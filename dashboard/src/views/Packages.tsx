@@ -1,3 +1,4 @@
+import { AwayLink } from "capsomer/react/link";
 import { Suspense, lazy, useState } from "react";
 import { useApp } from "../app/ctx";
 import { fetchPackageHistory, useAnswer } from "../lib/api";
@@ -269,17 +270,13 @@ function PackagePanel({
               <div className="small">
                 Counts from deps.dev, which it calls indicative rather than exact. No public API
                 lists them:{" "}
-                <a
-                  href={`https://www.npmjs.com/package/${enc}?activeTab=dependents`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <AwayLink href={`https://www.npmjs.com/package/${enc}?activeTab=dependents`} newTab>
                   npm's list
-                </a>{" "}
+                </AwayLink>{" "}
                 ·{" "}
-                <a href={`https://deps.dev/npm/${enc}`} target="_blank" rel="noopener noreferrer">
+                <AwayLink href={`https://deps.dev/npm/${enc}`} newTab>
                   deps.dev
-                </a>
+                </AwayLink>
                 . GitHub offers no API for the repositories that use it.
               </div>
             </dd>
@@ -289,14 +286,13 @@ function PackagePanel({
                 {() =>
                   snap.github.state === "ok" && (
                     <>
-                      <a
+                      <AwayLink
                         className="mono"
                         href={`https://github.com/${snap.github.repo}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        newTab
                       >
                         {snap.github.repo}
-                      </a>{" "}
+                      </AwayLink>{" "}
                       · <span className="num">{snap.github.stars}</span> stars ·{" "}
                       <span className="num">{snap.github.open_issues}</span> open issues ·{" "}
                       <span className="num">

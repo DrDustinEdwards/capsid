@@ -1,3 +1,4 @@
+import { AwayLink } from "capsomer/react/link";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense } from "react";
@@ -75,15 +76,14 @@ export function DefaultBranches() {
                       </td>
                       <td>
                         {c.latest?.url && (
-                          <a
+                          <AwayLink
                             className="stretch"
                             href={c.latest.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
                             aria-label={`Open the latest ${c.namespace} run on GitHub`}
+                            newTab
                           >
                             Open run
-                          </a>
+                          </AwayLink>
                         )}
                       </td>
                     </tr>
@@ -288,9 +288,9 @@ export function PullRequests() {
                     tabIndex={job ? 0 : undefined}
                   >
                     <td className="mono">
-                      <a href={p.pr_url} target="_blank" rel="noopener noreferrer">
+                      <AwayLink href={p.pr_url} newTab>
                         {prLabel(p.pr_url)}
-                      </a>
+                      </AwayLink>
                     </td>
                     <td data-label="Job">
                       {job ? job.title : <span className="mono faint">{p.job_id}</span>}
@@ -494,9 +494,9 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
   return (
     <li className="wrow prcard" data-row="" id={prAnchor(a)}>
       <div className="wmain">
-        <a className="wtitle mono" href={prUrl(a)} target="_blank" rel="noopener noreferrer">
+        <AwayLink className="wtitle mono" href={prUrl(a)} newTab>
           {name}
-        </a>
+        </AwayLink>
         <span className="held">
           <St kind="warn">{checkWords(a.failed)}</St>
         </span>
@@ -545,14 +545,14 @@ function VisualLook({ visual }: { visual: NonNullable<OpsAwaitingSeat["visual"]>
     <span className="visual-look">
       <span>{visual.title}</span>
       {visual.preview && (
-        <a href={visual.preview} target="_blank" rel="noopener noreferrer">
+        <AwayLink href={visual.preview} newTab>
           Open the preview
-        </a>
+        </AwayLink>
       )}
       {visual.shots.map((src, i) => (
-        <a key={src} href={src} target="_blank" rel="noopener noreferrer">
+        <AwayLink key={src} href={src} newTab>
           Screenshot {i + 1}
-        </a>
+        </AwayLink>
       ))}
       {!visual.preview && !visual.shots.length && (
         <span className="faint">

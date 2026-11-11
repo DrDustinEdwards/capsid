@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { type FormEvent } from "react";
+import "capsomer/button.css";
+import "capsomer/filter-bar.css";
+import { FilterBar, hasFilters, withParams } from "capsomer/react/filter-bar";
 import { Spinner } from "capsomer/react/empty";
-import { useLocation, useSearch } from "../lib/router";
+import { Link, useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
@@ -29,27 +32,21 @@ export function Activity() {
   const params = new URLSearchParams(search);
   const namespace = params.get("namespace") ?? "";
   const actor = params.get("actor") ?? "";
-  const [nsInput, setNsInput] = useState(namespace);
-  const [actorInput, setActorInput] = useState(actor);
-
-  // The address changed (back, a link): the fields follow it. Adjusted while rendering, not in an effect.
-  const [seen, setSeen] = useState({ namespace, actor });
-  if (seen.namespace !== namespace || seen.actor !== actor) {
-    setSeen({ namespace, actor });
-    setNsInput(namespace);
-    setActorInput(actor);
-  }
 
   const load = useAnswer<PortalActivity>(["activity", namespace, actor], () =>
     fetchActivity({ namespace, actor }),
   );
 
-  const apply = (ns: string, who: string) => {
-    const qs = new URLSearchParams();
-    if (ns.trim()) qs.set("namespace", ns.trim());
-    if (who.trim()) qs.set("actor", who.trim());
-    const s = qs.toString();
-    navigate(s ? `/activity?${s}` : "/activity", { replace: true });
+  const apply = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    navigate(
+      withParams("/activity", {
+        namespace: form.get("namespace") as string,
+        actor: form.get("actor") as string,
+      }),
+      { replace: true },
+    );
   };
 
   const data = load.data;
@@ -68,24 +65,19 @@ export function Activity() {
   return (
     <div className="page">
       <PageHead title="Activity" />
-      <form
-        className="toolbar"
-        role="search"
-        aria-label="Filter activity"
-        onSubmit={(e) => {
-          e.preventDefault();
-          apply(nsInput, actorInput);
-        }}
+      {/* The address changed (back, a link): the fields follow it, so the bar starts over. */}
+      <FilterBar
+        key={`${namespace}\u0000${actor}`}
+        label="Filter activity"
+        onSubmit={apply}
+        clearLabel="Clear"
+        clearHref={hasFilters({ namespace, actor }, ["namespace", "actor"]) ? "/activity" : null}
+        renderLink={(props) => <Link {...props} />}
       >
         <label className="sr-only" htmlFor="actNs">
           Project
         </label>
-        <select
-          id="actNs"
-          className="search"
-          value={nsInput}
-          onChange={(e) => setNsInput(e.target.value)}
-        >
+        <select id="actNs" className="search" name="namespace" defaultValue={namespace}>
           <option value="">All projects</option>
           {names.map((n) => (
             <option key={n} value={n}>
@@ -98,12 +90,7 @@ export function Activity() {
         </label>
         {/* A picker, not a box to type an id into from memory (the UX audit's m7): every
             agent on the roster, and every actor in the rows read. */}
-        <select
-          id="actActor"
-          className="search"
-          value={actorInput}
-          onChange={(e) => setActorInput(e.target.value)}
-        >
+        <select id="actActor" className="search" name="actor" defaultValue={actor}>
           <option value="">Anyone</option>
           {actors.map((a) => (
             <option key={a} value={a}>
@@ -111,15 +98,7 @@ export function Activity() {
             </option>
           ))}
         </select>
-        <button type="submit" className="btn">
-          Apply
-        </button>
-        {(namespace || actor) && (
-          <button type="button" className="btn" onClick={() => apply("", "")}>
-            Clear
-          </button>
-        )}
-      </form>
+      </FilterBar>
       {load.error && (
         <div className="callout crit" role="alert">
           Could not read the activity: {load.error}

@@ -1,3 +1,4 @@
+import { AwayLink } from "capsomer/react/link";
 import { trendChart } from "./charts";
 import { Suspense, useEffect, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
@@ -202,9 +203,9 @@ export function SinceLastLooked() {
                 <ul className="digest-list">
                   {d.pull_requests_ready.map((p) => (
                     <li key={p.url}>
-                      <a href={p.url} target="_blank" rel="noreferrer noopener">
+                      <AwayLink href={p.url} newTab>
                         {p.url.replace("https://github.com/", "")}
-                      </a>{" "}
+                      </AwayLink>{" "}
                       <span className="faint">
                         {p.state === "unchecked" ? "not checked yet" : p.state}
                       </span>

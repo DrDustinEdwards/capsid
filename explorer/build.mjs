@@ -226,6 +226,7 @@ export async function build({
     "components/site-header/site-header.css",
     "components/manual/manual.css",
     "components/family-footer/family-footer.css",
+    "components/hero/hero.css",
     "components/chart-frame/chart-frame.css",
     "components/meter/meter.css",
     "tokens/site-capsid.css",
@@ -265,6 +266,7 @@ export async function build({
     "tooltip",
     "shell",
     "meter",
+    "shortcuts",
   ]) {
     const dir = join(capsomer, "dist", "components", name);
     mkdirSync(join(stage, "capsomer", name), { recursive: true });

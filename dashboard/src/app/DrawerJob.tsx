@@ -1,3 +1,4 @@
+import { AwayLink } from "capsomer/react/link";
 import type { ReactNode } from "react";
 import { jobBadge, resumeCall } from "../lib/derive";
 import { ago, ms } from "../lib/format";
@@ -345,9 +346,9 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
                 <dt>Result</dt>
                 <dd className="mono">
                   {/^https?:\/\//.test(j.result_ref) ? (
-                    <a href={j.result_ref} target="_blank" rel="noopener noreferrer">
+                    <AwayLink href={j.result_ref} newTab>
                       {j.result_ref}
-                    </a>
+                    </AwayLink>
                   ) : (
                     j.result_ref
                   )}
@@ -372,9 +373,9 @@ function FragmentPr({ url, merged }: { url: string; merged: boolean | null }) {
     <>
       <dt>Pull request</dt>
       <dd>
-        <a href={url} target="_blank" rel="noopener noreferrer">
+        <AwayLink href={url} newTab>
           {url.replace(/^https:\/\/github\.com\//, "")}
-        </a>{" "}
+        </AwayLink>{" "}
         <span className="faint">
           {merged === true ? "merged" : merged === false ? "not merged" : "open"}
         </span>

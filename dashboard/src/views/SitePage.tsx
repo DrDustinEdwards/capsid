@@ -1,3 +1,4 @@
+import { AwayLink } from "capsomer/react/link";
 import { Suspense, lazy, useState } from "react";
 import { Empty } from "capsomer/react/empty";
 import { PageHead } from "capsomer/react/page-head";
@@ -73,9 +74,9 @@ export function SitePage() {
           <span className="site-lead">
             {p ? <Pill kind={p.kind}>{p.label}</Pill> : <St kind="nodata">Not probed yet</St>}
             {origin ? (
-              <a href={origin} target="_blank" rel="noopener noreferrer">
+              <AwayLink href={origin} newTab>
                 {hostOf(origin)}
-              </a>
+              </AwayLink>
             ) : (
               <span className="faint">serves no site</span>
             )}
@@ -191,9 +192,9 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
               <dt>URL</dt>
               <dd className="mono">
                 {healthUrl ? (
-                  <a href={healthUrl} target="_blank" rel="noopener noreferrer">
+                  <AwayLink href={healthUrl} newTab>
                     {healthUrl}
-                  </a>
+                  </AwayLink>
                 ) : (
                   `${s.origin}/`
                 )}

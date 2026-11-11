@@ -1,3 +1,4 @@
+import { AwayLink } from "capsomer/react/link";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy, useId, useState, type ReactNode } from "react";
@@ -210,9 +211,9 @@ function Meta({ children }: { children: ReactNode }) {
 
 function GitHub({ href }: { href: string }) {
   return (
-    <a className="wlink" href={href} target="_blank" rel="noreferrer noopener">
+    <AwayLink className="wlink" href={href} newTab>
       Open on GitHub
-    </a>
+    </AwayLink>
   );
 }
 
@@ -507,9 +508,9 @@ function OtherGroup({ entries }: { entries: Entry[] }) {
                 {k.label}
               </InboxMark>
               {item.link ? (
-                <a className="wtitle" href={item.link} target="_blank" rel="noreferrer noopener">
+                <AwayLink className="wtitle" href={item.link} newTab>
                   {item.title}
-                </a>
+                </AwayLink>
               ) : (
                 <b>{item.title}</b>
               )}

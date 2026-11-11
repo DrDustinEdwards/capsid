@@ -35,6 +35,7 @@ import "capsomer/site-header.css";
 import "capsomer/admin-shell.css";
 import "capsomer/theme-switch.css";
 import "capsomer/tabs.css";
+import "capsomer/link.css";
 import "capsomer/banner.css";
 import "capsomer/button.css";
 import "capsomer/field.css";

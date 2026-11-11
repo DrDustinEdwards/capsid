@@ -1,3 +1,4 @@
+import { AwayLink } from "capsomer/react/link";
 import { trendChart } from "./charts";
 import { Fragment, Suspense } from "react";
 import { useApp } from "../app/ctx";
@@ -159,9 +160,9 @@ export function Backups() {
                           <St kind="run">running</St>
                         )}{" "}
                         {o.last_run.url && (
-                          <a href={o.last_run.url} target="_blank" rel="noopener noreferrer">
+                          <AwayLink href={o.last_run.url} newTab>
                             run
-                          </a>
+                          </AwayLink>
                         )}
                       </>
                     ) : (
@@ -180,9 +181,9 @@ export function Backups() {
                           <St kind="run">running</St>
                         )}{" "}
                         {o.last_drill.url && (
-                          <a href={o.last_drill.url} target="_blank" rel="noopener noreferrer">
+                          <AwayLink href={o.last_drill.url} newTab>
                             run
-                          </a>
+                          </AwayLink>
                         )}
                       </>
                     ) : (
