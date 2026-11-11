@@ -301,7 +301,7 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
         <JobControls j={j} />
         <div>
           <p className="section-title">Record</p>
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>Status</dt>
             <dd>
               <St kind={k.kind}>{k.label}</St> <span className="faint">{jobMeta(j, now)}</span>

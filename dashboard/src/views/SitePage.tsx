@@ -182,7 +182,7 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
       <div className="grid2">
         <Panel flush title="Probe" src={`watcher pass · checked ${ago(ms(s.checked_at), now)}`}>
           <div className="body">
-            <dl className="kv">
+            <dl className="cap-detail-record">
               <dt>Checked</dt>
               <dd>
                 {ago(ms(s.checked_at), now)} <When t={ms(s.checked_at)} />
@@ -339,7 +339,7 @@ function Setup({
       >
         {row ? (
           <div className="body">
-            <dl className="kv">
+            <dl className="cap-detail-record">
               <dt>Project</dt>
               <dd className="mono">{row.namespace}</dd>
               <dt>Name</dt>

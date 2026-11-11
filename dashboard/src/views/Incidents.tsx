@@ -36,7 +36,7 @@ export function Incidents() {
           {snap ? (
             <>
               <div className="body">
-                <dl className="kv">
+                <dl className="cap-detail-record">
                   <dt>Finished</dt>
                   <dd>
                     {ago(ms(snap.pass_at), now)}{" "}

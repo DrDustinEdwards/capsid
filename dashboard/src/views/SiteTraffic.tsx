@@ -131,7 +131,7 @@ function SearchTable({
 
 function Totals({ items }: { items: Array<[string, string]> }) {
   return (
-    <dl className="kv">
+    <dl className="cap-detail-record">
       {items.map(([k, v]) => (
         <Fragment key={k}>
           <dt>{k}</dt>

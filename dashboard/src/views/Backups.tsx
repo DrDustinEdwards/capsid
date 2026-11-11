@@ -42,7 +42,7 @@ export function Backups() {
             ) : (
               <>
                 {h.backup.warning && <Alert tone="crit">{h.backup.warning}</Alert>}
-                <dl className="kv">
+                <dl className="cap-detail-record">
                   <dt>Last good dump</dt>
                   <dd className="num">
                     {h.backup.last_ok ? (
@@ -118,7 +118,7 @@ export function Backups() {
                     <b>{os.headline}.</b> {os.detail}.
                   </Banner>
                 )}
-                <dl className="kv">
+                <dl className="cap-detail-record">
                   {o.sites.map((s) => (
                     <Fragment key={s.site}>
                       <dt>{s.site}</dt>

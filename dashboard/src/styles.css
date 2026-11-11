@@ -594,9 +594,6 @@ table.brief.workers-stores .cap-status {
   }
 }
 
-/* stat tiles: figure and label on one line, the detail beneath. A tile is never
-   narrower than its text (flex 1 0 auto), so the row wraps to more rows instead of
-   cutting a word; only a tile wider than the whole row wraps its detail (design D3). */
 /* Health's verdict (views/Health.tsx): the answer in one line, the problems as links. */
 .verdict {
   display: flex;
@@ -608,62 +605,6 @@ table.brief.workers-stores .cap-status {
 }
 .verdict .cap-status {
   font-size: 15px;
-}
-.tiles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.tile {
-  flex: 1 0 auto;
-  max-width: 100%;
-  display: grid;
-  gap: 1px;
-  padding: 7px 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-  text-decoration: none;
-}
-.tile:hover {
-  border-color: var(--line-strong);
-  text-decoration: none;
-}
-.tile .t1 {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  white-space: nowrap;
-}
-.tile .v {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-}
-.tile .v small {
-  font-size: var(--fs-detail);
-  font-weight: 400;
-  color: var(--muted);
-  letter-spacing: 0;
-}
-.tile .l {
-  font-size: var(--fs-detail);
-  color: var(--muted);
-}
-.tile .d {
-  font-size: var(--fs-detail);
-  color: var(--muted);
-}
-.tile.crit .v {
-  color: var(--crit);
-}
-.tile.warn .v {
-  color: var(--warn);
-}
-.tile.ok .v {
-  color: var(--ok);
 }
 
 /* A compact table (Shared code's users). */
@@ -1120,20 +1061,6 @@ table.brief {
   display: grid;
   gap: 18px;
 }
-.kv {
-  display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
-  gap: 7px 14px;
-  font-size: 13px;
-}
-.kv dt {
-  color: var(--muted);
-}
-.kv dd {
-  margin: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
 .cmd {
   font-family: var(--mono);
   font-size: var(--fs-detail);
@@ -1146,23 +1073,23 @@ table.brief {
   line-height: 1.55;
 }
 /* An audit row before and after (the Activity drawer): the old value struck through above the new. */
-.kv.diff dd {
+.cap-detail-record.diff dd {
   display: grid;
   gap: 3px;
   justify-items: start;
 }
-.kv.diff del,
-.kv.diff ins {
+.cap-detail-record.diff del,
+.cap-detail-record.diff ins {
   text-decoration-thickness: 1px;
   border-radius: 4px;
   padding: 1px 5px;
   overflow-wrap: anywhere;
 }
-.kv.diff del {
+.cap-detail-record.diff del {
   background: var(--crit-soft);
   text-decoration-line: line-through;
 }
-.kv.diff ins {
+.cap-detail-record.diff ins {
   background: var(--ok-soft);
   text-decoration: none;
 }
@@ -1445,9 +1372,6 @@ main .sev-crit[data-row]:focus-visible {
   }
   .qrow .cap-status {
     grid-column: 1 / -1;
-  }
-  .kv {
-    grid-template-columns: 116px minmax(0, 1fr);
   }
   .search {
     min-width: 0;

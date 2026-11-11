@@ -207,7 +207,7 @@ function PackagePanel({
         {!snap ? (
           <p className="faint">The watcher reads this package on its next pass.</p>
         ) : (
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>Version</dt>
             <dd>
               <Part part={snap.npm}>

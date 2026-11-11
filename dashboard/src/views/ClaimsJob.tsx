@@ -196,7 +196,7 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
             return (
               <div key={c.id} className="claim" data-claim={c.id}>
                 <div className="body">
-                  <dl className="kv">
+                  <dl className="cap-detail-record">
                     <dt>Claim</dt>
                     <dd className="mono">
                       #{c.id} · {c.action} · {c.agent} ·{" "}

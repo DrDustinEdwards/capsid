@@ -105,7 +105,7 @@ function SitePanel({
           </Banner>
         )}
         {op && (
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>Operator API</dt>
             <dd className="mono">
               {site.origin}
@@ -155,7 +155,7 @@ function SitePanel({
               <St kind="nodata">Not read</St> {site.status.error}
             </Banner>
           ) : (
-            <dl className="kv">
+            <dl className="cap-detail-record">
               {site.status.fields.map((f) => (
                 <FieldRow key={f.key} k={f.key} v={f.value} />
               ))}

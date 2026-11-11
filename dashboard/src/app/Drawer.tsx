@@ -99,7 +99,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
             {d.changes.length === 0 ? (
               <p className="faint">No field changed.</p>
             ) : (
-              <dl className="kv diff">
+              <dl className="cap-detail-record diff">
                 {d.changes.map((c) => (
                   <Fragment key={c.field}>
                     <dt>{c.field}</dt>
@@ -125,7 +125,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
         )}
         <div>
           <p className="section-title">Recorded</p>
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>When</dt>
             <dd>
               {ago(ms(r.at), now)} <When t={ms(r.at)} />
@@ -187,7 +187,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
         onClose={onClose}
       />
       <div className="dbody">
-        <dl className="kv">
+        <dl className="cap-detail-record">
           <dt>Namespaces</dt>
           <dd className="mono">{nsList(a)}</dd>
           <dt>Last seen</dt>
