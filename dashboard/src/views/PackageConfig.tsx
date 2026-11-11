@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useApp } from "../app/ctx";
 import type { OpsPackageConfig } from "../types";
 import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
-import { Danger } from "./shared";
+import { DangerZone } from "capsomer/react/danger-zone";
+import "capsomer/danger-zone.css";
 
 // The package configuration (live.packages, the ops_packages table): one row per npm
 // package Packages' Published tab shows, added and changed there. Every change goes through the confirm dialog, which
@@ -73,7 +74,7 @@ export function PackageForm({
       onClose={onClose}
       danger={
         !adding && (
-          <Danger note="The Packages page stops showing it.">
+          <DangerZone note="The Packages page stops showing it.">
             <button
               type="button"
               className="btn danger"
@@ -89,7 +90,7 @@ export function PackageForm({
             >
               Remove
             </button>
-          </Danger>
+          </DangerZone>
         )
       }
     >
