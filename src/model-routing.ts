@@ -1,5 +1,6 @@
 import { AUTO_MERGE_REFUSED_PATHS } from "./auto-merge-policy";
 import { isMoneyPath } from "./scope";
+import { formatMoney } from "@dustinedwards/site-runtime/money";
 
 // AUTOMATIC MODEL ROUTING (capsid/research/design-model-routing.md). Capsid picks the
 // model for every job from its kind and its risk, so nobody chooses a model by hand. The
@@ -555,7 +556,7 @@ export interface TrialStatus {
 }
 
 const money = (usd: number | null): string =>
-  usd === null ? "no cost recorded" : `$${usd.toFixed(2)} a job`;
+  usd === null ? "no cost recorded" : `${formatMoney(usd, "usd", { scale: 0 })} a job`;
 
 /** Each trial arm read against its kind's rule: what it has collected and whether the
  *  evidence supports the rule change. "supports" holds exactly when proposeRuleChanges
