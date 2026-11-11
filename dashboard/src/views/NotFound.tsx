@@ -1,3 +1,8 @@
+// The report's stylesheets load with this lazy view, not in the initial CSS.
+import "capsomer/row-list.css";
+import "capsomer/segmented.css";
+import "capsomer/time.css";
+import "capsomer/not-found-report.css";
 import { NotFoundReport } from "capsomer/react/not-found-report";
 import { fetchNotFound, useAnswer } from "../lib/api";
 import type { PortalNotFound } from "../types";
