@@ -1,6 +1,7 @@
 import { QueryClient, dehydrate, type DehydratedState } from "@tanstack/react-query";
 import { createContext, type RouterContextProvider } from "react-router";
-import { FEED_KEY, LIVE, answer, ask, type Answer } from "../lib/api";
+import { answerOf, ask, type Answer } from "capsomer/react/data";
+import { FEED_KEY, LIVE } from "../lib/api";
 import { DAY } from "../lib/format";
 import { pageBase } from "../lib/router";
 import type { OpsFeed } from "../types";
@@ -196,7 +197,7 @@ async function readInto(client: QueryClient, server: PortalServer, spec: Spec): 
     queryKey: spec.key,
     queryFn: async () =>
       ask<unknown>(async (): Promise<Answer<unknown>> =>
-        answer(await server.read(spec.path), true),
+        answerOf(await server.read(spec.path), true),
       ),
   });
 }

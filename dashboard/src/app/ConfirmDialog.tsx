@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "capsomer/react/dialog";
+import { useTwoStep } from "capsomer/react/confirm-dialog";
 import { Disclosure } from "capsomer/react/disclosure";
 import { Field } from "capsomer/react/field";
 import "capsomer/banner.css";
@@ -95,7 +96,6 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const confirmRef = useRef<HTMLInputElement>(null);
   const started = useRef(false);
-  const alive = useRef(true);
   const needsReason = NEEDS_REASON.has(req.action);
   // A reason typed before the dialog opened (the reply box on a Needs you row) is the
   // reason: the dialog previews with it at once and shows it, rather than asking again.
@@ -108,21 +108,18 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   // the token carries it; a wrong number is refused with the right one.
   const typesConfirm = TYPED_CONFIRM.has(req.action);
   const [typedVersion, setTypedVersion] = useState("");
-  const [preview, setPreview] = useState<PortalPreview | null>(null);
-  const [pending, setPending] = useState<null | "preview" | "perform">(null);
-  // field: the error is about the reason or version field itself, so it is shown there.
-  const [error, setError] = useState<{ text: string; expired: boolean; field?: boolean } | null>(
-    null,
-  );
+  // Preview, then perform (capsomer/react/confirm-dialog's useTwoStep). An error's field flag says
+  // it is about the reason or version field itself, so it is shown there.
+  const step = useTwoStep({
+    preview: (params: Record<string, string>) =>
+      previewAction(csrf, { action: req.action, params }),
+    perform: (shown: PortalPreview) => performAction(csrf, shown.token),
+    onDone: (r: PortalPerformed) => finish(r),
+    onSignedOut: () => finish("signed-out"),
+  });
+  const { preview, pending, error, setError, runPerform } = step;
   const label = performLabel(req.action, req.params);
   const destructive = DESTRUCTIVE.has(req.action);
-
-  const failed = (r: Exclude<Answer<unknown>, { kind: "ok" }>) => {
-    if (r.kind === "signed-out") return finish("signed-out");
-    if (r.kind === "expired") return setError({ text: r.message, expired: true });
-    if (r.kind === "refused") return setError({ text: r.message, expired: false });
-    setError({ text: `Could not reach the server: ${r.message}`, expired: false });
-  };
 
   // Every click on Preview ends in something the person can see: the preview, a
   // refusal, a timeout, or the reason it could not be sent. A click that does nothing
@@ -157,44 +154,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
       ...(typedNote ? { note: typedNote } : {}),
       ...(typesConfirm ? { confirm: version } : {}),
     };
-    setPending("preview");
-    setError(null);
-    setPreview(null);
-    try {
-      const r = await previewAction(csrf, { action: req.action, params });
-      if (!alive.current) return;
-      if (r.kind === "ok") setPreview(r.value);
-      else failed(r);
-    } catch (e) {
-      if (alive.current)
-        setError({
-          text: `The preview could not be shown: ${e instanceof Error ? e.message : String(e)}`,
-          expired: false,
-        });
-    } finally {
-      if (alive.current) setPending(null);
-    }
-  };
-
-  const runPerform = async () => {
-    if (!preview) return;
-    setPending("perform");
-    setError(null);
-    try {
-      const r = await performAction(csrf, preview.token);
-      if (!alive.current) return;
-      if (r.kind === "ok") return finish(r.value);
-      if (r.kind === "expired") setPreview(null);
-      failed(r);
-    } catch (e) {
-      if (alive.current)
-        setError({
-          text: `The result could not be shown: ${e instanceof Error ? e.message : String(e)}. Check Activity before trying again.`,
-          expired: false,
-        });
-    } finally {
-      if (alive.current) setPending(null);
-    }
+    await step.runPreview(params);
   };
 
   // The reason is read from the field itself as well as from state, so a value the
@@ -202,16 +162,12 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   const reasonNow = () => reasonRef.current?.value ?? reason;
 
   useEffect(() => {
-    alive.current = true;
     // Once, even under StrictMode's double effect: an action without a reason
     // previews as soon as the dialog opens.
     if (!started.current) {
       started.current = true;
       if (!askReason && !typesConfirm) void runPreview("");
     }
-    return () => {
-      alive.current = false;
-    };
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount (the started ref guards StrictMode): the dialog asks for its preview as it opens
   }, []);
 
@@ -220,7 +176,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- refocus when the preview arrives; a changed action does not move focus
   }, [preview]);
 
-  const busy = pending != null;
+  const busy = step.busy;
   const fieldError = error?.field ? error.text : undefined;
 
   let primary = null;
