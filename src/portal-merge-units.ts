@@ -3,7 +3,7 @@ import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalMergeUnits } from "./ops-types/views";
 import { REPORT_KEY, readSuspended, type UnitsReport } from "./merge-units";
 import { portalGate } from "./portal-auth";
-import { jsonResponse as json } from "./http";
+import { jsonResponse as json } from "@dustinedwards/site-runtime/http";
 
 // The Portal's Merge units panel (docs/autonomy.md, "Earned promotion and demotion"):
 // GET /portal/api/merge-units. The suspended units as the tick reads them (the list a lift

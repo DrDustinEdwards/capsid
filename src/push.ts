@@ -15,7 +15,7 @@ import { readSnapshot } from "./ops-snapshot";
 import { readStoredTls, tlsAlerts } from "./tls-expiry";
 import { domainAlerts } from "./domain-expiry";
 import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys } from "./web-push";
-import { jsonResponse as json, textResponse as text } from "./http";
+import { jsonResponse as json, textResponse as text } from "@dustinedwards/site-runtime/http";
 import { HOUR_MS, DAY_MS } from "./time";
 
 // PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7; Dustin's DECIDE 5

@@ -1,6 +1,6 @@
 import { bingWebmaster } from "./bing-webmaster";
 import type { Env } from "./env";
-import { jsonResponse, textResponse } from "./http";
+import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 import { namespaceNameRefusal } from "./namespace-admin";
 import { cloudflareCredentials, type FetchLike } from "./ops-cloudflare";
 import { OPS_RETURN_TO } from "./ops-feed";

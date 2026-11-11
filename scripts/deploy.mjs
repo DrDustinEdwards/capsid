@@ -42,7 +42,7 @@ if (existsSync("dashboard/package.json")) {
     process.exit(1);
   }
   npmRun(["--prefix", "dashboard", "run", "build"]);
-  npmRun(["--prefix", "dashboard", "run", "size"]);
+  npmRun(["run", "size:dashboard"]);
 }
 
 let sha = "unknown";
