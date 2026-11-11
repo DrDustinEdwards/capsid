@@ -1314,7 +1314,7 @@ describe("the Portal's reads", () => {
   it("namespaces reports what the status reports, for every roster namespace", async () => {
     const response = await call(PORTAL_NAMESPACES_PATH);
     expect(response.status).toBe(200);
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     const body = (await response.json()) as PortalNamespaces;
     expect(body.namespaces.map((n) => n.namespace)).toEqual([...APP_ROSTER]);
     const status = await capsidStatus(workerEnv());

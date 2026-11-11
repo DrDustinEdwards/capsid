@@ -17,14 +17,9 @@ import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { logEvent, OWASP_EVENTS } from "@dustinedwards/site-runtime/log";
 import { emailKey } from "@dustinedwards/site-runtime/rate-limit";
 import type { Env } from "./env";
-import {
-  isPortalHost,
-  isSameOriginPath,
-  PORTAL_HOST,
-  portalCookiePath,
-  publicPortalPath,
-} from "./portal-host";
+import { isPortalHost, PORTAL_HOST, portalCookiePath, publicPortalPath } from "./portal-host";
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+import { isSameOriginPath } from "@dustinedwards/site-runtime/url";
 import { isolationVerdict, originRefusal } from "@dustinedwards/site-runtime/origin";
 
 const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
