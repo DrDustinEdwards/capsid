@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "5.105.3",
-    "capsomer": "github:DrDustinEdwards/capsomer#v0.87.0",
+    "capsomer": "github:DrDustinEdwards/capsomer#fc1a1c1",
     "enarratio": "0.9.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
@@ -31,6 +31,11 @@
     "@types/react-dom": "19.3.0",
     "typescript": "6.0.3",
     "vite": "8.3.5"
+  },
+  "overrides": {
+    "capsomer": {
+      "enarratio": "$enarratio"
+    }
   },
   "engines": {
     "node": ">=22.12.0"
