@@ -12,7 +12,6 @@ import {
   isAdditiveMigration,
   loadGatePolicy,
   parseGatePolicy,
-  splitStatements,
 } from "../src/gate-policy.ts";
 import { commandFromSummary, RESUME_MARKER } from "../src/jobs.ts";
 import { signTaskBody } from "../src/signed-docs.ts";
@@ -158,10 +157,9 @@ test("an empty migration is a refusal", () => {
   assert.equal(isAdditiveMigration("-- nothing but a comment\n").ok, false);
 });
 
-test("splitStatements ignores a DROP that is only mentioned in a comment", () => {
+test("a DROP that is only mentioned in a comment does not refuse a migration", () => {
   const sql =
     "-- this replaces the DROP TABLE we used to do;\nCREATE TABLE IF NOT EXISTS t (a TEXT);";
-  assert.deepEqual(splitStatements(sql), ["CREATE TABLE IF NOT EXISTS t (a TEXT)"]);
   assert.equal(isAdditiveMigration(sql).ok, true);
 });
 

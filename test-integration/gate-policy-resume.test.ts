@@ -466,7 +466,7 @@ describe("a migration resume", () => {
     });
     const { id, before, result } = await seatMigrationResume(JOB_PR);
     expect(result.ok, "the default branch's file approved the job's destructive one").toBe(false);
-    expect(String(result.refusal)).toMatch(/does not call additive/);
+    expect(String(result.refusal)).toMatch(/leaves this migration to a person \(drops a table\)/);
     await expectUntouched(id, before);
     expect(reads).toEqual([JOB_HEAD]);
   });
