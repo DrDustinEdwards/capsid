@@ -48,7 +48,7 @@ import {
 } from "./watcher";
 import { gatherFindings } from "./watcher-gather";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import { textResponse } from "./http";
+import { textResponse } from "@dustinedwards/site-runtime/http";
 import { MINUTE_MS, DAY_MS } from "./time";
 
 // The Watch Floor's one read (capsid/research/design-ops-console.md): GET
@@ -503,7 +503,7 @@ export async function opsFeed(env: Env, now: Date): Promise<OpsFeedData> {
   };
 }
 
-function feedResponse(
+function opsFeedAnswer(
   request: Request,
   user: PortalUser,
   data: OpsFeedData,
@@ -536,7 +536,7 @@ export async function handleOpsFeed(
 ): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
-  return feedResponse(request, gate.user, await (deps.feed ?? opsFeed)(env, now));
+  return opsFeedAnswer(request, gate.user, await (deps.feed ?? opsFeed)(env, now));
 }
 
 export async function handleOpsRefresh(
@@ -639,7 +639,7 @@ export async function handleOpsRefresh(
     logEvent("OPS_REFRESH_AUDIT_FAILED", { message: warning }, { level: "error" });
   }
   const feed = await (deps.feed ?? opsFeed)(env, now);
-  return feedResponse(
+  return opsFeedAnswer(
     request,
     gate.user,
     feed,

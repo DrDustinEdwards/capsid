@@ -11,7 +11,6 @@
     "build:worker": "vite build -c vite.worker.config.ts",
     "build:demo": "node --import ../test/resolve-ts.mjs scripts/demo-api.mjs",
     "check": "node scripts/fixture-check.mjs && react-router typegen && tsc --noEmit -p .",
-    "size": "node scripts/size-budget.mjs",
     "serve": "node --import ../test/resolve-ts.mjs dev/serve.ts",
     "e2e": "playwright test",
     "shots": "playwright test -c playwright.shots.config.ts"

@@ -3,7 +3,7 @@ import { untrusted, UNTRUSTED_DATA_RULE } from "@dustinedwards/site-runtime/anth
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
-import { textResponse } from "./http";
+import { textResponse } from "@dustinedwards/site-runtime/http";
 import { readJob } from "./jobs-transition";
 import { pathClassOf, type PathClass } from "./merge-class";
 import { worthReviewer, type ChangedFile } from "./model-routing";
