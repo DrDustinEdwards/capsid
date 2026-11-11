@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useApp } from "../app/ctx";
 import type { PortalNamespace } from "../types";
 import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
-import { Danger } from "./shared";
+import { DangerZone } from "capsomer/react/danger-zone";
+import "capsomer/danger-zone.css";
 
 // ADD, CHANGE OR DELETE A PROJECT (the Portal audit's new map, 2026-11-06): the namespace_add,
 // namespace_edit and namespace_remove controls, which share their rules and audit rows with
@@ -92,7 +93,7 @@ export function ProjectForm({
       onClose={onClose}
       danger={
         !adding && (
-          <Danger note="Archived documents, versions, the audit log and finished jobs are kept. The preview lists what it deletes, or what has to end first.">
+          <DangerZone note="Archived documents, versions, the audit log and finished jobs are kept. The preview lists what it deletes, or what has to end first.">
             <label className="check">
               <input
                 type="checkbox"
@@ -117,7 +118,7 @@ export function ProjectForm({
             >
               Delete
             </button>
-          </Danger>
+          </DangerZone>
         )
       }
     >

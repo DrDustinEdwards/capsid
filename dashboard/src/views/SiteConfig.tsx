@@ -4,7 +4,8 @@ import { ago, msSql, utc } from "../lib/format";
 import { St } from "../ui/icons";
 import type { OpsSiteConfig } from "../types";
 import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
-import { Danger } from "./shared";
+import { DangerZone } from "capsomer/react/danger-zone";
+import "capsomer/danger-zone.css";
 
 // The site configuration (live.sites, the ops_sites table): one row per namespace. A row
 // with an origin is a site the watcher probes; a row with no origin records that the
@@ -114,7 +115,7 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
       onClose={onClose}
       danger={
         !adding && (
-          <Danger note="The watcher stops probing it. Its history stays.">
+          <DangerZone note="The watcher stops probing it. Its history stays.">
             <button
               type="button"
               className="btn danger"
@@ -133,7 +134,7 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
             >
               Remove
             </button>
-          </Danger>
+          </DangerZone>
         )
       }
     >

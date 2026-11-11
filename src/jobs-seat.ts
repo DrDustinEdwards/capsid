@@ -62,7 +62,7 @@ import {
 //
 // `opts.extra` rides in the same guarded batch, so a caller's own write commits only
 // with the fail; `opts.outcome: false` writes no outcome row, for a fail that is not the
-// holder's (the bench score step, src/bench.ts finishRun).
+// holder's (the bench score step, src/bench.ts finishBenchRun).
 export async function adminFailJob(
   env: Env,
   agent: Agent,
@@ -486,7 +486,7 @@ export function workRecorded(job: JobRow): string | null {
 }
 
 // `extra` rides in the same guarded batch, so a caller's own write commits only with the
-// supersede (the bench score step, src/bench.ts finishRun).
+// supersede (the bench score step, src/bench.ts finishBenchRun).
 export async function supersedeJob(
   env: Env,
   agent: Agent,

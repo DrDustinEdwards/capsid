@@ -32,7 +32,7 @@ import { formatMoney } from "@dustinedwards/site-runtime/money";
 // queue), 5 (claims against verified), 6 (cost), 7 (merges) and 9 (errors and deploys) are
 // Enarratio's bar, line and area charts from enarratio/lite, which drop Observable Plot and
 // fit the chunk budget. This module loads with the page that shows a chart, never in the
-// initial bundle. Each is Enarratio's whole figure (title, finding, notes, source, "Show data")
+// initial bundle. Each is Enarratio's whole figure (title, finding, notes, source, and a toolbar with the data download)
 // in Capsomer's chart frame, which redraws it to its width.
 
 // A later read that failed keeps the last answer on screen; this says so, so the failure is
