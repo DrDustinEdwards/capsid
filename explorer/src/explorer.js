@@ -3,7 +3,7 @@
 // its tabs, Enarratio's chart tooltips, the flow players, the front page's panel and tour, the filters
 // and sorting, and search.
 import { controller } from "./capsomer/system-map/system-map.js";
-import { enhance as enhanceTabs } from "./tabs.js";
+import { enhance as enhanceTabs } from "./capsomer/tabs/tabs.js";
 // Every chart in Capsomer's frame: drawn again at its column's width where the server wrote a spec, and enhanced.
 import "capsomer/behavior/chart-enhance";
 import { enhance as enhanceHeader } from "./capsomer/site-header/site-header.js";

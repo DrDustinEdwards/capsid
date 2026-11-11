@@ -37,6 +37,8 @@ import "capsomer/theme-switch.css";
 import "capsomer/tabs.css";
 import "capsomer/banner.css";
 import "capsomer/button.css";
+import "capsomer/copy.css";
+import "capsomer/icons.css";
 import "capsomer/field.css";
 import "capsomer/switch.css";
 import "capsomer/switch-reason.css";
