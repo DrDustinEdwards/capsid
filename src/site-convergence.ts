@@ -26,7 +26,7 @@ const clip = (s: string) => (s.length > TEXT_MAX ? `${s.slice(0, TEXT_MAX - 1)}â
 
 /** A health body's checks, each with the repair it maps to. Only the fields the view shows
  *  are kept, as text or numbers: the body is the site's, read as data. */
-export function healthChecks(body: unknown, operator: SiteOperator): ConvergenceCheck[] {
+export function convergenceChecks(body: unknown, operator: SiteOperator): ConvergenceCheck[] {
   const checks = (body as { checks?: unknown } | null)?.checks;
   if (!Array.isArray(checks)) return [];
   const out: ConvergenceCheck[] = [];
@@ -150,7 +150,7 @@ async function readSiteConvergence(
     : {
         ok: h.status === 200 && (h.body as { ok?: unknown } | null)?.ok === true,
         http_status: h.status || null,
-        checks: healthChecks(h.body, operator),
+        checks: convergenceChecks(h.body, operator),
         error: h.error,
       };
 

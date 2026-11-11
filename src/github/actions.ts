@@ -1,5 +1,5 @@
 import type { RepoEnv as Env } from "../env";
-import { redact, redactText, type Redacted } from "../redact";
+import { redact, redactText, type Redacted } from "@dustinedwards/site-runtime/redact";
 import { assertRepoArg, cachedGet, ghFetch, resolveRepo } from "./client";
 
 // Recent CI workflow runs for a namespace's repo, via the GitHub App. Read-only.
@@ -11,7 +11,7 @@ import { assertRepoArg, cachedGet, ghFetch, resolveRepo } from "./client";
 // is inert; a build log carries whatever the workflow echoed: resolved binding ids,
 // account ids, wrangler output, and any variable a step printed by accident. The runs
 // list stays open to read-only keys. Every log text returned, to anyone, is redacted
-// first (src/redact.ts). With run_id, jobs/job/step drill into any run the same way
+// first (site-runtime ./redact). With run_id, jobs/job/step drill into any run the same way
 // (ciRunJobs below), behind the same log gate.
 
 // A ref matching this shape is filtered as a head sha, anything else as a branch.
@@ -186,7 +186,7 @@ export const CI_LOG_BUDGET = 64 * 1024;
 // lower bound, so `from` needs no adjustment.
 const STEP_STAMP_PRECISION_MS = 1000;
 
-// Every log text ci_status returns is redacted (src/redact.ts), and redacted BEFORE the
+// Every log text ci_status returns is redacted (site-runtime ./redact), and redacted BEFORE the
 // budget cut: a cut first could split a secret so its remaining half no longer matches
 // any pattern, or keep a private key's body without its BEGIN line.
 //
