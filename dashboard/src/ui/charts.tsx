@@ -5,6 +5,7 @@ import { sparkline, uptimeStrip, uptimeStripTable, type UptimeSlot } from "enarr
 import type { HourBucket, SiteSnapshot } from "../types";
 import { RING_SLOTS, ringOf, slotStart, uptime } from "../lib/derive";
 import { pct, utc } from "../lib/format";
+import { markup } from "capsomer/behavior/trusted-html";
 
 // ---- uptime ticks: 336 half-hour slots as 84 two-hour ticks ------------------------
 
@@ -46,13 +47,9 @@ export function UptimeTicks({ site }: { site: SiteSnapshot }) {
     <>
       <span
         className="cap-uptime-strip"
-        dangerouslySetInnerHTML={{ __html: uptimeStrip({ ...opts, inline: true }) }}
+        dangerouslySetInnerHTML={markup(uptimeStrip({ ...opts, inline: true }))}
       />
-      <span
-        dangerouslySetInnerHTML={{
-          __html: uptimeStripTable(opts, { dataTable: "visually-hidden" }).markup,
-        }}
-      />
+      <span dangerouslySetInnerHTML={markup(uptimeStripTable(opts).markup)} />
     </>
   );
 }
@@ -82,8 +79,8 @@ export function ErrorSpark({ values, label }: { values: number[]; label: string 
   return (
     <span
       className="spark"
-      dangerouslySetInnerHTML={{
-        __html: sparkline({
+      dangerouslySetInnerHTML={markup(
+        sparkline({
           values,
           label,
           alt: label,
@@ -92,7 +89,7 @@ export function ErrorSpark({ values, label }: { values: number[]; label: string 
           area: true,
           inline: true,
         }),
-      }}
+      )}
     />
   );
 }

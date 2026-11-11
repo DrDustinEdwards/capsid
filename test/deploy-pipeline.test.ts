@@ -166,7 +166,7 @@ test("CI runs the app's browser tests after the dashboard build, with Chromium i
   const ci = read(".github/workflows/ci.yml");
   const checks = ci.slice(ci.indexOf("  checks:"), ci.indexOf("  deploy:"));
   const build = checks.indexOf("run: npm run build:dashboard");
-  const install = checks.indexOf("playwright install --with-deps chromium");
+  const install = checks.indexOf("playwright install chromium");
   const run = checks.indexOf("run: npm run test:browser");
   assert.ok(
     build > -1 && install > -1 && run > -1,

@@ -29,15 +29,18 @@
     "check:console": "devkit-console",
     "check:migrations": "devkit-migrations migrations --min 54",
     "report:bloat": "devkit-no-bloat",
-    "check:conformance": "devkit-conformance"
+    "check:conformance": "devkit-conformance",
+    "check:secrets": "devkit-secrets",
+    "check:destructive": "devkit-destructive"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4",
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.39.0",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.42.0",
     "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.15.0",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.119.0",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.129.0",
     "@modelcontextprotocol/server": "2.4.0",
     "agents": "0.33.0",
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.94.0",
     "jose": "6.2.15",
     "tldts": "7.4.19",
     "zod": "4.6.7"
@@ -45,7 +48,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.6.0",
     "@cloudflare/workers-types": "5.20261108.1",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.30.0",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.33.0",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/conformance": "0.2.0-alpha.12",
     "@types/node": "24.19.2",

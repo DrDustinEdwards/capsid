@@ -5,7 +5,9 @@ import { ago, ms } from "../lib/format";
 import type { OpsJob, OpsAgent } from "../types";
 import { Pill, St } from "../ui/icons";
 import { When } from "../ui/When";
-import { Danger, jobMeta } from "../views/shared";
+import { DangerZone } from "capsomer/react/danger-zone";
+import "capsomer/danger-zone.css";
+import { jobMeta } from "../views/shared";
 import { useApp, type ConfirmRequest } from "./ctx";
 
 export function Head({
@@ -187,7 +189,7 @@ function JobControls({ j }: { j: OpsJob }) {
           </p>
         </details>
       )}
-      <Danger note="Ends it as failed, against its holder.">
+      <DangerZone note="Ends it as failed, against its holder.">
         <button
           type="button"
           className="btn danger"
@@ -197,7 +199,7 @@ function JobControls({ j }: { j: OpsJob }) {
         >
           Mark failed
         </button>
-      </Danger>
+      </DangerZone>
     </div>
   );
 }
@@ -206,7 +208,7 @@ export function AgentControls({ a }: { a: OpsAgent }) {
   const { confirm } = useApp();
   if (a.revoked_at) return null;
   return (
-    <Danger note="Ends this credential. The preview lists what else it changes.">
+    <DangerZone note="Ends this credential. The preview lists what else it changes.">
       <button
         type="button"
         className="btn danger"
@@ -220,7 +222,7 @@ export function AgentControls({ a }: { a: OpsAgent }) {
       >
         Revoke
       </button>
-    </Danger>
+    </DangerZone>
   );
 }
 

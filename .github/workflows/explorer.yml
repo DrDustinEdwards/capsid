@@ -82,7 +82,7 @@ jobs:
         run: npm --prefix explorer test
 
       - name: Install the browser
-        run: npx --prefix explorer playwright install --with-deps chromium
+        run: npx --prefix explorer playwright install chromium
 
       # Served by wrangler dev with the deploy's own config and _headers (explorer/playwright.config.mjs).
       - name: Browser spec

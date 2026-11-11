@@ -89,7 +89,7 @@ export interface Env extends Omit<
   // widened to optional here, so the code keeps saying which is missing when one is not set.
   EMAIL?: SendEmail;
   EMAIL_ROUTING?: string;
-  // Phone alerts (src/push.ts, src/web-push.ts): the VAPID key that signs each Web Push,
+  // Phone alerts (src/push.ts, site-runtime ./web-push): the VAPID key that signs each Web Push,
   // a P-256 private key as a JWK, put by scripts/vapid-keys.mjs. Unset, no alert is sent
   // and the Portal's Settings says why.
   VAPID_PRIVATE_KEY?: string;
