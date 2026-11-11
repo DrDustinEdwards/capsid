@@ -10,15 +10,11 @@ export function NotFound() {
   const load = useAnswer<PortalNotFound>(["not-found"], fetchNotFound);
   const d = load.data;
   const days = d?.days ?? 30;
-  const probes = d?.probes ?? 0;
   return (
     <NotFoundReport
       title={`Missing pages, ${days} days`}
-      src={
-        probes > 0
-          ? `Capsid's page_404_daily; ${probes.toLocaleString("en-US")} scanner ${probes === 1 ? "probe" : "probes"} not listed`
-          : "Capsid's page_404_daily"
-      }
+      src="Capsid's page_404_daily"
+      probes={d?.probes}
       rows={d?.pages ?? []}
       days={days}
       loading={load.loading}
