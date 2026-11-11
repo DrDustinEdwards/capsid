@@ -253,7 +253,6 @@ export async function build({
   // carrying the imports' integrity cost the home page 0.7 s of Lighthouse LCP.
   const stage = join(out, ".bundle");
   mkdirSync(stage, { recursive: true });
-  copyFileSync(join(capsomer, "dist", "components", "tabs", "tabs.js"), join(stage, "tabs.js"));
   for (const name of [
     "system-map",
     "tabs",
@@ -266,6 +265,7 @@ export async function build({
     "shell",
     "meter",
     "shortcuts",
+    "hooks",
   ]) {
     const dir = join(capsomer, "dist", "components", name);
     mkdirSync(join(stage, "capsomer", name), { recursive: true });
