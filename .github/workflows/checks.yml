@@ -42,5 +42,6 @@ jobs:
       # Portal's pages (dashboard/build/worker/portal.js, bundled in through the capsid-portal-pages alias), so the
       # dashboard is built first; the dry run reads wrangler.dryrun.jsonc, which scripts/dry-run-config.mjs builds offline
       # from wrangler.jsonc.example, so no secret is needed. Raised on 2026-11-03 from 1872 KiB raw and 540 KiB gzip to
-      # 2885 and 850 (Dustin: the Portal rendered on the server like the network's other sites).
+      # 2885 and 850 (Dustin: the Portal rendered on the server like the network's other sites). Raised on 2026-11-11 to
+      # 3216 and 955 (10% above 2924 and 868): the Public Suffix List for registrableDomain (tldts, 129 KiB raw, 46 KiB gzip).
       worker-size-prepare: npm --prefix dashboard run build && node scripts/dry-run-config.mjs

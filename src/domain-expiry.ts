@@ -1,6 +1,7 @@
 import type { Finding } from "./watcher-detect";
 import { DAY_MS } from "./time";
 import { callSignal } from "./call-signal";
+import { parse } from "tldts";
 
 // DOMAIN REGISTRATION EXPIRY, BY RDAP (job_5ac1139641e0, design-portal-insight.md section 5,
 // pulled forward by Dustin on 2026-10-07: dustinedwards.info expires 2026-12-27, and
@@ -29,12 +30,10 @@ const EARLY_DAYS = 30;
 const LATE_DAYS = 7;
 const FETCH_TIMEOUT_MS = 8000;
 
-// Suffixes a site may sit under that are a host's, not a registration of ours.
-const HOSTING_SUFFIXES = ["workers.dev", "pages.dev", "vercel.app", "netlify.app", "github.io"];
-
-/** The registrable domain of a site origin, or null for a hosting suffix or an IP. The
- *  portfolio's TLDs are all single-label (.info, .app, .com, .org, .dev), so the last two
- *  labels are the registration; a multi-label public suffix would need the PSL. */
+/** The registrable domain of a site origin, or null for a hosting suffix or an IP. It reads
+ *  the Public Suffix List (tldts), so a name under a multi-label suffix such as co.uk keeps
+ *  its third label, and a host under a suffix in the list's private section (workers.dev,
+ *  pages.dev, vercel.app, github.io and the like) is a host's, not a registration of ours. */
 export function registrableDomain(origin: string): string | null {
   let host: string;
   try {
@@ -42,10 +41,10 @@ export function registrableDomain(origin: string): string | null {
   } catch {
     return null;
   }
-  if (/^[\d.]+$/.test(host) || host.includes(":")) return null;
-  if (HOSTING_SUFFIXES.some((s) => host === s || host.endsWith(`.${s}`))) return null;
-  const labels = host.split(".").filter(Boolean);
-  return labels.length >= 2 ? labels.slice(-2).join(".") : null;
+  if (host.includes(":") || host.startsWith("[")) return null;
+  const parsed = parse(host, { allowPrivateDomains: true });
+  if (parsed.isIp || parsed.isPrivate) return null;
+  return parsed.domain;
 }
 
 /** The RDAP base for a domain's TLD from the IANA bootstrap, or null. */
