@@ -35,9 +35,9 @@ jobs:
     uses: DrDustinEdwards/devkit/.github/workflows/pr.yml@562daa2dbfb23f2987f81caeac34f9e054b3d03b # v0.26.4
     with:
       review: true
-      # Both installs: the knip (dashboard) run reads dashboard/, its own package, and the Worker bundles the Portal's
-      # pages from it.
-      install: npm ci && npm ci --prefix dashboard
+      # The three installs: the knip (dashboard) run reads dashboard/, its own package, and the Worker bundles the Portal's
+      # pages from it; devkit-css-vars (.css-vars.json) reads the Capsomer package each of dashboard/ and explorer/ pins.
+      install: npm ci && npm ci --prefix dashboard && npm ci --prefix explorer
       # The Worker bundle size (.worker-size.json, set about 10% above the measured Total Upload). The Worker renders the
       # Portal's pages (dashboard/build/worker/portal.js, bundled in through the capsid-portal-pages alias), so the
       # dashboard is built first; the dry run reads wrangler.dryrun.jsonc, which scripts/dry-run-config.mjs builds offline
