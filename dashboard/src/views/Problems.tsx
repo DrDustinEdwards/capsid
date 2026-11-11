@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link } from "../lib/router";
 import { useApp, isView, placePath } from "../app/ctx";
 import { attentionGroups, WAITING_KINDS, PROBLEM_ROWS, type AttentionRow } from "../lib/derive";
-import { ago } from "../lib/format";
+import { relative } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 
 // ---- Problems (was Needs attention) ------------------------------------------------------
@@ -89,7 +89,7 @@ function ProblemRow({ row }: { row: AttentionRow }) {
         <b>{row.title}</b>
         <div>{row.sub}</div>
       </div>
-      <span className="when">{ago(row.at, now)}</span>
+      <span className="when">{relative(row.at, now)}</span>
     </div>
   );
 }
@@ -122,7 +122,7 @@ function GroupRow({ row }: { row: AttentionRow }) {
           <div>{row.sub}</div>
         </div>
         <span className="when">
-          {ago(row.at, now)} <span className="chev" aria-hidden="true" />
+          {relative(row.at, now)} <span className="chev" aria-hidden="true" />
         </span>
       </div>
       <div className="att-kids" id={id} hidden={!open}>
@@ -141,7 +141,7 @@ function GroupRow({ row }: { row: AttentionRow }) {
                   <b>{k.title}</b>
                   <div>{k.sub}</div>
                 </div>
-                <span className="when">{ago(k.at, now)}</span>
+                <span className="when">{relative(k.at, now)}</span>
               </div>
             ))}
             {view && (
@@ -205,7 +205,7 @@ function Notices({ rows, count }: { rows: AttentionRow[]; count: number }) {
                   {r.kind} · {r.sub}
                 </div>
               </div>
-              <span className="when">{ago(r.at, now)}</span>
+              <span className="when">{relative(r.at, now)}</span>
             </div>
           ))}
       </div>

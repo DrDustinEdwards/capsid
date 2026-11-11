@@ -4,7 +4,8 @@ import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
 import { agentState, driverOf } from "../lib/derive";
-import { ago, ms, pct } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
+import { pct } from "../lib/format";
 import { St } from "../ui/icons";
 import type { PortalNamespace, PortalNamespaces } from "../types";
 import { Panel } from "capsomer/react/panel";
@@ -28,9 +29,9 @@ function Driver({ ns }: { ns: string }) {
       <St kind={st.kind}>{st.label}</St>
       <div className="src">
         {d.revoked_at
-          ? `revoked ${ago(ms(d.revoked_at), now)}`
+          ? `revoked ${relative(parse(d.revoked_at), now)}`
           : d.last_seen
-            ? `seen ${ago(ms(d.last_seen), now)}`
+            ? `seen ${relative(parse(d.last_seen), now)}`
             : "never seen"}
       </div>
     </>
@@ -49,7 +50,7 @@ function Report({ n }: { n: PortalNamespace }) {
       ) : (
         <span className="num">{pct(rep.integrity, 0)}</span>
       )}
-      <div className="src">report {ago(ms(rep.generated), now)}</div>
+      <div className="src">report {relative(parse(rep.generated), now)}</div>
     </>
   );
 }
@@ -165,7 +166,7 @@ function Roster() {
       {load.error && (
         <Alert tone="crit">
           Could not read the projects: {load.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
+          {data ? `. Showing the read from ${relative(parse(data.generated), now)}.` : ""}
         </Alert>
       )}
       <Panel
@@ -175,7 +176,7 @@ function Roster() {
         count={data?.namespaces.length}
         src={
           <>
-            {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
+            {data ? `read ${relative(parse(data.generated), now)} · ` : ""}
             <button type="button" className="cap-btn" disabled={load.loading} onClick={read}>
               {load.loading ? "Reading..." : "Read again"}
             </button>

@@ -1,10 +1,10 @@
 import { Banner } from "capsomer/react/banner";
 import { useApp } from "../app/ctx";
 import { incidents, passStale, TASK_OUTCOME } from "../lib/derive";
-import { ago, age, ms } from "../lib/format";
+import { parse, relative, span } from "capsomer/behavior/time";
 import type { OpsTask } from "../types";
 import { St } from "../ui/icons";
-import { When } from "../ui/When";
+import { Time } from "capsomer/react/time";
 import { Panel } from "capsomer/react/panel";
 import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, useNsFilter } from "./shared";
 
@@ -31,7 +31,7 @@ export function Incidents() {
         <Panel
           flush
           title="Last watcher pass"
-          src={snap ? <When t={ms(snap.pass_at)} /> : "none yet"}
+          src={snap ? <Time at={snap.pass_at} format="exact" /> : "none yet"}
         >
           {snap ? (
             <>
@@ -39,7 +39,7 @@ export function Incidents() {
                 <dl className="cap-detail-record">
                   <dt>Finished</dt>
                   <dd>
-                    {ago(ms(snap.pass_at), now)}{" "}
+                    {relative(parse(snap.pass_at), now)}{" "}
                     {passStale(snap, now) && <St kind="warn">stale</St>}
                   </dd>
                   <dt>Cadence</dt>
@@ -146,7 +146,7 @@ export function ScheduledTasks() {
                       <div className="faint">
                         {t.period_ms == null
                           ? "runs with its work"
-                          : `every ${age(now - t.period_ms, now)}`}
+                          : `every ${span(now - now - t.period_ms)}`}
                       </div>
                     </td>
                     <td>
@@ -164,7 +164,7 @@ export function ScheduledTasks() {
                           <St kind={TASK_OUTCOME[last.outcome].kind}>
                             {TASK_OUTCOME[last.outcome].label}
                           </St>{" "}
-                          {ago(ms(last.finished_at), now)}
+                          {relative(parse(last.finished_at), now)}
                         </>
                       ) : (
                         <span className="faint">none recorded</span>
@@ -181,7 +181,7 @@ export function ScheduledTasks() {
                                 <St kind={TASK_OUTCOME[r.outcome].kind}>
                                   {TASK_OUTCOME[r.outcome].label}
                                 </St>{" "}
-                                {ago(ms(r.finished_at), now)}: {r.reason}
+                                {relative(parse(r.finished_at), now)}: {r.reason}
                               </li>
                             ))}
                           </ul>

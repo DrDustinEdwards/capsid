@@ -2,11 +2,12 @@ import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { Fragment, Suspense } from "react";
 import { useApp } from "../app/ctx";
-import { ago, bytes, ms } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
+import { bytes } from "../lib/format";
 import { OFFACCOUNT_LATE, OFFACCOUNT_STALE, offaccountState } from "../lib/derive";
 import { storeUse } from "../lib/store";
 import { St } from "../ui/icons";
-import { When } from "../ui/When";
+import { Time } from "capsomer/react/time";
 import { Panel } from "capsomer/react/panel";
 import { NoSnapshot } from "./shared";
 import { Spinner } from "capsomer/react/empty";
@@ -47,7 +48,8 @@ export function Backups() {
                   <dd className="num">
                     {h.backup.last_ok ? (
                       <>
-                        {ago(ms(h.backup.last_ok), now)} <When t={ms(h.backup.last_ok)} />
+                        {relative(parse(h.backup.last_ok), now)}{" "}
+                        <Time at={h.backup.last_ok} format="exact" />
                       </>
                     ) : (
                       <St kind="crit">None recorded</St>
@@ -125,10 +127,10 @@ export function Backups() {
                       <dd className="num">
                         {s.newest ? (
                           <>
-                            {ago(ms(s.newest), now)} <When t={ms(s.newest)} />{" "}
-                            {now - ms(s.newest) >= OFFACCOUNT_STALE ? (
+                            {relative(parse(s.newest), now)} <Time at={s.newest} format="exact" />{" "}
+                            {now - parse(s.newest) >= OFFACCOUNT_STALE ? (
                               <St kind="crit">stale</St>
-                            ) : now - ms(s.newest) >= OFFACCOUNT_LATE ? (
+                            ) : now - parse(s.newest) >= OFFACCOUNT_LATE ? (
                               <St kind="warn">late</St>
                             ) : null}
                           </>
@@ -142,7 +144,8 @@ export function Backups() {
                   <dd className="num">
                     {o.reported_at ? (
                       <>
-                        {ago(ms(o.reported_at), now)} <When t={ms(o.reported_at)} />
+                        {relative(parse(o.reported_at), now)}{" "}
+                        <Time at={o.reported_at} format="exact" />
                       </>
                     ) : (
                       <St kind="crit">none yet</St>
@@ -231,7 +234,7 @@ function SiteBackups() {
       section="Site backups"
       src={
         <>
-          {data ? `read ${ago(ms(data.read_at), now)} · ` : ""}
+          {data ? `read ${relative(parse(data.read_at), now)} · ` : ""}
           <button type="button" className="cap-btn" disabled={load.loading} onClick={load.reread}>
             {load.loading ? "Reading..." : "Read again"}
           </button>{" "}
@@ -304,7 +307,7 @@ function Fresh({
   if (!at) return <St kind="crit">None</St>;
   return (
     <>
-      {ago(ms(at), now)} {warning ? <St kind="crit">stale</St> : null}
+      {relative(parse(at), now)} {warning ? <St kind="crit">stale</St> : null}
     </>
   );
 }
@@ -343,7 +346,11 @@ function SiteRow({ site, now, backUp }: { site: SiteBackupRow; now: number; back
         )}
       </td>
       <td className="num">
-        {site.amazon?.newest ? ago(ms(site.amazon.newest), now) : <St kind="nodata">No copy</St>}
+        {site.amazon?.newest ? (
+          relative(parse(site.amazon.newest), now)
+        ) : (
+          <St kind="nodata">No copy</St>
+        )}
       </td>
       <td>
         <button type="button" className="cap-btn" onClick={backUp}>

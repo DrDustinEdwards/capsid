@@ -2,15 +2,17 @@ import { Banner } from "capsomer/react/banner";
 import { Suspense, lazy, useState } from "react";
 import { useApp } from "../app/ctx";
 import { fetchPackageHistory, useAnswer } from "../lib/api";
-import { ago, fmtN, ms } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
+import { fmtN } from "../lib/format";
 import { St } from "../ui/icons";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "../types";
 import { ChartFrame } from "capsomer/react/chart-frame";
 import "capsomer/chart-frame.css";
 import { Panel } from "capsomer/react/panel";
 import { areaChart } from "enarratio/lite/area";
-import { PageTabs, useTabParam } from "../ui/pagetabs";
-import { useDemo } from "../lib/router";
+import { PageTabs } from "capsomer/react/tabs";
+import { tabParam } from "capsomer/behavior/tabs";
+import { tabLink, useDemo, useSearch } from "../lib/router";
 import type { PackageEditing } from "./PackageConfig";
 
 // The Shared code and Completeness tabs load when opened, and the add and edit form the first
@@ -196,7 +198,7 @@ function PackagePanel({
       title={cfg.name}
       src={
         <>
-          {snap ? `read ${ago(ms(snap.at), now)} · ` : "not read yet · "}
+          {snap ? `read ${relative(parse(snap.at), now)} · ` : "not read yet · "}
           <button
             type="button"
             className="cap-btn"
@@ -340,11 +342,19 @@ function PackagePanel({
 // site. Each Worker's secrets and stores are on its site's Setup tab, and those no site owns on
 // Health's Cloudflare tab. The tab is in the address (?tab=shared).
 export function Packages() {
-  const tab = tabOf(PACKAGE_TABS, useTabParam()) ?? PACKAGE_TABS[0].id;
+  const search = useSearch();
+  const tab = tabOf(PACKAGE_TABS, tabParam(search)) ?? PACKAGE_TABS[0].id;
   return (
     <div className="page">
       <PageHead title="Packages" />
-      <PageTabs label="Packages" path="/packages" tabs={PACKAGE_TABS} current={tab} />
+      <PageTabs
+        aria-label="Packages"
+        path="/packages"
+        tabs={PACKAGE_TABS}
+        current={tab}
+        search={search}
+        renderLink={tabLink}
+      />
       <div className="embedded" id={tab}>
         {tab === "shared" ? (
           <Suspense fallback={null}>

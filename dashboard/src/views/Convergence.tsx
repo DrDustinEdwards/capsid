@@ -3,7 +3,7 @@ import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchConvergence, useAnswer, type Load } from "../lib/api";
-import { ago, ms } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
 import type { ConvergenceCheck, ConvergenceSite, PortalConvergence } from "../types";
 import { St } from "../ui/icons";
 
@@ -87,7 +87,7 @@ function SitePanel({
       section="Operator API"
       src={
         <>
-          {`read ${ago(ms(site.read_at), now)} · `}
+          {`read ${relative(parse(site.read_at), now)} · `}
           <button type="button" className="cap-btn" disabled={loading} onClick={reread}>
             {loading ? "Reading..." : "Read again"}
           </button>
@@ -176,7 +176,7 @@ function SitePanel({
                   <St kind="nodata">{r.error ? "failed" : "no verdict"}</St>
                 )}{" "}
                 <span className="faint">
-                  {ago(ms(r.at), now)} by {r.actor}
+                  {relative(parse(r.at), now)} by {r.actor}
                   {r.via ? ` (${r.via})` : ""}
                   {r.error ? `: ${r.error}` : ""}
                 </span>

@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, type AnchorHTMLAttributes } from "react";
+import type { RenderTabLink } from "capsomer/react/tabs";
 import { Link as RouterLink, useLocation as useRouterLocation, useNavigate } from "react-router";
 import { DEMO_BASE } from "./demo";
 
@@ -48,3 +49,6 @@ export const Link = forwardRef<
   const base = pageBase(useRouterLocation().pathname);
   return <RouterLink ref={ref} to={withBase(base, href)} {...rest} />;
 });
+
+/** Capsomer's tab links (PageTabs, TabsNav) as Portal links, so a tab stays under the page's base. */
+export const tabLink: RenderTabLink = ({ href, ...props }) => <Link href={href} {...props} />;

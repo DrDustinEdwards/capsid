@@ -1,6 +1,6 @@
 import { Banner } from "capsomer/react/banner";
 import type { Kind } from "../lib/derive";
-import { age, utc, ms, ago } from "../lib/format";
+import { parse, relative, span, utc } from "capsomer/behavior/time";
 import type {
   ClaimsGroup,
   ClaimsAgreementCounts,
@@ -37,7 +37,7 @@ export function wait(msValue: number | null) {
   return msValue === null ? (
     <None what="no wait" />
   ) : (
-    <span className="num">{age(0, msValue)}</span>
+    <span className="num">{span(msValue - 0)}</span>
   );
 }
 
@@ -200,7 +200,9 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
                     <dt>Claim</dt>
                     <dd className="mono">
                       #{c.id} · {c.action} · {c.agent} ·{" "}
-                      <span title={utc(ms(c.recorded_at))}>{ago(ms(c.recorded_at), now)}</span>
+                      <span title={utc(parse(c.recorded_at))}>
+                        {relative(parse(c.recorded_at), now)}
+                      </span>
                     </dd>
                     <dt>Stated</dt>
                     <dd className="mono">
@@ -286,8 +288,8 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
               <tbody>
                 {data.touches.map((t) => (
                   <tr key={t.id} data-row="">
-                    <td className="num" data-label="When" title={utc(ms(t.at))}>
-                      {ago(ms(t.at), now)}
+                    <td className="num" data-label="When" title={utc(parse(t.at))}>
+                      {relative(parse(t.at), now)}
                     </td>
                     <td className="mono" data-label="Kind">
                       {t.kind}

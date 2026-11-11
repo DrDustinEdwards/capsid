@@ -9,15 +9,17 @@ import "capsomer/chart-frame.css";
 import "capsomer/uptime-strip.css";
 import { uptimeStrip } from "enarratio";
 import { SITE_TABS, parseRoute, tabOf, useApp, type SiteTab } from "../app/ctx";
-import { Link, useLocation } from "../lib/router";
+import { Link, tabLink, useLocation, useSearch } from "../lib/router";
 import { PROBE, cfNoData, cfOk, ringOf, siteScripts, uptime } from "../lib/derive";
-import { ago, hostOf, ms, msSql, pct, shortId, utc } from "../lib/format";
+import { parse, relative, utc } from "capsomer/behavior/time";
+import { hostOf, pct, shortId } from "../lib/format";
 import type { OpsSiteConfig, SiteSnapshot } from "../types";
 import { NoData, Pill, St } from "../ui/icons";
-import { When } from "../ui/When";
+import { Time } from "capsomer/react/time";
 import { ChartSlot } from "../ui/ChartSlot";
 import { uptimeOptions } from "../ui/charts";
-import { PageTabs, useTabParam } from "../ui/pagetabs";
+import { PageTabs } from "capsomer/react/tabs";
+import { tabParam } from "capsomer/behavior/tabs";
 import { trendChart } from "./charts";
 import { Convergence, SiteSecrets } from "./Convergence";
 // The settings form loads the first time Edit is pressed, so the page's first paint does not carry it.
@@ -42,7 +44,8 @@ export function SitePage() {
   const { feed } = useApp();
   const [location] = useLocation();
   const ns = parseRoute(location).site ?? "";
-  const tab: SiteTab = tabOf(SITE_TABS, useTabParam()) ?? SITE_TABS[0].id;
+  const search = useSearch();
+  const tab: SiteTab = tabOf(SITE_TABS, tabParam(search)) ?? SITE_TABS[0].id;
   const row = feed.live.sites.find((s) => s.namespace === ns) ?? null;
   const snap = feed.snapshot?.sites.find((s) => s.namespace === ns) ?? null;
   const name = row?.name ?? snap?.name ?? ns;
@@ -85,10 +88,12 @@ export function SitePage() {
         }
       />
       <PageTabs
-        label={name}
+        aria-label={name}
         path={`/sites/${encodeURIComponent(ns)}`}
         tabs={SITE_TABS}
         current={tab}
+        search={search}
+        renderLink={tabLink}
       />
       <div className="embedded" id={tab} data-tab-panel={tab}>
         {tab === "overview" ? (
@@ -180,12 +185,16 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
         </Banner>
       )}
       <div className="grid2">
-        <Panel flush title="Probe" src={`watcher pass · checked ${ago(ms(s.checked_at), now)}`}>
+        <Panel
+          flush
+          title="Probe"
+          src={`watcher pass · checked ${relative(parse(s.checked_at), now)}`}
+        >
           <div className="body">
             <dl className="cap-detail-record">
               <dt>Checked</dt>
               <dd>
-                {ago(ms(s.checked_at), now)} <When t={ms(s.checked_at)} />
+                {relative(parse(s.checked_at), now)} <Time at={s.checked_at} format="exact" />
               </dd>
               <dt>URL</dt>
               <dd className="mono">
@@ -273,8 +282,8 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
             <tbody>
               {cf.deploys.map((d) => (
                 <tr key={d.id}>
-                  <td className="num" title={utc(ms(d.created_on))}>
-                    {ago(ms(d.created_on), now)}
+                  <td className="num" title={utc(parse(d.created_on))}>
+                    {relative(parse(d.created_on), now)}
                   </td>
                   <td className="mono">{shortId(d.version_id ?? d.id)}</td>
                   <td className="muted">{d.message ?? ""}</td>
@@ -306,7 +315,7 @@ function Setup({
   const { feed, now, confirm } = useApp();
   const [editing, setEditing] = useState(false);
   const none = <span className="faint">none</span>;
-  const at = row ? msSql(row.updated_at) : NaN;
+  const at = row ? parse(row.updated_at) : NaN;
   return (
     <>
       {editing && row && (
@@ -394,7 +403,7 @@ function Setup({
                   {row.revision}
                 </span>{" "}
                 <span className="faint" title={Number.isNaN(at) ? row.updated_at : utc(at)}>
-                  {Number.isNaN(at) ? `updated ${row.updated_at}` : `updated ${ago(at, now)}`}
+                  {Number.isNaN(at) ? `updated ${row.updated_at}` : `updated ${relative(at, now)}`}
                 </span>
               </dd>
             </dl>

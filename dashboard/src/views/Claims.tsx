@@ -6,7 +6,7 @@ import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, fetchClaimsJob, useAnswer } from "../lib/api";
-import { age, ago, ms } from "../lib/format";
+import { parse, relative, span } from "capsomer/behavior/time";
 import { download, toCsv } from "../lib/csv";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../types";
 import { Panel } from "capsomer/react/panel";
@@ -150,7 +150,7 @@ export function Claims() {
       {agg.error && (
         <Alert tone="crit">
           Could not read the claims: {agg.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
+          {data ? `. Showing the read from ${relative(parse(data.generated), now)}.` : ""}
         </Alert>
       )}
       {data && data.truncated.length > 0 && (
@@ -166,7 +166,7 @@ export function Claims() {
         count={data?.groups.length}
         src={
           <>
-            {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
+            {data ? `read ${relative(parse(data.generated), now)} · ` : ""}
             <button
               type="button"
               className="cap-btn"
@@ -231,7 +231,7 @@ export function Claims() {
                       {wait(g.touches.waited_ms_median)}
                       {g.touches.waited_ms_total !== null && (
                         <div className="src">
-                          total {age(0, g.touches.waited_ms_total)} over {g.touches.waits}
+                          total {span(g.touches.waited_ms_total - 0)} over {g.touches.waits}
                         </div>
                       )}
                     </td>

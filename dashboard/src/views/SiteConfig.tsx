@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApp } from "../app/ctx";
-import { ago, msSql, utc } from "../lib/format";
+import { parse, relative, utc } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 import type { OpsSiteConfig } from "../types";
 import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
@@ -255,7 +255,7 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
 
 export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
   const { now } = useApp();
-  const at = msSql(s.updated_at);
+  const at = parse(s.updated_at);
   const none = <span className="faint">none</span>;
   return (
     <tr data-row="">
@@ -287,7 +287,7 @@ export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void })
       <td data-label="Revision">
         <span className="num">{s.revision}</span>
         <div className="src" title={Number.isNaN(at) ? s.updated_at : utc(at)}>
-          {Number.isNaN(at) ? `updated ${s.updated_at}` : `updated ${ago(at, now)}`}
+          {Number.isNaN(at) ? `updated ${s.updated_at}` : `updated ${relative(at, now)}`}
         </div>
       </td>
       <td className="ctl">

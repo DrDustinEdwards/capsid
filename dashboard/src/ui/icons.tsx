@@ -1,111 +1,26 @@
 import type { ReactNode } from "react";
-import { Glyph, Status, Pill as CapPill, type Tone } from "capsomer/react/status";
+import { Glyph, Status, Pill as CapPill, type GlyphName, type Tone } from "capsomer/react/status";
 import type { Kind } from "../lib/derive";
 
-// Capsomer's status shapes (shape, word and color together). Portal kinds with no shape of their own
-// take the nearest tone; the word says the rest.
-const TONE: Record<Kind, Tone> = {
-  ok: "ok",
-  done: "ok",
-  warn: "warn",
-  blocked: "warn",
-  crit: "crit",
-  nodata: "nodata",
-  unknown: "nodata",
-  queued: "nodata",
-  run: "info",
+// Capsomer's status shapes (shape, word and color together). Each Portal kind is a tone, and the
+// kinds with a mark of their own (queued, unknown, blocked, running) name it (status.md: done is ok,
+// run is info running, queued is muted queued, blocked is warn blocked).
+const STATE: Record<Kind, { tone: Tone; glyph?: GlyphName; running?: boolean }> = {
+  ok: { tone: "ok" },
+  done: { tone: "ok" },
+  warn: { tone: "warn" },
+  blocked: { tone: "warn", glyph: "blocked" },
+  crit: { tone: "crit" },
+  nodata: { tone: "nodata" },
+  unknown: { tone: "muted", glyph: "unknown" },
+  queued: { tone: "muted", glyph: "queued" },
+  run: { tone: "info", running: true },
 };
 
-// No style attribute: the Portal's CSP refuses inline styles in the server's HTML (a status
-// icon lost its color on /demos/health, 2026-11-03). A tone is a class (styles.css, .tone-*).
-function S({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" className={className}>
-      {children}
-    </svg>
-  );
-}
-
-// The inbox's kinds each get their own mark (Dustin's review of 2026-10-11: every row had the
-// same pause icon). The color still says who acts: warning for a person, critical for a
-// machine fault.
-const INBOX_SHAPES: Record<string, ReactNode> = {
-  question: (
-    <>
-      <circle
-        cx="7"
-        cy="7"
-        r="6"
-        fill="currentColor"
-        opacity=".18"
-        stroke="currentColor"
-        strokeWidth="1.3"
-      />
-      <path
-        d="M5.3 5.4a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.6-.7 1.1v.3"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-      <circle cx="7" cy="10.4" r=".8" fill="currentColor" />
-    </>
-  ),
-  pr: (
-    <>
-      <circle cx="3.8" cy="3" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      <circle cx="3.8" cy="11" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      <circle cx="10.2" cy="11" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      <path
-        d="M3.8 4.6v4.8M10.2 9.4V6.2A2.2 2.2 0 0 0 8 4H6.4M7.6 2.6 6.2 4l1.4 1.4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </>
-  ),
-  report: (
-    <>
-      <path
-        d="M3 13V1.8M3 2.2h7.6l-1.6 2.6 1.6 2.6H3"
-        fill="currentColor"
-        fillOpacity=".18"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </>
-  ),
-  proposal: (
-    <>
-      <path
-        d="M3 1.5h5.5L11 4v8.5H3z"
-        fill="currentColor"
-        fillOpacity=".18"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinejoin="round"
-      />
-      <path d="M5 7h4M5 9.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    </>
-  ),
-  "site-down": (
-    <>
-      <circle cx="7" cy="7" r="6.2" fill="currentColor" />
-      <path
-        d="M7 3.6v5.6M4.6 6.9 7 9.3l2.4-2.4"
-        fill="none"
-        stroke="var(--surface)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </>
-  ),
-};
+// The inbox's kinds each have their own mark (Dustin's review of 2026-10-11: every row had the
+// same pause icon), Capsomer's glyphs since 0.92.0. The color still says who acts: warning for a
+// person, critical for a machine fault.
+const INBOX_GLYPHS = new Set<string>(["question", "pr", "report", "proposal", "site-down"]);
 
 /** An inbox kind's own mark, with its word. An unknown kind takes the tone's status shape. */
 export function InboxMark({
@@ -117,40 +32,32 @@ export function InboxMark({
   tone: Kind;
   children: ReactNode;
 }) {
-  const shape = INBOX_SHAPES[kind];
-  if (!shape) return <St kind={tone}>{children}</St>;
+  if (!INBOX_GLYPHS.has(kind)) return <St kind={tone}>{children}</St>;
   return (
-    <span className="cap-status" data-tone={TONE[tone]}>
-      <S className="cap-status-glyph">{shape}</S>
+    <Status tone={STATE[tone].tone} glyph={kind as GlyphName}>
       {children}
-    </span>
+    </Status>
   );
 }
 
 /** A tone's bare glyph, colored by the tone. */
 export function Icon({ kind }: { kind: Kind }) {
-  return (
-    <span className="cap-status" data-tone={TONE[kind]}>
-      <Glyph name={kind === "run" ? "running" : TONE[kind]} />
-    </span>
-  );
+  const s = STATE[kind];
+  return <Glyph name={s.running ? "running" : (s.glyph ?? s.tone)} tone={s.tone} />;
 }
 
-// Status text: shape, word and color together, never color alone.
-export function St({ kind, children }: { kind: Kind; children: ReactNode }) {
+// Status text: shape, word and color together, never color alone. `wrap` lets a phrase (a hold
+// reason) wrap in its own column, the glyph at its first line.
+export function St({ kind, wrap, children }: { kind: Kind; wrap?: boolean; children: ReactNode }) {
   return (
-    <Status tone={TONE[kind]} running={kind === "run"}>
+    <Status {...STATE[kind]} wrap={wrap}>
       {children}
     </Status>
   );
 }
 
 export function Pill({ kind, children }: { kind: Kind; children: ReactNode }) {
-  return (
-    <CapPill tone={TONE[kind]} running={kind === "run"}>
-      {children}
-    </CapPill>
-  );
+  return <CapPill {...STATE[kind]}>{children}</CapPill>;
 }
 
 // No data is a state with a reason. In a panel the reason is written out. In a table cell

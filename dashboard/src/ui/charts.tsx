@@ -5,7 +5,8 @@ import { markup } from "capsomer/behavior/trusted-html";
 import { sparkline, uptimeStrip, uptimeStripTable, type UptimeSlot } from "enarratio";
 import type { HourBucket, SiteSnapshot } from "../types";
 import { RING_SLOTS, ringOf, slotStart, uptime } from "../lib/derive";
-import { pct, utc } from "../lib/format";
+import { utc } from "capsomer/behavior/time";
+import { pct } from "../lib/format";
 
 // ---- uptime ticks: 336 half-hour slots as 84 two-hour ticks ------------------------
 

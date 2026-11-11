@@ -5,7 +5,7 @@ import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
-import { ago, ms, utc } from "../lib/format";
+import { parse, relative, utc } from "capsomer/behavior/time";
 import type { PortalActivity } from "../types";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
@@ -55,7 +55,7 @@ export function Activity() {
 
   const data = load.data;
   // The rows were just read from the server, so none is later than the read itself.
-  const now = data ? Math.max(appNow, ms(data.generated)) : appNow;
+  const now = data ? Math.max(appNow, parse(data.generated)) : appNow;
   const names = feed.live.namespaces.map((n) => n.name);
   if (namespace && !names.includes(namespace)) names.push(namespace);
   const actors = [
@@ -124,7 +124,7 @@ export function Activity() {
       {load.error && (
         <Alert tone="crit">
           Could not read the activity: {load.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
+          {data ? `. Showing the read from ${relative(parse(data.generated), now)}.` : ""}
         </Alert>
       )}
       <Panel
@@ -134,7 +134,7 @@ export function Activity() {
         src={
           <>
             {data
-              ? `newest first, at most ${data.limit} rows · read ${ago(ms(data.generated), now)} · `
+              ? `newest first, at most ${data.limit} rows · read ${relative(parse(data.generated), now)} · `
               : ""}
             <button type="button" className="cap-btn" disabled={load.loading} onClick={load.reread}>
               {load.loading ? "Reading..." : "Read again"}
@@ -167,8 +167,8 @@ export function Activity() {
                     data-open={`audit:${r.id}`}
                     tabIndex={0}
                   >
-                    <td className="num" title={utc(ms(r.at))}>
-                      {ago(ms(r.at), now)}
+                    <td className="num" title={utc(parse(r.at))}>
+                      {relative(parse(r.at), now)}
                     </td>
                     <td className="mono">
                       {r.actor ?? <None />}

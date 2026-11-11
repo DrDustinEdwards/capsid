@@ -133,15 +133,6 @@ main {
   text-wrap: balance;
 }
 
-/* status vocabulary: shape + text + color */
-/* A hold reason is a phrase, so it wraps in its own column rather than squeezing the rest. */
-.held .cap-status {
-  white-space: normal;
-  align-items: flex-start;
-}
-.held .cap-status-glyph {
-  margin-top: 2px;
-}
 .prcards .wrow + .wrow {
   border-top: 1px solid var(--line);
 }
@@ -1482,9 +1473,6 @@ td.ctl .toolbar.col {
 }
 .device-list .prefrow {
   flex-wrap: wrap;
-}
-.when .faint {
-  white-space: nowrap;
 }
 
 /* The result of an action: stays until dismissed or replaced, not on a timer. */

@@ -5,7 +5,7 @@ import { PUSH_KEY } from "../lib/keys";
 import { useApp } from "../app/ctx";
 import { fetchPush, postPush, useAnswer, type Answer, type PushOp } from "../lib/api";
 import { BASE } from "../lib/base";
-import { ago, msSql } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
 import type { PortalPush } from "../types";
 import { Panel } from "capsomer/react/panel";
 
@@ -156,9 +156,9 @@ export function PhoneAlerts() {
                   <span>
                     {d.label ?? `Device ${d.id}`}{" "}
                     <span className="faint">
-                      turned on {ago(msSql(d.created_at), now)}
+                      turned on {relative(parse(d.created_at), now)}
                       {d.last_sent_at
-                        ? `, last alert ${ago(msSql(d.last_sent_at), now)}${d.last_status && (d.last_status < 200 || d.last_status > 299) ? ` (answered ${d.last_status})` : ""}`
+                        ? `, last alert ${relative(parse(d.last_sent_at), now)}${d.last_status && (d.last_status < 200 || d.last_status > 299) ? ` (answered ${d.last_status})` : ""}`
                         : ", no alert yet"}
                     </span>
                   </span>
@@ -217,11 +217,11 @@ function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: numbe
         {digest.last &&
           (digest.last.outcome === "failed" ? (
             <Banner tone="crit">
-              Last attempt failed {ago(Date.parse(digest.last.at), now)}: {digest.last.note}
+              Last attempt failed {relative(Date.parse(digest.last.at), now)}: {digest.last.note}
             </Banner>
           ) : (
             <p className="faint">
-              Last sent {ago(Date.parse(digest.last.at), now)}: {digest.last.note}
+              Last sent {relative(Date.parse(digest.last.at), now)}: {digest.last.note}
             </p>
           ))}
       </div>

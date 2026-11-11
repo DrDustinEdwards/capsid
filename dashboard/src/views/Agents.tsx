@@ -2,9 +2,12 @@ import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { AGENT_TABS, tabOf, useApp } from "../app/ctx";
 import { agentState, archiveAgents, nsList, rosterAgents } from "../lib/derive";
-import { ago, ms, pct } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
+import { pct } from "../lib/format";
 import { St } from "../ui/icons";
-import { PageTabs, useTabParam } from "../ui/pagetabs";
+import { PageTabs } from "capsomer/react/tabs";
+import { tabLink, useSearch } from "../lib/router";
+import { tabParam } from "capsomer/behavior/tabs";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
 
@@ -14,11 +17,19 @@ const CostChart = trendChart("CostChart");
 // Three tabs (the Portal audit's new map, 2026-11-06): the roster, the archive of revoked
 // agents, and the AI access granted on each server. The claim checks are Jobs' Checks tab.
 export function Agents() {
-  const tab = tabOf(AGENT_TABS, useTabParam()) ?? AGENT_TABS[0].id;
+  const search = useSearch();
+  const tab = tabOf(AGENT_TABS, tabParam(search)) ?? AGENT_TABS[0].id;
   return (
     <div className="page">
       <PageHead title="Agents" />
-      <PageTabs label="Agents" path="/agents" tabs={AGENT_TABS} current={tab} />
+      <PageTabs
+        aria-label="Agents"
+        path="/agents"
+        tabs={AGENT_TABS}
+        current={tab}
+        search={search}
+        renderLink={tabLink}
+      />
       {tab === "archive" ? <Archive /> : tab === "access" ? <Access /> : <Roster />}
     </div>
   );
@@ -66,15 +77,15 @@ function Archive() {
                         {a.kind} · {nsList(a)}
                       </div>
                     </td>
-                    <td data-label="Revoked">{ago(ms(a.revoked_at as string), now)}</td>
+                    <td data-label="Revoked">{relative(parse(a.revoked_at as string), now)}</td>
                     <td data-label="Archive">
                       {a.archived_at ? (
-                        <St kind="nodata">Archived {ago(ms(a.archived_at), now)}</St>
+                        <St kind="nodata">Archived {relative(parse(a.archived_at), now)}</St>
                       ) : (
                         <St kind="queued">
                           Moves by{" "}
                           {new Date(
-                            ms(a.revoked_at as string) + ARCHIVE_AFTER_MS,
+                            parse(a.revoked_at as string) + ARCHIVE_AFTER_MS,
                           ).toLocaleDateString()}
                         </St>
                       )}
@@ -86,7 +97,7 @@ function Archive() {
                       {a.prs_merged} of {a.prs_opened}
                     </td>
                     <td data-label="Last seen">
-                      {a.last_seen ? ago(ms(a.last_seen), now) : "never"}
+                      {a.last_seen ? relative(parse(a.last_seen), now) : "never"}
                     </td>
                   </tr>
                 ))}
@@ -185,7 +196,9 @@ function Roster() {
                     </td>
                     <td data-label="Last seen">
                       <St kind={st.kind}>{st.label}</St>
-                      <div className="src">{a.last_seen ? ago(ms(a.last_seen), now) : "never"}</div>
+                      <div className="src">
+                        {a.last_seen ? relative(parse(a.last_seen), now) : "never"}
+                      </div>
                     </td>
                     <td data-label="Done / failed / blocked" className="num">
                       {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}

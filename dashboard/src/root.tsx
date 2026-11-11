@@ -25,6 +25,7 @@ import "capsomer/base.css";
 import "capsomer/family-teal.css";
 import "capsomer/site-capsid-portal.css";
 import "capsomer/status.css";
+import "capsomer/time.css";
 import "capsomer/summary-list.css";
 import "capsomer/panel.css";
 import "capsomer/empty.css";

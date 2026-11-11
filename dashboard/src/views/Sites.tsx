@@ -1,8 +1,9 @@
 import { Banner } from "capsomer/react/banner";
 import { useState } from "react";
 import { SITES_TABS, sitePath, tabOf, useApp } from "../app/ctx";
-import { Link } from "../lib/router";
-import { PageTabs, useTabParam } from "../ui/pagetabs";
+import { Link, tabLink, useSearch } from "../lib/router";
+import { PageTabs } from "capsomer/react/tabs";
+import { tabParam } from "capsomer/behavior/tabs";
 import { Panel } from "capsomer/react/panel";
 import { Uptime90 } from "./Uptime90";
 import { Deploys } from "./Deploys";
@@ -14,11 +15,19 @@ import { FilterEmpty, FleetTable, NoSnapshot, NsChips, PageHead, useNsFilter } f
 // opens the site's own page (views/SitePage.tsx). The Deploys tab holds every site's deploys.
 // Projects recorded as serving no site are listed last, so that record can be changed too.
 export function Sites() {
-  const tab = tabOf(SITES_TABS, useTabParam()) ?? SITES_TABS[0].id;
+  const search = useSearch();
+  const tab = tabOf(SITES_TABS, tabParam(search)) ?? SITES_TABS[0].id;
   return (
     <div className="page">
       <PageHead title="Sites" />
-      <PageTabs label="Sites" path="/sites" tabs={SITES_TABS} current={tab} />
+      <PageTabs
+        aria-label="Sites"
+        path="/sites"
+        tabs={SITES_TABS}
+        current={tab}
+        search={search}
+        renderLink={tabLink}
+      />
       {tab === "deploys" ? <Deploys /> : <AllSites />}
     </div>
   );

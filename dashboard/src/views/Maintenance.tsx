@@ -5,7 +5,7 @@ import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchMaintenance, useAnswer } from "../lib/api";
 import type { Kind } from "../lib/derive";
-import { ago, ms } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
 import type { MaintenanceRule, OpsMaintenanceItem, PortalMaintenance } from "../types";
 import { St } from "../ui/icons";
 
@@ -68,7 +68,7 @@ export function Maintenance() {
       count={data?.generated ? items.length : undefined}
       src={
         <>
-          {data?.generated ? `daily pass ${ago(ms(data.generated), now)} · ` : ""}
+          {data?.generated ? `daily pass ${relative(parse(data.generated), now)} · ` : ""}
           <button type="button" className="cap-btn" disabled={load.loading} onClick={load.reread}>
             {load.loading ? "Reading..." : "Read again"}
           </button>
