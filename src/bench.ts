@@ -486,7 +486,7 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
     if (locked) return textResponse(locked, 409);
     // A stale running row is closed as unjudged before its rerun can open, so its job can
     // no longer post a late score: /bench/score refuses a row that is not running.
-    // A treatment row's job is closed with it (finishRun); one that moved in between is
+    // A treatment row's job is closed with it (closeBenchRun); one that moved in between is
     // left running, and the slot refusal below says so.
     const { results: staleRuns } = await env.DB.prepare(
       "SELECT id FROM bench_runs WHERE task_id = ?1 AND arm = ?2 AND status = 'running' AND started_at <= ?3",
@@ -494,7 +494,7 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
       .bind(task_id, arm, stale)
       .all<{ id: string }>();
     for (const { id: staleId } of staleRuns ?? []) {
-      await finishRun(env, { id: staleId, task_id, arm }, now, [
+      await closeBenchRun(env, { id: staleId, task_id, arm }, now, [
         env.DB.prepare(
           `UPDATE bench_runs SET status = 'unjudged', finished_at = ?2, unjudged_reason = 'no report within the stale window; closed when the next start was asked for'
            WHERE id = ?1 AND status = 'running'`,
@@ -593,7 +593,7 @@ const BENCH_HARNESS: Agent = {
 };
 
 /** Commits `rowClose` only while the run is running, with its job's close for a treatment run. False when nothing was written. */
-async function finishRun(
+async function closeBenchRun(
   env: Env,
   run: { id: string; task_id: string; arm: Arm },
   now: Date,
@@ -735,7 +735,7 @@ export async function handleBenchScore(request: Request, env: Env): Promise<Resp
     report.image_bytes,
     JSON.stringify(report),
   );
-  if (!(await finishRun(env, run, finishedAt, [closeRow]))) {
+  if (!(await closeBenchRun(env, run, finishedAt, [closeRow]))) {
     // Two reports for one run racing: the first closed it, the second matched nothing.
     const after = await env.DB.prepare("SELECT status FROM bench_runs WHERE id = ?1")
       .bind(run.id)

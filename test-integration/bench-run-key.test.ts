@@ -12,7 +12,7 @@ import { buildServer } from "../src/server";
 // key"): a treatment run's own key can claim its one job, read it by id, and complete it
 // with a reproduction or fail it, and every other call is refused: list, search, document read and write, every other job action,
 // another run's job and another namespace. It stops resolving once the run is scored,
-// and the score step closes the job (src/bench.ts finishRun).
+// and the score step closes the job (src/bench.ts closeBenchRun).
 //
 // Against a real D1, through resolveAgent and the served tools, so it is the key as the
 // agent would hold it, not a hand-built caller.

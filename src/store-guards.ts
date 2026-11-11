@@ -39,7 +39,7 @@ export function requireJobUnchanged(
     .bind(id, status, claimedBy, updatedAt);
 }
 
-// The same abort for a bench run (src/bench.ts finishRun): fires unless the run is still
+// The same abort for a bench run (src/bench.ts closeBenchRun): fires unless the run is still
 // running, so a run's close and its job's close commit together or not at all.
 export function requireBenchRunRunning(db: D1Database, runId: string): D1PreparedStatement {
   return db
