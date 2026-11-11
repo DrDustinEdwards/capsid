@@ -1105,56 +1105,7 @@ table.brief {
   background: var(--accent);
 }
 
-/* drawer: a native modal <dialog> (showModal) at the right edge. It slides in on open
-   (@starting-style) and out on close (display and overlay stay through the transition);
-   its ::backdrop is the scrim. Reduced motion drops both, below. */
-.drawer {
-  position: fixed;
-  inset: 0 0 0 auto;
-  margin: 0;
-  width: min(560px, 100%);
-  height: 100%;
-  max-width: none;
-  max-height: none;
-  border: 0;
-  border-left: 1px solid var(--line);
-  padding: 0;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  transform: translateX(102%);
-  transition:
-    transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1),
-    display 0.22s allow-discrete,
-    overlay 0.22s allow-discrete;
-  flex-direction: column;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-.drawer[open] {
-  display: flex;
-  transform: none;
-}
-@starting-style {
-  .drawer[open] {
-    transform: translateX(102%);
-  }
-}
-.drawer::backdrop {
-  background: var(--scrim);
-  opacity: 0;
-  transition:
-    opacity 0.18s,
-    display 0.18s allow-discrete,
-    overlay 0.18s allow-discrete;
-}
-.drawer[open]::backdrop {
-  opacity: 1;
-}
-@starting-style {
-  .drawer[open]::backdrop {
-    opacity: 0;
-  }
-}
+/* drawer: Capsomer's Dialog as a right side sheet (app/Drawer.tsx); its slide, scrim and reduced motion are Capsomer's. */
 .drawer > header {
   display: flex;
   align-items: start;
