@@ -6,12 +6,13 @@ import { controller } from "./capsomer/system-map/system-map.js";
 import { enhance as enhanceTabs } from "./tabs.js";
 // Every chart in Capsomer's frame: drawn again at its column's width where the server wrote a spec, and enhanced.
 import "capsomer/behavior/chart-enhance";
+// Play, Pause and Play again over a flow's steps: stops at the end, on a hidden tab and when the person moves.
+import { stepPlayer } from "capsomer/behavior/step-player";
 import { enhance as enhanceHeader } from "./capsomer/site-header/site-header.js";
 import { enhance as enhanceTheme, toggleTheme } from "./capsomer/theme-switch/theme-switch.js";
 import { enhance as enhanceMeters } from "./capsomer/meter/meter.js";
 
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-const STEP_MS = 3600;
 
 document.documentElement.classList.add("js");
 enhanceHeader(document, {
@@ -37,41 +38,6 @@ for (const root of document.querySelectorAll("[data-cap='system-map']")) {
 }
 
 /**
- * Play steps a flow on its own, one step every few seconds, and stops at the end, on a key, or
- * when the tab is hidden. The button says what pressing it will do.
- * @param {HTMLButtonElement | null} button @param {() => number} current @param {number} total @param {(n: number) => void} go
- */
-function autoplay(button, current, total, go) {
-  if (!button) return { stop() {}, start() {} };
-  let timer = 0;
-  const label = () =>
-    (button.textContent = timer ? "Pause" : current() >= total ? "Play again" : "Play");
-  const stop = () => {
-    clearInterval(timer);
-    timer = 0;
-    label();
-  };
-  const start = () => {
-    if (timer) return;
-    if (current() >= total) go(1);
-    timer = setInterval(
-      () => {
-        if (current() >= total) return stop();
-        go(current() + 1);
-      },
-      reduced.matches ? STEP_MS * 1.5 : STEP_MS,
-    );
-    label();
-  };
-  button.hidden = false;
-  button.setAttribute("aria-live", "off");
-  button.addEventListener("click", () => (timer ? stop() : start()));
-  document.addEventListener("visibilitychange", () => document.hidden && stop());
-  label();
-  return { stop, start, playing: () => !!timer };
-}
-
-/**
  * The front page's player: the map plays its flow in place, with no address of its own, so
  * stepping never adds to the browser's history. The tour's chapter nearest the middle of the
  * screen is the step shown, and its parts' names light with the drawing.
@@ -85,12 +51,12 @@ function player(map, root, host) {
     if (e.detail.id === flow) current = e.detail.step;
   });
   const go = (n) => (root.dataset.flow === flow ? map.step(n) : map.playFlow(flow, n));
-  const play = autoplay(
-    host.parentElement.querySelector("[data-autoplay]"),
-    () => current,
+  const play = stepPlayer({
+    button: host.parentElement.querySelector("[data-autoplay]"),
+    current: () => current,
     total,
     go,
-  );
+  });
   root.addEventListener("keydown", () => play.stop());
   const chapters = [...document.querySelectorAll("[data-tour-step]")];
   if (!chapters.length) return;
@@ -171,12 +137,12 @@ function flowPage(map, root, host) {
       )?.focus();
   };
   const go = (n) => (root.dataset.flow === flow ? map.step(n) : map.playFlow(flow, n));
-  play = autoplay(
-    document.querySelector("[data-swap='step'] [data-autoplay]"),
-    () => current,
+  play = stepPlayer({
+    button: document.querySelector("[data-swap='step'] [data-autoplay]"),
+    current: () => current,
     total,
     go,
-  );
+  });
 
   map.playFlow(flow, current);
   // Whatever stepped (a link, a key, the map's own Back and Next), the map says so here.
