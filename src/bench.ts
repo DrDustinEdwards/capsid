@@ -16,7 +16,7 @@ import { noFlags } from "./agents-schema";
 import { adminFailJob, supersedeJob, workRecorded } from "./jobs-seat";
 import { readJob } from "./jobs-transition";
 import { auditStatement, isMissingRowAbort, requireBenchRunRunning } from "./store-guards";
-import { textResponse } from "./http";
+import { textResponse } from "@dustinedwards/site-runtime/http";
 import {
   type Arm,
   type Refusal,

@@ -5,7 +5,7 @@ import { portalGate } from "./portal-auth";
 import { readSharedCode } from "./shared-code";
 import { readCompleteness } from "./completeness";
 import { readResources } from "./system-facts-store";
-import { textResponse } from "./http";
+import { textResponse } from "@dustinedwards/site-runtime/http";
 import { notFoundReport } from "@dustinedwards/site-runtime/not-found";
 import type { PortalNotFound } from "./ops-types/sites";
 

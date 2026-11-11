@@ -148,7 +148,7 @@ jobs:
         run: npm run test:integration
 
       # The Watch Floor app builds, and stays inside its size budget
-      # (dashboard/scripts/size-budget.mjs, which fails closed on a missing build).
+      # (devkit-size-budget, dashboard/.size-budget.json, which fails closed on a missing build).
       # scripts/deploy.mjs runs the same two before every deploy.
       - name: Build the dashboard and hold its size budget
         run: npm run build:dashboard

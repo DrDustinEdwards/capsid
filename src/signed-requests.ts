@@ -14,7 +14,7 @@ import {
 } from "./offaccount";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { MINUTE_MS } from "./time";
-import { textResponse } from "./http";
+import { textResponse } from "@dustinedwards/site-runtime/http";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 
 // The signed endpoints that are not MCP: the backup credential mint and the Amazon copy's report, and

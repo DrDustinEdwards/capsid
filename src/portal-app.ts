@@ -3,7 +3,7 @@ import { dashboardCsp } from "./dashboard-csp";
 import type { Env } from "./env";
 import { PORTAL_PATH, portalGate } from "./portal-auth";
 import { isPortalHost } from "./portal-host";
-import { textResponse as text } from "./http";
+import { textResponse as text } from "@dustinedwards/site-runtime/http";
 
 // Capsid Portal (capsid/research/design-ops-console.md, moved from /console/app/ by
 // capsid/research/design-portal-unify.md): React Router pages rendered here, on the server, with

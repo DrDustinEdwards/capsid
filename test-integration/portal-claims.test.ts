@@ -61,7 +61,7 @@ describe("GET /portal/api/claims", () => {
     await plant();
     const response = await get(`?namespace=${NS}`);
     expect(response.status).toBe(200);
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     const body = (await response.json()) as PortalClaimsAggregate;
     expect(body.generated).toMatch(/T.*Z$/);
     expect(body.filter).toEqual({ namespace: NS, agent: null, since: null, until: null });
