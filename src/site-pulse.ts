@@ -71,7 +71,7 @@ export function nextPulse(prev: PulseSite | undefined, probe: SiteProbe, now: Da
   };
 }
 
-/** The failing checks a degraded reason names: health-format joins them with "; ", and a
+/** The failing checks a degraded reason names: ./health-read joins them with "; ", and a
  *  part such as "backup: last successful backup was 38h ago" is keyed by its name only, so
  *  an age that grows each probe is still one check. */
 function degradedChecks(reason: string): string[] {

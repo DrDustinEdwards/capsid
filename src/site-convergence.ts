@@ -1,3 +1,4 @@
+import { healthChecks as readChecks } from "@dustinedwards/site-runtime/health-read";
 import type { Env } from "./env";
 import { healthUrl, readSiteConfig } from "./ops-sites";
 import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
@@ -27,30 +28,19 @@ const clip = (s: string) => (s.length > TEXT_MAX ? `${s.slice(0, TEXT_MAX - 1)}â
 /** A health body's checks, each with the repair it maps to. Only the fields the view shows
  *  are kept, as text or numbers: the body is the site's, read as data. */
 export function healthChecks(body: unknown, operator: SiteOperator): ConvergenceCheck[] {
-  const checks = (body as { checks?: unknown } | null)?.checks;
-  if (!Array.isArray(checks)) return [];
-  const out: ConvergenceCheck[] = [];
-  for (const c of checks) {
-    if (!c || typeof c !== "object" || typeof (c as { name?: unknown }).name !== "string") continue;
-    const row = c as Record<string, unknown>;
-    const name = clip(row.name as string);
+  return readChecks(body).map((row) => {
+    const name = clip(row.name);
     const tool = Object.hasOwn(operator.repairs, name) ? operator.repairs[name] : null;
-    const said = [row.detail, row.message, row.reason].find((v) => typeof v === "string") as
-      | string
-      | undefined;
-    const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
-    out.push({
+    return {
       name,
-      // The family shape says `status`; the older bodies say `ok`.
-      ok: row.ok === true || row.status === "pass",
-      detail: said ? clip(said) : null,
-      expected: num(row.expected),
-      present: num(row.present),
+      ok: row.ok,
+      detail: row.detail ? clip(row.detail) : null,
+      expected: row.expected ?? null,
+      present: row.present ?? null,
       repair: tool,
       repair_refusal: tool ? toolRefusal(operator, tool) : null,
-    });
-  }
-  return out;
+    };
+  });
 }
 
 /** sync_status's scalar fields as label and text, and its divergence list as lines. */

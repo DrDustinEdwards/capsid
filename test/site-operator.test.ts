@@ -222,8 +222,8 @@ test("the convergence view maps each check to its repair and keeps sync_status's
   const checks = healthChecks(
     {
       checks: [
-        { name: "content-drift", ok: false, detail: "2 posts differ", expected: 42, present: 40 },
-        { name: "media-backup-drift", ok: true },
+        { name: "content-drift", status: "fail", detail: "40 of 42" },
+        { name: "media-backup-drift", status: "pass" },
         { bad: 1 },
       ],
     },

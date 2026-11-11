@@ -14,7 +14,7 @@ import { pulseAlerts, readPulse } from "./site-pulse";
 import { readSnapshot } from "./ops-snapshot";
 import { readStoredTls, tlsAlerts } from "./tls-expiry";
 import { domainAlerts } from "./domain-expiry";
-import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys } from "./web-push";
+import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys } from "@dustinedwards/site-runtime/web-push";
 import { jsonResponse as json, textResponse as text } from "@dustinedwards/site-runtime/http";
 import { HOUR_MS, DAY_MS } from "./time";
 
