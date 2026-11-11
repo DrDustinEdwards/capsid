@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, Suspense, lazy, useState, type ReactNode } from "react";
 import { LogView } from "capsomer/react/log-view";
 import "capsomer/table.css";
 import "capsomer/log-view.css";
@@ -24,7 +24,8 @@ import type {
   WebVital,
 } from "../types";
 import { St } from "../ui/icons";
-import { NotFound } from "./NotFound";
+// Only Capsid's own page shows its 404 table, so the report and its stylesheets load with it.
+const NotFound = lazy(() => import("./NotFound").then((m) => ({ default: m.NotFound })));
 
 // A SITE PAGE'S LIVE READS (the Portal audit's new map, 2026-11-06; src/portal-site.ts): search
 // (Google Search Console and Bing Webmaster) and traffic (Cloudflare's edge: 404s, 5xx, web
@@ -429,7 +430,11 @@ export function SearchAndTraffic({ ns }: { ns: string }) {
     <>
       <Search ns={ns} />
       <Traffic ns={ns} />
-      {ns === "capsid" && <NotFound />}
+      {ns === "capsid" && (
+        <Suspense fallback={null}>
+          <NotFound />
+        </Suspense>
+      )}
     </>
   );
 }
