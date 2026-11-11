@@ -3,9 +3,12 @@ import { useApp } from "../app/ctx";
 import { ago, msSql, utc } from "../lib/format";
 import { St } from "../ui/icons";
 import type { OpsSiteConfig } from "../types";
-import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
+import { ConfigForm, useConfigForm, type Editing } from "capsomer/react/config-form";
+import "capsomer/config-form.css";
+import { Field } from "./shared";
 import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
+import { Missing } from "capsomer/react/empty";
 
 // The site configuration (live.sites, the ops_sites table): one row per namespace. A row
 // with an origin is a site the watcher probes; a row with no origin records that the
@@ -67,9 +70,13 @@ function paramsOf(d: Draft): Record<string, string> {
   return p;
 }
 
-export type Editing = { kind: "add" } | { kind: "edit"; row: OpsSiteConfig };
-
-export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () => void }) {
+export function SiteForm({
+  editing,
+  onClose,
+}: {
+  editing: Editing<OpsSiteConfig>;
+  onClose: () => void;
+}) {
   const { feed, confirm } = useApp();
   const { f, first } = useConfigForm();
   const [d, setD] = useState<Draft>(editing.kind === "edit" ? draftOf(editing.row) : BLANK);
@@ -256,7 +263,7 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
 export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
   const { now } = useApp();
   const at = msSql(s.updated_at);
-  const none = <span className="faint">none</span>;
+  const none = <Missing />;
   return (
     <tr data-row="">
       <td>

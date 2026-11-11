@@ -1,6 +1,9 @@
 import { Fragment, Suspense, lazy, useState, type ReactNode } from "react";
-import { Spinner } from "capsomer/react/empty";
+import { LogView } from "capsomer/react/log-view";
+import "capsomer/table.css";
+import "capsomer/log-view.css";
 import { Panel } from "capsomer/react/panel";
+import { ReadState, SourceState, type SourceResult } from "capsomer/react/read-state";
 import { useApp } from "../app/ctx";
 import {
   fetchBuildLog,
@@ -8,7 +11,6 @@ import {
   fetchSiteTraffic,
   fetchWorkersBuilds,
   useAnswer,
-  type Load,
 } from "../lib/api";
 import { ago, fmtN, ms, pct, shortId, utc } from "../lib/format";
 import type {
@@ -34,51 +36,17 @@ const NotFound = lazy(() => import("./NotFound").then((m) => ({ default: m.NotFo
 
 // ---- Shared pieces -------------------------------------------------------------------------
 
-// A read's state before its sources: reading, failed, or nothing yet.
-function Reading({
-  load,
-  what,
-  children,
-}: {
-  load: Load<unknown>;
-  what: string;
-  children: ReactNode;
-}) {
-  if (!load.data && load.loading) {
-    return (
-      <div className="loading" role="status">
-        <Spinner label={`Reading ${what}...`} />
-      </div>
-    );
-  }
-  if (!load.data) {
-    return (
-      <div className="body">
-        <St kind="nodata">No data</St>{" "}
-        {load.error ? `The read failed: ${load.error}.` : "No read yet."}
-      </div>
-    );
-  }
-  return <>{children}</>;
-}
-
-// One source: its rows, or why it has none. "empty" is a read that worked and found nothing.
+// A read's state before its sources is Capsomer's ReadState; one source's answer, or why it has
+// none, is its SourceState. A site with no source set up is "No data", as one with nothing yet.
 function Source<T>({ src, children }: { src: SiteSource<T>; children: (data: T) => ReactNode }) {
-  if (src.ok) return <>{children(src.data)}</>;
-  return (
-    <div className="body">
-      {src.kind === "empty" ? (
-        <span className="faint">{src.reason}</span>
-      ) : (
-        <>
-          <St kind={src.kind === "error" ? "warn" : "nodata"}>
-            {src.kind === "error" ? "Not read" : "No data"}
-          </St>{" "}
-          {src.reason}
-        </>
-      )}
-    </div>
-  );
+  const result: SourceResult<T> = src.ok
+    ? src
+    : {
+        ok: false,
+        kind: src.kind === "empty" || src.kind === "error" ? src.kind : "nodata",
+        reason: src.reason,
+      };
+  return <SourceState src={result}>{children}</SourceState>;
 }
 
 // ---- Search --------------------------------------------------------------------------------
@@ -149,7 +117,7 @@ function Search({ ns }: { ns: string }) {
   return (
     <div className="grid2">
       <Panel flush title="Google Search" src="Search Console, 28 days ending 3 days ago">
-        <Reading load={load} what="Search Console">
+        <ReadState what="Search Console" loading={load.loading} error={load.error} hasData={!!d}>
           {d && (
             <Source src={d.google}>
               {(g) => (
@@ -184,10 +152,10 @@ function Search({ ns }: { ns: string }) {
               )}
             </Source>
           )}
-        </Reading>
+        </ReadState>
       </Panel>
       <Panel flush title="Bing Search" src="Bing Webmaster, the same window">
-        <Reading load={load} what="Bing Webmaster">
+        <ReadState what="Bing Webmaster" loading={load.loading} error={load.error} hasData={!!d}>
           {d && (
             <Source src={d.bing}>
               {(b) => (
@@ -226,7 +194,7 @@ function Search({ ns }: { ns: string }) {
               )}
             </Source>
           )}
-        </Reading>
+        </ReadState>
       </Panel>
     </div>
   );
@@ -334,7 +302,7 @@ function Traffic({ ns }: { ns: string }) {
   return (
     <div className="grid2">
       <Panel flush title="Missing pages" src={edge}>
-        <Reading load={load} what="the 404s">
+        <ReadState what="the 404s" loading={load.loading} error={load.error} hasData={!!d}>
           {d && (
             <Source src={d.not_found}>
               {(n) => {
@@ -375,107 +343,73 @@ function Traffic({ ns }: { ns: string }) {
               }}
             </Source>
           )}
-        </Reading>
+        </ReadState>
       </Panel>
       <Panel flush title="Server errors" src={edge}>
-        <Reading load={load} what="the 5xx">
+        <ReadState what="the 5xx" loading={load.loading} error={load.error} hasData={!!d}>
           {d && (
             <Source src={d.server_errors}>
               {(e) => (
-                <>
-                  {e.note && <p className="body faint">{e.note}</p>}
-                  {e.failures.length ? (
-                    <div className="scroll-x">
-                      <table className="list">
-                        <thead>
-                          <tr>
-                            <th scope="col">Path</th>
-                            <th scope="col" className="num">
-                              Status
-                            </th>
-                            <th scope="col" className="num">
-                              Hits
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {e.failures.map((f) => (
-                            <tr key={`${f.path} ${f.status}`}>
-                              <td className="mono wrap">{f.path}</td>
-                              <td className="num">{f.status}</td>
-                              <td className="num">{fmtN(f.hits)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {e.truncated && (
-                        <p className="body faint">The top failures only; more may exist.</p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="body">
-                      <St kind="ok">None</St> No request failed with a 5xx.
-                    </p>
-                  )}
-                </>
+                <div className="body">
+                  <LogView
+                    caption={`Server errors, ${d.days} days`}
+                    columns={[
+                      { key: "path", label: "Path", mono: true, cell: (f) => f.path },
+                      { key: "status", label: "Status", num: true, cell: (f) => f.status },
+                      { key: "hits", label: "Hits", num: true, cell: (f) => fmtN(f.hits) },
+                    ]}
+                    rows={e.failures}
+                    rowKey={(f) => `${f.path} ${f.status}`}
+                    note={e.note || undefined}
+                    truncated={e.truncated}
+                    truncatedNote="The top failures only; more may exist."
+                    empty="No request failed with a 5xx."
+                  />
+                </div>
               )}
             </Source>
           )}
-        </Reading>
+        </ReadState>
       </Panel>
       <Panel flush title="Web vitals" src={`Cloudflare's browser insights, ${d?.days ?? 7} days`}>
-        <Reading load={load} what="the web vitals">
+        <ReadState what="the web vitals" loading={load.loading} error={load.error} hasData={!!d}>
           {d && <Source src={d.web_vitals}>{(v) => <Vitals v={v} />}</Source>}
-        </Reading>
+        </ReadState>
       </Panel>
       <Panel flush title="AI crawlers" src={edge}>
-        <Reading load={load} what="the crawlers">
+        <ReadState what="the crawlers" loading={load.loading} error={load.error} hasData={!!d}>
           {d && (
             <Source src={d.ai_crawlers}>
               {(c) => (
-                <>
-                  {c.note && <p className="body faint">{c.note}</p>}
-                  {c.crawlers.length ? (
-                    <div className="scroll-x">
-                      <table className="list">
-                        <thead>
-                          <tr>
-                            <th scope="col">Crawler</th>
-                            <th scope="col">Kind</th>
-                            <th scope="col" className="num">
-                              Hits
-                            </th>
-                            <th scope="col">Answered</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {c.crawlers.map((r) => (
-                            <tr key={r.name}>
-                              <td>{r.name}</td>
-                              <td className="muted">{CRAWLER_KIND[r.kind] ?? r.kind}</td>
-                              <td className="num">{fmtN(r.hits)}</td>
-                              <td className="muted">
-                                {Object.entries(r.statuses)
-                                  .sort((a, b) => b[1] - a[1])
-                                  .map(([status, n]) => `${status} × ${fmtN(n)}`)
-                                  .join(", ")}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {c.truncated && (
-                        <p className="body faint">The top crawlers only; more may exist.</p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="body faint">No known AI crawler visited.</p>
-                  )}
-                </>
+                <div className="body">
+                  <LogView
+                    caption={`AI crawlers, ${d.days} days`}
+                    columns={[
+                      { key: "name", label: "Crawler", cell: (r) => r.name },
+                      { key: "kind", label: "Kind", cell: (r) => CRAWLER_KIND[r.kind] ?? r.kind },
+                      { key: "hits", label: "Hits", num: true, cell: (r) => fmtN(r.hits) },
+                      {
+                        key: "answered",
+                        label: "Answered",
+                        cell: (r) =>
+                          Object.entries(r.statuses)
+                            .sort((x, y) => y[1] - x[1])
+                            .map(([status, n]) => `${status} × ${fmtN(n)}`)
+                            .join(", "),
+                      },
+                    ]}
+                    rows={c.crawlers}
+                    rowKey={(r) => r.name}
+                    note={c.note || undefined}
+                    truncated={c.truncated}
+                    truncatedNote="The top crawlers only; more may exist."
+                    empty="No known AI crawler visited."
+                  />
+                </div>
               )}
             </Source>
           )}
-        </Reading>
+        </ReadState>
       </Panel>
     </div>
   );
@@ -539,7 +473,7 @@ function BuildLog({ build }: { build: string }) {
       title={`Build log ${shortId(build)}`}
       src="Cloudflare Workers Builds, the last 500 lines"
     >
-      <Reading load={load} what="the build log">
+      <ReadState what="the build log" loading={load.loading} error={load.error} hasData={!!d}>
         {d && (
           <Source src={d.log}>
             {(l) => (
@@ -556,7 +490,7 @@ function BuildLog({ build }: { build: string }) {
             )}
           </Source>
         )}
-      </Reading>
+      </ReadState>
     </Panel>
   );
 }
@@ -574,7 +508,7 @@ export function SiteBuilds({ ns }: { ns: string }) {
         count={d?.builds.ok ? d.builds.data.builds.length : undefined}
         src={`Cloudflare Workers Builds${d?.script ? ` for ${d.script}` : ""}, newest first`}
       >
-        <Reading load={load} what="the builds">
+        <ReadState what="the builds" loading={load.loading} error={load.error} hasData={!!d}>
           {d && (
             <Source src={d.builds}>
               {({ builds }) => (
@@ -632,7 +566,7 @@ export function SiteBuilds({ ns }: { ns: string }) {
               )}
             </Source>
           )}
-        </Reading>
+        </ReadState>
       </Panel>
       {open && <BuildLog build={open} />}
     </>

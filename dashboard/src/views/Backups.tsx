@@ -7,6 +7,7 @@ import { storeUse } from "../lib/store";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";
 import { Panel } from "capsomer/react/panel";
+import { ReadAgain } from "capsomer/react/read-state";
 import { NoSnapshot } from "./shared";
 import { Spinner } from "capsomer/react/empty";
 import { fetchBackups, useAnswer } from "../lib/api";
@@ -230,10 +231,12 @@ function SiteBackups() {
       section="Site backups"
       src={
         <>
-          {data ? `read ${ago(ms(data.read_at), now)} · ` : ""}
-          <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
-            {load.loading ? "Reading..." : "Read again"}
-          </button>{" "}
+          <ReadAgain
+            at={data ? ms(data.read_at) : undefined}
+            now={now}
+            reading={load.loading}
+            onRead={load.reread}
+          />{" "}
           <button
             type="button"
             className="btn"

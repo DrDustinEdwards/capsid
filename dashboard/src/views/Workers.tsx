@@ -1,4 +1,4 @@
-import { Empty, Spinner } from "capsomer/react/empty";
+import { Empty, Missing, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchResources, useAnswer } from "../lib/api";
@@ -17,16 +17,12 @@ type Worker = ResourcesDoc["workers"][number];
 type User = ResourcesDoc["databases"][number]["used_by"][number];
 
 const names = (list: string[]) =>
-  list.length ? (
-    <span className="mono">{list.join(", ")}</span>
-  ) : (
-    <span className="faint">none</span>
-  );
+  list.length ? <span className="mono">{list.join(", ")}</span> : <Missing />;
 const pairs = (list: Array<{ binding: string; to: string }>) =>
   list.length ? (
     <span className="mono">{list.map((p) => `${p.binding} → ${p.to}`).join(", ")}</span>
   ) : (
-    <span className="faint">none</span>
+    <Missing />
   );
 
 function WorkerPanel({ w }: { w: Worker }) {

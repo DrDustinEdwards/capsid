@@ -1,5 +1,6 @@
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import { ReadAgain } from "capsomer/react/read-state";
 import { useApp } from "../app/ctx";
 import { fetchConvergence, useAnswer, type Load } from "../lib/api";
 import { ago, ms } from "../lib/format";
@@ -86,14 +87,7 @@ function SitePanel({
       title="Operator API"
       id={`convergence-${site.namespace}`}
       section="Operator API"
-      src={
-        <>
-          {`read ${ago(ms(site.read_at), now)} · `}
-          <button type="button" className="btn" disabled={loading} onClick={reread}>
-            {loading ? "Reading..." : "Read again"}
-          </button>
-        </>
-      }
+      src={<ReadAgain at={ms(site.read_at)} now={now} reading={loading} onRead={reread} />}
     >
       <div className="body stack-gap" data-convergence={site.namespace}>
         {site.problem && <div className="callout warn">{site.problem}</div>}

@@ -2,7 +2,8 @@ import { Suspense, lazy, type ReactNode } from "react";
 import { Link } from "../lib/router";
 import { HEALTH_TABS, placePath, tabOf, useApp, type HealthTab } from "../app/ctx";
 import { WAITING_KINDS, attentionGroups, siteScripts, type AttentionRow } from "../lib/derive";
-import { St } from "../ui/icons";
+import { Verdict } from "capsomer/react/verdict";
+import "capsomer/verdict.css";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { Backups } from "./Backups";
 import { DefaultBranches } from "./Ci";
@@ -29,7 +30,7 @@ export function Health() {
   return (
     <div className="page">
       <PageHead title="Health" />
-      <Verdict />
+      <HealthVerdict />
       <Overview />
       <PageTabs label="Health" path="/health" tabs={HEALTH_TABS} current={tab} />
       <div className="embedded" id={tab} data-tab-panel={tab}>
@@ -63,46 +64,26 @@ function TabPanel({ tab }: { tab: HealthTab }): ReactNode {
 }
 
 // One line: "All good", or how many problems and the first few by name, each a link to
-// where it is fixed. The same problems as Needs you's list (what waits on you is not one of
-// them: it is in Waiting for you), so the two pages never disagree.
-function Verdict() {
+// where it is fixed (Capsomer's Verdict). The same problems as Needs you's list (what waits on
+// you is not one of them: it is in Waiting for you), so the two pages never disagree.
+function HealthVerdict() {
   const { feed, now, open } = useApp();
   const { problems } = attentionGroups(feed, now, WAITING_KINDS);
-  if (!problems.length) {
-    return (
-      <p className="verdict" data-verdict="ok">
-        <St kind="ok">All good</St>
-        <span className="muted">
-          Sites, backups and default branches were fine on the last pass.
-        </span>
-      </p>
-    );
-  }
-  const kind = problems.some((p) => p.sev === "crit") ? "crit" : "warn";
-  const named = problems.slice(0, NAMED);
-  const rest = problems.length - named.length;
   return (
-    <p className="verdict" data-verdict="problems">
-      <St kind={kind}>
-        {problems.length} {problems.length === 1 ? "problem" : "problems"}:
-      </St>
-      <span>
-        {named.map((p, i) => (
-          <span key={p.key}>
-            <ProblemLink row={p} />
-            {i < named.length - 1 ? " · " : ""}
-          </span>
-        ))}
-        {rest > 0 && (
-          <>
-            {" and "}
-            <button type="button" className="linkbtn" onClick={() => open("view:needs#attention")}>
-              {rest} more
-            </button>
-          </>
-        )}
-      </span>
-    </p>
+    <Verdict
+      problems={problems.map((p) => ({
+        key: p.key,
+        tone: p.sev === "crit" ? "crit" : "warn",
+        label: <ProblemLink row={p} />,
+      }))}
+      okNote="Sites, backups and default branches were fine on the last pass."
+      named={NAMED}
+      more={(rest) => (
+        <button type="button" className="linkbtn" onClick={() => open("view:needs#attention")}>
+          {rest} more
+        </button>
+      )}
+    />
   );
 }
 

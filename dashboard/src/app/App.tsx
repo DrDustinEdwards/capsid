@@ -17,6 +17,9 @@ import { Freshness } from "capsomer/react/freshness";
 import { shareLeft } from "capsomer/behavior/freshness";
 import "capsomer/freshness.css";
 import { AdminShell, type AdminEntry } from "capsomer/react/admin-shell";
+import { SignedOutPage } from "capsomer/react/error-page";
+import { ModeBanner } from "capsomer/react/mode-banner";
+import "capsomer/mode-banner.css";
 import { Outlet } from "react-router";
 import { Link, useDemo, useLocation, useSearch } from "../lib/router";
 import {
@@ -45,7 +48,6 @@ import {
   type UndoRequest,
   type ViewId,
 } from "./ctx";
-import { DemoNotice } from "./DemoNotice";
 import type { OpsFeed, PortalPerformed } from "../types";
 import { lasting, withMessage, type Message } from "../lib/messages";
 
@@ -668,23 +670,7 @@ export function App() {
     : null;
 
   let content: ReactNode;
-  if (signedOut) {
-    content = (
-      <div className="page">
-        <div className="signedout" role="alert">
-          <h1>Signed out</h1>
-          <p>
-            {leftByChoice
-              ? "You signed out of Capsid Portal in this browser. Signing in again may not ask for your email if your Access session is still open."
-              : "Your Portal session ended, so the feed stopped answering."}
-          </p>
-          <a className="btn" href={APP_URL}>
-            {leftByChoice ? "Sign in again" : "Reload to sign in"}
-          </a>
-        </div>
-      </div>
-    );
-  } else if (!feed) {
+  if (!feed) {
     content = (
       <div className="page">
         {error ? (
@@ -726,12 +712,15 @@ export function App() {
   // the theme button and the avatar, whose menu holds Help; its second row says where you are and
   // links to the public site. The strip holds the family's apps.
   // The top bar says how fresh the page is and holds Refresh.
-  const shell = (
+  // Signed out is its own page (Capsomer's SignedOutPage), with no shell around it.
+  const shell = signedOut ? (
+    <SignedOutPage app="Capsid Portal" signIn={APP_URL} byChoice={leftByChoice} access />
+  ) : (
     <AdminShell
       app="portal"
       letterhead
       viewSite="https://capsid.dustinedwards.info"
-      page={signedOut ? "Signed out" : siteName || VIEWS.find((v) => v.id === route.view)?.label}
+      page={siteName || VIEWS.find((v) => v.id === route.view)?.label}
       nav={menu}
       tabs={tabEntries}
       navLabel="Sections"
@@ -755,7 +744,7 @@ export function App() {
             current: route.view === "settings",
           },
         ],
-        onSignOut: signedOut ? undefined : () => void leave(),
+        onSignOut: () => void leave(),
         signOutDisabled: !feed || leaving,
       }}
       status={
@@ -768,10 +757,10 @@ export function App() {
               SAMPLE DATA
             </span>
           )}
-          {!signedOut && <FeedFreshness feed={feed} nextPollAt={nextPollAt} skew={skew} />}
+          <FeedFreshness feed={feed} nextPollAt={nextPollAt} skew={skew} />
         </>
       }
-      onRefresh={signedOut ? undefined : () => void refresh()}
+      onRefresh={() => void refresh()}
       refreshing={spinning}
       refreshShortcut="R"
       jumpKeys={singleKeys}
@@ -783,7 +772,7 @@ export function App() {
       renderLink={(p) => (/^https?:/.test(p.href) ? <a {...p} /> : <Link {...p} />)}
       mainProps={{ ref: mainRef, onClick: onRowActivate, onKeyDown: onRowActivate }}
     >
-      {demo && <DemoNotice />}
+      {demo && <ModeBanner mode="demo" />}
       {content}
     </AdminShell>
   );

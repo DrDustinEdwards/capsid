@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useApp } from "../app/ctx";
 import type { PortalNamespace } from "../types";
-import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
+import { ConfigForm, useConfigForm, type Editing } from "capsomer/react/config-form";
+import "capsomer/config-form.css";
+import { Field } from "./shared";
 import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
 
@@ -10,8 +12,6 @@ import "capsomer/danger-zone.css";
 // capsid_admin_manage_namespaces (src/namespace-admin.ts, src/namespace-delete.ts). A project is
 // its namespace and the repos the repo tools resolve through, exactly one labeled primary. Every
 // change previews first in the confirm dialog, which shows what it will do or why it is refused.
-
-export type ProjectEditing = { kind: "add" } | { kind: "edit"; n: PortalNamespace };
 
 type RepoDraft = { key: number; repo: string; label: string };
 
@@ -22,17 +22,17 @@ export function ProjectForm({
   editing,
   onClose,
 }: {
-  editing: ProjectEditing;
+  editing: Editing<PortalNamespace>;
   onClose: () => void;
 }) {
   const { confirm } = useApp();
   const { f, first } = useConfigForm();
   const adding = editing.kind === "add";
-  const [ns, setNs] = useState(adding ? "" : editing.n.namespace);
+  const [ns, setNs] = useState(adding ? "" : editing.row.namespace);
   const [rows, setRows] = useState<RepoDraft[]>(() =>
-    adding || !editing.n.repos.length
+    adding || !editing.row.repos.length
       ? [draftRow("", "primary")]
-      : editing.n.repos.map((r) => draftRow(r.repo, r.label)),
+      : editing.row.repos.map((r) => draftRow(r.repo, r.label)),
   );
   const [cascade, setCascade] = useState(false);
   const [policies, setPolicies] = useState(false);

@@ -512,17 +512,6 @@ tr:has(.stretch) {
   font-size: var(--fs-detail);
   max-width: 24ch;
 }
-.wreply {
-  display: grid;
-  gap: 6px;
-  width: 100%;
-  max-width: 560px;
-  margin-top: 6px;
-}
-.wreply label {
-  font-size: var(--fs-detail);
-  color: var(--muted);
-}
 .batch-list {
   list-style: decimal;
 }
@@ -675,18 +664,6 @@ table.brief.workers-stores .st {
 /* stat tiles: figure and label on one line, the detail beneath. A tile is never
    narrower than its text (flex 1 0 auto), so the row wraps to more rows instead of
    cutting a word; only a tile wider than the whole row wraps its detail (design D3). */
-/* Health's verdict (views/Health.tsx): the answer in one line, the problems as links. */
-.verdict {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-  margin: 0;
-  font-size: 15px;
-}
-.verdict .st {
-  font-size: 15px;
-}
 .tiles {
   display: flex;
   flex-wrap: wrap;
@@ -1500,29 +1477,6 @@ main .sev-crit[data-row]:focus-visible {
   padding: 40px 0;
   text-align: center;
 }
-.signedout {
-  margin: 12vh auto 0;
-  max-width: 460px;
-  text-align: center;
-  display: grid;
-  gap: 12px;
-  justify-items: center;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 28px 24px;
-}
-.signedout h1 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: var(--weight-heading);
-  letter-spacing: -0.01em;
-}
-.signedout p {
-  margin: 0;
-  color: var(--muted);
-}
-
 @media (max-width: 1180px) {
   .grid2 {
     grid-template-columns: minmax(0, 1fr);
@@ -1581,32 +1535,25 @@ main .sev-crit[data-row]:focus-visible {
 }
 
 /* Settings: the site form */
-.siteform {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px 16px;
-  padding: 14px 16px;
-  align-items: start;
-}
-.siteform .f {
+.cap-config-form .f {
   display: grid;
   gap: 4px;
   min-width: 0;
 }
-.siteform .f .section-title {
+.cap-config-form .f .section-title {
   margin: 0;
 }
-.siteform .check {
+.cap-config-form .check {
   grid-column: 1 / -1;
   display: flex;
   gap: 8px;
   align-items: center;
   font-size: 13px;
 }
-.siteform :is(.full, .cap-danger) {
+.cap-config-form :is(.full, .cap-danger) {
   grid-column: 1 / -1;
 }
-.siteform .repos {
+.cap-config-form .repos {
   border: 0;
   margin: 0;
   padding: 0;
@@ -1614,7 +1561,7 @@ main .sev-crit[data-row]:focus-visible {
   gap: 8px;
   min-width: 0;
 }
-.siteform .repos legend {
+.cap-config-form .repos legend {
   padding: 0;
 }
 .repo-row {
@@ -1622,7 +1569,7 @@ main .sev-crit[data-row]:focus-visible {
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
   gap: 8px;
 }
-.siteform .cap-danger .check {
+.cap-config-form .cap-danger .check {
   grid-column: auto;
 }
 .field {

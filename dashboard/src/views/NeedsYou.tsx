@@ -1,6 +1,6 @@
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
-import { Suspense, lazy, useId, useState, type ReactNode } from "react";
+import { Suspense, lazy, useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
 import { hasSites, type Kind } from "../lib/derive";
@@ -17,6 +17,8 @@ import type { InboxApp, InboxItem, OpsAwaitingSeat, OpsJob, PortalNamespace } fr
 import { InboxMark, St } from "../ui/icons";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import { RowReply } from "capsomer/react/row-list";
+import "capsomer/row-list.css";
 import { PageHead } from "./shared";
 import { Problems } from "./Problems";
 
@@ -348,22 +350,14 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
   const question = j ? j.question === true : item.kind === "question";
   const verb = question ? "Answer" : "Resume";
   const [replying, setReplying] = useState(false);
-  const [reply, setReply] = useState("");
-  const [hint, setHint] = useState<string | null>(null);
-  const id = useId();
-  const box = `${id}-reply`;
   const blocked = j?.status === "blocked";
-  const send = () => {
-    const text = reply.trim();
-    if (!text)
-      return setHint(question ? "Type your answer first." : "Say what you did or approved first.");
+  const send = (text: string) => {
     if (!j) return;
-    setHint(null);
     confirm({
       action: "resume_job",
       params: { id: j.id, reason: text },
       title: `${question ? "Answer" : "Resume job"}: ${j.title}`,
-      onDone: () => (setReplying(false), setReply("")),
+      onDone: () => setReplying(false),
     });
   };
   return (
@@ -394,46 +388,16 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
           {item.link && <GitHub href={item.link} />}
         </span>
         {replying && (
-          <form
-            className="wreply"
-            id={box}
-            onSubmit={(e) => {
-              e.preventDefault();
-              send();
-            }}
-          >
-            <label htmlFor={`${box}-text`}>
-              {question
+          <RowReply
+            label={
+              question
                 ? "Your answer, sent to its driver"
-                : "What you did or approved, sent to its driver"}
-            </label>
-            <textarea
-              id={`${box}-text`}
-              rows={3}
-              value={reply}
-              autoFocus
-              aria-invalid={hint ? true : undefined}
-              aria-describedby={hint ? `${box}-hint` : undefined}
-              onChange={(e) => (setReply(e.target.value), setHint(null))}
-            />
-            {hint && (
-              <span className="err" id={`${box}-hint`} role="alert">
-                {hint}
-              </span>
-            )}
-            <div className="toolbar">
-              <button type="submit" className="btn primary">
-                Send
-              </button>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => (setReplying(false), setHint(null))}
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+                : "What you did or approved, sent to its driver"
+            }
+            emptyHint={question ? "Type your answer first." : "Say what you did or approved first."}
+            onSend={send}
+            onCancel={() => setReplying(false)}
+          />
         )}
       </div>
       <div className="wact">

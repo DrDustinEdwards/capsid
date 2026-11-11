@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
@@ -7,9 +6,11 @@ import { ago, ms, pct } from "../lib/format";
 import { St } from "../ui/icons";
 import type { PortalNamespace, PortalNamespaces } from "../types";
 import { Panel } from "capsomer/react/panel";
+import { ReadAgain } from "capsomer/react/read-state";
 import "capsomer/button.css";
 import { PageHead } from "./shared";
-import { ProjectForm, type ProjectEditing } from "./ProjectConfig";
+import { useEditor } from "capsomer/react/config-form";
+import { ProjectForm } from "./ProjectConfig";
 
 // PROJECTS (the Portal audit's new map, 2026-11-06; out of Settings): each project's driver,
 // its jobs and the integrity of its latest truth report. A project paused after repeated
@@ -138,23 +139,20 @@ function Roster() {
   const load = useAnswer<PortalNamespaces>([LIVE, "namespaces"], fetchNamespaces);
   const read = load.reread;
   const data = load.data;
-  const [editing, setEditing] = useState<ProjectEditing | null>(null);
-  // The form is keyed on what it edits, so switching rows starts a fresh draft.
-  const formKey = editing ? (editing.kind === "add" ? "add" : `edit:${editing.n.namespace}`) : "";
-  const close = () => (setEditing(null), read());
+  const ed = useEditor<PortalNamespace>(read);
   return (
     <>
       <div className="toolbar">
         <button
           type="button"
           className="btn primary"
-          onClick={() => setEditing({ kind: "add" })}
-          disabled={editing?.kind === "add"}
+          onClick={ed.add}
+          disabled={ed.editing?.kind === "add"}
         >
           Add project
         </button>
       </div>
-      {editing && <ProjectForm key={formKey} editing={editing} onClose={close} />}
+      {ed.editing && <ProjectForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />}
       {load.error && (
         <div className="callout crit" role="alert">
           Could not read the projects: {load.error}
@@ -167,12 +165,12 @@ function Roster() {
         id="projects"
         count={data?.namespaces.length}
         src={
-          <>
-            {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-            <button type="button" className="btn" disabled={load.loading} onClick={read}>
-              {load.loading ? "Reading..." : "Read again"}
-            </button>
-          </>
+          <ReadAgain
+            at={data ? ms(data.generated) : undefined}
+            now={now}
+            reading={load.loading}
+            onRead={read}
+          />
         }
       >
         {!data && load.loading ? (
@@ -200,7 +198,7 @@ function Roster() {
                     key={n.namespace}
                     n={n}
                     onChanged={read}
-                    onEdit={() => setEditing({ kind: "edit", n })}
+                    onEdit={() => ed.edit(n, n.namespace)}
                   />
                 ))}
               </tbody>

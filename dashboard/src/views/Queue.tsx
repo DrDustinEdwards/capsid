@@ -12,6 +12,7 @@ import { St } from "../ui/icons";
 import { Anchors } from "../ui/anchors";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import { ReadAgain } from "capsomer/react/read-state";
 import { FilterEmpty, NsChips, PageHead, QueueRows, useNsFilter } from "./shared";
 import { Tonight } from "./Overnight";
 
@@ -56,12 +57,12 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
       section="Stuck jobs"
       count={data ? rows.length : undefined}
       src={
-        <>
-          {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-          <button type="button" className="btn" disabled={load.loading} onClick={reread}>
-            {load.loading ? "Reading..." : "Read again"}
-          </button>
-        </>
+        <ReadAgain
+          at={data ? ms(data.generated) : undefined}
+          now={now}
+          reading={load.loading}
+          onRead={reread}
+        />
       }
     >
       {load.error && (

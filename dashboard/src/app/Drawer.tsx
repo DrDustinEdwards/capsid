@@ -7,7 +7,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { Spinner } from "capsomer/react/empty";
+import { Missing as NoValue, Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
@@ -132,7 +132,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
               {ago(ms(r.at), now)} <When t={ms(r.at)} />
             </dd>
             <dt>Actor</dt>
-            <dd className="mono">{r.actor ?? <span className="faint">none</span>}</dd>
+            <dd className="mono">{r.actor ?? <NoValue />}</dd>
             {r.client && (
               <>
                 <dt>Via</dt>

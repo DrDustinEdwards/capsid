@@ -1,5 +1,8 @@
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import { StatusMatrix } from "capsomer/react/status-matrix";
+import "capsomer/table.css";
+import "capsomer/status-matrix.css";
 import { useApp } from "../app/ctx";
 import { fetchCompleteness, useAnswer } from "../lib/api";
 import { ago, fmtN, ms } from "../lib/format";
@@ -25,6 +28,14 @@ const KIND = {
   partial: "warn",
   missing: "crit",
   unmeasured: "unknown",
+  "n/a": "nodata",
+} as const;
+// The grid's tones (Capsomer's StatusMatrix); a check that could not measure is the info glyph.
+const TONE = {
+  complete: "ok",
+  partial: "warn",
+  missing: "crit",
+  unmeasured: "info",
   "n/a": "nodata",
 } as const;
 const LABEL: Record<CompletenessStatus, string> = {
@@ -95,46 +106,25 @@ export function Completeness() {
           </>
         }
       >
-        <div className="scroll-x">
-          <table className="brief done-grid">
-            <caption className="sr-only">
-              Each area of the shared code, for the package and each live site
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Area</th>
-                {columns.map((c) => (
-                  <th key={c.id} scope="col">
-                    {c.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.areas.map((a) => (
-                <tr key={a.id}>
-                  <th scope="row">
-                    <a href={`#done-area-${a.id}`}>
-                      {a.id}. {a.name}
-                    </a>
-                  </th>
-                  {columns.map((c) => {
-                    const cell = a.cells[c.id];
-                    return (
-                      <td key={c.id}>
-                        {cell ? (
-                          <Mark cell={cell} where={`${a.name}, ${c.name}`} />
-                        ) : (
-                          <span className="faint">·</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <StatusMatrix
+          caption="Each area of the shared code, for the package and each live site"
+          columns={columns}
+          rows={data.areas.map((a) => ({
+            id: String(a.id),
+            name: (
+              <a href={`#done-area-${a.id}`}>
+                {a.id}. {a.name}
+              </a>
+            ),
+            text: a.name,
+            cells: Object.fromEntries(
+              Object.entries(a.cells).map(([id, c]) => [
+                id,
+                { tone: TONE[c.status], label: LABEL[c.status], reason: c.reason },
+              ]),
+            ),
+          }))}
+        />
       </Panel>
       {data.areas.map((a) => (
         <AreaPanel key={a.id} area={a} columns={columns} publicOnly={data.public_token} />
@@ -144,16 +134,6 @@ export function Completeness() {
         {ago(ms(data.read), now)}. Runs daily at 06:23 UTC. Kept for ten minutes.
       </p>
     </div>
-  );
-}
-
-// One cell in the grid: the status as an icon, its words for a screen reader and on hover.
-function Mark({ cell, where }: { cell: CompletenessCell; where: string }) {
-  const label = `${where}: ${LABEL[cell.status]}. ${cell.reason}`;
-  return (
-    <span className={`done-mark ${KIND[cell.status]}`} title={label} role="img" aria-label={label}>
-      <St kind={KIND[cell.status]}>{""}</St>
-    </span>
   );
 }
 

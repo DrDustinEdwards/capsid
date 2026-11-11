@@ -1,7 +1,7 @@
 import { trendChart } from "./charts";
 import { FILTER_KEYS } from "../lib/keys";
 import { Suspense, useState } from "react";
-import { Spinner } from "capsomer/react/empty";
+import { Missing, Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, fetchClaimsJob, useAnswer } from "../lib/api";
@@ -10,16 +10,8 @@ import { toCsv } from "@dustinedwards/site-runtime/csv";
 import { downloadCsv } from "@dustinedwards/site-runtime/csv-client";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../types";
 import { Panel } from "capsomer/react/panel";
-import {
-  byCheck,
-  None,
-  AgreementCounts,
-  totals,
-  counts,
-  wait,
-  JobDetail,
-  AGREEMENTS,
-} from "./ClaimsJob";
+import { ReadAgain } from "capsomer/react/read-state";
+import { byCheck, AgreementCounts, totals, counts, wait, JobDetail, AGREEMENTS } from "./ClaimsJob";
 
 // Chart 5, claim against verified per agent, is Enarratio's grouped bar chart, in the same
 // lazy chunk as the Portal's other charts.
@@ -165,20 +157,15 @@ export function Claims() {
         title="By agent"
         count={data?.groups.length}
         src={
-          <>
-            {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-            <button
-              type="button"
-              className="btn"
-              disabled={agg.loading}
-              onClick={() => {
-                agg.reread();
-                if (job) detail.reread();
-              }}
-            >
-              {agg.loading ? "Reading..." : "Read again"}
-            </button>
-          </>
+          <ReadAgain
+            at={data ? ms(data.generated) : undefined}
+            now={now}
+            reading={agg.loading}
+            onRead={() => {
+              agg.reread();
+              if (job) detail.reread();
+            }}
+          />
         }
       >
         {!data && agg.loading ? (
@@ -203,7 +190,7 @@ export function Claims() {
                 {data.groups.map((g) => (
                   <tr key={`${g.agent ?? ""}\u0000${g.namespace}`} data-row="">
                     <td className="mono wrap" data-label="Agent">
-                      {g.agent ?? <None what="no claim yet" />}
+                      {g.agent ?? <Missing>no claim yet</Missing>}
                     </td>
                     <td className="mono" data-label="Project">
                       {g.namespace}
@@ -221,7 +208,7 @@ export function Claims() {
                       {g.touches.count ? (
                         `${g.touches.count}: ${counts(g.touches.by_kind)}`
                       ) : (
-                        <None />
+                        <Missing />
                       )}
                       {g.touches.count > 0 && (
                         <div className="src">{counts(g.touches.by_actor_kind)}</div>
