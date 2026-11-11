@@ -5,7 +5,7 @@ import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
 import { runSiteRepair, type RepairOutcome } from "./site-repair";
 import { tokenSet, type FetchLike } from "./site-operator";
 import { DAY_MS } from "./time";
-import { failingCheckNames } from "./health-format";
+import { failingCheckNames } from "@dustinedwards/site-runtime/health-read";
 import { healthUrl } from "./ops-sites";
 import { callSignal } from "./call-signal";
 
@@ -95,7 +95,7 @@ const healthy = (r: Reading) =>
   alertChecks(r.body).length === 0;
 
 /** The failing checks' names, read as the watcher reads every health body
- *  (src/health-format.ts), each cut to one line, and every alert the body names. */
+ *  (site-runtime ./health-read), each cut to one line, and every alert the body names. */
 export function failingChecks(body: unknown): string[] {
   return [
     ...new Set([
