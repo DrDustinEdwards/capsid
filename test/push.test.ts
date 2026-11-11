@@ -22,7 +22,7 @@ import { fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
 // Phone alerts (docs/design/design-merge-pipeline.md section 5, PR 7; DECIDE 5 and 6 of
 // 2026-10-09): exactly seven triggers, each sent once, never with an Approve button, never
-// with a title. The encryption itself is in site-runtime ./web-push tests.
+// with a title. The encryption itself is in test/web-push.test.ts.
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
 const H = 3_600_000;

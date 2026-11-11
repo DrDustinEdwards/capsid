@@ -1,6 +1,6 @@
 # Health format
 
-One format for a site's health route, defined here so the watcher's `sha` live check (docs/live-checks.md) reads every site the same way. Code: `src/health-format.ts`; tests: `test/health-format.test.ts`.
+One format for a site's health route, defined here so the watcher's `sha` live check (docs/live-checks.md) reads every site the same way. Code: site-runtime `./health-read`.
 
 ## The body
 

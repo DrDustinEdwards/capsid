@@ -11,7 +11,7 @@ import {
 } from "../src/site-operator.ts";
 import { failingChecks, repairPlan } from "../src/site-watch.ts";
 import { limitRefusal, AUTO_PER_DAY } from "../src/site-repair.ts";
-import { healthChecks, statusFields } from "../src/site-convergence.ts";
+import { convergenceChecks, statusFields } from "../src/site-convergence.ts";
 import { secretPresence } from "../src/secret-presence.ts";
 import { readSecretNames } from "../src/ops-cloudflare.ts";
 import type { Env } from "../src/env.ts";
@@ -219,11 +219,11 @@ test("the rate limit: two minutes for anyone, thirty for the watcher, and four w
 });
 
 test("the convergence view maps each check to its repair and keeps sync_status's scalars and divergences", () => {
-  const checks = healthChecks(
+  const checks = convergenceChecks(
     {
       checks: [
-        { name: "content-drift", status: "fail", detail: "40 of 42" },
-        { name: "media-backup-drift", status: "pass" },
+        { name: "content-drift", ok: false, detail: "2 posts differ", expected: 42, present: 40 },
+        { name: "media-backup-drift", ok: true },
         { bad: 1 },
       ],
     },
