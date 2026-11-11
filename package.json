@@ -38,6 +38,7 @@
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.114.0",
     "@modelcontextprotocol/server": "2.4.0",
     "agents": "0.33.0",
+    "capsomer": "github:DrDustinEdwards/capsomer#44b34734f85bf45a44ecd1215988e47798c06869",
     "jose": "6.2.15",
     "zod": "4.6.7"
   },
@@ -58,6 +59,10 @@
     "wrangler": "4.156.0"
   },
   "overrides": {
+    "capsomer": {
+      "@drdustinedwards/site-helpers": "$@drdustinedwards/site-helpers",
+      "enarratio": "0.8.0"
+    },
     "agents": {
       "@modelcontextprotocol/client": "$@modelcontextprotocol/client",
       "@modelcontextprotocol/sdk": "1.32.2"

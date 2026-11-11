@@ -1,3 +1,4 @@
+import type { PublicModel } from "capsomer/behavior/system-model";
 import { z } from "zod";
 import { bounded } from "./limits";
 
@@ -225,79 +226,6 @@ export function parseSystemModel(
     problems: parsed.error.issues.map((i) => `${i.path.join(".") || "(model)"}: ${i.message}`),
   };
 }
-
-// The published document. Strict schemas, so a key nobody listed fails the test that
-// parses toPublic's output, and the site builds validate against the same shape.
-const PublicSystemOpen = z.strictObject({
-  id: Id,
-  name: bounded(40),
-  short: bounded(12),
-  family: z.enum(FAMILIES),
-  ring: z.enum(RINGS),
-  private: z.literal(false),
-  description: bounded(280).optional(),
-  domain: bounded(253).optional(),
-  repos: z.array(bounded(512).url()).optional(),
-});
-// A private system is everything a public one is but its repo link.
-const PublicSystemPrivate = PublicSystemOpen.omit({ repos: true }).extend({
-  private: z.literal(true),
-});
-
-export const PublicModelSchema = z.strictObject({
-  version: z.literal(1),
-  as_of: bounded(10).regex(/^\d{4}-\d{2}-\d{2}$/),
-  systems: z.array(z.union([PublicSystemOpen, PublicSystemPrivate])),
-  containers: z.array(
-    z.strictObject({
-      id: Id,
-      system: Id,
-      name: bounded(40),
-      kind: z.enum(CONTAINER_KINDS),
-      technology: bounded(60),
-      description: bounded(280).optional(),
-    }),
-  ),
-  relationships: z.array(
-    z.strictObject({
-      id: bounded(200),
-      from: Id,
-      to: Id,
-      kind: z.enum(RELATIONSHIP_KINDS),
-      title: bounded(280).optional(),
-    }),
-  ),
-  // Optional so a document built before flows existed still parses; toPublic always writes it.
-  flows: z
-    .array(
-      z.strictObject({
-        id: Id,
-        name: bounded(60),
-        description: bounded(280).optional(),
-        steps: z
-          .array(
-            z.strictObject({
-              relationship: bounded(200),
-              toward: Id,
-              text: bounded(280),
-              lights: z.array(Id).max(8).optional(),
-            }),
-          )
-          .min(2)
-          .max(20),
-      }),
-    )
-    .optional(),
-  counts: z.strictObject({
-    systems: z.number().int(),
-    public: z.number().int(),
-    private: z.number().int(),
-    containers: z.number().int(),
-    relationships: z.number().int(),
-  }),
-});
-
-export type PublicModel = z.infer<typeof PublicModelSchema>;
 
 /** Repo visibility as GitHub reports it, keyed by "owner/name" in lower case: true for
  *  a private repo, false for a public one. A repo missing from the map is unknown. */

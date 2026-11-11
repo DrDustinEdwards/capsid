@@ -7,6 +7,7 @@
 // A rate with no denominator is null, not zero: an agent that opened no pull
 // requests has no merge rate, and 0% would rank it below one that merged one in ten.
 
+import { median } from "capsomer/behavior/format";
 import { agentActor } from "./agents-schema";
 
 // What this module needs to know about a credential, and no more. Not
@@ -67,14 +68,6 @@ function rate(numerator: number, denominator: number): number | null {
   return Math.round((numerator / denominator) * 1000) / 1000;
 }
 
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  // An even count averages the two middles and rounds to whole minutes.
-  return sorted.length % 2 === 1 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
-}
-
 // Only a verified field counts toward a rate. Counts are stored whether or not the
 // Worker could check them, because an unverified count is still better than nothing
 // on the row. A rate is a claim about a credential that a reader acts on, and one
@@ -128,7 +121,7 @@ export function recordFor(actor: string, rows: RecordRows): AgentRecord {
     pr_merge_rate: rate(prsMerged, prsOpenedForRate),
     ci_checked: ciChecked.length,
     ci_green_rate: rate(ciChecked.filter((o) => o.ci_green === 1).length, ciChecked.length),
-    median_duration_minutes: median(durations),
+    median_duration_minutes: median(durations, { round: true }),
   };
 }
 
