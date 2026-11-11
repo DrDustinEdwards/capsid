@@ -31,7 +31,7 @@ const DeployTimeline = trendChart("DeployTimeline");
 // the button beside Edit or Resume. Each control in it still previews and confirms.
 export function Danger({ note, children }: { note?: string; children: ReactNode }) {
   return (
-    <div className="callout crit full" role="group" aria-label="Danger" data-danger="">
+    <div className="danger-zone full" role="group" aria-label="Danger" data-danger="">
       <p className="section-title">Danger</p>
       <div className="toolbar">
         {children}

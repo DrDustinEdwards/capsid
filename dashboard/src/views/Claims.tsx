@@ -1,3 +1,4 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { FILTER_KEYS } from "../lib/keys";
 import { Suspense, useState } from "react";
@@ -147,16 +148,16 @@ export function Claims() {
         )}
       </form>
       {agg.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read the claims: {agg.error}
           {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+        </Alert>
       )}
       {data && data.truncated.length > 0 && (
-        <div className="callout warn" role="status">
+        <Banner tone="warn">
           This read hit its bound on: {data.truncated.join(", ")}. Narrow the filter, or read every
           row through the claims tool's export.
-        </div>
+        </Banner>
       )}
       {data && <ClaimsExport data={data} />}
       <Panel
@@ -324,9 +325,9 @@ export function Claims() {
         </div>
       )}
       {detail.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read job {job}: {detail.error}
-        </div>
+        </Alert>
       )}
       {detail.data && <JobDetail data={detail.data} now={now} />}
     </div>

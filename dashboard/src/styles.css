@@ -1174,20 +1174,20 @@ table.brief {
   color: var(--muted);
   margin: 0 0 8px;
 }
-.callout {
-  border: 1px solid var(--line);
+/* The danger zone waits for Capsomer's danger-zone (shared audit item 31); until then it is this one rule. */
+.danger-zone {
+  border: 1px solid var(--crit);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 13px;
-  background: var(--raised);
-}
-.callout.warn {
-  border-color: var(--warn);
-  background: var(--warn-soft);
-}
-.callout.crit {
-  border-color: var(--crit);
   background: var(--crit-soft);
+}
+.reason {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--line-strong);
+  background: var(--raised);
+  font-size: 13px;
 }
 
 dialog {

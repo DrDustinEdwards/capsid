@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy, useId, useState, type ReactNode } from "react";
@@ -105,9 +106,9 @@ function Waiting() {
       }
     >
       {error && (
-        <div className="callout warn" role="status">
+        <Banner tone="warn">
           Stopped queues could not be read: {error}
-        </div>
+        </Banner>
       )}
       {total === 0 ? (
         <Empty kind="all-clear" title="Nothing needs you." />

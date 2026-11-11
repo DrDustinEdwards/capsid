@@ -1,3 +1,4 @@
+import { Alert } from "capsomer/react/banner";
 import { useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
@@ -156,10 +157,10 @@ function Roster() {
       </div>
       {editing && <ProjectForm key={formKey} editing={editing} onClose={close} />}
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read the projects: {load.error}
           {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+        </Alert>
       )}
       <Panel
         flush

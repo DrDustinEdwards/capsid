@@ -1,3 +1,4 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import type { ReactNode } from "react";
 import { jobBadge, resumeCall } from "../lib/derive";
 import { ago, ms } from "../lib/format";
@@ -241,14 +242,16 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
         {j.status === "parked" && (
           <div>
             <p className="section-title">Parked until</p>
-            <div className="callout">{j.parked_reason ?? "No reason was recorded."}</div>
+            <Banner tone="neutral">{j.parked_reason ?? "No reason was recorded."}</Banner>
           </div>
         )}
         {j.status === "blocked" && j.question && (
           <div>
             <p className="section-title">Asks you</p>
-            <div className="callout warn" data-question="">
-              {(j.waits_on ?? "No question was recorded.").replace(/^QUESTION:\s*/, "")}
+            <div data-question="">
+              <Banner tone="warn">
+                {(j.waits_on ?? "No question was recorded.").replace(/^QUESTION:\s*/, "")}
+              </Banner>
             </div>
             <p className="faint small">
               Answer it with the button below: your reason and note go to its driver as the resume
@@ -260,14 +263,16 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
           <>
             <div>
               <p className="section-title">Waits on</p>
-              <div className="callout warn">{j.waits_on ?? "No reason was recorded."}</div>
+              <Banner tone="warn">{j.waits_on ?? "No reason was recorded."}</Banner>
             </div>
             <div>
               <p className="section-title">Run this</p>
               {j.command_signature === "mismatch" ? (
-                <div className="callout crit" data-signature="mismatch">
-                  Withheld. This command's signature does not match, so it was changed after the
-                  block wrote it. Do not run anything from this job; tell the seat.
+                <div data-signature="mismatch">
+                  <Alert tone="crit">
+                    Withheld. This command's signature does not match, so it was changed after the
+                    block wrote it. Do not run anything from this job; tell the seat.
+                  </Alert>
                 </div>
               ) : j.command ? (
                 <>

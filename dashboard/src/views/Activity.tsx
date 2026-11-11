@@ -1,3 +1,4 @@
+import { Alert } from "capsomer/react/banner";
 import { useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "../lib/router";
@@ -121,10 +122,10 @@ export function Activity() {
         )}
       </form>
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read the activity: {load.error}
           {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+        </Alert>
       )}
       <Panel
         flush

@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { Suspense, lazy, useState } from "react";
 import { Empty } from "capsomer/react/empty";
 import { PageHead } from "capsomer/react/page-head";
@@ -174,11 +175,9 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
   return (
     <>
       {detail && (
-        <div
-          className={`callout ${s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : ""}`}
-        >
+        <Banner tone={s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : "neutral"}>
           {detail}
-        </div>
+        </Banner>
       )}
       <div className="grid2">
         <Panel flush title="Probe" src={`watcher pass · checked ${ago(ms(s.checked_at), now)}`}>

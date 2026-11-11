@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { Suspense, lazy, useState } from "react";
 import { useApp } from "../app/ctx";
 import { fetchPackageHistory, useAnswer } from "../lib/api";
@@ -134,7 +135,7 @@ function HistoryPanel({ name }: { name: string }) {
       </button>
     );
   }
-  if (!h.data) return <div className="callout warn">The history could not be read: {h.error}</div>;
+  if (!h.data) return <Banner tone="warn">The history could not be read: {h.error}</Banner>;
   const d = h.data;
   const byName = new Map<string, number>();
   for (const day of d.days) byName.set(day.name, (byName.get(day.name) ?? 0) + day.downloads);
@@ -381,9 +382,9 @@ function Published() {
         </Suspense>
       )}
       {!rows.length && (
-        <div className="callout" role="status">
+        <Banner tone="neutral">
           No package is configured yet. Add one to watch its versions, downloads and dependents.
-        </div>
+        </Banner>
       )}
       {rows.length > 0 && !feed.snapshot && <NoSnapshot />}
       {rows.map((cfg) => (

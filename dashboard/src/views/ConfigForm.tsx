@@ -1,3 +1,4 @@
+import { Alert } from "capsomer/react/banner";
 import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
 import "capsomer/button.css";
 import "capsomer/field.css";
@@ -59,8 +60,8 @@ export function ConfigForm({
       >
         {children}
         {hint && (
-          <div className="callout warn full" role="alert">
-            {hint}
+          <div className="full">
+            <Alert tone="warn">{hint}</Alert>
           </div>
         )}
         <div className="toolbar full">

@@ -1,3 +1,4 @@
+import { Alert } from "capsomer/react/banner";
 import {
   Suspense,
   lazy,
@@ -722,9 +723,7 @@ export function App() {
     content = (
       <div className="page">
         {error ? (
-          <div className="callout crit" role="alert">
-            Could not read the feed: {error}. It retries every minute.
-          </div>
+          <Alert tone="crit">Could not read the feed: {error}. It retries every minute.</Alert>
         ) : (
           <div className="loading" role="status">
             <Spinner label="Reading the feed..." />

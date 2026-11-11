@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { useState } from "react";
 import { SITES_TABS, sitePath, tabOf, useApp } from "../app/ctx";
 import { Link } from "../lib/router";
@@ -52,9 +53,9 @@ function AllSites() {
       </div>
       {editing && <SiteForm key={formKey} editing={editing} onClose={() => setEditing(null)} />}
       {!configured.some((s) => s.origin !== null) ? (
-        <div className="callout" role="status">
+        <Banner tone="neutral">
           No site is configured, so the watcher probes nothing. Add a site to start.
-        </div>
+        </Banner>
       ) : !snap ? (
         <NoSnapshot />
       ) : (
@@ -67,7 +68,7 @@ function AllSites() {
         </Panel>
       )}
       {waiting.length > 0 && (
-        <div className="callout" role="status">
+        <Banner tone="neutral">
           Added and waiting for the watcher's next pass:{" "}
           {waiting.map((s, i) => (
             <span key={s.namespace}>
@@ -76,7 +77,7 @@ function AllSites() {
             </span>
           ))}
           .
-        </div>
+        </Banner>
       )}
       <Uptime90 ns={ns} />
       {noSite.length > 0 && (

@@ -1,3 +1,4 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
@@ -35,9 +36,9 @@ export function Convergence({ ns }: { ns: string }) {
     return (
       <Panel flush title="Site sync" id="convergence" section="Site sync">
         {load.error ? (
-          <div className="callout crit" role="alert">
+          <Alert tone="crit">
             Could not read site sync: {load.error}
-          </div>
+          </Alert>
         ) : (
           <div className="loading" role="status">
             <Spinner label="Reading each site's operator API..." />
@@ -49,10 +50,10 @@ export function Convergence({ ns }: { ns: string }) {
   return (
     <>
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read site sync again: {load.error}. Showing the read from{" "}
           {data.generated.slice(11, 16)} UTC.
-        </div>
+        </Alert>
       )}
       {sites.map((s) => (
         <SitePanel key={s.namespace} site={s} loading={load.loading} reread={reread} />
@@ -96,12 +97,12 @@ function SitePanel({
       }
     >
       <div className="body stack-gap" data-convergence={site.namespace}>
-        {site.problem && <div className="callout warn">{site.problem}</div>}
+        {site.problem && <Banner tone="warn">{site.problem}</Banner>}
         {op && !op.secret_set && (
-          <div className="callout warn">
+          <Banner tone="warn">
             The Capsid Worker secret <span className="mono">{op.auth_var}</span> is not set, so
             Capsid calls nothing on this site. The seat sets it with wrangler secret put.
-          </div>
+          </Banner>
         )}
         {op && (
           <dl className="kv">
@@ -150,9 +151,9 @@ function SitePanel({
         <div className="body stack-gap">
           <h3 className="conv-h">Operator sync_status</h3>
           {site.status.error ? (
-            <div className="callout">
+            <Banner tone="neutral">
               <St kind="nodata">Not read</St> {site.status.error}
-            </div>
+            </Banner>
           ) : (
             <dl className="kv">
               {site.status.fields.map((f) => (
@@ -278,9 +279,9 @@ function Secrets({ secrets }: { secrets: NonNullable<ConvergenceSite["secrets"]>
     <div className="body stack-gap">
       {secrets.script ? <p className="faint mono">{secrets.script}</p> : null}
       {secrets.state !== "ok" ? (
-        <div className="callout">
+        <Banner tone="neutral">
           <St kind="nodata">Not read</St> {secrets.reason}
-        </div>
+        </Banner>
       ) : secrets.rows.length === 0 ? (
         <Empty kind="all-clear" title="The Worker has no secrets." />
       ) : (

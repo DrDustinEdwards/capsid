@@ -1,3 +1,4 @@
+import { Alert } from "capsomer/react/banner";
 import { useState } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
@@ -75,9 +76,9 @@ export function Maintenance() {
       }
     >
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read the Maintenance list: {load.error}
-        </div>
+        </Alert>
       )}
       {!data && load.loading ? (
         <div className="loading" role="status">
