@@ -221,6 +221,12 @@ function classifySegment(
         refused: `${path} is not under migrations/, so it is not a migration this policy covers.`,
       };
     }
+    // devkit-migrations applies only files named NNNN_name.sql; any other name waits for a person at deploy.
+    if (!/(^|\/)\d{4}_[\w-]+\.sql$/.test(path)) {
+      return {
+        refused: `${path} is not named NNNN_name.sql, so the deploy would not apply it; it is not pre-approved.`,
+      };
+    }
     return { klass: "additive_migration", migrationPath: path };
   }
   if (PUSH_BRANCH.test(segment)) return { klass: "push_branch" };
@@ -306,19 +312,60 @@ const ADDITIVE: Array<{ pattern: RegExp; what: string }> = [
   { pattern: /^create\s+(unique\s+)?index\s+(if\s+not\s+exists\s+)?/i, what: "CREATE INDEX" },
 ];
 
+/**
+ * The statements of a migration, read the way devkit-migrations (the deploy's own check) reads one: comments are
+ * dropped and a `;`, `--` or `/*` inside a string literal or quoted name is part of it, so a comment opener in a
+ * string cannot hide a DROP that follows it, and a semicolon in a default value does not split a statement.
+ */
 export function splitStatements(sql: string): string[] {
-  // Comments first, so a DROP inside a comment is not read as a statement and a
-  // semicolon inside one does not split.
-  const withoutComments = sql.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
-  return withoutComments
-    .split(";")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const statements: string[] = [];
+  let current = "";
+  for (let i = 0; i < sql.length;) {
+    const c = sql[i]!;
+    const close = c === "'" || c === '"' || c === "`" ? c : c === "[" ? "]" : "";
+    if (close) {
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === close) {
+          if (close !== "]" && sql[j + 1] === close) j += 2;
+          else break;
+        } else j++;
+      }
+      current += sql.slice(i, j + 1);
+      i = j + 1;
+    } else if (c === "-" && sql[i + 1] === "-") {
+      const j = sql.indexOf("\n", i);
+      i = j < 0 ? sql.length : j;
+    } else if (c === "/" && sql[i + 1] === "*") {
+      const j = sql.indexOf("*/", i + 2);
+      current += " ";
+      i = j < 0 ? sql.length : j + 2;
+    } else if (c === ";") {
+      statements.push(current);
+      current = "";
+      i++;
+    } else {
+      current += c;
+      i++;
+    }
+  }
+  statements.push(current);
+  return statements.map((s) => s.trim()).filter(Boolean);
 }
+
+/** A `-- contract: <reason>` line: devkit-migrations then leaves the file to a person at deploy. */
+const CONTRACT_LINE = /^\s*--\s*contract:\s*\S/im;
 
 export function isAdditiveMigration(
   sql: string,
 ): { ok: true; statements: string[] } | { ok: false; reason: string } {
+  // The deploy refuses to apply such a file unattended, so pre-approving it would approve a migration that never runs.
+  if (CONTRACT_LINE.test(sql))
+    return {
+      ok: false,
+      reason:
+        "the migration says `-- contract:`, so the deploy leaves it to a person; it is not pre-approved.",
+    };
   const statements = splitStatements(sql);
   if (statements.length === 0)
     return { ok: false, reason: "the migration file contains no statements." };
