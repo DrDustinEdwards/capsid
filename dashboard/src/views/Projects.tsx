@@ -105,13 +105,13 @@ function Row({
       </td>
       <td className="ctl">
         <div className="toolbar col">
-          <button type="button" className="btn" aria-label={`Edit ${n.namespace}`} onClick={onEdit}>
+          <button type="button" className="cap-btn" aria-label={`Edit ${n.namespace}`} onClick={onEdit}>
             Edit
           </button>
           {n.breaker.open && (
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Reset ${n.namespace}`}
               onClick={() =>
                 confirm({
@@ -147,7 +147,7 @@ function Roster() {
       <div className="toolbar">
         <button
           type="button"
-          className="btn primary"
+          className="cap-btn" data-variant="primary"
           onClick={() => setEditing({ kind: "add" })}
           disabled={editing?.kind === "add"}
         >
@@ -169,7 +169,7 @@ function Roster() {
         src={
           <>
             {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-            <button type="button" className="btn" disabled={load.loading} onClick={read}>
+            <button type="button" className="cap-btn" disabled={load.loading} onClick={read}>
               {load.loading ? "Reading..." : "Read again"}
             </button>
           </>

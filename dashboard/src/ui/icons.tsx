@@ -1,5 +1,20 @@
 import type { ReactNode } from "react";
+import { Glyph, Status, Pill as CapPill, type Tone } from "capsomer/react/status";
 import type { Kind } from "../lib/derive";
+
+// Capsomer's status shapes (shape, word and color together). Portal kinds with no shape of their own
+// take the nearest tone; the word says the rest.
+const TONE: Record<Kind, Tone> = {
+  ok: "ok",
+  done: "ok",
+  warn: "warn",
+  blocked: "warn",
+  crit: "crit",
+  nodata: "nodata",
+  unknown: "nodata",
+  queued: "nodata",
+  run: "info",
+};
 
 // No style attribute: the Portal's CSP refuses inline styles in the server's HTML (a status
 // icon lost its color on /demos/health, 2026-11-03). A tone is a class (styles.css, .tone-*).
@@ -11,131 +26,11 @@ function S({ children, className }: { children: ReactNode; className?: string })
   );
 }
 
-const SHAPES: Record<Kind, ReactNode> = {
-  ok: (
-    <>
-      <circle cx="7" cy="7" r="6.2" fill="currentColor" opacity=".16" />
-      <path
-        d="M4 7.2 6.1 9.3 10 4.9"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </>
-  ),
-  warn: (
-    <>
-      <path
-        d="M7 1.4 13 12.2H1z"
-        fill="currentColor"
-        opacity=".18"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinejoin="round"
-      />
-      <path d="M7 5.2v3.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <circle cx="7" cy="10.2" r=".85" fill="currentColor" />
-    </>
-  ),
-  crit: (
-    <>
-      <path d="M4.4 1h5.2L13 4.4v5.2L9.6 13H4.4L1 9.6V4.4z" fill="currentColor" />
-      <path d="M5 5l4 4M9 5 5 9" stroke="var(--surface)" strokeWidth="1.5" strokeLinecap="round" />
-    </>
-  ),
-  nodata: (
-    <>
-      <circle
-        cx="7"
-        cy="7"
-        r="6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeDasharray="2.2 2"
-      />
-      <path d="M4.5 7h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </>
-  ),
-  // Could not be measured: a question mark, so it never reads as a pass, a failure or "does not apply".
-  unknown: (
-    <>
-      <circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      <path
-        d="M5.2 5.4a1.9 1.9 0 1 1 2.6 1.7c-.5.3-.8.6-.8 1.2v.3"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-      <circle cx="7" cy="10.3" r=".85" fill="currentColor" />
-    </>
-  ),
-  queued: <circle cx="7" cy="7" r="5.6" fill="none" stroke="currentColor" strokeWidth="1.5" />,
-  run: (
-    <>
-      <circle
-        cx="7"
-        cy="7"
-        r="5.6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        opacity=".3"
-      />
-      <path
-        d="M7 1.4A5.6 5.6 0 0 1 12.6 7"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <circle cx="7" cy="7" r="2" fill="currentColor" />
-    </>
-  ),
-  blocked: (
-    <>
-      <rect
-        x="1.2"
-        y="1.2"
-        width="11.6"
-        height="11.6"
-        rx="3"
-        fill="currentColor"
-        opacity=".18"
-        stroke="currentColor"
-        strokeWidth="1.3"
-      />
-      <path
-        d="M5.3 4.4v5.2M8.7 4.4v5.2"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </>
-  ),
-  done: (
-    <>
-      <circle cx="7" cy="7" r="6.2" fill="currentColor" />
-      <path
-        d="M4 7.2 6.1 9.3 10 4.9"
-        fill="none"
-        stroke="var(--surface)"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </>
-  ),
-};
 
 // The inbox's kinds each get their own mark (Dustin's review of 2026-10-11: every row had the
 // same pause icon). The color still says who acts: warning for a person, critical for a
 // machine fault.
 const INBOX_SHAPES: Record<string, ReactNode> = {
-  "blocked-job": SHAPES.blocked,
   question: (
     <>
       <circle
@@ -198,7 +93,6 @@ const INBOX_SHAPES: Record<string, ReactNode> = {
       <path d="M5 7h4M5 9.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </>
   ),
-  ci: SHAPES.crit,
   "site-down": (
     <>
       <circle cx="7" cy="7" r="6.2" fill="currentColor" />
@@ -224,37 +118,39 @@ export function InboxMark({
   tone: Kind;
   children: ReactNode;
 }) {
+  const shape = INBOX_SHAPES[kind];
+  if (!shape) return <St kind={tone}>{children}</St>;
   return (
-    <span className={`st ${tone}`}>
-      <S>{INBOX_SHAPES[kind] ?? SHAPES[tone]}</S>
+    <span className="cap-status" data-tone={TONE[tone]}>
+      <S className="cap-status-glyph">{shape}</S>
       {children}
     </span>
   );
 }
 
-export function Icon({ kind, tone }: { kind: Kind; tone?: boolean }) {
-  return <S className={tone ? `tone-${kind}` : undefined}>{SHAPES[kind]}</S>;
+/** A tone's bare glyph, colored by the tone. */
+export function Icon({ kind }: { kind: Kind }) {
+  return (
+    <span className="cap-status" data-tone={TONE[kind]}>
+      <Glyph name={kind === "run" ? "running" : TONE[kind]} />
+    </span>
+  );
 }
 
 // Status text: shape, word and color together, never color alone.
 export function St({ kind, children }: { kind: Kind; children: ReactNode }) {
-  const cls = kind === "done" ? "ok" : kind;
   return (
-    <span className={`st ${cls}`}>
-      <Icon kind={kind} />
+    <Status tone={TONE[kind]} running={kind === "run"}>
       {children}
-    </span>
+    </Status>
   );
 }
 
 export function Pill({ kind, children }: { kind: Kind; children: ReactNode }) {
-  const cls =
-    kind === "queued" ? "nodata" : kind === "blocked" ? "warn" : kind === "done" ? "ok" : kind;
   return (
-    <span className={`pill ${cls}`}>
-      <Icon kind={kind} />
+    <CapPill tone={TONE[kind]} running={kind === "run"}>
       {children}
-    </span>
+    </CapPill>
   );
 }
 
@@ -262,19 +158,10 @@ export function Pill({ kind, children }: { kind: Kind; children: ReactNode }) {
 // (brief) the cell says two words, and a short reason shows on hover and is read by a
 // screen reader; the full sentence is in the row's panel (design D18).
 export function NoData({ reason, brief }: { reason: string; brief?: boolean }) {
-  if (brief)
-    return (
-      <span className="st nodata" data-tip={reason || undefined}>
-        <Icon kind="nodata" />
-        No data
-        {reason && <span className="sr-only">: {reason}</span>}
-      </span>
-    );
   return (
-    <span className="nodata-cell">
-      <St kind="nodata">No data</St>
-      <span className="src">{reason}</span>
-    </span>
+    <Status tone="nodata" brief={brief} reason={reason || undefined}>
+      No data
+    </Status>
   );
 }
 

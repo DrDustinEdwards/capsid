@@ -53,7 +53,7 @@ export function SitePage() {
           kind="no-match"
           title="No site has this name."
           action={
-            <Link className="btn" href="/sites">
+            <Link className="cap-btn" href="/sites">
               All sites
             </Link>
           }
@@ -328,7 +328,7 @@ function Setup({
           row ? (
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Edit ${row.namespace}`}
               onClick={() => setEditing(true)}
               disabled={editing}
@@ -417,7 +417,7 @@ function Setup({
           <div className="toolbar">
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Rotate the operator key of ${row.name}`}
               onClick={() =>
                 confirm({

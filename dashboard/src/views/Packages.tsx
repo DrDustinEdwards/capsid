@@ -129,7 +129,7 @@ function HistoryPanel({ name }: { name: string }) {
   });
   if (!h.data && !h.error) {
     return (
-      <button type="button" className="btn" disabled={h.loading} onClick={() => setAsked(true)}>
+      <button type="button" className="cap-btn" disabled={h.loading} onClick={() => setAsked(true)}>
         {h.loading ? "Reading npm…" : "Load the daily download history"}
       </button>
     );
@@ -196,7 +196,7 @@ function PackagePanel({
       src={
         <>
           {snap ? `read ${ago(ms(snap.at), now)} · ` : "not read yet · "}
-          <button type="button" className="btn" aria-label={`Edit ${cfg.name}`} onClick={onEdit}>
+          <button type="button" className="cap-btn" aria-label={`Edit ${cfg.name}`} onClick={onEdit}>
             Edit
           </button>
         </>
@@ -368,7 +368,7 @@ function Published() {
       <div className="toolbar">
         <button
           type="button"
-          className="btn primary"
+          className="cap-btn" data-variant="primary"
           onClick={() => setEditing({ kind: "add" })}
           disabled={editing?.kind === "add"}
         >

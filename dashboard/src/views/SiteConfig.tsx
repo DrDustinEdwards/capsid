@@ -117,7 +117,7 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
           <Danger note="The watcher stops probing it. Its history stays.">
             <button
               type="button"
-              className="btn danger"
+              className="cap-btn" data-variant="danger"
               aria-label={`Remove ${editing.row.namespace}`}
               onClick={() =>
                 confirm({
@@ -291,7 +291,7 @@ export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void })
       </td>
       <td className="ctl">
         {/* Edit only: Remove is in the form's Danger area (UX audit M9). */}
-        <button type="button" className="btn" aria-label={`Edit ${s.namespace}`} onClick={onEdit}>
+        <button type="button" className="cap-btn" aria-label={`Edit ${s.namespace}`} onClick={onEdit}>
           Edit
         </button>
       </td>

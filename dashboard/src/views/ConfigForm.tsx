@@ -64,10 +64,10 @@ export function ConfigForm({
           </div>
         )}
         <div className="toolbar full">
-          <button type="submit" className="btn primary">
+          <button type="submit" className="cap-btn" data-variant="primary">
             Preview
           </button>
-          <button type="button" className="btn" onClick={onClose}>
+          <button type="button" className="cap-btn" onClick={onClose}>
             Cancel
           </button>
         </div>

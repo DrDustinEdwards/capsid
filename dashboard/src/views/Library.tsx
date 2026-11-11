@@ -110,11 +110,11 @@ export function Library() {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
         />
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Search
         </button>
         {(q || doc) && (
-          <Link href={routePath("library")} className="btn">
+          <Link href={routePath("library")} className="cap-btn">
             All shelves
           </Link>
         )}

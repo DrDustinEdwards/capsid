@@ -68,7 +68,7 @@ export function Maintenance() {
       src={
         <>
           {data?.generated ? `daily pass ${ago(ms(data.generated), now)} · ` : ""}
-          <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
+          <button type="button" className="cap-btn" disabled={load.loading} onClick={load.reread}>
             {load.loading ? "Reading..." : "Read again"}
           </button>
         </>
@@ -96,7 +96,7 @@ export function Maintenance() {
             <div className="att-more">
               <button
                 type="button"
-                className="linkbtn"
+                className="cap-link-btn"
                 aria-expanded={more}
                 onClick={() => setMore(!more)}
               >

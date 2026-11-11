@@ -140,7 +140,7 @@ export function PhoneAlerts() {
             {supported() ? (
               <button
                 type="button"
-                className="btn primary"
+                className="cap-btn" data-variant="primary"
                 disabled={busy || !data?.public_key}
                 onClick={() => void turnOn()}
               >
@@ -151,7 +151,7 @@ export function PhoneAlerts() {
             )}
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               disabled={busy || devices.length === 0 || !data?.public_key}
               onClick={() => void send({ op: "test" }, "Test alert sent to each device.")}
             >
@@ -173,7 +173,7 @@ export function PhoneAlerts() {
                   </span>
                   <button
                     type="button"
-                    className="btn ml-auto"
+                    className="cap-btn ml-auto"
                     disabled={busy}
                     onClick={() =>
                       void send(

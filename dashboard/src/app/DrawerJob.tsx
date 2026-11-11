@@ -28,7 +28,7 @@ export function Head({
         <div className="mono muted">{sub}</div>
       </div>
       {badge}
-      <button type="button" className="btn iconbtn" data-close aria-label="Close" onClick={onClose}>
+      <button type="button" className="cap-btn" data-icon-only data-close aria-label="Close" onClick={onClose}>
         ×
       </button>
     </header>
@@ -43,7 +43,7 @@ function CopyBlock({ id, text, label }: { id: string; text: string; label: strin
         {text}
       </div>
       <div className="toolbar mt8">
-        <button type="button" className="btn" onClick={() => copy(text)}>
+        <button type="button" className="cap-btn" onClick={() => copy(text)}>
           {label}
         </button>
       </div>
@@ -78,7 +78,7 @@ function JobControls({ j }: { j: OpsJob }) {
         <div className="toolbar">
           <button
             type="button"
-            className="btn primary"
+            className="cap-btn" data-variant="primary"
             onClick={() =>
               confirm({
                 action: "unpark_job",
@@ -149,7 +149,7 @@ function JobControls({ j }: { j: OpsJob }) {
       <div>
         <p className="section-title">Change it</p>
         <div className="toolbar">
-          <button type="button" className="btn primary" onClick={() => confirm(primary.req)}>
+          <button type="button" className="cap-btn" data-variant="primary" onClick={() => confirm(primary.req)}>
             {primary.label}
           </button>
         </div>
@@ -166,13 +166,13 @@ function JobControls({ j }: { j: OpsJob }) {
       </div>
       {more.length > 0 && (
         <details className="more-actions">
-          <summary className="btn">
+          <summary className="cap-btn">
             <span className="chev" aria-hidden="true" />
             More actions
           </summary>
           <div className="toolbar mt8">
             {more.map((m) => (
-              <button key={m.label} type="button" className="btn" onClick={() => confirm(m.req)}>
+              <button key={m.label} type="button" className="cap-btn" onClick={() => confirm(m.req)}>
                 {m.label}
               </button>
             ))}
@@ -190,7 +190,7 @@ function JobControls({ j }: { j: OpsJob }) {
       <Danger note="Ends it as failed, against its holder.">
         <button
           type="button"
-          className="btn danger"
+          className="cap-btn" data-variant="danger"
           onClick={() =>
             confirm({ action: "fail_job", params, title: `Mark job failed: ${j.title}` })
           }
@@ -209,7 +209,7 @@ export function AgentControls({ a }: { a: OpsAgent }) {
     <Danger note="Ends this credential. The preview lists what else it changes.">
       <button
         type="button"
-        className="btn danger"
+        className="cap-btn" data-variant="danger"
         onClick={() =>
           confirm({
             action: "revoke_agent",

@@ -231,12 +231,12 @@ function SiteBackups() {
       src={
         <>
           {data ? `read ${ago(ms(data.read_at), now)} · ` : ""}
-          <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
+          <button type="button" className="cap-btn" disabled={load.loading} onClick={load.reread}>
             {load.loading ? "Reading..." : "Read again"}
           </button>{" "}
           <button
             type="button"
-            className="btn"
+            className="cap-btn"
             disabled={!data || data.sites.length === 0}
             onClick={() => backUp()}
           >
@@ -349,7 +349,7 @@ function SiteRow({ site, now, backUp }: { site: SiteBackupRow; now: number; back
         {site.amazon?.newest ? ago(ms(site.amazon.newest), now) : <St kind="nodata">No copy</St>}
       </td>
       <td>
-        <button type="button" className="btn" onClick={backUp}>
+        <button type="button" className="cap-btn" onClick={backUp}>
           Back up now
         </button>
       </td>

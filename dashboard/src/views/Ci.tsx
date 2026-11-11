@@ -155,7 +155,7 @@ export function PullRequests() {
             <div className="toolbar">
               <button
                 type="button"
-                className="btn"
+                className="cap-btn"
                 onClick={() =>
                   confirm({
                     action: "sign_policy_from_repo",
@@ -236,7 +236,7 @@ export function PullRequests() {
                         {n.paused && (
                           <button
                             type="button"
-                            className="btn"
+                            className="cap-btn"
                             aria-label={`Resume auto-merge for ${n.namespace}`}
                             onClick={() =>
                               confirm({
@@ -438,7 +438,7 @@ function MergeUnits() {
                         {suspended.has(r.unit) && (
                           <button
                             type="button"
-                            className="btn"
+                            className="cap-btn"
                             aria-label={`Lift the suspension of ${r.unit}`}
                             onClick={() =>
                               confirm({
@@ -454,7 +454,7 @@ function MergeUnits() {
                         {r.state === "promote" && (
                           <button
                             type="button"
-                            className="btn primary"
+                            className="cap-btn" data-variant="primary"
                             aria-label={`Promote ${r.unit}`}
                             onClick={() => sign("promote", r.unit)}
                           >
@@ -464,7 +464,7 @@ function MergeUnits() {
                         {listed && (
                           <button
                             type="button"
-                            className="btn"
+                            className="cap-btn"
                             aria-label={`Demote ${r.unit}`}
                             onClick={() => sign("demote", r.unit)}
                           >
@@ -510,7 +510,7 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
         {canApprove(a) && (
           <button
             type="button"
-            className="btn primary"
+            className="cap-btn" data-variant="primary"
             aria-label={`Approve ${name}`}
             onClick={() => confirm(approveRequest(a))}
           >
@@ -519,7 +519,7 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
         )}
         <button
           type="button"
-          className="btn"
+          className="cap-btn"
           aria-label={`Close ${name}`}
           onClick={() => confirm(closeRequest(a))}
         >

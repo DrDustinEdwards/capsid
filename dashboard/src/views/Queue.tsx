@@ -58,7 +58,7 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
       src={
         <>
           {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-          <button type="button" className="btn" disabled={load.loading} onClick={reread}>
+          <button type="button" className="cap-btn" disabled={load.loading} onClick={reread}>
             {load.loading ? "Reading..." : "Read again"}
           </button>
         </>

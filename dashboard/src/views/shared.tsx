@@ -107,7 +107,7 @@ export function FilterEmpty({
         kind="no-match"
         title={children}
         action={
-          <button type="button" className="btn" onClick={onShowAll}>
+          <button type="button" className="cap-btn" onClick={onShowAll}>
             Show all
           </button>
         }
@@ -433,7 +433,7 @@ export function IncidentFeed({ ns }: { ns?: string }) {
             tabIndex={it.ref ? 0 : undefined}
             title={it.ref ? undefined : `fingerprint ${it.fp}`}
           >
-            <Icon kind={kind} tone />
+            <Icon kind={kind} />
             <div className="t">
               <b>{it.title}</b>
               <div className="sub">

@@ -96,7 +96,7 @@ function Verdict() {
         {rest > 0 && (
           <>
             {" and "}
-            <button type="button" className="linkbtn" onClick={() => open("view:needs#attention")}>
+            <button type="button" className="cap-link-btn" onClick={() => open("view:needs#attention")}>
               {rest} more
             </button>
           </>
@@ -113,7 +113,7 @@ function ProblemLink({ row }: { row: AttentionRow }) {
   const to = ref.startsWith("view:") ? placePath(ref.slice(5)) : null;
   if (to && !to.includes("#")) return <Link href={to}>{row.title}</Link>;
   return (
-    <button type="button" className="linkbtn" onClick={() => open(ref)}>
+    <button type="button" className="cap-link-btn" onClick={() => open(ref)}>
       {row.title}
     </button>
   );

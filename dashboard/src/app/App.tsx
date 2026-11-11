@@ -712,7 +712,7 @@ export function App() {
               ? "You signed out of Capsid Portal in this browser. Signing in again may not ask for your email if your Access session is still open."
               : "Your Portal session ended, so the feed stopped answering."}
           </p>
-          <a className="btn" href={APP_URL}>
+          <a className="cap-btn" href={APP_URL}>
             {leftByChoice ? "Sign in again" : "Reload to sign in"}
           </a>
         </div>
@@ -900,7 +900,7 @@ export function App() {
             {message.undo && (
               <button
                 type="button"
-                className="btn"
+                className="cap-btn"
                 disabled={message.busy}
                 onClick={() => void undo(message)}
               >
@@ -909,7 +909,7 @@ export function App() {
             )}
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               disabled={message.busy}
               onClick={() => {
                 setMessages((all) => all.filter((x) => x.id !== message.id));

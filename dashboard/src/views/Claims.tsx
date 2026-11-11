@@ -133,13 +133,13 @@ export function Claims() {
           value={input.until}
           onChange={(e) => setInput({ ...input, until: e.target.value })}
         />
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Apply
         </button>
         {filtered && (
           <button
             type="button"
-            className="btn"
+            className="cap-btn"
             onClick={() => go({ namespace: "", agent: "", since: "", until: "" }, job)}
           >
             Clear
@@ -168,7 +168,7 @@ export function Claims() {
             {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               disabled={agg.loading}
               onClick={() => {
                 agg.reread();
@@ -309,11 +309,11 @@ export function Claims() {
             </option>
           ))}
         </datalist>
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Open job
         </button>
         {job && (
-          <button type="button" className="btn" onClick={() => go(filter, "")}>
+          <button type="button" className="cap-btn" onClick={() => go(filter, "")}>
             Close job
           </button>
         )}
@@ -415,13 +415,13 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
   return (
     <div className="toolbar" role="group" aria-label="Export">
       <span className="faint small">Export as CSV:</span>
-      <button type="button" className="btn" onClick={agents}>
+      <button type="button" className="cap-btn" onClick={agents}>
         By agent
       </button>
-      <button type="button" className="btn" onClick={waits}>
+      <button type="button" className="cap-btn" onClick={waits}>
         Waits
       </button>
-      <button type="button" className="btn" onClick={usage}>
+      <button type="button" className="cap-btn" onClick={usage}>
         Usage
       </button>
     </div>

@@ -111,11 +111,11 @@ export function Activity() {
             </option>
           ))}
         </select>
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Apply
         </button>
         {(namespace || actor) && (
-          <button type="button" className="btn" onClick={() => apply("", "")}>
+          <button type="button" className="cap-btn" onClick={() => apply("", "")}>
             Clear
           </button>
         )}
@@ -135,7 +135,7 @@ export function Activity() {
             {data
               ? `newest first, at most ${data.limit} rows · read ${ago(ms(data.generated), now)} · `
               : ""}
-            <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
+            <button type="button" className="cap-btn" disabled={load.loading} onClick={load.reread}>
               {load.loading ? "Reading..." : "Read again"}
             </button>
           </>

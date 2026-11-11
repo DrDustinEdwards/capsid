@@ -89,7 +89,7 @@ function SitePanel({
       src={
         <>
           {`read ${ago(ms(site.read_at), now)} · `}
-          <button type="button" className="btn" disabled={loading} onClick={reread}>
+          <button type="button" className="cap-btn" disabled={loading} onClick={reread}>
             {loading ? "Reading..." : "Read again"}
           </button>
         </>
@@ -129,7 +129,7 @@ function SitePanel({
                       <span className="mono">{tool}</span>{" "}
                       <button
                         type="button"
-                        className="btn"
+                        className="cap-btn"
                         disabled={!op.secret_set}
                         onClick={() => run(tool)}
                       >
@@ -243,7 +243,7 @@ function Checks({
                     <span className="mono">{c.repair}</span>
                     <button
                       type="button"
-                      className="btn"
+                      className="cap-btn"
                       disabled={!canRun}
                       onClick={() => run(c.repair as string)}
                     >
