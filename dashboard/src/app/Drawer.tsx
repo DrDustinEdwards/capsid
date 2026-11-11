@@ -7,6 +7,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { Dialog } from "capsomer/react/dialog";
 import { Missing as NoValue, Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
@@ -258,47 +259,19 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
   );
 }
 
-// The detail panel: a native modal <dialog> opened with showModal(), so the page behind
-// is inert and Tab stays inside (audit DECIDE 9). The route drives it: an address
-// /<view>/<type>/<id> opens it, and closing it (Close, Esc, a click on the backdrop)
-// navigates back to /<view>. It slides in from the right (styles.css, drawer), and focus
-// returns to the row that opened it.
+// The detail panel: Capsomer's Dialog as a side sheet on the right (native showModal, so the page
+// behind is inert and Tab stays inside, audit DECIDE 9). The route drives it: an address
+// /<view>/<type>/<id> opens it, and closing it (Close, Esc, a click on the backdrop) navigates back
+// to /<view>. Focus returns to the row that opened it, or to the view when that row is gone.
 export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => void }) {
   const { feed, open } = useApp();
   // Keep the last content while the drawer slides out.
   const [shown, setShown] = useState<Ref | null>(route);
   if (route && (shown?.type !== route.type || shown.id !== route.id)) setShown(route);
-  const panel = useRef<HTMLDialogElement>(null);
-  const opener = useRef<Element | null>(null);
   const routed = useRef(route != null);
   useEffect(() => {
     routed.current = route != null;
   });
-  const key = route ? `${route.type}:${route.id}` : "";
-  useEffect(() => {
-    const d = panel.current;
-    if (!d) return;
-    if (route) {
-      // Remember what had focus before the drawer opened, once, to hand it back.
-      if (!d.open) {
-        opener.current = document.activeElement;
-        d.showModal();
-      }
-      d.querySelector<HTMLElement>("[data-close]")?.focus();
-    } else if (d.open) {
-      d.close();
-      // Back to the row that opened it; when that is gone, or sat in a dialog since closed
-      // (the command menu), to the view.
-      const from = opener.current;
-      const back =
-        from instanceof HTMLElement && from.isConnected && !from.closest("dialog:not([open])")
-          ? from
-          : document.querySelector<HTMLElement>("main");
-      back?.focus();
-      opener.current = null;
-    }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- `key` names the route (type:id); the effect runs when the drawer opens on another row, not on a new route object
-  }, [key]);
   const ref = route ?? shown;
   let body: ReactNode = null;
   if (ref?.type === "job") {
@@ -322,32 +295,17 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
     return true;
   };
   return (
-    <dialog
-      ref={panel}
+    <Dialog
+      open={route != null}
+      // Closed by Esc, the backdrop or Back while the address still names it: follow the address.
+      onOpenChange={(o) => {
+        if (!o && routed.current) onClose();
+      }}
+      placement="right"
+      closeButton={false}
       className="drawer"
       aria-labelledby="drawerTitle"
-      onCancel={(e) => {
-        // Esc: the route closes the dialog, so the address and the panel stay one thing.
-        e.preventDefault();
-        onClose();
-      }}
-      onClose={() => {
-        // Closed some other way while the address still names it: follow the address.
-        if (routed.current) onClose();
-      }}
       onClick={(e) => {
-        const d = panel.current;
-        if (d && e.target === d) {
-          // A click on the dialog element itself outside its box is the backdrop.
-          const r = d.getBoundingClientRect();
-          if (
-            e.clientX < r.left ||
-            e.clientX > r.right ||
-            e.clientY < r.top ||
-            e.clientY > r.bottom
-          )
-            return onClose();
-        }
         openRow(e);
       }}
       onKeyDown={(e) => {
@@ -357,6 +315,6 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
       }}
     >
       {body}
-    </dialog>
+    </Dialog>
   );
 }
