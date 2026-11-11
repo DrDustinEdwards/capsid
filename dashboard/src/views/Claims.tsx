@@ -6,7 +6,8 @@ import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, fetchClaimsJob, useAnswer } from "../lib/api";
 import { age, ago, ms } from "../lib/format";
-import { downloadCsv, toCsv } from "capsomer/behavior/csv";
+import { toCsv } from "@dustinedwards/site-runtime/csv";
+import { downloadCsv } from "@dustinedwards/site-runtime/csv-client";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../types";
 import { Panel } from "capsomer/react/panel";
 import {
