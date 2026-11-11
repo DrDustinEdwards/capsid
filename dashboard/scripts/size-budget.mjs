@@ -7,7 +7,7 @@
 //
 //   initial JS (the heaviest page's)                <= 205 KB gzip
 //   each other chunk (loaded when a part opens)     <=  40 KB gzip
-//   initial CSS (the heaviest page's)               <= 39 KB gzip
+//   initial CSS (the heaviest page's)               <= 40 KB gzip
 //   lazy CSS (every other stylesheet), together     <=  12 KB gzip
 //   fonts                                           reported, not budgeted
 //
@@ -73,13 +73,14 @@
 // The page's content no longer waits on any of it. Initial JS raised from 121 KB to 205 KB (this
 // build's heaviest page, Packages, is 197.6 KB) and initial CSS from 28 KB to 38 KB (36.4 KB).
 // 2026-11-07: initial CSS 38 KB to 39 KB, for the shared error page's stylesheet (0.1 KB gzip) that replaced a hand-built boundary.
+// 2026-11-11: initial CSS 39 KB to 40 KB, for Enarratio 0.12's toolbar and quiet-chart rules and Capsomer 0.89.0 (build 39.3 KB).
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const KB = 1024;
-const BUDGET = { initialJs: 205 * KB, lazyChunk: 40 * KB, css: 39 * KB, lazyCss: 12 * KB };
+const BUDGET = { initialJs: 205 * KB, lazyChunk: 40 * KB, css: 40 * KB, lazyCss: 12 * KB };
 
 const client = fileURLToPath(new URL("../build/client/", import.meta.url));
 const server = fileURLToPath(new URL("../build/server/index.js", import.meta.url));
