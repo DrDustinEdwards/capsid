@@ -161,10 +161,7 @@ jobs:
     with:
       worker-name: capsid
       health-url: https://capsid.dustinedwards.info/health
-      verify-command: >-
-        code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://capsid.dustinedwards.info/ || true);
-        echo "home page answered $code";
-        if [ "$code" = 200 ]; then exit 0; elif [ "$code" = 000 ]; then exit 3; else exit 1; fi
+      verify-command: node "$DEVKIT_DIR/bin/verify-deploy.mjs" https://capsid.dustinedwards.info
       working-directory: explorer
       install: cd .. && npm ci && npm ci --prefix explorer
       pre-deploy: >-
