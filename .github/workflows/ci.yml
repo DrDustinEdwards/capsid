@@ -131,10 +131,11 @@ jobs:
       # deleted, nor a later one that drops or renames without a `-- contract:` line
       # (migrations/manifest.json; a new migration adds its hash with
       # `npx devkit-migrations migrations --write`).
-      - name: Console and migration ratchets
+      - name: Console, migration and secret ratchets
         run: |
           npm run check:console
           npm run check:migrations
+          npm run check:secrets
 
       - name: Tests
         run: npm test
