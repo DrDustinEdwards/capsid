@@ -75,14 +75,14 @@ export function Completeness() {
     <div className="embedded">
       <div className="done-verdict">
         <Banner tone={data.finished ? "ok" : "warn"}>
-        <b>{data.finished ? "Finished." : "Not finished."}</b> {fmtN(count("complete"))} of{" "}
-        {fmtN(cells.length)} cells complete, {fmtN(count("partial"))} partial,{" "}
-        {fmtN(count("missing"))} missing
-        {count("unmeasured") ? `, ${fmtN(count("unmeasured"))} could not be measured` : ""}.{" "}
-        {data.finished
-          ? `Every cell is complete and has passed ${CLEAN_DAYS} daily runs in a row.`
-          : `Finished means every cell complete and clean for ${CLEAN_DAYS} daily runs.`}
-      </Banner>
+          <b>{data.finished ? "Finished." : "Not finished."}</b> {fmtN(count("complete"))} of{" "}
+          {fmtN(cells.length)} cells complete, {fmtN(count("partial"))} partial,{" "}
+          {fmtN(count("missing"))} missing
+          {count("unmeasured") ? `, ${fmtN(count("unmeasured"))} could not be measured` : ""}.{" "}
+          {data.finished
+            ? `Every cell is complete and has passed ${CLEAN_DAYS} daily runs in a row.`
+            : `Finished means every cell complete and clean for ${CLEAN_DAYS} daily runs.`}
+        </Banner>
       </div>
       <Panel
         flush

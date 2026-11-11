@@ -454,7 +454,8 @@ function MergeUnits() {
                         {r.state === "promote" && (
                           <button
                             type="button"
-                            className="cap-btn" data-variant="primary"
+                            className="cap-btn"
+                            data-variant="primary"
                             aria-label={`Promote ${r.unit}`}
                             onClick={() => sign("promote", r.unit)}
                           >
@@ -510,7 +511,8 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
         {canApprove(a) && (
           <button
             type="button"
-            className="cap-btn" data-variant="primary"
+            className="cap-btn"
+            data-variant="primary"
             aria-label={`Approve ${name}`}
             onClick={() => confirm(approveRequest(a))}
           >

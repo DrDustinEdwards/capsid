@@ -1097,7 +1097,6 @@ dialog {
   transform: translate(-50%, 0);
 }
 
-
 /* app additions: utilities that replace the prototype's inline styles (CSP style-src 'self') */
 #root {
   height: 100%;

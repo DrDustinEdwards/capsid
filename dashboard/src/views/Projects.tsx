@@ -106,7 +106,12 @@ function Row({
       </td>
       <td className="ctl">
         <div className="toolbar col">
-          <button type="button" className="cap-btn" aria-label={`Edit ${n.namespace}`} onClick={onEdit}>
+          <button
+            type="button"
+            className="cap-btn"
+            aria-label={`Edit ${n.namespace}`}
+            onClick={onEdit}
+          >
             Edit
           </button>
           {n.breaker.open && (
@@ -148,7 +153,8 @@ function Roster() {
       <div className="toolbar">
         <button
           type="button"
-          className="cap-btn" data-variant="primary"
+          className="cap-btn"
+          data-variant="primary"
           onClick={() => setEditing({ kind: "add" })}
           disabled={editing?.kind === "add"}
         >

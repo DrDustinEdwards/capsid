@@ -111,7 +111,8 @@ export function ProjectForm({
             </label>
             <button
               type="button"
-              className="cap-btn" data-variant="danger"
+              className="cap-btn"
+              data-variant="danger"
               aria-label={`Delete ${ns}`}
               onClick={remove}
             >

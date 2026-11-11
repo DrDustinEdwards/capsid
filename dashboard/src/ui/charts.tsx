@@ -49,9 +49,7 @@ export function UptimeTicks({ site }: { site: SiteSnapshot }) {
         className="cap-uptime-strip"
         dangerouslySetInnerHTML={markup(uptimeStrip({ ...opts, inline: true }))}
       />
-      <span
-        dangerouslySetInnerHTML={markup(uptimeStripTable(opts).markup)}
-      />
+      <span dangerouslySetInnerHTML={markup(uptimeStripTable(opts).markup)} />
     </>
   );
 }

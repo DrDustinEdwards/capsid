@@ -105,11 +105,7 @@ function Waiting() {
         ) : undefined
       }
     >
-      {error && (
-        <Banner tone="warn">
-          Stopped queues could not be read: {error}
-        </Banner>
-      )}
+      {error && <Banner tone="warn">Stopped queues could not be read: {error}</Banner>}
       {total === 0 ? (
         <Empty kind="all-clear" title="Nothing needs you." />
       ) : (
@@ -238,7 +234,8 @@ function PrGroup({ entries }: { entries: Entry[] }) {
             {chosen.length > 0 && (
               <button
                 type="button"
-                className="cap-btn" data-variant="primary"
+                className="cap-btn"
+                data-variant="primary"
                 onClick={() =>
                   confirm({ ...approveAllRequest(chosen), onDone: () => ticks.all(false) })
                 }
@@ -300,7 +297,8 @@ function PrRow({
         {ok && (
           <button
             type="button"
-            className="cap-btn" data-variant="primary"
+            className="cap-btn"
+            data-variant="primary"
             aria-label={`Approve ${name}`}
             onClick={() => confirm(approveRequest(ok))}
           >
@@ -388,7 +386,11 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
         </Meta>
         <span className="wlinks">
           {j && (
-            <button type="button" className="cap-link-btn wlink" onClick={() => open(`job:${j.id}`)}>
+            <button
+              type="button"
+              className="cap-link-btn wlink"
+              onClick={() => open(`job:${j.id}`)}
+            >
               More about this job
             </button>
           )}
@@ -441,7 +443,8 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
         {blocked && !replying && (
           <button
             type="button"
-            className="cap-btn" data-variant="primary"
+            className="cap-btn"
+            data-variant="primary"
             aria-label={`${verb} ${item.title}`}
             onClick={() => setReplying(true)}
           >
@@ -473,7 +476,8 @@ function StopGroup({ list, onReset }: { list: PortalNamespace[]; onReset: () => 
           <div className="wact">
             <button
               type="button"
-              className="cap-btn" data-variant="primary"
+              className="cap-btn"
+              data-variant="primary"
               aria-label={`Reset ${n.namespace}`}
               onClick={() =>
                 confirm({

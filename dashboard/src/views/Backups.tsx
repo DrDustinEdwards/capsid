@@ -247,11 +247,7 @@ function SiteBackups() {
       }
     >
       <div className="body stack-gap">
-        {load.error && (
-          <Alert tone="crit">
-            Could not read the sites' backups: {load.error}
-          </Alert>
-        )}
+        {load.error && <Alert tone="crit">Could not read the sites' backups: {load.error}</Alert>}
         {!data ? (
           !load.error && (
             <div className="loading" role="status">

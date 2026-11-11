@@ -43,7 +43,8 @@ function AllSites() {
       <div className="toolbar">
         <button
           type="button"
-          className="cap-btn" data-variant="primary"
+          className="cap-btn"
+          data-variant="primary"
           onClick={() => setEditing({ kind: "add" })}
           disabled={editing?.kind === "add"}
         >

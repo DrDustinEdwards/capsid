@@ -75,11 +75,7 @@ export function Maintenance() {
         </>
       }
     >
-      {load.error && (
-        <Alert tone="crit">
-          Could not read the Maintenance list: {load.error}
-        </Alert>
-      )}
+      {load.error && <Alert tone="crit">Could not read the Maintenance list: {load.error}</Alert>}
       {!data && load.loading ? (
         <div className="loading" role="status">
           <Spinner label="Reading the Maintenance list..." />

@@ -26,7 +26,6 @@ function S({ children, className }: { children: ReactNode; className?: string })
   );
 }
 
-
 // The inbox's kinds each get their own mark (Dustin's review of 2026-10-11: every row had the
 // same pause icon). The color still says who acts: warning for a person, critical for a
 // machine fault.

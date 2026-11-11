@@ -124,19 +124,14 @@ export function PhoneAlerts() {
             and number, never a title, and a tap opens that item in the Portal; it has no Approve
             button.
           </p>
-          {data?.problem && (
-            <Banner tone="warn">
-              Not set up yet: {data.problem}
-            </Banner>
-          )}
-          {note && (
-            <Banner tone={note.kind === "crit" ? "crit" : "neutral"}>{note.text}</Banner>
-          )}
+          {data?.problem && <Banner tone="warn">Not set up yet: {data.problem}</Banner>}
+          {note && <Banner tone={note.kind === "crit" ? "crit" : "neutral"}>{note.text}</Banner>}
           <div className="toolbar">
             {supported() ? (
               <button
                 type="button"
-                className="cap-btn" data-variant="primary"
+                className="cap-btn"
+                data-variant="primary"
                 disabled={busy || !data?.public_key}
                 onClick={() => void turnOn()}
               >
@@ -202,9 +197,7 @@ function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: numbe
           questions, blocked jobs, rollbacks, and what finished or became ready since the last one.
         </p>
         {digest.on ? (
-          <Banner tone="neutral">
-            On. It goes to {digest.to}.
-          </Banner>
+          <Banner tone="neutral">On. It goes to {digest.to}.</Banner>
         ) : (
           // Plain words first (the UX audit's m11); what the setup still needs, in the
           // Worker's own words, is one click away.
@@ -221,8 +214,8 @@ function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: numbe
             }
           />
         )}
-        {digest.last && (
-          digest.last.outcome === "failed" ? (
+        {digest.last &&
+          (digest.last.outcome === "failed" ? (
             <Banner tone="crit">
               Last attempt failed {ago(Date.parse(digest.last.at), now)}: {digest.last.note}
             </Banner>
@@ -230,8 +223,7 @@ function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: numbe
             <p className="faint">
               Last sent {ago(Date.parse(digest.last.at), now)}: {digest.last.note}
             </p>
-          )
-        )}
+          ))}
       </div>
     </Panel>
   );

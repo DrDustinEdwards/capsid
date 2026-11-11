@@ -85,7 +85,8 @@ export function Overview() {
             label: "Amazon copy",
             tone: "nodata",
             reason: "No copy",
-            d: copyState.bad || copyState.warn ? copyState.headline : copyState.detail.toLowerCase(),
+            d:
+              copyState.bad || copyState.warn ? copyState.headline : copyState.detail.toLowerCase(),
             go: "health#backups",
           }
         : {

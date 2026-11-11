@@ -197,7 +197,12 @@ function PackagePanel({
       src={
         <>
           {snap ? `read ${ago(ms(snap.at), now)} · ` : "not read yet · "}
-          <button type="button" className="cap-btn" aria-label={`Edit ${cfg.name}`} onClick={onEdit}>
+          <button
+            type="button"
+            className="cap-btn"
+            aria-label={`Edit ${cfg.name}`}
+            onClick={onEdit}
+          >
             Edit
           </button>
         </>
@@ -369,7 +374,8 @@ function Published() {
       <div className="toolbar">
         <button
           type="button"
-          className="cap-btn" data-variant="primary"
+          className="cap-btn"
+          data-variant="primary"
           onClick={() => setEditing({ kind: "add" })}
           disabled={editing?.kind === "add"}
         >

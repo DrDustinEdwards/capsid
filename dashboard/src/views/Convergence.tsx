@@ -36,9 +36,7 @@ export function Convergence({ ns }: { ns: string }) {
     return (
       <Panel flush title="Site sync" id="convergence" section="Site sync">
         {load.error ? (
-          <Alert tone="crit">
-            Could not read site sync: {load.error}
-          </Alert>
+          <Alert tone="crit">Could not read site sync: {load.error}</Alert>
         ) : (
           <div className="loading" role="status">
             <Spinner label="Reading each site's operator API..." />

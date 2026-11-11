@@ -96,7 +96,11 @@ function Verdict() {
         {rest > 0 && (
           <>
             {" and "}
-            <button type="button" className="cap-link-btn" onClick={() => open("view:needs#attention")}>
+            <button
+              type="button"
+              className="cap-link-btn"
+              onClick={() => open("view:needs#attention")}
+            >
               {rest} more
             </button>
           </>
