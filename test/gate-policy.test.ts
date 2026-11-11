@@ -165,6 +165,13 @@ test("splitStatements ignores a DROP that is only mentioned in a comment", () =>
   assert.equal(isAdditiveMigration(sql).ok, true);
 });
 
+test("a comment opener inside a string cannot hide a DROP, and a contract file is not pre-approved", () => {
+  // The deploy's check (devkit-migrations) reads strings the same way; the two must agree on this file.
+  const hidden = "ALTER TABLE t ADD COLUMN c TEXT DEFAULT '/*';\nDROP TABLE x; -- */";
+  assert.equal(isAdditiveMigration(hidden).ok, false);
+  assert.equal(isAdditiveMigration("-- contract: rebuild\nCREATE INDEX i ON t (a);").ok, false);
+});
+
 // the command comes back out of the blocked summary
 
 test("commandFromSummary reads back exactly what blockJob wrote", () => {
