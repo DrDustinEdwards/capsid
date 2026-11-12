@@ -315,3 +315,51 @@ test("PLANT: the view says untagged, on npm, private, and what was not read", ()
     manifest_error: "GitHub answered 404 for example-org/gone's package.json",
   });
 });
+
+test("PLANT: a workflow pin's version is the tag its sha points at, so a sha moved back with its comment kept reads as the older release", async () => {
+  const { workflowPins } = await import("../src/lockfiles.ts");
+  const { versionDrift } = await import("../src/system-versions.ts");
+  const [new_, old, stray] = ["a", "b", "c"].map((c) => c.repeat(40));
+  const caller = (sha: string) =>
+    `jobs:\n  checks:\n    uses: example-org/devkit/.github/workflows/pr.yml@${sha} # v0.42.0\n`;
+  const night = (sha: string) =>
+    sharedCodeView(
+      [DEVKIT],
+      new Map([["devkit", ["v0.39.0", "v0.42.0"]]]),
+      [
+        {
+          ...app("sample", {}, ["package.json"]),
+          repo: "example-org/sample",
+          workflows: [{ path: ".github/workflows/checks.yml", pins: workflowPins(caller(sha)) }],
+        },
+      ],
+      NOW,
+      new Map(),
+      new Map([
+        [
+          "devkit",
+          new Map([
+            [new_, "v0.42.0"],
+            [old, "v0.39.0"],
+          ]),
+        ],
+      ]),
+    );
+  const pinned = (sha: string) => night(sha).packages[0].users.map((u) => u.pinned);
+  assert.deepEqual(pinned(new_), ["v0.42.0"]);
+  assert.deepEqual(pinned(old), ["v0.39.0"], "the comment still says v0.42.0");
+  assert.deepEqual(pinned(stray), [stray], "a sha no tag names is itself, not a release");
+  const first = versionDrift(night(new_), {}, NOW);
+  assert.match(
+    versionDrift(night(old), first.since, NOW)
+      .items.map((i) => i.line)
+      .join("\n"),
+    /moved devkit back from v0\.42\.0 to v0\.39\.0 in \.github\/workflows/,
+  );
+  assert.match(
+    versionDrift(night(stray), first.since, NOW)
+      .items.map((i) => i.line)
+      .join("\n"),
+    /pins devkit at ccccccc in \.github\/workflows, a commit no release tag names/,
+  );
+});
