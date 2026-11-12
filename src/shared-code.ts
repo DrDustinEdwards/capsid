@@ -3,7 +3,14 @@ import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import { parseReposList } from "./github/client";
 import { readNpm, readNpmVersions, readPackageConfig, type FetchLike } from "./ops-packages";
-import { npmLockVersions, pnpmLockVersions, workflowPins } from "./lockfiles";
+import {
+  asTag,
+  noBloatJobs,
+  npmLockVersions,
+  pnpmLockVersions,
+  workflowPins,
+  type NoBloatJob,
+} from "./lockfiles";
 import { bundledModel } from "./public-data";
 import type { SystemModel } from "./system-model";
 import type { PackageSnapshot } from "./ops-types/sites";
@@ -133,12 +140,12 @@ export function presetSpec(entry: string): { repo: string; ref: string | null } 
 
 const SEMVER = /^v?(\d+)\.(\d+)\.(\d+)$/;
 
-function semver(tag: string): [number, number, number] | null {
+export function semver(tag: string): [number, number, number] | null {
   const m = SEMVER.exec(tag);
   return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
 }
 
-function cmp(a: [number, number, number], b: [number, number, number]): number {
+export function cmp(a: [number, number, number], b: [number, number, number]): number {
   return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 }
 
@@ -230,8 +237,12 @@ export interface AppRead {
     lockVersions: Record<string, string>;
   }>;
   presets: string[];
-  // Each workflow file's `uses:` pins.
-  workflows?: Array<{ path: string; pins: Array<{ repo: string; pinned: string | null }> }>;
+  // Each workflow file's `uses:` pins, and its jobs that call devkit's no-bloat check.
+  workflows?: Array<{
+    path: string;
+    pins: Array<{ repo: string; ref: string }>;
+    no_bloat?: NoBloatJob[];
+  }>;
   error: string | null;
 }
 
@@ -242,6 +253,7 @@ export function sharedCodeView(
   apps: readonly AppRead[],
   now: Date,
   releases: ReadonlyMap<string, ReleaseRead> = new Map(),
+  tagShas: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map(),
 ): SharedCodeView {
   const packages: SharedCodePackage[] = config.map((pkg) => {
     const names = new Set([pkg.repo, ...pkg.formerly].map((r) => r.toLowerCase()));
@@ -306,13 +318,25 @@ export function sharedCodeView(
       }
       // One row per version the workflows pin, so a repo whose files disagree shows both.
       const byPin = new Map<string | null, { files: number; old: boolean }>();
+      // A sha is the release whose tag points at it, read from the tags, never from the comment beside it; a sha no
+      // tag names is itself (no release, so no check of a release runs), and unknown when the tags were not read.
+      const shas = tagShas.get(pkg.name);
+      const version = (ref: string): string | null =>
+        /^[0-9a-f]{40}$/i.test(ref)
+          ? Array.isArray(t)
+            ? (shas?.get(ref.toLowerCase()) ?? ref.toLowerCase())
+            : null
+          : /^v?\d+\.\d+\.\d+$/.test(ref)
+            ? asTag(ref)
+            : null;
       for (const w of app.workflows ?? []) {
         for (const pin of w.pins) {
           if (!names.has(pin.repo)) continue;
-          const row = byPin.get(pin.pinned) ?? { files: 0, old: false };
+          const pinned = version(pin.ref);
+          const row = byPin.get(pinned) ?? { files: 0, old: false };
           row.files += 1;
           row.old ||= pin.repo !== pkg.repo.toLowerCase();
-          byPin.set(pin.pinned, row);
+          byPin.set(pinned, row);
         }
       }
       for (const [pinned, row] of byPin) {
@@ -360,7 +384,31 @@ export function sharedCodeView(
           : { namespace: a.namespace, error: a.error! },
       ),
     packages,
+    no_bloat_off: noBloatOff(apps),
   };
+}
+
+/** The repos with a root package.json where no workflow job runs devkit's no-bloat check: none calls pr.yml or
+ *  no-bloat.yml, or each that does turns it off. A private repository passes `no-bloat: false` to pr.yml and runs
+ *  no-bloat.yml weekly, so it is on. Only what was read is judged; a repo that could not be read is apps_failed's. */
+function noBloatOff(apps: readonly AppRead[]): NonNullable<SharedCodeView["no_bloat_off"]> {
+  const out: NonNullable<SharedCodeView["no_bloat_off"]> = [];
+  for (const app of apps) {
+    if (app.error !== null || !app.manifests.some((m) => m.path === "package.json")) continue;
+    const jobs = (app.workflows ?? []).flatMap((w) =>
+      (w.no_bloat ?? []).map((j) => ({ ...j, path: w.path })),
+    );
+    if (jobs.some((j) => j.off === null)) continue;
+    const repo = app.repo ?? app.namespace;
+    out.push({
+      namespace: app.namespace,
+      repo: app.repo ?? null,
+      line: jobs.length
+        ? `${repo} runs no no-bloat check: ${jobs.map((j) => `${j.path}: ${j.off}`).join("; ")}. Turn it back on, or find who turned it off.`
+        : `${repo} runs no no-bloat check: no workflow calls devkit's pr.yml or no-bloat.yml. Add the caller (devkit examples/pr-caller.yml).`,
+    });
+  }
+  return out;
 }
 
 type ReleaseFields = Pick<
@@ -569,8 +617,10 @@ async function readApp(
       .filter((p) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(p))
       .sort()
       .slice(0, WORKFLOWS_PER_APP);
-    for (const path of workflows)
-      app.workflows!.push({ path, pins: workflowPins(await rawFile(env, target.repo, path)) });
+    for (const path of workflows) {
+      const text = await rawFile(env, target.repo, path);
+      app.workflows!.push({ path, pins: workflowPins(text), no_bloat: noBloatJobs(text) });
+    }
   } catch (err) {
     app.error = errorMessage(err);
   }
@@ -600,7 +650,10 @@ function modelApps(
   });
 }
 
-async function readTags(env: Env, full: string): Promise<string[] | string> {
+async function readTags(
+  env: Env,
+  full: string,
+): Promise<Array<{ name: string; sha: string }> | string> {
   const [owner, repo] = full.split("/");
   const resp = await ghFetch(
     env,
@@ -609,7 +662,10 @@ async function readTags(env: Env, full: string): Promise<string[] | string> {
     `/repos/${owner}/${repo}/tags?per_page=${TAGS_PER_PAGE}`,
   );
   if (!resp.ok) return `GitHub answered ${resp.status} for ${full}'s tags`;
-  return ((await resp.json()) as Array<{ name: string }>).map((t) => t.name);
+  return ((await resp.json()) as Array<{ name: string; commit: { sha: string } }>).map((t) => ({
+    name: t.name,
+    sha: t.commit.sha.toLowerCase(),
+  }));
 }
 
 /** The view, from the hour's cache unless `fresh`. A missing table says so. */
@@ -703,18 +759,21 @@ async function buildSharedCode(
     }),
   );
   const tags = new Map<string, string[] | string>();
+  const tagShas = new Map<string, Map<string, string>>();
   const failed = (err: unknown) => errorMessage(err);
-  for (const pkg of config)
-    tags.set(
-      pkg.name,
-      await (
-        pkg.registry === "npm" ? readNpmVersions(fetchImpl, pkg.name) : readTags(env, pkg.repo)
-      ).catch(failed),
-    );
+  for (const pkg of config) {
+    if (pkg.registry === "npm") {
+      tags.set(pkg.name, await readNpmVersions(fetchImpl, pkg.name).catch(failed));
+      continue;
+    }
+    const read = await readTags(env, pkg.repo).catch(failed);
+    tags.set(pkg.name, typeof read === "string" ? read : read.map((r) => r.name));
+    if (typeof read !== "string") tagShas.set(pkg.name, new Map(read.map((r) => [r.sha, r.name])));
+  }
   const releases = new Map<string, ReleaseRead>();
   // A published package's repo may hold several packages (the Astro workspace), so its
   // root package.json says nothing about it; its release is npm's.
   for (const pkg of config)
     if (pkg.registry !== "npm") releases.set(pkg.name, await readRelease(env, pkg.repo, fetchImpl));
-  return sharedCodeView(config, tags, apps, now, releases);
+  return sharedCodeView(config, tags, apps, now, releases, tagShas);
 }
