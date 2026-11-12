@@ -5,7 +5,7 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { withAuditKey } from "./audit-key";
 import { backupTaskResult, runBackup } from "./backup";
 import { readSiteRow } from "./ops-sites";
-import { callOperator, tokenSet, type FetchLike, type OperatorCall } from "./site-operator";
+import { callOperator, tokenSet, type FetchLike } from "./site-operator";
 import { takeLimit } from "./site-repair";
 import { auditStatement } from "./store-guards";
 import { supersedePass } from "./supersede";
