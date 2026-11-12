@@ -4,7 +4,7 @@ import { npmVersions, readPackageConfig, type FetchLike } from "./ops-packages";
 import { heading, proseOnly } from "./job-body-check";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-import { parsePrUrl } from "@dustinedwards/site-runtime/github";
+import { parsePrUrl, PR_URL_SOURCE } from "@dustinedwards/site-runtime/github";
 // The third job body check (src/job-body-check.ts): a body that states a pull request is
 // merged, a version is tagged or a package version is published is checked against GitHub
 // and npm at post and edit, and refused when what Capsid reads says otherwise. The case:
@@ -47,7 +47,8 @@ const NOT_DONE =
 const SKIPPED_PARTS = heading("DONE WHEN|OUT OF SCOPE");
 const OTHER_PARTS = heading("GOAL|DO|DECIDED|RULES");
 
-const PR_ITEM = String.raw`(?:https:\/\/github\.com\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\/pull\/\d+|#\d+)(?![\w/])`;
+// A pull request is site-runtime's URL pattern or a bare #N; its groups sit inside each list's own group 1.
+const PR_ITEM = String.raw`(?:${PR_URL_SOURCE}|#\d+)(?![\w/])`;
 const PR_LIST = String.raw`${PR_ITEM}(?:(?:\s*,\s*(?:and\s+)?|\s+and\s+|\s*&\s*)${PR_ITEM})*`;
 const PR_NOUN = String.raw`(?:(?:PRs?|pull\s+requests?)\s+)?`;
 // The verb's state, required except at the start of a sentence ("- #12 merged").

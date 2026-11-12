@@ -8,11 +8,7 @@ import {
   type DeletePlan,
   type PlanCounts,
 } from "../src/namespace-delete.ts";
-import {
-  signDeleteToken,
-  verifyDeleteToken,
-  type DeleteClaims,
-} from "../src/namespace-delete-token.ts";
+import { confirmKeys } from "../src/auth.ts";
 import { D1_BATCH_STATEMENTS } from "../src/limits.ts";
 import { actionArgFor, defaultActionFor, requiredGrant } from "../src/scope.ts";
 import { hintsFor } from "../src/tool-annotations.ts";
@@ -20,7 +16,7 @@ import { MANAGE_NAMESPACES } from "../src/tools/surface.ts";
 
 // The pure half of capsid_admin_manage_namespaces's delete_preview and delete_perform
 // (the delete_namespace operation): the refusals, the plan fingerprint and the
-// confirmation token. The store half is test-integration/delete-namespace.test.ts,
+// confirmation key. The store half is test-integration/delete-namespace.test.ts,
 // against a real D1, because the batch is INSERT ... SELECT and json_each the node fake
 // does not evaluate.
 
@@ -234,110 +230,11 @@ test("the difference names what moved", () => {
 });
 
 // ---- the token -------------------------------------------------------------------
-
-const KEY = { COOKIE_ENCRYPTION_KEY: "unit-namespace-delete-key" };
-const NOW = new Date("2026-09-29T12:00:00Z");
-const EXPECT = {
-  actor: "access:admin@example.com",
-  namespace: "sample",
-  cascade: true,
-  allowImprovePaths: false,
-};
-
-function claims(over: Partial<DeleteClaims> = {}): DeleteClaims {
-  return {
-    v: 1,
-    namespace: "sample",
-    cascade: true,
-    allow_improve_paths: false,
-    actor: "access:admin@example.com",
-    plan: planFingerprint(plan()),
-    exp: Math.floor(NOW.getTime() / 1000) + 300,
-    ...over,
-  };
-}
-
-test("a token verifies for the caller and the arguments it was signed for", async () => {
-  const verified = await verifyDeleteToken(KEY, await signDeleteToken(KEY, claims()), EXPECT, NOW);
-  assert.equal(verified.ok, true);
-  assert.equal(verified.ok && verified.claims.plan, planFingerprint(plan()));
-});
-
-test("PLANT: every mismatch refuses the token", async () => {
-  const cases: Array<[string, Promise<string>, typeof EXPECT, RegExp]> = [
-    [
-      "another key",
-      signDeleteToken({ COOKIE_ENCRYPTION_KEY: "other" }, claims()),
-      EXPECT,
-      /does not verify/,
-    ],
-    [
-      "another caller",
-      signDeleteToken(KEY, claims({ actor: "agent:sample-driver" })),
-      EXPECT,
-      /another caller/,
-    ],
-    [
-      "expired",
-      signDeleteToken(KEY, claims({ exp: Math.floor(NOW.getTime() / 1000) })),
-      EXPECT,
-      /expired/,
-    ],
-    [
-      "another namespace",
-      signDeleteToken(KEY, claims({ namespace: "other" })),
-      EXPECT,
-      /issued for namespace other/,
-    ],
-    [
-      "another cascade",
-      signDeleteToken(KEY, claims({ cascade: false })),
-      EXPECT,
-      /issued with cascade false/,
-    ],
-    [
-      "another allow_improve_paths",
-      signDeleteToken(KEY, claims({ allow_improve_paths: true })),
-      EXPECT,
-      /allow_improve_paths true/,
-    ],
-  ];
-  for (const [label, token, expect, pattern] of cases) {
-    const verified = await verifyDeleteToken(KEY, await token, expect, NOW);
-    assert.equal(verified.ok, false, `${label} verified`);
-    assert.match(verified.ok ? "" : verified.refusal, pattern, label);
-  }
-});
-
-test("PLANT: a tampered payload or a malformed token is refused", async () => {
-  const token = await signDeleteToken(KEY, claims());
-  const [payload, sig] = token.split(".");
-  const swapped = Buffer.from(JSON.stringify({ ...claims(), namespace: "other" })).toString(
-    "base64url",
-  );
-  const tampered = await verifyDeleteToken(KEY, `${swapped}.${sig}`, EXPECT, NOW);
-  assert.equal(tampered.ok, false);
-  assert.match(tampered.ok ? "" : tampered.refusal, /does not verify/);
-  for (const bad of [
-    "",
-    "x",
-    `${payload}.`,
-    `${payload}.${"0".repeat(63)}`,
-    `${payload}.${sig}.x`,
-  ]) {
-    const verified = await verifyDeleteToken(KEY, bad, EXPECT, NOW);
-    assert.equal(verified.ok, false, `accepted ${JSON.stringify(bad)}`);
-  }
-});
+// The token itself is site-runtime's ./confirm-token, tested where it lives; the key is Capsid's.
 
 test("with no root secret nothing is signed or checked", async () => {
   await assert.rejects(
-    () => signDeleteToken({ COOKIE_ENCRYPTION_KEY: "" }, claims()),
-    /COOKIE_ENCRYPTION_KEY is unset/,
-  );
-  await assert.rejects(
-    () =>
-      verifyDeleteToken({ COOKIE_ENCRYPTION_KEY: "" }, "a.".concat("0".repeat(64)), EXPECT, NOW),
+    () => confirmKeys({ COOKIE_ENCRYPTION_KEY: "" }, "capsid-namespace-delete:v1"),
     /COOKIE_ENCRYPTION_KEY is unset/,
   );
 });

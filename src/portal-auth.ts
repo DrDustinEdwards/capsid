@@ -12,7 +12,8 @@ import {
   startAccessLogin,
 } from "./access-login";
 import { isAdminEmail } from "@dustinedwards/site-runtime/access";
-import { capsidCookie, getCookie } from "./auth";
+import { capsidCookie } from "./auth";
+import { readCookie } from "@dustinedwards/site-runtime/headers";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { logEvent, OWASP_EVENTS } from "@dustinedwards/site-runtime/log";
 import { emailKey } from "@dustinedwards/site-runtime/rate-limit";
@@ -117,13 +118,11 @@ export async function portalSessionCookie(
 }
 
 /** The Set-Cookie values that sign this browser out: the session and CSRF cookies,
- *  same name, path and attributes, Max-Age=0, under the prefixed name and the bare one
- *  they had before (for one release, with getCookie's fallback). */
+ *  same name, path and attributes, Max-Age=0. */
 export function portalSignOutCookies(cookiePath: string = PORTAL_PATH): string[] {
-  return [PORTAL_SESSION_COOKIE, PORTAL_CSRF_COOKIE].flatMap((name) => [
+  return [PORTAL_SESSION_COOKIE, PORTAL_CSRF_COOKIE].map((name) =>
     capsidCookie(name, "", cookiePath, 0),
-    `${name}=; Path=${cookiePath}; Secure; HttpOnly; SameSite=Lax; Max-Age=0`,
-  ]);
+  );
 }
 
 // The verified payload, expired or not, or null: a bad signature or shape, an email no
@@ -140,7 +139,7 @@ function verifiedSession(request: Request, env: Env): Promise<SessionPayload | n
 }
 
 async function verifySession(request: Request, env: Env): Promise<SessionPayload | null> {
-  const raw = getCookie(request, PORTAL_SESSION_COOKIE);
+  const raw = readCookie(request, PORTAL_SESSION_COOKIE);
   if (!raw) return null;
   const dot = raw.indexOf(".");
   if (dot === -1) return null;

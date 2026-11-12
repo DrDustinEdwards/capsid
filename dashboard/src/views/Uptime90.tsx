@@ -36,8 +36,8 @@ export function Uptime90({ ns }: { ns: string }) {
       {rows.length === 0 ? (
         <p className="faint">No probe counted yet.</p>
       ) : (
-        <div className="scroll-x">
-          <table className="list">
+        <div className="cap-table-wrap">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th>Site</th>
@@ -102,17 +102,20 @@ export function Uptime90({ ns }: { ns: string }) {
           </table>
           <ul className="cap-uptime-legend" aria-label="Key">
             <li>
-              <span className="cap-uptime-key" data-key="up" aria-hidden="true"></span>Met target
+              <span className="cap-uptime-key" data-key="up" aria-hidden="true"></span>
+              Met target
             </li>
             <li>
-              <span className="cap-uptime-key" data-key="degraded" aria-hidden="true"></span>Under
-              target
+              <span className="cap-uptime-key" data-key="degraded" aria-hidden="true"></span>
+              Under target
             </li>
             <li>
-              <span className="cap-uptime-key" data-key="down" aria-hidden="true"></span>Down
+              <span className="cap-uptime-key" data-key="down" aria-hidden="true"></span>
+              Down
             </li>
             <li>
-              <span className="cap-uptime-key" data-key="nodata" aria-hidden="true"></span>No data
+              <span className="cap-uptime-key" data-key="nodata" aria-hidden="true"></span>
+              No data
             </li>
           </ul>
         </div>

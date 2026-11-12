@@ -1,3 +1,4 @@
+import { slugify } from "@drdustinedwards/site-helpers/slug";
 import type { Finding } from "./watcher-detect";
 import { HOUR_MS } from "./time";
 
@@ -60,14 +61,8 @@ export async function readActionHours(
   return results ?? [];
 }
 
-function slug(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/^agent:/, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 60);
-}
+// An actor or action in a fingerprint: prelum's slug, without the agent: prefix, at most 60 characters.
+const slug = (text: string): string => slugify(text.replace(/^agent:/i, ""), { max: 60 });
 
 /** The hour of day in America/Chicago for a UTC hour key. */
 export function chicagoHour(hourKey: string): number {

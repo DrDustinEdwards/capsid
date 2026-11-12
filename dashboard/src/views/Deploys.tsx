@@ -36,7 +36,7 @@ export function Deploys() {
           <button
             key={r}
             type="button"
-            className="chip"
+            className="cap-chip"
             aria-pressed={filters.range === r}
             onClick={() => setFilters({ range: r })}
           >
@@ -67,8 +67,8 @@ export function Deploys() {
             count={list.length}
             src="at most 10 per site, newest first"
           >
-            <div className="scroll-x">
-              <table className="list">
+            <div className="cap-table-wrap">
+              <table className="cap-table">
                 <thead>
                   <tr>
                     <th>When</th>
@@ -114,7 +114,7 @@ export function Deploys() {
                         ) : (
                           <span className="toolbar" role="status" data-filter-empty="">
                             No deploys for the namespace {ns} in this range.
-                            <button type="button" className="btn" onClick={() => setNs("all")}>
+                            <button type="button" className="cap-btn" onClick={() => setNs("all")}>
                               Show all
                             </button>
                           </span>
@@ -134,8 +134,8 @@ export function Deploys() {
               section="No deploy data"
               count={missing.length}
             >
-              <div className="scroll-x">
-                <table className="list">
+              <div className="cap-table-wrap">
+                <table className="cap-table">
                   <tbody>
                     {missing.map((s) => (
                       <tr key={siteKey(s)}>

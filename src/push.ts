@@ -21,6 +21,7 @@ import {
   type PushSubscriptionKeys,
 } from "@dustinedwards/site-runtime/web-push";
 import { jsonResponse as json, textResponse as text } from "@dustinedwards/site-runtime/http";
+import { toSqlTime } from "@dustinedwards/site-runtime/time";
 import { HOUR_MS, DAY_MS, utcDay } from "./time";
 
 // PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7; Dustin's DECIDE 5
@@ -172,7 +173,7 @@ async function gatherUrgent(
   }
 
   // 2. Rollbacks the watcher recorded.
-  const since = new Date(t - RECENT_MS).toISOString().replace("T", " ").slice(0, 19);
+  const since = toSqlTime(t - RECENT_MS);
   const rolled = await env.DB.prepare(
     `SELECT repo, namespace, run_id, head_sha, outcome FROM deploy_outcomes
      WHERE outcome IN ('rolled_back', 'rollback_failed') AND recorded_at >= ?1 ORDER BY recorded_at LIMIT 20`,

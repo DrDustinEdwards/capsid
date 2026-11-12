@@ -40,8 +40,8 @@ export function DefaultBranches() {
     <>
       <Panel flush title="Default branches" src="watcher ci check · GitHub App">
         {snap ? (
-          <div className="scroll-x">
-            <table className="list">
+          <div className="cap-table-wrap">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>Project</th>
@@ -156,7 +156,7 @@ export function PullRequests() {
             <div className="toolbar">
               <button
                 type="button"
-                className="btn"
+                className="cap-btn"
                 onClick={() =>
                   confirm({
                     action: "sign_policy_from_repo",
@@ -180,8 +180,8 @@ export function PullRequests() {
             count={live.merge_safety.namespaces.length}
             src="the tick's safety meter"
           >
-            <div className="scroll-x reflow">
-              <table className="list cards-below-1100">
+            <div className="cap-table-wrap" data-reflow="wide">
+              <table className="cap-table">
                 <thead>
                   <tr>
                     <th>Project</th>
@@ -194,7 +194,7 @@ export function PullRequests() {
                     <th>State</th>
                     <th>Why</th>
                     <th>
-                      <span className="sr-only">Action</span>
+                      <span className="cap-sr-only">Action</span>
                     </th>
                   </tr>
                 </thead>
@@ -237,7 +237,7 @@ export function PullRequests() {
                         {n.paused && (
                           <button
                             type="button"
-                            className="btn"
+                            className="cap-btn"
                             aria-label={`Resume auto-merge for ${n.namespace}`}
                             onClick={() =>
                               confirm({
@@ -266,8 +266,8 @@ export function PullRequests() {
         src="recorded against jobs"
         count={live.prs.length}
       >
-        <div className="scroll-x reflow">
-          <table className="list cards-below-1100">
+        <div className="cap-table-wrap" data-reflow="wide">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th>PR</th>
@@ -341,7 +341,11 @@ export function PullRequests() {
 // merge, and the tick's promote and demote proposals. Each row offers its control: Demote and
 // Promote sign the policy's next version (sign_policy_change, the version typed), and Lift
 // suspension is unit_resume, with a reason. docs/autonomy.md, "Earned promotion and demotion".
-type UnitRow = { unit: string; state: "auto" | "suspended" | "promote" | "demote"; why: string };
+type UnitRow = {
+  unit: string;
+  state: "auto" | "suspended" | "promote" | "demote";
+  why: string;
+};
 
 function unitRows(promoted: readonly string[], units: PortalMergeUnits): UnitRow[] {
   const rows = new Map<string, UnitRow>();
@@ -406,15 +410,15 @@ function MergeUnits() {
       src={units.generated ? `judged ${utc(parse(units.generated))}` : "not judged yet"}
     >
       {rows.length ? (
-        <div className="scroll-x reflow">
-          <table className="list cards-below-1100">
+        <div className="cap-table-wrap" data-reflow="wide">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th>Unit</th>
                 <th>State</th>
                 <th>Why</th>
                 <th>
-                  <span className="sr-only">Actions</span>
+                  <span className="cap-sr-only">Actions</span>
                 </th>
               </tr>
             </thead>
@@ -439,7 +443,7 @@ function MergeUnits() {
                         {suspended.has(r.unit) && (
                           <button
                             type="button"
-                            className="btn"
+                            className="cap-btn"
                             aria-label={`Lift the suspension of ${r.unit}`}
                             onClick={() =>
                               confirm({
@@ -455,7 +459,8 @@ function MergeUnits() {
                         {r.state === "promote" && (
                           <button
                             type="button"
-                            className="btn primary"
+                            className="cap-btn"
+                            data-variant="primary"
                             aria-label={`Promote ${r.unit}`}
                             onClick={() => sign("promote", r.unit)}
                           >
@@ -465,7 +470,7 @@ function MergeUnits() {
                         {listed && (
                           <button
                             type="button"
-                            className="btn"
+                            className="cap-btn"
                             aria-label={`Demote ${r.unit}`}
                             onClick={() => sign("demote", r.unit)}
                           >
@@ -511,7 +516,8 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
         {canApprove(a) && (
           <button
             type="button"
-            className="btn primary"
+            className="cap-btn"
+            data-variant="primary"
             aria-label={`Approve ${name}`}
             onClick={() => confirm(approveRequest(a))}
           >
@@ -520,7 +526,7 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
         )}
         <button
           type="button"
-          className="btn"
+          className="cap-btn"
           aria-label={`Close ${name}`}
           onClick={() => confirm(closeRequest(a))}
         >

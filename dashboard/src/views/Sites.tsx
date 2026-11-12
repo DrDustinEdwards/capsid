@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import type { OpsSiteConfig } from "../types";
 import { SITES_TABS, sitePath, tabOf, useApp } from "../app/ctx";
 import { Link } from "../lib/router";
@@ -41,7 +42,8 @@ function AllSites() {
       <div className="toolbar">
         <button
           type="button"
-          className="btn primary"
+          className="cap-btn"
+          data-variant="primary"
           onClick={ed.add}
           disabled={ed.editing?.kind === "add"}
         >
@@ -51,9 +53,9 @@ function AllSites() {
       </div>
       {ed.editing && <SiteForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />}
       {!configured.some((s) => s.origin !== null) ? (
-        <div className="callout" role="status">
+        <Banner tone="neutral">
           No site is configured, so the watcher probes nothing. Add a site to start.
-        </div>
+        </Banner>
       ) : !snap ? (
         <NoSnapshot />
       ) : (
@@ -66,7 +68,7 @@ function AllSites() {
         </Panel>
       )}
       {waiting.length > 0 && (
-        <div className="callout" role="status">
+        <Banner tone="neutral">
           Added and waiting for the watcher's next pass:{" "}
           {waiting.map((s, i) => (
             <span key={s.namespace}>
@@ -75,13 +77,13 @@ function AllSites() {
             </span>
           ))}
           .
-        </div>
+        </Banner>
       )}
       <Uptime90 ns={ns} />
       {noSite.length > 0 && (
         <Panel flush title="Projects with no site" count={noSite.length}>
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>Project</th>
@@ -92,7 +94,7 @@ function AllSites() {
                   <th>Worker script</th>
                   <th>Revision</th>
                   <th>
-                    <span className="sr-only">Controls</span>
+                    <span className="cap-sr-only">Controls</span>
                   </th>
                 </tr>
               </thead>

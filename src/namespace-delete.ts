@@ -5,7 +5,12 @@ import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { D1_BATCH_STATEMENTS } from "./limits";
 import { isMissingRowAbort } from "./store-guards";
 import { pathMutation } from "./tools/docs";
-import { signDeleteToken, type Verified, verifyDeleteToken } from "./namespace-delete-token";
+import { confirmKeys } from "./auth";
+import {
+  mintConfirm,
+  type Redeemed,
+  redeemConfirm,
+} from "@dustinedwards/site-runtime/confirm-token";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
@@ -62,6 +67,9 @@ export const NAMESPACE_DELETE_MAX_DOCUMENTS = Math.floor(
 );
 
 const DELETE_TOKEN_TTL_SECONDS = 5 * 60;
+/** The delete confirmation's key label (auth.ts confirmKeys): its own, so a Portal control's token never performs a
+ *  delete here. A new label retires every outstanding token. */
+const DELETE_CONFIRM_LABEL = "capsid-namespace-delete:v1";
 // How many of each blocker a refusal names. The counts are always whole.
 const NAMED = 20;
 
@@ -398,17 +406,19 @@ export async function previewNamespaceDelete(
     ...summarize(plan),
   };
   if (refusals.length) return { ok: true, data: base };
-  const exp = Math.floor(now.getTime() / 1000) + DELETE_TOKEN_TTL_SECONDS;
-  let token: string;
+  let minted: { token: string; expiresAt: string };
   try {
-    token = await signDeleteToken(env, {
-      v: 1,
-      namespace,
-      cascade: opts.cascade,
-      allow_improve_paths: opts.allowImprovePaths,
-      actor,
-      plan: planFingerprint(plan),
-      exp,
+    minted = await mintConfirm({
+      keys: await confirmKeys(env, DELETE_CONFIRM_LABEL),
+      claims: {
+        namespace,
+        cascade: opts.cascade,
+        allow_improve_paths: opts.allowImprovePaths,
+        actor,
+        plan: planFingerprint(plan),
+      },
+      ttlSeconds: DELETE_TOKEN_TTL_SECONDS,
+      now: now.getTime(),
     });
   } catch (err) {
     return {
@@ -420,8 +430,8 @@ export async function previewNamespaceDelete(
     ok: true,
     data: {
       ...base,
-      token,
-      expires_at: new Date(exp * 1000).toISOString(),
+      token: minted.token,
+      expires_at: minted.expiresAt,
       next: `Call capsid_admin_manage_namespaces with action 'delete_perform', the same namespace, cascade and allow_improve_paths, and this token within five minutes. Any change to what the preview counted refuses it.`,
     },
   };
@@ -487,23 +497,35 @@ export async function performNamespaceDelete(
         "delete_perform needs the token capsid_admin_manage_namespaces action delete_preview returned. Preview first.",
     };
   }
-  let verified: Verified;
+  let redeemed: Redeemed;
   try {
-    verified = await verifyDeleteToken(
-      env,
+    redeemed = await redeemConfirm({
+      keys: await confirmKeys(env, DELETE_CONFIRM_LABEL),
       token,
-      { actor, namespace, cascade: opts.cascade, allowImprovePaths: opts.allowImprovePaths },
-      now,
-    );
+      expect: {
+        actor,
+        namespace,
+        cascade: opts.cascade,
+        allow_improve_paths: opts.allowImprovePaths,
+      },
+      now: now.getTime(),
+    });
   } catch (err) {
     return {
       ok: false,
       refusal: `delete_namespace refused, nothing changed: ${errorMessage(err)}`,
     };
   }
-  if (!verified.ok)
-    return { ok: false, refusal: `delete_namespace refused, nothing changed: ${verified.refusal}` };
-  return deleteAsPlanned(env, actor, namespace, opts, verified.claims.plan);
+  if (!redeemed.ok)
+    return { ok: false, refusal: `delete_namespace refused, nothing changed: ${redeemed.reason}` };
+  const signedPlan = redeemed.claims.plan;
+  if (typeof signedPlan !== "string")
+    return {
+      ok: false,
+      refusal:
+        "delete_namespace refused, nothing changed: the confirmation token verifies but carries no plan: preview again.",
+    };
+  return deleteAsPlanned(env, actor, namespace, opts, signedPlan);
 }
 
 /**

@@ -3,7 +3,10 @@ import { VIEWS, placePath, type ViewId } from "../src/app/ctx.ts";
 
 // Every view the app registers, so a new view is covered without editing a test. The
 // count is asserted where it is used: an empty list would otherwise pass vacuously.
-export const ALL_VIEWS = VIEWS.map((v) => ({ id: v.id as ViewId, label: v.label as string }));
+export const ALL_VIEWS = VIEWS.map((v) => ({
+  id: v.id as ViewId,
+  label: v.label as string,
+}));
 export const VIEW_COUNT = 11;
 
 // A place: a view, or a view and its tab or section as "view#tab" (placePath in
@@ -29,7 +32,7 @@ export interface Overflow {
   doc: { scroll: number; client: number };
   root: { scroll: number; client: number } | null;
   // Elements inside the root that scroll sideways: overflow-x auto or scroll, and wider
-  // than their box. A scroll-x wrapper that actually scrolls counts.
+  // than their box. A cap-table-wrap that actually scrolls counts.
   scrollers: string[];
 }
 

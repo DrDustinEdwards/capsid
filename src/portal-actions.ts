@@ -1,4 +1,4 @@
-import { getCookie } from "./auth";
+import { readCookie } from "@dustinedwards/site-runtime/headers";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { performControl, previewControl } from "./controls";
 import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./portal-activity";
@@ -91,7 +91,7 @@ export async function gateActionRequest(request: Request, env: Env, now: Date): 
     };
 
   const header = request.headers.get(PORTAL_CSRF_HEADER);
-  const cookie = getCookie(request, PORTAL_CSRF_COOKIE);
+  const cookie = readCookie(request, PORTAL_CSRF_COOKIE);
   if (!header || !cookie || !(await safeEqual(cookie, header))) {
     return {
       ok: false,

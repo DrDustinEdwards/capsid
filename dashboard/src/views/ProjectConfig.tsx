@@ -3,7 +3,7 @@ import { useApp } from "../app/ctx";
 import type { PortalNamespace } from "../types";
 import { ConfigForm, useConfigForm, type Editing } from "capsomer/react/config-form";
 import "capsomer/config-form.css";
-import { Field } from "./shared";
+import { Field } from "capsomer/react/field";
 import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
 
@@ -16,7 +16,11 @@ import "capsomer/danger-zone.css";
 type RepoDraft = { key: number; repo: string; label: string };
 
 let nextKey = 0;
-const draftRow = (repo = "", label = ""): RepoDraft => ({ key: nextKey++, repo, label });
+const draftRow = (repo = "", label = ""): RepoDraft => ({
+  key: nextKey++,
+  repo,
+  label,
+});
 
 export function ProjectForm({
   editing,
@@ -112,7 +116,8 @@ export function ProjectForm({
             </label>
             <button
               type="button"
-              className="btn danger"
+              className="cap-btn"
+              data-variant="danger"
               aria-label={`Delete ${ns}`}
               onClick={remove}
             >
@@ -123,15 +128,13 @@ export function ProjectForm({
       }
     >
       <Field
-        id={f("ns")}
         label="Project"
-        note="Its namespace: a lowercase slug of a-z, 0-9 and '-'. It cannot be renamed later."
+        help="Its namespace: a lowercase slug of a-z, 0-9 and '-'. It cannot be renamed later."
       >
         <input
           ref={adding ? first : undefined}
           id={f("ns")}
-          aria-describedby={`${f("ns")}-note`}
-          className="field mono"
+          className="cap-input mono"
           value={ns}
           readOnly={!adding}
           autoComplete="off"
@@ -149,7 +152,7 @@ export function ProjectForm({
           <div className="repo-row" key={r.key} data-repo-row="">
             <input
               ref={!adding && i === 0 ? first : undefined}
-              className="field mono"
+              className="cap-input mono"
               aria-label={`Repo ${i + 1}, as owner/name`}
               placeholder="owner/name"
               value={r.repo}
@@ -158,7 +161,7 @@ export function ProjectForm({
               onChange={(e) => edit(r.key, { repo: e.target.value })}
             />
             <input
-              className="field mono"
+              className="cap-input mono"
               aria-label={`Label of repo ${i + 1}`}
               placeholder="primary"
               value={r.label}
@@ -168,7 +171,7 @@ export function ProjectForm({
             />
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Remove repo ${i + 1}`}
               disabled={rows.length === 1}
               onClick={() => setRows((all) => all.filter((x) => x.key !== r.key))}
@@ -180,7 +183,7 @@ export function ProjectForm({
         <div>
           <button
             type="button"
-            className="btn"
+            className="cap-btn"
             onClick={() => setRows((all) => [...all, draftRow()])}
           >
             Add a repo

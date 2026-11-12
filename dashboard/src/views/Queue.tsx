@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy } from "react";
@@ -67,12 +68,12 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
       }
     >
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Banner tone="crit">
           Could not read the stale jobs: {load.error}
           {data ? `. Showing the read from ${ago(parse(data.generated), now)}.` : ""}
-        </div>
+        </Banner>
       )}
-      {data?.note && <div className="callout warn">{data.note}</div>}
+      {data?.note && <Banner tone="warn">{data.note}</Banner>}
       {!data && load.loading ? (
         <div className="loading" role="status">
           <Spinner label="Reading the stale jobs..." />

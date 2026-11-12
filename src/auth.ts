@@ -1,26 +1,13 @@
 import { isAdminEmail } from "@dustinedwards/site-runtime/access";
+import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { hostCookie } from "@dustinedwards/site-runtime/headers";
+import type { Env } from "./env";
 
 // A Capsid cookie's Set-Cookie, HttpOnly and SameSite=Lax: site-runtime's hostCookie, which names a cookie scoped to
 // the whole host (Path=/) __Host- and one scoped to a path (the Portal under /portal on the MCP host) __Secure-.
 // `maxAge: 0` with an empty value ends it.
 export function capsidCookie(name: string, value: string, path: string, maxAge: number): string {
   return hostCookie(name, value, { maxAge, path });
-}
-
-// Cookie lookup, once, for the consent flow and the Portal session: the prefixed name first, then the bare name the
-// cookies had before the prefixes, read for one release so live sessions survive. REMOVAL: the release after.
-export function getCookie(request: Request, name: string): string | null {
-  const header = request.headers.get("Cookie");
-  if (!header) return null;
-  const jar = new Map<string, string>();
-  for (const part of header.split(";")) {
-    const eq = part.indexOf("=");
-    if (eq === -1) continue;
-    const key = part.slice(0, eq).trim();
-    if (!jar.has(key)) jar.set(key, part.slice(eq + 1).trim());
-  }
-  return jar.get(`__Host-${name}`) ?? jar.get(`__Secure-${name}`) ?? jar.get(name) ?? null;
 }
 
 type AdminEnv = { ADMIN_EMAIL?: string; CO_OWNER_EMAILS?: string };
@@ -38,4 +25,18 @@ export async function adminGrantEmail(env: AdminEnv, props: unknown): Promise<st
   const email =
     props && typeof props === "object" ? (props as { email?: unknown }).email : undefined;
   return typeof email === "string" && isAdminEmail(env, email) ? email : null;
+}
+
+// The signing keys for a preview-then-perform confirmation (site-runtime ./confirm-token, which signs with
+// ./signed-token's hex keys): COOKIE_ENCRYPTION_KEY under the confirmation's own label, so each kind of confirmation
+// has its own key, a token minted for one never verifies as another, and a new label retires every outstanding one.
+// Fails closed: with no root secret there is nothing to sign with, and an empty key would sign with a value anybody
+// knows.
+export async function confirmKeys(
+  env: Pick<Env, "COOKIE_ENCRYPTION_KEY">,
+  label: string,
+): Promise<string[]> {
+  if (!env.COOKIE_ENCRYPTION_KEY)
+    throw new Error("COOKIE_ENCRYPTION_KEY is unset, so no confirmation can be signed or checked");
+  return [await hmacSha256Hex(env.COOKIE_ENCRYPTION_KEY, label)];
 }

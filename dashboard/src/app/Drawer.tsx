@@ -1,3 +1,4 @@
+import { Alert } from "capsomer/react/banner";
 import {
   Fragment,
   useEffect,
@@ -19,6 +20,8 @@ import { Pill, St } from "../ui/icons";
 import { Time } from "capsomer/react/time";
 import { agentState, nsList } from "../lib/derive";
 import { AgentControls, Head, JobBody } from "./DrawerJob";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 
 type Ref = { type: DrawerType; id: string };
 
@@ -26,11 +29,11 @@ function Missing({ what, onClose }: { what: string; onClose: () => void }) {
   return (
     <>
       <Head label="Not found" title={what} sub="" onClose={onClose} />
-      <div className="dbody">
-        <div className="callout">
+      <div className="cap-dialog-body cap-detail-body">
+        <Alert tone="neutral">
           It is not in the current feed. It may have ended more than 24 hours ago, or the watcher
           has not seen it yet.
-        </div>
+        </Alert>
       </div>
     </>
   );
@@ -41,12 +44,14 @@ function Missing({ what, onClose }: { what: string; onClose: () => void }) {
 // by name (src/audit-detail.ts). Never the raw params.
 function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
   const { now } = useApp();
-  const load = useAnswer(["activity", "row", id], () => fetchActivity({ id }), { keep: false });
+  const load = useAnswer(["activity", "row", id], () => fetchActivity({ id }), {
+    keep: false,
+  });
   if (!load.data && load.loading) {
     return (
       <>
         <Head label="Audit row" title={`#${id}`} sub="" onClose={onClose} />
-        <div className="dbody">
+        <div className="cap-dialog-body cap-detail-body">
           <div className="loading" role="status">
             <Spinner label="Reading the row..." />
           </div>
@@ -58,10 +63,8 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
     return (
       <>
         <Head label="Audit row" title={`#${id}`} sub="" onClose={onClose} />
-        <div className="dbody">
-          <div className="callout crit" role="alert">
-            Could not read the row: {load.error}
-          </div>
+        <div className="cap-dialog-body cap-detail-body">
+          <Alert tone="crit">Could not read the row: {load.error}</Alert>
         </div>
       </>
     );
@@ -71,11 +74,11 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
     return (
       <>
         <Head label="Not found" title={`Audit row #${id}`} sub="" onClose={onClose} />
-        <div className="dbody">
-          <div className="callout">
+        <div className="cap-dialog-body cap-detail-body">
+          <Alert tone="neutral">
             There is no audit row with this id. Rows older than the retention are pruned after the
             nightly dump.
-          </div>
+          </Alert>
         </div>
       </>
     );
@@ -89,11 +92,11 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
         sub={`#${r.id} · ${r.action ?? "no action"} · ${r.actor ?? "no actor"}`}
         onClose={onClose}
       />
-      <div className="dbody">
+      <div className="cap-dialog-body cap-detail-body">
         {d.reason !== null && (
           <div>
             <p className="section-title">Reason</p>
-            <div className="callout reason">{d.reason}</div>
+            <Alert tone="neutral">{d.reason}</Alert>
           </div>
         )}
         {d.changes !== null && (
@@ -102,11 +105,11 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
             {d.changes.length === 0 ? (
               <p className="faint">No field changed.</p>
             ) : (
-              <dl className="kv diff">
+              <dl className="cap-detail-record">
                 {d.changes.map((c) => (
                   <Fragment key={c.field}>
                     <dt>{c.field}</dt>
-                    <dd>
+                    <dd className="cap-detail-diff">
                       {c.before !== null && (
                         <del className="mono" aria-label={`before: ${c.before}`}>
                           {c.before}
@@ -128,7 +131,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
         )}
         <div>
           <p className="section-title">Recorded</p>
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>When</dt>
             <dd>
               {ago(parse(r.at), now)} <Time at={r.at} format="exact" />
@@ -189,8 +192,8 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
         badge={<Pill kind={st.kind}>{st.label}</Pill>}
         onClose={onClose}
       />
-      <div className="dbody">
-        <dl className="kv">
+      <div className="cap-dialog-body cap-detail-body">
+        <dl className="cap-detail-record">
           <dt>Namespaces</dt>
           <dd className="mono">{nsList(a)}</dd>
           <dt>Last seen</dt>
@@ -304,7 +307,7 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
       }}
       placement="right"
       closeButton={false}
-      className="drawer"
+      className="drawer cap-detail"
       aria-labelledby="drawerTitle"
       onClick={(e) => {
         openRow(e);

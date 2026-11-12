@@ -1,6 +1,7 @@
 import { gatherInbox } from "./inbox";
 import { adminAgentForEmail } from "./agents";
-import { capsidCookie, getCookie } from "./auth";
+import { capsidCookie } from "./auth";
+import { readCookie } from "@dustinedwards/site-runtime/headers";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
 import { loadMergePolicy } from "./auto-merge-policy";
 import { readSafetyReport } from "./merge-safety";
@@ -148,7 +149,7 @@ const CSRF_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 /** The request's Portal CSRF value, and the Set-Cookie that mints one when it has none. */
 export function portalCsrf(request: Request): { value: string; setCookie: string | null } {
-  const presented = getCookie(request, PORTAL_CSRF_COOKIE);
+  const presented = readCookie(request, PORTAL_CSRF_COOKIE);
   if (presented !== null && CSRF_SHAPE.test(presented))
     return { value: presented, setCookie: null };
   const value = crypto.randomUUID();
