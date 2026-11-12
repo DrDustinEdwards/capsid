@@ -4,7 +4,8 @@ import { Suspense } from "react";
 import { useApp } from "../app/ctx";
 import { ciState, type Kind } from "../lib/derive";
 import { checkWords } from "../../../src/check-words";
-import { age, ago, ms, utc } from "../lib/format";
+import { age, ago } from "../lib/format";
+import { parse, utc } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
 import { Empty } from "capsomer/react/empty";
@@ -65,10 +66,10 @@ export function DefaultBranches() {
                       <td className="mono">{c.latest ? c.latest.head_sha.slice(0, 7) : "-"}</td>
                       <td
                         className="num"
-                        title={c.latest ? utc(ms(c.latest.created_at)) : undefined}
+                        title={c.latest ? utc(parse(c.latest.created_at)) : undefined}
                       >
                         {c.latest ? (
-                          ago(ms(c.latest.created_at), now)
+                          ago(parse(c.latest.created_at), now)
                         ) : (
                           <span className="faint">runs could not be read</span>
                         )}
@@ -306,13 +307,13 @@ export function PullRequests() {
                     </td>
                     <td className="num" data-label="Verified">
                       {p.merge_verified_at ? (
-                        ago(ms(p.merge_verified_at), now)
+                        ago(parse(p.merge_verified_at), now)
                       ) : (
                         <span className="faint">not yet</span>
                       )}
                     </td>
                     <td className="num" data-label="Recorded">
-                      {ago(ms(p.recorded_at), now)}
+                      {ago(parse(p.recorded_at), now)}
                     </td>
                   </tr>
                 );
@@ -402,7 +403,7 @@ function MergeUnits() {
       title="Merge units"
       id="merge-units"
       count={rows.length}
-      src={units.generated ? `judged ${utc(ms(units.generated))}` : "not judged yet"}
+      src={units.generated ? `judged ${utc(parse(units.generated))}` : "not judged yet"}
     >
       {rows.length ? (
         <div className="scroll-x reflow">
@@ -503,7 +504,7 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
         <span className="muted">{a.why}</span>
         {a.visual && <VisualLook visual={a.visual} />}
         <span className="wmeta">
-          {a.namespace} · waiting {age(ms(a.at), now)}
+          {a.namespace} · waiting {age(parse(a.at), now)}
         </span>
       </div>
       <div className="wact">

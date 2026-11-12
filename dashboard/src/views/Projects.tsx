@@ -2,7 +2,8 @@ import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
 import { agentState, driverOf } from "../lib/derive";
-import { ago, ms, pct } from "../lib/format";
+import { ago, pct } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 import type { PortalNamespace, PortalNamespaces } from "../types";
 import { Panel } from "capsomer/react/panel";
@@ -28,9 +29,9 @@ function Driver({ ns }: { ns: string }) {
       <St kind={st.kind}>{st.label}</St>
       <div className="src">
         {d.revoked_at
-          ? `revoked ${ago(ms(d.revoked_at), now)}`
+          ? `revoked ${ago(parse(d.revoked_at), now)}`
           : d.last_seen
-            ? `seen ${ago(ms(d.last_seen), now)}`
+            ? `seen ${ago(parse(d.last_seen), now)}`
             : "never seen"}
       </div>
     </>
@@ -49,7 +50,7 @@ function Report({ n }: { n: PortalNamespace }) {
       ) : (
         <span className="num">{pct(rep.integrity, 0)}</span>
       )}
-      <div className="src">report {ago(ms(rep.generated), now)}</div>
+      <div className="src">report {ago(parse(rep.generated), now)}</div>
     </>
   );
 }
@@ -156,7 +157,7 @@ function Roster() {
       {load.error && (
         <div className="callout crit" role="alert">
           Could not read the projects: {load.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
+          {data ? `. Showing the read from ${ago(parse(data.generated), now)}.` : ""}
         </div>
       )}
       <Panel
@@ -166,7 +167,7 @@ function Roster() {
         count={data?.namespaces.length}
         src={
           <ReadAgain
-            at={data ? ms(data.generated) : undefined}
+            at={data ? parse(data.generated) : undefined}
             now={now}
             reading={load.loading}
             onRead={read}

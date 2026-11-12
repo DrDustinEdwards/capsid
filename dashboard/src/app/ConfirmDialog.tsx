@@ -16,7 +16,8 @@ import "capsomer/button.css";
 import "capsomer/disclosure.css";
 import "capsomer/field.css";
 import { performAction, previewAction, type Answer } from "../lib/api";
-import { ago, ms, utc } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse, utc } from "capsomer/behavior/time";
 import type { PortalPerformed, PortalPreview } from "../types";
 import {
   DESTRUCTIVE,
@@ -394,8 +395,8 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
                 )}
               </div>
               <p className="faint note">
-                This confirmation is good until {utc(ms(preview.expires_at))} (
-                {ago(ms(preview.expires_at))}).
+                This confirmation is good until {utc(parse(preview.expires_at))} (
+                {ago(parse(preview.expires_at))}).
               </p>
             </div>
           </Disclosure>

@@ -10,7 +10,8 @@ import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, useAnswer } from "../lib/api";
 import { padRing } from "capsomer/behavior/uptime-strip";
 import { RING_SLOTS, cfNoData, cfOk, slotStart } from "../lib/derive";
-import { DAY, HOUR, MIN, SLOT_MS, fmtN, ms, pct, shortId, utc } from "../lib/format";
+import { DAY, HOUR, MIN, SLOT_MS, fmtN, pct, shortId } from "../lib/format";
+import { parse, utc } from "capsomer/behavior/time";
 import { useTrends } from "../lib/trends";
 import type {
   ClaimsAgreement,
@@ -543,13 +544,13 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     return <ChartFrame noData={{ title, reason: "the analytics read returned no hours" }} />;
   const rates = e.map((x) => (x.requests ? (x.errors / x.requests) * 100 : 0));
   const peak = Math.max(...rates);
-  const t0 = ms(e[0]!.hour);
-  const t1 = ms(e[e.length - 1]!.hour) + HOUR;
-  const inWindow = cf.deploys.filter((d) => ms(d.created_on) >= t0 && ms(d.created_on) <= t1);
+  const t0 = parse(e[0]!.hour);
+  const t1 = parse(e[e.length - 1]!.hour) + HOUR;
+  const inWindow = cf.deploys.filter((d) => parse(d.created_on) >= t0 && parse(d.created_on) <= t1);
   const tot = errorTotals(e);
   const opts = {
     data: e.map((x, i) => ({
-      hour: new Date(ms(x.hour)).toISOString(),
+      hour: new Date(parse(x.hour)).toISOString(),
       rate: Math.round(rates[i]! * 100) / 100,
     })),
     x: "hour",
@@ -559,7 +560,7 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     formatValue: (v: number) => `${v}%`,
     references: [{ y: 1, label: "Alert at 1%" }],
     markers: inWindow.map((d) => ({
-      x: new Date(ms(d.created_on)).toISOString(),
+      x: new Date(parse(d.created_on)).toISOString(),
       label: `Deploy ${shortId(d.version_id ?? d.id)}`,
     })),
     height: 220,
@@ -567,7 +568,7 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     subtitle: `${fmtN(tot.req)} requests and ${fmtN(tot.err)} errors (${pct(tot.rate)})`,
     alt: `Error rate for ${site.name} over the last 24 hours: peak ${peak.toFixed(2)}% in an hour, ${pct(tot.rate)} overall, ${inWindow.length} ${inWindow.length === 1 ? "deploy" : "deploys"} in the window.`,
     caption: inWindow.length
-      ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(ms(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.`
+      ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(parse(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.`
       : "No deploy in the window.",
     source: { name: "Cloudflare Workers analytics, hourly" },
   } as const;
@@ -619,7 +620,7 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
     const why = cfNoData(s.cloudflare);
     if (why) noData.push(`${s.name}: ${why}`);
     for (const d of cfOk(s)?.deploys ?? []) {
-      const t = ms(d.created_on);
+      const t = parse(d.created_on);
       if (t < t0 || t > now) continue;
       deploys++;
       events.push({

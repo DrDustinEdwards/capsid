@@ -12,7 +12,8 @@ import {
   fetchWorkersBuilds,
   useAnswer,
 } from "../lib/api";
-import { ago, fmtN, ms, pct, shortId, utc } from "../lib/format";
+import { ago, fmtN, pct, shortId } from "../lib/format";
+import { parse, utc } from "capsomer/behavior/time";
 import type {
   PortalBuildLog,
   PortalSiteSearch,
@@ -534,9 +535,9 @@ export function SiteBuilds({ ns }: { ns: string }) {
                           <tr key={id ?? i}>
                             <td
                               className="num"
-                              title={b.created_on ? utc(ms(b.created_on)) : undefined}
+                              title={b.created_on ? utc(parse(b.created_on)) : undefined}
                             >
-                              {b.created_on ? ago(ms(b.created_on), now) : ""}
+                              {b.created_on ? ago(parse(b.created_on), now) : ""}
                             </td>
                             <td>
                               <St kind={st.kind}>{st.label}</St>

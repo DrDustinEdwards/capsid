@@ -6,7 +6,8 @@ import { QUEUE_TABS, tabOf, useApp } from "../app/ctx";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { LIVE, fetchStale, useAnswer, type Load } from "../lib/api";
 import { JOB } from "../lib/derive";
-import { ago, ms } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import type { OpsJob, PortalStale, StaleRule } from "../types";
 import { St } from "../ui/icons";
 import { Anchors } from "../ui/anchors";
@@ -58,7 +59,7 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
       count={data ? rows.length : undefined}
       src={
         <ReadAgain
-          at={data ? ms(data.generated) : undefined}
+          at={data ? parse(data.generated) : undefined}
           now={now}
           reading={load.loading}
           onRead={reread}
@@ -68,7 +69,7 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
       {load.error && (
         <div className="callout crit" role="alert">
           Could not read the stale jobs: {load.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
+          {data ? `. Showing the read from ${ago(parse(data.generated), now)}.` : ""}
         </div>
       )}
       {data?.note && <div className="callout warn">{data.note}</div>}

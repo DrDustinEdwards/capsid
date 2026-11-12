@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import { CopyButton } from "capsomer/react/copy";
 import { jobBadge, resumeCall } from "../lib/derive";
-import { ago, ms } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import type { OpsJob, OpsAgent } from "../types";
 import { Pill, St } from "../ui/icons";
-import { When } from "../ui/When";
+import { Time } from "capsomer/react/time";
 import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
 import { jobMeta } from "../views/shared";
@@ -309,11 +310,11 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             <dd className="mono">{j.posted_by}</dd>
             <dt>Created</dt>
             <dd>
-              {ago(ms(j.created_at), now)} <When t={ms(j.created_at)} />
+              {ago(parse(j.created_at), now)} <Time at={j.created_at} format="exact" />
             </dd>
             <dt>Last change</dt>
             <dd>
-              {ago(ms(j.updated_at), now)} <When t={ms(j.updated_at)} />
+              {ago(parse(j.updated_at), now)} <Time at={j.updated_at} format="exact" />
             </dd>
             {j.claimed_by && (
               <>

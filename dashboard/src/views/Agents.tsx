@@ -2,7 +2,8 @@ import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { AGENT_TABS, tabOf, useApp } from "../app/ctx";
 import { agentState, archiveAgents, nsList, rosterAgents } from "../lib/derive";
-import { ago, ms, pct } from "../lib/format";
+import { ago, pct } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { Panel } from "capsomer/react/panel";
@@ -67,15 +68,15 @@ function Archive() {
                         {a.kind} · {nsList(a)}
                       </div>
                     </td>
-                    <td data-label="Revoked">{ago(ms(a.revoked_at as string), now)}</td>
+                    <td data-label="Revoked">{ago(parse(a.revoked_at as string), now)}</td>
                     <td data-label="Archive">
                       {a.archived_at ? (
-                        <St kind="nodata">Archived {ago(ms(a.archived_at), now)}</St>
+                        <St kind="nodata">Archived {ago(parse(a.archived_at), now)}</St>
                       ) : (
                         <St kind="queued">
                           Moves by{" "}
                           {new Date(
-                            ms(a.revoked_at as string) + ARCHIVE_AFTER_MS,
+                            parse(a.revoked_at as string) + ARCHIVE_AFTER_MS,
                           ).toLocaleDateString()}
                         </St>
                       )}
@@ -87,7 +88,7 @@ function Archive() {
                       {a.prs_merged} of {a.prs_opened}
                     </td>
                     <td data-label="Last seen">
-                      {a.last_seen ? ago(ms(a.last_seen), now) : "never"}
+                      {a.last_seen ? ago(parse(a.last_seen), now) : "never"}
                     </td>
                   </tr>
                 ))}
@@ -186,7 +187,9 @@ function Roster() {
                     </td>
                     <td data-label="Last seen">
                       <St kind={st.kind}>{st.label}</St>
-                      <div className="src">{a.last_seen ? ago(ms(a.last_seen), now) : "never"}</div>
+                      <div className="src">
+                        {a.last_seen ? ago(parse(a.last_seen), now) : "never"}
+                      </div>
                     </td>
                     <td data-label="Done / failed / blocked" className="num">
                       {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}
