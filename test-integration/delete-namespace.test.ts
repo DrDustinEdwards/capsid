@@ -9,7 +9,8 @@ import {
   planFingerprint,
   readDeletePlan,
 } from "../src/namespace-delete";
-import { signDeleteToken } from "../src/namespace-delete-token";
+import { mintConfirm } from "@dustinedwards/site-runtime/confirm-token";
+import { confirmKeys } from "../src/auth";
 import { buildAdminServer, buildServer } from "../src/server";
 
 // capsid_admin_manage_namespaces delete_preview and delete_perform (Capsid Admin)
@@ -25,6 +26,17 @@ const ACTOR = ADMIN.actor;
 
 function workerEnv(db: D1Database = env.DB): Env {
   return { ...(env as unknown as Env), DB: db, COOKIE_ENCRYPTION_KEY: SECRET };
+}
+
+// A delete token signed the way the Worker signs one (site-runtime ./confirm-token under the delete's key), good for
+// a minute from `now`.
+async function forge(
+  keyEnv: Pick<Env, "COOKIE_ENCRYPTION_KEY">,
+  claims: Record<string, unknown>,
+  now = Date.now(),
+): Promise<string> {
+  const keys = await confirmKeys(keyEnv, "capsid-namespace-delete:v1");
+  return (await mintConfirm({ keys, claims, ttlSeconds: 60, now })).token;
 }
 
 let seq = 0;
@@ -329,7 +341,7 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
     const p = await preview(a);
     const result = await callAs(ADMIN, { namespace: b, action: "delete_perform", token: p.token });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toMatch(new RegExp(`issued for namespace ${a}`));
+    expect(result.content[0].text).toMatch(/issued for another namespace/);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace IN (?1, ?2)", a, b)).toBe(
       2,
     );
@@ -341,7 +353,7 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
     const p = await preview(ns, { cascade: true });
     const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", token: p.token });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toMatch(/issued with cascade true/);
+    expect(result.content[0].text).toMatch(/issued for another cascade/);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
   });
 
@@ -349,15 +361,17 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
     const ns = fresh();
     await register(ns);
     const plan = await readDeletePlan(env.DB, ns);
-    const token = await signDeleteToken(workerEnv(), {
-      v: 1,
-      namespace: ns,
-      cascade: false,
-      allow_improve_paths: false,
-      actor: ACTOR,
-      plan: planFingerprint(plan),
-      exp: Math.floor(Date.now() / 1000) - 1,
-    });
+    const token = await forge(
+      workerEnv(),
+      {
+        namespace: ns,
+        cascade: false,
+        allow_improve_paths: false,
+        actor: ACTOR,
+        plan: planFingerprint(plan),
+      },
+      Date.now() - 61_000,
+    );
     const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", token });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/expired/);
@@ -368,34 +382,30 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
     const ns = fresh();
     await register(ns);
     const plan = await readDeletePlan(env.DB, ns);
-    const token = await signDeleteToken(workerEnv(), {
-      v: 1,
+    const token = await forge(workerEnv(), {
       namespace: ns,
       cascade: false,
       allow_improve_paths: false,
       actor: "access:someone-else@example.com",
       plan: planFingerprint(plan),
-      exp: Math.floor(Date.now() / 1000) + 60,
     });
     const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", token });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toMatch(/another caller/);
+    expect(result.content[0].text).toMatch(/issued for another actor/);
   });
 
   it("PLANT: a token signed under another key does not verify", async () => {
     const ns = fresh();
     await register(ns);
     const plan = await readDeletePlan(env.DB, ns);
-    const token = await signDeleteToken(
+    const token = await forge(
       { COOKIE_ENCRYPTION_KEY: "not-the-worker-key" },
       {
-        v: 1,
         namespace: ns,
         cascade: false,
         allow_improve_paths: false,
         actor: ACTOR,
         plan: planFingerprint(plan),
-        exp: Math.floor(Date.now() / 1000) + 60,
       },
     );
     const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", token });
@@ -639,14 +649,12 @@ describe("capsid_admin_manage_namespaces delete batch cap", () => {
 
     // A token signed over this very plan is refused at perform too, by the same rule.
     const plan = await readDeletePlan(env.DB, ns);
-    const token = await signDeleteToken(workerEnv(), {
-      v: 1,
+    const token = await forge(workerEnv(), {
       namespace: ns,
       cascade: true,
       allow_improve_paths: false,
       actor: ACTOR,
       plan: planFingerprint(plan),
-      exp: Math.floor(Date.now() / 1000) + 60,
     });
     const result = await callAs(ADMIN, {
       namespace: ns,

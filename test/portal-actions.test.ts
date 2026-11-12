@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { mintConfirm } from "@dustinedwards/site-runtime/confirm-token";
+import { confirmKeys } from "../src/auth.ts";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { PORTAL_CSRF_COOKIE, type OpsFeedData } from "../src/ops-feed.ts";
 import type { OpsSiteConfig } from "../src/ops-types/sites.ts";
@@ -40,9 +41,7 @@ import { PAUSED_KEY } from "../src/merge-safety.ts";
 import { policyPin, policyPinKey, signTaskBody } from "../src/signed-docs.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
-
-const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
+import { fromBase64urlText } from "@dustinedwards/site-runtime/encoding";
 
 // approve_pr reads the pull request's head from GitHub at preview and at perform. Only
 // that read is answered; nothing in this file reaches GitHub otherwise.
@@ -418,15 +417,15 @@ async function previewOk(
 // The token's payload, decoded, edited and re-encoded with the original signature.
 function tamper(token: string, edit: (claims: Record<string, unknown>) => void): string {
   const [payload, sig] = token.split(".");
-  const claims = JSON.parse(decodeBase64url(payload)) as Record<string, unknown>;
-  edit(claims);
-  return `${base64url(JSON.stringify(claims))}.${sig}`;
+  const signed = JSON.parse(fromBase64urlText(payload)) as { c: Record<string, unknown> };
+  edit(signed.c);
+  return `${Buffer.from(JSON.stringify(signed)).toString("base64url")}.${sig}`;
 }
 
 // A token signed the way the Worker signs one, for claims no preview would issue.
 async function forge(claims: Record<string, unknown>): Promise<string> {
-  const payload = base64url(JSON.stringify(claims));
-  return `${payload}.${await hmacSha256Hex(await hmacSha256Hex(SECRET, "capsid-portal-confirm:v2"), payload)}`;
+  const keys = await confirmKeys({ COOKIE_ENCRYPTION_KEY: SECRET }, "capsid-portal-confirm:v2");
+  return (await mintConfirm({ keys, claims, ttlSeconds: 60, now: NOW.getTime() })).token;
 }
 
 // The absences
@@ -444,16 +443,14 @@ test("PLANT: a merge or a mint is refused at preview and at perform, even fully 
     wroteNothing(w, `${action} preview`);
 
     const token = await forge({
-      v: 2,
-      jti: "a".repeat(32),
       action,
       params: {},
       email: EMAIL,
-      exp: NOW.getTime() / 1000 + 60,
     });
     const performed = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
     assert.equal(performed.status, 400, `a signed ${action} token was performed`);
-    wroteNothing(w, `${action} perform`);
+    // Redeeming spends the token before its action is looked up, so only its nonce is written.
+    spentOnly(w, `${action} perform`);
   }
 });
 
@@ -588,7 +585,7 @@ for (const [action, params] of EVERY_ACTION) {
       `the click row is not in the preview's audit list: ${JSON.stringify(body.audit)}`,
     );
     assert.equal(body.audit.length, 2, "the mutator's row and the click row");
-    assert.match(body.token, /^[A-Za-z0-9_-]+\.[0-9a-f]{64}$/);
+    assert.match(body.token, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/);
     assert.equal(body.expires_at, LATER(5 * 60_000).toISOString());
     wroteNothing(w, `${action} preview`);
   });
@@ -720,12 +717,9 @@ test("PLANT: a signed switch token with no reason (issued before the rule) is re
   for (const [action, params] of SWITCH_CASES) {
     const w = world();
     const token = await forge({
-      v: 2,
-      jti: "b".repeat(32),
       action,
       params,
       email: EMAIL,
-      exp: NOW.getTime() / 1000 + 60,
     });
     const res = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
     assert.equal(res.status, 400, `${action} with no reason was performed`);
@@ -923,7 +917,7 @@ test("a co-owner's session is refused when CO_OWNER_EMAILS is unset, and a confi
     deps,
   );
   assert.equal(res.status, 403);
-  assert.match(await res.text(), /another session/);
+  assert.match(await res.text(), /issued for another email/);
   wroteNothing(w, "a confirmation issued to the primary owner");
 });
 
@@ -1037,7 +1031,7 @@ test("a token issued to another session is refused with 403", async () => {
     deps,
   );
   assert.equal(res.status, 403);
-  assert.match(await res.text(), /another session/);
+  assert.match(await res.text(), /issued for another email/);
   wroteNothing(other, "another session's perform");
 });
 

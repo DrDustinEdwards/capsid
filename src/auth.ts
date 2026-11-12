@@ -1,5 +1,7 @@
 import { isAdminEmail } from "@dustinedwards/site-runtime/access";
+import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { hostCookie } from "@dustinedwards/site-runtime/headers";
+import type { Env } from "./env";
 
 // A Capsid cookie's Set-Cookie, HttpOnly and SameSite=Lax: site-runtime's hostCookie, which names a cookie scoped to
 // the whole host (Path=/) __Host- and one scoped to a path (the Portal under /portal on the MCP host) __Secure-.
@@ -38,4 +40,18 @@ export async function adminGrantEmail(env: AdminEnv, props: unknown): Promise<st
   const email =
     props && typeof props === "object" ? (props as { email?: unknown }).email : undefined;
   return typeof email === "string" && isAdminEmail(env, email) ? email : null;
+}
+
+// The signing keys for a preview-then-perform confirmation (site-runtime ./confirm-token, which signs with
+// ./signed-token's hex keys): COOKIE_ENCRYPTION_KEY under the confirmation's own label, so each kind of confirmation
+// has its own key, a token minted for one never verifies as another, and a new label retires every outstanding one.
+// Fails closed: with no root secret there is nothing to sign with, and an empty key would sign with a value anybody
+// knows.
+export async function confirmKeys(
+  env: Pick<Env, "COOKIE_ENCRYPTION_KEY">,
+  label: string,
+): Promise<string[]> {
+  if (!env.COOKIE_ENCRYPTION_KEY)
+    throw new Error("COOKIE_ENCRYPTION_KEY is unset, so no confirmation can be signed or checked");
+  return [await hmacSha256Hex(env.COOKIE_ENCRYPTION_KEY, label)];
 }
