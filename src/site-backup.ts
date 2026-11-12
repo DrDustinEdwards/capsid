@@ -6,7 +6,8 @@ import { readSiteConfig, readSiteRow } from "./ops-sites";
 import type { SiteOperator } from "./ops-types/sites";
 import type { PortalBackups, SiteBackupRow, SiteBackupStatus } from "./ops-types/views";
 import { callOperator, tokenSet, type FetchLike, type OperatorCall } from "./site-operator";
-import { runCapsidJob, runsLine } from "./site-jobs";
+import { describeRuns } from "@dustinedwards/site-runtime/cron";
+import { runCapsidJob } from "./site-jobs";
 import { takeLimit } from "./site-repair";
 import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";
@@ -134,7 +135,7 @@ export type BackupRun =
   | { namespace: string; ran: true; call: OperatorCall; line: string; recorded: boolean };
 
 function backupLine(call: OperatorCall): string {
-  return runsLine("run_job { backup: true }", call);
+  return describeRuns("run_job { backup: true }", call);
 }
 
 /** Why backups cannot run on `namespace`, or null. Reads only, so the control's preview refuses what the run refuses. */

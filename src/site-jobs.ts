@@ -1,10 +1,11 @@
 import type { Env } from "./env";
 import { exportAuditLog } from "@dustinedwards/site-runtime/audit-log";
+import { describeRuns, runsSucceeded } from "@dustinedwards/site-runtime/cron";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { withAuditKey } from "./audit-key";
 import { backupTaskResult, runBackup } from "./backup";
 import { readSiteRow } from "./ops-sites";
-import { callOperator, tokenSet, type FetchLike, type OperatorCall } from "./site-operator";
+import { callOperator, tokenSet, type FetchLike } from "./site-operator";
 import { takeLimit } from "./site-repair";
 import { auditStatement } from "./store-guards";
 import { supersedePass } from "./supersede";
@@ -33,27 +34,6 @@ const JOB_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /** The namespace whose jobs are this Worker's own. */
 export const CAPSID_NAMESPACE = "capsid";
-
-/** One line for an audit row, a task run or a summary: what each job run came to. */
-export function runsLine(what: string, call: OperatorCall): string {
-  if (!call.ok) return call.error ?? `${what} failed`;
-  const runs = (call.data as { runs?: unknown } | null)?.runs;
-  if (!Array.isArray(runs))
-    return `${what} answered ${call.status} without its runs, so nothing was proven`;
-  const each = (
-    runs as Array<{ job?: unknown; status?: unknown; ms?: unknown; error?: unknown }>
-  ).map(
-    (r) =>
-      `${String(r.job)} ${String(r.status)}${typeof r.ms === "number" ? ` in ${r.ms} ms` : ""}${typeof r.error === "string" ? ` (${r.error})` : ""}`,
-  );
-  return `${what} ran: ${each.join(", ") || "no jobs"}`;
-}
-
-/** Whether every run in an operator answer succeeded or was skipped by its own gate. */
-function allRan(call: OperatorCall): boolean {
-  const runs = (call.data as { runs?: Array<{ status?: unknown }> } | null)?.runs;
-  return call.ok && Array.isArray(runs) && runs.every((r) => r.status !== "failed");
-}
 
 // ---- Capsid's own jobs -------------------------------------------------------------------
 
@@ -187,8 +167,8 @@ export async function runSiteJob(
     job: true,
     args: { job: args.name },
   });
-  const ok = allRan(call);
-  const line = runsLine("run_job", call);
+  const ok = runsSucceeded(call);
+  const line = describeRuns("run_job", call);
   let recorded = true;
   try {
     await env.DB.batch([
