@@ -126,3 +126,53 @@ export function workflowPins(text: string): Array<{ repo: string; pinned: string
   }
   return out;
 }
+
+/** How a workflow runs devkit's no-bloat check: each job that calls pr.yml or no-bloat.yml, and why it is off, if it is. */
+export interface NoBloatJob {
+  job: string;
+  workflow: "pr" | "no-bloat";
+  /** Why the job does not run the check: pr.yml's `no-bloat: false` or `node: false`, or an `if` on the job. Null: on. */
+  off: string | null;
+}
+
+/** Each job in one workflow file that calls devkit's pr.yml or no-bloat.yml, read line by line as a caller is written
+ *  (the job's `uses`, `if` and `with` at one indent, its inputs one level in), the way devkit's no-bloat bin reads it
+ *  (callerJobs): a pull request that turns the check off is refused there, and this is the nightly look at what merged. */
+export function noBloatJobs(text: string): NoBloatJob[] {
+  const lines = text.split("\n");
+  const indent = (l: string) => l.length - l.trimStart().length;
+  const content = (l: string) => l.trim() !== "" && !l.trim().startsWith("#");
+  const out: NoBloatJob[] = [];
+  lines.forEach((line, u) => {
+    const m =
+      /^(\s*)uses:\s*["']?DrDustinEdwards\/devkit\/\.github\/workflows\/(pr|no-bloat)\.yml@/i.exec(
+        line,
+      );
+    if (!m) return;
+    const at = m[1].length;
+    let j = u - 1;
+    while (j >= 0 && !(content(lines[j]) && indent(lines[j]) < at)) j--;
+    if (j < 0) return;
+    const job: NoBloatJob = {
+      job: lines[j].trim().replace(/:\s*$/, ""),
+      workflow: m[2].toLowerCase() as "pr" | "no-bloat",
+      off: null,
+    };
+    let inWith = false;
+    for (let k = j + 1; k < lines.length; k++) {
+      const l = lines[k];
+      if (!content(l)) continue;
+      if (indent(l) <= indent(lines[j])) break;
+      if (indent(l) === at) {
+        inWith = /^\s*with:\s*$/.test(l);
+        const cond = /^\s*if:\s*(.+)$/.exec(l);
+        if (cond) job.off = `the job "${job.job}" runs only if ${cond[1].trim()}`;
+      } else if (inWith && job.workflow === "pr" && !job.off) {
+        const off = /^\s*(no-bloat|node):\s*["']?false["']?\s*(?:#.*)?$/.exec(l);
+        if (off) job.off = `the job "${job.job}" passes ${off[1]}: false`;
+      }
+    }
+    out.push(job);
+  });
+  return out;
+}

@@ -172,6 +172,8 @@ export interface SharedCodeView {
   apps_read: number;
   apps_failed: Array<{ namespace: string; system?: string | null; error: string }>;
   packages: SharedCodePackage[];
+  // The repos that run no no-bloat check (src/shared-code.ts noBloatOff). Absent in a view cached before it was read.
+  no_bloat_off?: Array<{ namespace: string; repo: string | null; line: string }>;
 }
 
 // The completeness scoreboard (src/completeness.ts): devkit's daily board, every area of the

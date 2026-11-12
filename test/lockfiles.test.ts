@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { npmLockVersions, pnpmLockVersions, workflowPins } from "../src/lockfiles.ts";
+import { noBloatJobs, npmLockVersions, pnpmLockVersions, workflowPins } from "../src/lockfiles.ts";
 
 // The versions model reads what a repo installed, not only what it asks for. Sample data only.
 
@@ -74,5 +74,29 @@ test("a workflow pin is the version Renovate writes beside the sha, or the ref w
     { repo: "example-org/devkit", pinned: "v0.21.0" },
     { repo: "example-org/action", pinned: "v2.0.0" },
     { repo: "example-org/action", pinned: null },
+  ]);
+});
+
+test("a pr.yml caller with no-bloat: false, node: false or an if runs no no-bloat check; a no-bloat.yml caller does", () => {
+  const caller = (job: string, uses: string, extra: string) =>
+    [
+      `  ${job}:`,
+      `${extra}    uses: DrDustinEdwards/devkit/.github/workflows/${uses}.yml@${"a".repeat(40)} # v1.0.0`,
+      "    with:",
+      "      review: false",
+    ].join("\n");
+  const text = [
+    "jobs:",
+    caller("on", "pr", ""),
+    caller("off", "pr", ""),
+    "      no-bloat: false # private: no-bloat.yml weekly",
+    caller("skipped", "pr", "    if: false\n"),
+    caller("weekly", "no-bloat", ""),
+  ].join("\n");
+  assert.deepEqual(noBloatJobs(text), [
+    { job: "on", workflow: "pr", off: null },
+    { job: "off", workflow: "pr", off: 'the job "off" passes no-bloat: false' },
+    { job: "skipped", workflow: "pr", off: 'the job "skipped" runs only if false' },
+    { job: "weekly", workflow: "no-bloat", off: null },
   ]);
 });
