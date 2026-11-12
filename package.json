@@ -43,6 +43,7 @@
     "capsomer": "github:DrDustinEdwards/capsomer#v0.111.0",
     "jose": "6.2.15",
     "tldts": "7.4.19",
+    "yaml": "2.9.1",
     "zod": "4.6.7"
   },
   "devDependencies": {
