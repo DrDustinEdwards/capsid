@@ -2,7 +2,8 @@ import { Alert, Banner } from "capsomer/react/banner";
 import { Suspense, lazy, useState } from "react";
 import { useApp } from "../app/ctx";
 import { fetchPackageHistory, useAnswer } from "../lib/api";
-import { ago, fmtN, ms } from "../lib/format";
+import { ago, fmtN } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "../types";
 import { ChartFrame } from "capsomer/react/chart-frame";
@@ -198,7 +199,7 @@ function PackagePanel({
       title={cfg.name}
       src={
         <>
-          {snap ? `read ${ago(ms(snap.at), now)} · ` : "not read yet · "}
+          {snap ? `read ${ago(parse(snap.at), now)} · ` : "not read yet · "}
           <button
             type="button"
             className="cap-btn"

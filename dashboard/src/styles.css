@@ -1124,9 +1124,6 @@ td.ctl .toolbar.col {
   gap: 10px;
   font-size: 13px;
 }
-.when .faint {
-  white-space: nowrap;
-}
 
 @media (max-width: 820px) {
   .auto-row {

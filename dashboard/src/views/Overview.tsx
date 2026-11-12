@@ -2,7 +2,8 @@ import { StatTile, type StatTileProps, StatTiles } from "capsomer/react/stat-til
 import { Link } from "../lib/router";
 import { placePath, useApp } from "../app/ctx";
 import { counts, hasSites, offaccountState } from "../lib/derive";
-import { HOUR, ago, ms } from "../lib/format";
+import { HOUR, ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import "capsomer/stat-tile.css";
 
 // The tiles at the top of Health (docs/design/design-portal-evaluation.md section 2; the UX
@@ -51,7 +52,7 @@ export function Overview() {
     {
       label: "Open findings",
       figure: findingsOpen,
-      detail: snap ? `watcher pass ${ago(ms(snap.pass_at), now)}` : "no watcher pass yet",
+      detail: snap ? `watcher pass ${ago(parse(snap.pass_at), now)}` : "no watcher pass yet",
       tone: findingsOpen ? "warn" : "ok",
       go: "health#problems",
     },
@@ -63,7 +64,7 @@ export function Overview() {
           detail:
             backup.warning ??
             (backup.last_ok
-              ? `last good dump ${ago(ms(backup.last_ok), now)}`
+              ? `last good dump ${ago(parse(backup.last_ok), now)}`
               : "no good dump recorded"),
           tone: backup.warning ? "crit" : "ok",
           go: "health#backups",

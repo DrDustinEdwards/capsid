@@ -6,7 +6,8 @@ import { Missing, Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, fetchClaimsJob, useAnswer } from "../lib/api";
-import { age, ago, ms } from "../lib/format";
+import { age, ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import { toCsv } from "@dustinedwards/site-runtime/csv";
 import { downloadCsv } from "@dustinedwards/site-runtime/csv-client";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../types";
@@ -143,7 +144,7 @@ export function Claims() {
       {agg.error && (
         <Banner tone="crit">
           Could not read the claims: {agg.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
+          {data ? `. Showing the read from ${ago(parse(data.generated), now)}.` : ""}
         </Banner>
       )}
       {data && data.truncated.length > 0 && (
@@ -159,7 +160,7 @@ export function Claims() {
         count={data?.groups.length}
         src={
           <ReadAgain
-            at={data ? ms(data.generated) : undefined}
+            at={data ? parse(data.generated) : undefined}
             now={now}
             reading={agg.loading}
             onRead={() => {

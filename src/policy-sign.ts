@@ -153,7 +153,7 @@ async function commitSigned(
 > {
   const signed = await signTaskBody(env.IMPROVE_SCORE_SECRET!, body);
   const { signature } = splitSignedTask(signed);
-  const sha256 = await sha256Hex(signed);
+  const digest = await sha256Hex(signed);
   // The anti-rollback record is written first: from here on the loaders accept this
   // body and no other signed copy (policyPin in signed-docs.ts). Written before the
   // store so every failure refuses, including a store that aborts below.
@@ -172,7 +172,7 @@ async function commitSigned(
       requireBodyUnchanged(env.DB, namespace, path, prior.body),
       snapshotLive(env.DB, namespace, path),
       documentUpsert(env.DB, namespace, path, prior.title, signed, null, null, null),
-      audit(signature, sha256, signed.length),
+      audit(signature, digest, signed.length),
     ]);
   } catch (err) {
     if (isMissingRowAbort(err)) {
@@ -188,7 +188,7 @@ async function commitSigned(
     }
     throw err;
   }
-  return { ok: true, signed, signature, sha256 };
+  return { ok: true, signed, signature, sha256: digest };
 }
 
 // ---------------------------------------------------------------------------

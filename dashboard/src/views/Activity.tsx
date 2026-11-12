@@ -4,7 +4,8 @@ import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
-import { ago, ms, utc } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse, utc } from "capsomer/behavior/time";
 import type { PortalActivity } from "../types";
 import { Missing, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
@@ -52,7 +53,7 @@ export function Activity() {
 
   const data = load.data;
   // The rows were just read from the server, so none is later than the read itself.
-  const now = data ? Math.max(appNow, ms(data.generated)) : appNow;
+  const now = data ? Math.max(appNow, parse(data.generated)) : appNow;
   const names = feed.live.namespaces.map((n) => n.name);
   if (namespace && !names.includes(namespace)) names.push(namespace);
   const actors = [
@@ -121,7 +122,7 @@ export function Activity() {
       {load.error && (
         <Banner tone="crit">
           Could not read the activity: {load.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
+          {data ? `. Showing the read from ${ago(parse(data.generated), now)}.` : ""}
         </Banner>
       )}
       <Panel
@@ -132,7 +133,7 @@ export function Activity() {
           <>
             {data ? `newest first, at most ${data.limit} rows · ` : ""}
             <ReadAgain
-              at={data ? ms(data.generated) : undefined}
+              at={data ? parse(data.generated) : undefined}
               now={now}
               reading={load.loading}
               onRead={load.reread}
@@ -165,8 +166,8 @@ export function Activity() {
                     data-open={`audit:${r.id}`}
                     tabIndex={0}
                   >
-                    <td className="num" title={utc(ms(r.at))}>
-                      {ago(ms(r.at), now)}
+                    <td className="num" title={utc(parse(r.at))}>
+                      {ago(parse(r.at), now)}
                     </td>
                     <td className="mono">
                       {r.actor ?? <Missing />}

@@ -14,9 +14,10 @@ import { useApp, type DrawerType } from "./ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
 import { JOB } from "../lib/derive";
-import { ago, ms } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import { Pill, St } from "../ui/icons";
-import { When } from "../ui/When";
+import { Time } from "capsomer/react/time";
 import { agentState, nsList } from "../lib/derive";
 import { AgentControls, Head, JobBody } from "./DrawerJob";
 import "capsomer/summary-list.css";
@@ -133,7 +134,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
           <dl className="cap-detail-record">
             <dt>When</dt>
             <dd>
-              {ago(ms(r.at), now)} <When t={ms(r.at)} />
+              {ago(parse(r.at), now)} <Time at={r.at} format="exact" />
             </dd>
             <dt>Actor</dt>
             <dd className="mono">{r.actor ?? <NoValue />}</dd>
@@ -199,7 +200,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
           <dd>
             {a.last_seen ? (
               <>
-                {ago(ms(a.last_seen), now)} <When t={ms(a.last_seen)} />
+                {ago(parse(a.last_seen), now)} <Time at={a.last_seen} format="exact" />
               </>
             ) : (
               "never"
@@ -209,7 +210,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
             <>
               <dt>Revoked</dt>
               <dd>
-                <When t={ms(a.revoked_at)} />
+                <Time at={a.revoked_at} format="exact" />
               </dd>
             </>
           )}
@@ -217,7 +218,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
             <>
               <dt>Archived</dt>
               <dd>
-                <When t={ms(a.archived_at)} />
+                <Time at={a.archived_at} format="exact" />
               </dd>
             </>
           )}
@@ -250,7 +251,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
                 <div className="t">
                   <b>{j.title}</b>
                 </div>
-                <div className="m">{ago(ms(j.updated_at), now)}</div>
+                <div className="m">{ago(parse(j.updated_at), now)}</div>
               </div>
             ))
           ) : (

@@ -4,7 +4,8 @@ import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
 import { useApp } from "../app/ctx";
 import { fetchConvergence, useAnswer, type Load } from "../lib/api";
-import { ago, ms } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import type { ConvergenceCheck, ConvergenceSite, PortalConvergence } from "../types";
 import { St } from "../ui/icons";
 import "capsomer/summary-list.css";
@@ -91,7 +92,7 @@ function SitePanel({
       title="Operator API"
       id={`convergence-${site.namespace}`}
       section="Operator API"
-      src={<ReadAgain at={ms(site.read_at)} now={now} reading={loading} onRead={reread} />}
+      src={<ReadAgain at={parse(site.read_at)} now={now} reading={loading} onRead={reread} />}
     >
       <div className="body stack-gap" data-convergence={site.namespace}>
         {site.problem && <Alert tone="warn">{site.problem}</Alert>}
@@ -175,7 +176,7 @@ function SitePanel({
                   <St kind="nodata">{r.error ? "failed" : "no verdict"}</St>
                 )}{" "}
                 <span className="faint">
-                  {ago(ms(r.at), now)} by {r.actor}
+                  {ago(parse(r.at), now)} by {r.actor}
                   {r.via ? ` (${r.via})` : ""}
                   {r.error ? `: ${r.error}` : ""}
                 </span>

@@ -5,11 +5,14 @@
     },
     {
       "label": "knip (dashboard)",
-      "args": ["--directory", "dashboard"]
+      "args": [
+        "--directory",
+        "dashboard"
+      ]
     }
   ],
   "baseline": {
-    "measured_at": "fdf389a",
+    "measured_at": "9b7878f",
     "knip (Worker)": {},
     "knip (dashboard)": {
       "Unused exports": 1
@@ -28,9 +31,9 @@
       "cases": 2567
     },
     "comments": {
-      "lines": 16464,
-      "code": 137054,
-      "percentage": 10.7
+      "lines": 16460,
+      "code": 137542,
+      "percentage": 10.69
     }
   }
 }

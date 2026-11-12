@@ -5,7 +5,8 @@ import { Suspense, lazy, useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
 import { hasSites, type Kind } from "../lib/derive";
-import { age, agentLabel, ago, ms } from "../lib/format";
+import { age, agentLabel, ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import {
   approveAllRequest,
   approveRequest,
@@ -104,7 +105,7 @@ function Waiting() {
       title="Waiting for you"
       id="waiting"
       count={total}
-      src={`read ${ago(ms(inbox.generated), now)}`}
+      src={`read ${ago(parse(inbox.generated), now)}`}
       footer={
         quiet.length > 0 ? (
           <span className="faint">Nothing waiting: {quiet.map((a) => a.name).join(", ")}</span>
@@ -297,7 +298,7 @@ function PrRow({
       <div className="wmain">
         <b>{item.title}</b>
         <Meta>
-          {app.name} · waiting {age(ms(item.since), now)}
+          {app.name} · waiting {age(parse(item.since), now)}
           {seat?.why ? ` · ${seat.why}` : ""}
         </Meta>
         {item.link && <GitHub href={item.link} />}
@@ -382,7 +383,7 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
           <p className="wask">{question ? `Asks: ${asks(j)}` : `Waits on: ${j.waits_on}`}</p>
         )}
         <Meta>
-          {app.name} · waiting {age(ms(item.since), now)}
+          {app.name} · waiting {age(parse(item.since), now)}
           {j?.claimed_by ? ` · ${agentLabel(j.claimed_by)}` : ""}
         </Meta>
         <span className="wlinks">
@@ -493,7 +494,7 @@ function OtherGroup({ entries }: { entries: Entry[] }) {
                 <b>{item.title}</b>
               )}
               <Meta>
-                {app.name} · {ago(ms(item.since), now)}
+                {app.name} · {ago(parse(item.since), now)}
               </Meta>
             </div>
           </li>
@@ -545,7 +546,7 @@ function WeeklyDigest() {
                 <li className="wrow" key={f.fingerprint} title={f.evidence.join("\n")}>
                   <span className="wmain">
                     <b>{f.headline}</b>
-                    <span className="wmeta">since {ago(ms(f.first_seen), now)}</span>
+                    <span className="wmeta">since {ago(parse(f.first_seen), now)}</span>
                   </span>
                 </li>
               ))}

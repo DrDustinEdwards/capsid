@@ -18,7 +18,8 @@ import {
   incidents,
   siteKey,
 } from "../lib/derive";
-import { age, agentLabel, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
+import { age, agentLabel, ago, fmtN, hostOf, pct, shortId } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import { Icon, NoData, Pill, St } from "../ui/icons";
 import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
 import { ChartSlot } from "../ui/ChartSlot";
@@ -122,7 +123,7 @@ function LiveDeployCell({ s }: { s: SiteSnapshot }) {
     <>
       <span className="mono">{shortId(d.version_id ?? d.id)}</span>
       <div className="src">
-        {ago(ms(d.created_on), now)}
+        {ago(parse(d.created_on), now)}
         {d.triggered_by ? ` · ${d.triggered_by}` : ""}
       </div>
     </>
@@ -225,7 +226,7 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
                     {s.http_status == null ? "no answer" : `HTTP ${s.http_status}`}
                   </span>
                   <div className="src">
-                    {s.health_path ?? "/"} · {ago(ms(s.checked_at), now)}
+                    {s.health_path ?? "/"} · {ago(parse(s.checked_at), now)}
                   </div>
                 </td>
               </tr>
@@ -253,7 +254,9 @@ type QueueGroup = {
 };
 
 const byStatus = (st: OpsJob["status"][]) => (jobs: OpsJob[]) =>
-  jobs.filter((j) => st.includes(j.status)).sort((a, b) => ms(a.updated_at) - ms(b.updated_at));
+  jobs
+    .filter((j) => st.includes(j.status))
+    .sort((a, b) => parse(a.updated_at) - parse(b.updated_at));
 
 const GROUPS: QueueGroup[] = [
   {
@@ -268,7 +271,7 @@ const GROUPS: QueueGroup[] = [
     pick: (jobs) =>
       jobs
         .filter((j) => j.status === "queued")
-        .sort((a, b) => b.priority - a.priority || ms(a.updated_at) - ms(b.updated_at)),
+        .sort((a, b) => b.priority - a.priority || parse(a.updated_at) - parse(b.updated_at)),
   },
   // Wanted, but not now (src/jobs-park.ts): never claimed or planned until unparked. A
   // row opens the drawer, which holds Unpark; a button in the row would break its height
@@ -279,7 +282,7 @@ const GROUPS: QueueGroup[] = [
     pick: (jobs) =>
       jobs
         .filter((j) => j.status === "parked")
-        .sort((a, b) => b.priority - a.priority || ms(a.updated_at) - ms(b.updated_at)),
+        .sort((a, b) => b.priority - a.priority || parse(a.updated_at) - parse(b.updated_at)),
     hideEmpty: true,
   },
   {
@@ -299,15 +302,15 @@ const GROUPS: QueueGroup[] = [
 export function jobMeta(j: OpsJob, now: number): string {
   switch (j.status) {
     case "blocked":
-      return `waiting ${age(ms(j.updated_at), now)}`;
+      return `waiting ${age(parse(j.updated_at), now)}`;
     case "claimed":
-      return `claimed ${ago(ms(j.updated_at), now)}`;
+      return `claimed ${ago(parse(j.updated_at), now)}`;
     case "queued":
-      return `queued ${ago(ms(j.created_at), now)}`;
+      return `queued ${ago(parse(j.created_at), now)}`;
     case "parked":
-      return `parked ${ago(ms(j.updated_at), now)}`;
+      return `parked ${ago(parse(j.updated_at), now)}`;
     default:
-      return `${JOB[j.status].label.toLowerCase()} ${ago(ms(j.updated_at), now)}`;
+      return `${JOB[j.status].label.toLowerCase()} ${ago(parse(j.updated_at), now)}`;
   }
 }
 
@@ -357,7 +360,7 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                           : j.status === "claimed"
                             ? `Held by ${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`
                             : j.status === "queued"
-                              ? `${j.finding ? "Watcher finding · " : ""}${j.started_by && j.started_at ? `Started by ${agentLabel(j.started_by)} ${ago(ms(j.started_at), now)} · ` : ""}priority ${j.priority}`
+                              ? `${j.finding ? "Watcher finding · " : ""}${j.started_by && j.started_at ? `Started by ${agentLabel(j.started_by)} ${ago(parse(j.started_at), now)} · ` : ""}priority ${j.priority}`
                               : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
                   // A blocked job that asks something is marked as a question: it waits on
                   // an answer, not on a command (design-portal-evaluation.md, the question row).

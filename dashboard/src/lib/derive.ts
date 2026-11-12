@@ -9,7 +9,8 @@ import type {
   SiteCloudflare,
   SiteSnapshot,
 } from "../types";
-import { DAY, HOUR, SLOT_MS, age, ago, hostOf, ms } from "./format";
+import { DAY, HOUR, SLOT_MS, age, ago, hostOf } from "./format";
+import { parse } from "capsomer/behavior/time";
 import { storeAttention } from "./store";
 
 // The status vocabulary: every state is a shape, a word and a color.
@@ -111,7 +112,7 @@ export const JOB: Record<OpsJob["status"], { kind: Kind; label: string }> = {
 // window (src/stale-jobs.ts, 3 days) is shown as Stalled rather than Running.
 export const STALE_CLAIM_MS = 3 * DAY;
 export function jobBadge(j: OpsJob, now: number): { kind: Kind; label: string } {
-  if (j.status === "claimed" && now - ms(j.updated_at) > STALE_CLAIM_MS)
+  if (j.status === "claimed" && now - parse(j.updated_at) > STALE_CLAIM_MS)
     return { kind: "warn", label: "Stalled" };
   return JOB[j.status];
 }
@@ -150,7 +151,7 @@ export const TASK_OUTCOME: Record<OpsTaskRun["outcome"], { kind: Kind; label: st
 };
 
 export function passStale(snap: OpsSnapshot | null, now: number): boolean {
-  return !snap || now - ms(snap.pass_at) > 2 * snap.cadence_min * 60_000;
+  return !snap || now - parse(snap.pass_at) > 2 * snap.cadence_min * 60_000;
 }
 
 // ---- needs attention ----------------------------------------------------------
@@ -182,7 +183,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       kind: "Watcher",
       title: "The watcher has not written its first pass yet",
       sub: "Sites, deploys, errors, backups and CI appear after the first pass",
-      at: ms(live.generated),
+      at: parse(live.generated),
       open: "view:health#problems",
     });
   } else {
@@ -190,9 +191,9 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       out.push({
         sev: "warn",
         kind: "Watcher",
-        title: `The last watcher pass is ${age(ms(snap.pass_at), now)} old`,
+        title: `The last watcher pass is ${age(parse(snap.pass_at), now)} old`,
         sub: `It runs every ${snap.cadence_min} min; site data is stale after ${2 * snap.cadence_min} min`,
-        at: ms(snap.pass_at),
+        at: parse(snap.pass_at),
         open: "view:health#problems",
       });
     }
@@ -202,8 +203,8 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
           sev: s.state === "down" ? "crit" : "warn",
           kind: "Site",
           title: `${s.name}: ${s.error ?? PROBE[s.state].label}`,
-          sub: `${hostOf(s.origin)} · ${s.http_status == null ? "no answer" : `HTTP ${s.http_status}`} · checked ${ago(ms(s.checked_at), now)}`,
-          at: ms(s.checked_at),
+          sub: `${hostOf(s.origin)} · ${s.http_status == null ? "no answer" : `HTTP ${s.http_status}`} · checked ${ago(parse(s.checked_at), now)}`,
+          at: parse(s.checked_at),
           open: `site:${siteKey(s)}`,
         });
       }
@@ -219,7 +220,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
           kind: "Site",
           title: `${s.name}: no Cloudflare data`,
           sub: cfNoData(cf) ?? "",
-          at: ms(snap.pass_at),
+          at: parse(snap.pass_at),
           open: `site:${siteKey(s)}`,
         });
       }
@@ -232,7 +233,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
         kind: "Backup",
         title: "Capsid health was not read on the last pass",
         sub: "Backup age is unknown",
-        at: ms(snap.pass_at),
+        at: parse(snap.pass_at),
         open: "view:health#backups",
       });
     } else {
@@ -242,7 +243,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
           kind: "Health",
           title: "Capsid reports degraded health",
           sub: `store d1 ${h.store.d1}, fts ${h.store.fts} · sha ${h.sha.slice(0, 7)}`,
-          at: ms(snap.pass_at),
+          at: parse(snap.pass_at),
           open: "view:health#backups",
         });
       if (h.backup.warning || !h.backup.last_ok) {
@@ -250,8 +251,10 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
           sev: "crit",
           kind: "Backup",
           title: h.backup.warning ?? "No good backup is recorded",
-          sub: h.backup.last_ok ? `last good dump ${ago(ms(h.backup.last_ok), now)}` : "no last_ok",
-          at: h.backup.last_ok ? ms(h.backup.last_ok) : ms(snap.pass_at),
+          sub: h.backup.last_ok
+            ? `last good dump ${ago(parse(h.backup.last_ok), now)}`
+            : "no last_ok",
+          at: h.backup.last_ok ? parse(h.backup.last_ok) : parse(snap.pass_at),
           open: "view:health#backups",
         });
       }
@@ -263,7 +266,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
         kind: "Backup",
         title: "The Amazon backup copy's report was not read on the last pass",
         sub: "Each site's newest copy is unknown",
-        at: ms(snap.pass_at),
+        at: parse(snap.pass_at),
         open: "view:health#backups",
       });
     } else {
@@ -274,7 +277,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
           kind: "Backup",
           title: st.headline,
           sub: st.detail,
-          at: o.reported_at ? ms(o.reported_at) : ms(snap.pass_at),
+          at: o.reported_at ? parse(o.reported_at) : parse(snap.pass_at),
           open: "view:health#backups",
         });
       }
@@ -287,7 +290,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
           kind: "CI",
           title: `CI runs for ${c.namespace} could not be read`,
           sub: "The GitHub read failed on the last pass",
-          at: ms(snap.pass_at),
+          at: parse(snap.pass_at),
           open: "view:health#ci",
         });
       else if (st.red)
@@ -296,7 +299,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
           kind: "CI",
           title: `${c.namespace} default branch is ${st.label}`,
           sub: `${c.latest.head_sha.slice(0, 7)} · ${c.latest.status}`,
-          at: ms(c.latest.created_at),
+          at: parse(c.latest.created_at),
           open: "view:health#ci",
         });
     }
@@ -307,7 +310,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
           kind: "Watcher",
           title: `Check '${c.id}' could not run on the last pass`,
           sub: c.findings.join("; "),
-          at: ms(snap.pass_at),
+          at: parse(snap.pass_at),
           open: "view:health#problems",
         });
     }
@@ -318,7 +321,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
         kind: "Watcher",
         title: `Site map drift: ${drift.unmapped.length} unmapped, ${drift.unknown.length} unknown`,
         sub: [...drift.unmapped, ...drift.unknown].join(", "),
-        at: ms(snap.pass_at),
+        at: parse(snap.pass_at),
         open: "view:health#problems",
       });
     }
@@ -333,7 +336,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       kind: "Scheduled",
       title: "The run ledger could not be read",
       sub: feed.scheduled.error,
-      at: ms(live.generated),
+      at: parse(live.generated),
       open: "view:health#problems",
     });
   } else {
@@ -346,9 +349,9 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
         title:
           t.flag === "failing"
             ? `${t.label}: its last run ${TASK_OUTCOME[last.outcome].label.toLowerCase()}`
-            : `${t.label} has not run for ${age(ms(last.finished_at), now)}`,
+            : `${t.label} has not run for ${age(parse(last.finished_at), now)}`,
         sub: last.reason,
-        at: ms(last.finished_at),
+        at: parse(last.finished_at),
         open: "view:health#problems",
       });
     }
@@ -359,7 +362,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       kind: "Watcher",
       title: "Cloudflare read not configured",
       sub: "Deploy and error columns show no data until it is",
-      at: ms(live.generated),
+      at: parse(live.generated),
       open: "view:sites#deploys",
     });
   }
@@ -369,7 +372,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       sev: "warn",
       kind: "Backup",
       ...store,
-      at: ms(live.generated),
+      at: parse(live.generated),
       open: "view:health#backups",
     });
   const blocked = live.jobs.filter((j) => j.status === "blocked");
@@ -379,7 +382,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       kind: "Queue",
       title: `${blocked.length} ${blocked.length === 1 ? "job is" : "jobs are"} waiting on you`,
       sub: [...new Set(blocked.map((j) => j.namespace))].join(", "),
-      at: Math.max(...blocked.map((j) => ms(j.updated_at))),
+      at: Math.max(...blocked.map((j) => parse(j.updated_at))),
       open: blocked.length === 1 && blocked[0] ? `job:${blocked[0].id}` : "view:queue",
       group: { key: "blocked", facet: "" },
     });
@@ -398,7 +401,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       sub: agent
         ? "Out of its usual pattern · a finding only, nothing suspended"
         : (f.evidence[0] ?? "Paused after repeated failures"),
-      at: ms(f.last_seen),
+      at: parse(f.last_seen),
       open: agent ? "view:health#problems" : "view:needs#waiting",
     });
   }
@@ -408,19 +411,19 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       kind: "PR",
       title: `${a.repo} #${a.number} awaits the seat`,
       sub: `${a.failed}: ${a.why}`,
-      at: ms(a.at),
+      at: parse(a.at),
       open: "view:prs",
       group: { key: "pr-seat", facet: a.repo },
     });
   }
   for (const a of live.agents) {
-    if (a.kind === "driver" && !a.revoked_at && a.last_seen && now - ms(a.last_seen) > 7 * DAY) {
+    if (a.kind === "driver" && !a.revoked_at && a.last_seen && now - parse(a.last_seen) > 7 * DAY) {
       out.push({
         sev: "nodata",
         kind: "Agent",
-        title: `${a.name} has been silent for ${Math.floor((now - ms(a.last_seen)) / DAY)} days`,
-        sub: `last seen ${ago(ms(a.last_seen), now)}`,
-        at: ms(a.last_seen),
+        title: `${a.name} has been silent for ${Math.floor((now - parse(a.last_seen)) / DAY)} days`,
+        sub: `last seen ${ago(parse(a.last_seen), now)}`,
+        at: parse(a.last_seen),
         open: `agent:${a.name}`,
         group: { key: "silent", facet: a.name },
       });
@@ -520,7 +523,7 @@ function fold(items: Attention[], feed: OpsFeed, now: number): AttentionRow[] {
           kind: "Queue",
           title: j.title,
           sub: `${j.namespace} · waits on: ${j.waits_on ?? "no reason recorded"}`,
-          at: ms(j.updated_at),
+          at: parse(j.updated_at),
           open: `job:${j.id}`,
         })),
         total: jobs.length,
@@ -591,9 +594,9 @@ export function blockedOrder(
 ): { blocked: OpsJob[]; stale: OpsJob[]; all: OpsJob[] } {
   const list = jobs
     .filter((j) => j.status === "blocked")
-    .sort((a, b) => b.priority - a.priority || ms(b.updated_at) - ms(a.updated_at));
-  const blocked = list.filter((j) => now - ms(j.updated_at) <= STALE_BLOCKED_MS);
-  const stale = list.filter((j) => now - ms(j.updated_at) > STALE_BLOCKED_MS);
+    .sort((a, b) => b.priority - a.priority || parse(b.updated_at) - parse(a.updated_at));
+  const blocked = list.filter((j) => now - parse(j.updated_at) <= STALE_BLOCKED_MS);
+  const stale = list.filter((j) => now - parse(j.updated_at) > STALE_BLOCKED_MS);
   return { blocked, stale, all: [...blocked, ...stale] };
 }
 
@@ -624,7 +627,7 @@ export function incidents(feed: OpsFeed): Incident[] {
       title: j.title.replace(/^Watcher: /, "").replace(/ \[[^\]]*\]$/, ""),
       fp: j.finding.fingerprint,
       ns: j.namespace,
-      at: ms(j.created_at),
+      at: parse(j.created_at),
       ref: `job:${j.id}`,
       status: JOB[j.status].label.toLowerCase(),
     });
@@ -640,7 +643,7 @@ export function incidents(feed: OpsFeed): Incident[] {
         title: `Check '${c.id}' reports a finding`,
         fp,
         ns: "watcher",
-        at: ms(feed.snapshot?.pass_at ?? feed.live.generated),
+        at: parse(feed.snapshot?.pass_at ?? feed.live.generated),
         ref: null,
         status: "no job in the live window",
       });
@@ -678,10 +681,10 @@ export function rosterAgents(agents: readonly OpsAgent[]): OpsAgent[] {
 export function archiveAgents(agents: readonly OpsAgent[]): OpsAgent[] {
   const waiting = agents
     .filter((a) => a.revoked_at && !a.archived_at)
-    .sort((x, y) => ms(x.revoked_at as string) - ms(y.revoked_at as string));
+    .sort((x, y) => parse(x.revoked_at as string) - parse(y.revoked_at as string));
   const archived = agents
     .filter((a) => a.archived_at)
-    .sort((x, y) => ms(y.archived_at as string) - ms(x.archived_at as string));
+    .sort((x, y) => parse(y.archived_at as string) - parse(x.archived_at as string));
   return [...waiting, ...archived];
 }
 
@@ -689,7 +692,7 @@ export function agentState(a: OpsAgent, now: number): { kind: Kind; label: strin
   if (a.archived_at) return { kind: "nodata", label: "Archived" };
   if (a.revoked_at) return { kind: "crit", label: "Revoked" };
   if (!a.last_seen) return { kind: "nodata", label: "Never seen" };
-  const d = now - ms(a.last_seen);
+  const d = now - parse(a.last_seen);
   if (d < HOUR) return { kind: "ok", label: "Active" };
   if (d < 2 * DAY) return { kind: "queued", label: "Idle" };
   return { kind: "nodata", label: "Silent" };
@@ -714,7 +717,7 @@ export const OFFACCOUNT_DRILL_STALE = 35 * DAY;
 
 export function offaccountState(o: NonNullable<OpsSnapshot["offaccount"]>, now: number) {
   const missing = o.sites.filter((s) => !s.newest).map((s) => s.site);
-  const ageOf = (s: { newest: string | null }) => (s.newest ? now - ms(s.newest) : null);
+  const ageOf = (s: { newest: string | null }) => (s.newest ? now - parse(s.newest) : null);
   const stale = o.sites.filter((s) => (ageOf(s) ?? 0) >= OFFACCOUNT_STALE).map((s) => s.site);
   const late = o.sites
     .filter((s) => {
@@ -724,13 +727,13 @@ export function offaccountState(o: NonNullable<OpsSnapshot["offaccount"]>, now: 
     .map((s) => s.site);
   const ages = o.sites.map(ageOf).filter((a): a is number => a != null);
   const worst = ages.length ? Math.max(...ages) : null;
-  const reportAge = o.reported_at ? now - ms(o.reported_at) : null;
+  const reportAge = o.reported_at ? now - parse(o.reported_at) : null;
   const silent = reportAge == null || reportAge >= OFFACCOUNT_REPORT_STALE;
   // The latest passing drill; undefined on a snapshot written before the field, which says
   // nothing either way until the next pass.
   const drill = o.last_drill;
   const drillOk =
-    drill === undefined || (drill?.at != null && now - ms(drill.at) < OFFACCOUNT_DRILL_STALE);
+    drill === undefined || (drill?.at != null && now - parse(drill.at) < OFFACCOUNT_DRILL_STALE);
   const bad = missing.length > 0 || stale.length > 0 || silent || !drillOk;
   const headline =
     reportAge == null
@@ -747,7 +750,7 @@ export function offaccountState(o: NonNullable<OpsSnapshot["offaccount"]>, now: 
                 ? `The Amazon backup copy is late for ${late.join(", ")}`
                 : "The Amazon backup copy is current";
   const detail = o.last_run
-    ? `Last copy run ${o.last_run.conclusion ?? "still running"}${o.last_run.at ? ` ${ago(ms(o.last_run.at), now)}` : ""}`
+    ? `Last copy run ${o.last_run.conclusion ?? "still running"}${o.last_run.at ? ` ${ago(parse(o.last_run.at), now)}` : ""}`
     : "No copy run recorded";
   return {
     missing,
