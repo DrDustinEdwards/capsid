@@ -20,7 +20,7 @@
 // Exit 0 means the rollback took effect: a readable sha other than this run's is live.
 // Exit 1 means it did not, or that what is live cannot be read.
 
-import { pathToFileURL } from "node:url";
+import { isMain } from "@dustinedwards/devkit/node";
 
 // A sha is at least 7 hex characters. A shorter value from /health would prefix-match
 // almost anything, so it counts as unreadable.
@@ -117,7 +117,7 @@ export function rollbackTookEffect(afterSha, runSha) {
 }
 
 // Skipped when imported by the test.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   try {
     if (args[0] === "--after") {

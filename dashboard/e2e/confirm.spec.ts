@@ -27,7 +27,12 @@ test("Mark failed with a typed reason, then Preview, shows the preview and perfo
   await page.route(PERFORM_URL, async (route) => {
     const feed = await (await page.request.get("api/ops")).json();
     await route.fulfill({
-      json: { action: "fail_job", summary: `Marked ${JOB} failed.`, warning: null, feed },
+      json: {
+        action: "fail_job",
+        summary: `Marked ${JOB} failed.`,
+        warning: null,
+        feed,
+      },
     });
   });
   const dialog = await openReasonDialog(page);
@@ -43,7 +48,7 @@ test("Mark failed with a typed reason, then Preview, shows the preview and perfo
   await expect(dialog.getByRole("button", { name: "Mark failed", exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "Mark failed", exact: true }).click();
   await expect(page.locator("dialog.confirm")).toBeHidden();
-  await expect(page.locator(".msg-region")).toContainText(`Marked ${JOB} failed.`);
+  await expect(page.locator(".cap-message")).toContainText(`Marked ${JOB} failed.`);
 });
 
 test("Preview with no reason says a reason is required, and sends nothing", async ({ page }) => {
@@ -114,12 +119,18 @@ test.describe("on a phone", () => {
   // centered dialog then sits off the visible screen. Measured before the fix: at 390 px
   // the document was 1189 px wide (the tab bar), and tapping Preview hit the dialog
   // element instead of the button.
-  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  test.use({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
 
   test("the dialog and its buttons are on screen", async ({ page }) => {
     const dialog = await openReasonDialog(page);
     for (const name of ["Preview", "Cancel"]) {
-      await expect(dialog.getByRole("button", { name })).toBeInViewport({ ratio: 1 });
+      await expect(dialog.getByRole("button", { name })).toBeInViewport({
+        ratio: 1,
+      });
     }
     await dialog.getByRole("textbox", { name: "Reason", exact: true }).pressSequentially("testing");
     await dialog.getByRole("button", { name: "Preview" }).tap();

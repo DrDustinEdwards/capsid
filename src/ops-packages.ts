@@ -1,8 +1,9 @@
+import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "./ops-types/sites";
 import { auditStatement } from "./store-guards";
-import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { DAY_MS, isoWeek, utcDay } from "./time";
 import { callSignal } from "./call-signal";
 
@@ -571,35 +572,26 @@ export async function packageHistory(
     .bind(cfg.name)
     .all<PortalPackageHistory["weeks"][number]>();
   const key = historyKey(cfg.name);
-  let cached: {
-    formerly: string | null;
-    fetched_at: string;
-    days: PortalPackageHistory["days"];
-    notes: string[];
-  } | null = null;
-  try {
-    const raw = await env.APP_KV.get(key);
-    cached = raw ? JSON.parse(raw) : null;
-  } catch (err) {
-    logEvent(
-      "PACKAGES_HISTORY_CACHE_UNREADABLE",
-      {
-        message: `PACKAGES_HISTORY_CACHE_UNREADABLE ${key}: ${errorMessage(err)}`,
-      },
-      { level: "warn" },
-    );
-  }
-  // A cache written before the former name changed is not this package's history.
-  if (!cached || cached.formerly !== cfg.formerly) {
-    const notes: string[] = [];
-    const days = [
-      ...(cfg.formerly ? await dailyDownloads(fetchImpl, cfg.formerly, now, notes) : []),
-      ...(await dailyDownloads(fetchImpl, cfg.name, now, notes)),
-    ];
-    days.sort((a, b) => (a.day === b.day ? a.name.localeCompare(b.name) : a.day < b.day ? -1 : 1));
-    cached = { formerly: cfg.formerly, fetched_at: now.toISOString(), days, notes };
-    await env.APP_KV.put(key, JSON.stringify(cached), { expirationTtl: HISTORY_TTL_SECONDS });
-  }
+  // A kept history written before the former name changed is not this package's history.
+  const cached = await kvCached(
+    env.APP_KV,
+    key,
+    {
+      ttl: HISTORY_TTL_SECONDS,
+      valid: (kept) => kept !== null && (kept as { formerly?: unknown }).formerly === cfg.formerly,
+    },
+    async () => {
+      const notes: string[] = [];
+      const days = [
+        ...(cfg.formerly ? await dailyDownloads(fetchImpl, cfg.formerly, now, notes) : []),
+        ...(await dailyDownloads(fetchImpl, cfg.name, now, notes)),
+      ];
+      days.sort((x, y) =>
+        x.day === y.day ? x.name.localeCompare(y.name) : x.day < y.day ? -1 : 1,
+      );
+      return { formerly: cfg.formerly, fetched_at: now.toISOString(), days, notes };
+    },
+  );
   return {
     name: cfg.name,
     formerly: cfg.formerly,

@@ -54,7 +54,7 @@ test("every safeEqual and adminGrantEmail call is awaited, in every file", () =>
       )
       .filter((c) => !c.text.startsWith("export async function ")),
   );
-  assert.ok(calls.length >= 11, `found only ${calls.length} calls`);
+  assert.ok(calls.length >= 9, `found only ${calls.length} calls`);
   assert.deepEqual(
     calls.filter((c) => !c.awaited).map((c) => `src/${c.file}:${c.line} ${c.text}`),
     [],

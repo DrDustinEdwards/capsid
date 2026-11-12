@@ -294,7 +294,7 @@ async function signedWithCsrf(
   init: RequestInit = {},
 ): Promise<Request> {
   const req = await signed(path, init);
-  req.headers.set("Cookie", `${req.headers.get("Cookie")}; ${PORTAL_CSRF_COOKIE}=${csrf}`);
+  req.headers.set("Cookie", `${req.headers.get("Cookie")}; __Secure-${PORTAL_CSRF_COOKIE}=${csrf}`);
   return req;
 }
 

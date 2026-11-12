@@ -53,10 +53,16 @@ export function SharedCode() {
   );
 }
 
-function behindText(u: SharedCodeApp): { kind: "ok" | "warn" | "nodata"; text: string } {
+function behindText(u: SharedCodeApp): {
+  kind: "ok" | "warn" | "nodata";
+  text: string;
+} {
   if (u.behind === null) return { kind: "nodata", text: u.pinned ? "Not a release" : "Unpinned" };
   if (u.behind === 0) return { kind: "ok", text: "Current" };
-  return { kind: "warn", text: `${u.behind} ${u.behind === 1 ? "release" : "releases"} behind` };
+  return {
+    kind: "warn",
+    text: `${u.behind} ${u.behind === 1 ? "release" : "releases"} behind`,
+  };
 }
 
 // The release line (Capsid improvement list, item 13): the version in the repo's
@@ -138,8 +144,8 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
       footer={<span className="faint">{summary}</span>}
     >
       {pkg.users.length ? (
-        <table className="brief shared-users">
-          <caption className="sr-only">Apps that use {pkg.name}</caption>
+        <table className="cap-table shared-users">
+          <caption className="cap-sr-only">Apps that use {pkg.name}</caption>
           <thead>
             <tr>
               <th>App</th>

@@ -150,7 +150,7 @@ async function call(
     await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())
   ).split(";")[0];
   const headers = new Headers({
-    Cookie: `${session}; capsid_portal_csrf=${CSRF}`,
+    Cookie: `${session}; __Secure-capsid_portal_csrf=${CSRF}`,
     "Sec-Fetch-Site": "same-origin",
   });
   if (init.body !== undefined) {

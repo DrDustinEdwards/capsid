@@ -1,3 +1,4 @@
+import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
 import { z } from "zod";
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
@@ -130,10 +131,16 @@ export async function readCompleteness(
   now: Date,
   fresh = false,
 ): Promise<CompletenessView> {
-  if (!fresh) {
-    const cached = await env.APP_KV.get(COMPLETENESS_CACHE_KEY);
-    if (cached) return JSON.parse(cached) as CompletenessView;
-  }
+  // A board that could not be read is not kept, so the next look reads it again.
+  return kvCached(
+    env.APP_KV,
+    COMPLETENESS_CACHE_KEY,
+    { ttl: CACHE_TTL_SECONDS, refresh: fresh, keep: (view) => !view.error },
+    () => buildCompleteness(env, now),
+  );
+}
+
+async function buildCompleteness(env: Env, now: Date): Promise<CompletenessView> {
   let raw: unknown;
   try {
     const resp = await ghFetch(
@@ -156,10 +163,5 @@ export async function readCompleteness(
   } catch (err) {
     return emptyView(now, `devkit's board.json could not be read: ${errorMessage(err)}`);
   }
-  const view = completenessView(raw, now);
-  if (!view.error)
-    await env.APP_KV.put(COMPLETENESS_CACHE_KEY, JSON.stringify(view), {
-      expirationTtl: CACHE_TTL_SECONDS,
-    });
-  return view;
+  return completenessView(raw, now);
 }

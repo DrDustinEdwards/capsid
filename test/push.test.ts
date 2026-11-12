@@ -599,7 +599,7 @@ async function request(
     ";",
   )[0];
   const headers: Record<string, string> = {
-    Cookie: `${session}; ${PORTAL_CSRF_COOKIE}=${CSRF}`,
+    Cookie: `${session}; __Secure-${PORTAL_CSRF_COOKIE}=${CSRF}`,
     [PORTAL_CSRF_HEADER]: CSRF,
     "Sec-Fetch-Site": opts.site ?? "same-origin",
     "Content-Type": "application/json",

@@ -41,8 +41,8 @@ function Archive() {
         {rows.length === 0 ? (
           <div className="body faint">No agent has been revoked.</div>
         ) : (
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>Agent</th>
@@ -108,7 +108,10 @@ function Archive() {
 const OWNER_PAGES = [
   { name: "Capsid", url: "https://mcp.dustinedwards.info/owner" },
   { name: "Carrel", url: "https://carrel-mcp.dustinedwards.info/owner" },
-  { name: "Dustin Edwards Admin", url: "https://admin-mcp.dustinedwards.info/owner" },
+  {
+    name: "Dustin Edwards Admin",
+    url: "https://admin-mcp.dustinedwards.info/owner",
+  },
   { name: "Foxing Admin", url: "https://admin-mcp.foxing.app/owner" },
   { name: "Foxhound Admin", url: "https://admin-mcp.foxhoundapp.com/owner" },
 ] as const;
@@ -121,8 +124,8 @@ function Access() {
           Grants you gave AI clients, with Revoke, and every tool call. Each opens on its server
           after a sign-in.
         </div>
-        <div className="scroll-x">
-          <table className="list">
+        <div className="cap-table-wrap">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th>Server</th>
@@ -154,8 +157,8 @@ function Roster() {
   return (
     <div className="embedded">
       <Panel flush title="Roster" src="live agents · job outcomes">
-        <div className="scroll-x reflow">
-          <table className="list cards-below-1100">
+        <div className="cap-table-wrap" data-reflow="wide">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th>Agent</th>
@@ -209,7 +212,7 @@ function Roster() {
                     <td data-label="Flags">
                       {a.flags.length ? (
                         a.flags.map((f) => (
-                          <span key={f} className="chip flag">
+                          <span key={f} className="cap-pill" data-variant="outline">
                             {f}
                           </span>
                         ))

@@ -25,7 +25,9 @@ async function performsLeaveFeed(page: Page, summary: string): Promise<{ count: 
   await page.route(PERFORM_URL, async (route) => {
     seen.count++;
     const feed = await (await page.request.get("api/ops")).json();
-    await route.fulfill({ json: { action: "approve_pr", summary, warning: null, feed } });
+    await route.fulfill({
+      json: { action: "approve_pr", summary, warning: null, feed },
+    });
   });
   return seen;
 }
@@ -102,10 +104,15 @@ test("PLANT: Approve on a pull request row previews approve_pr at the head the t
   const done = await performsLeaveFeed(page, "Approved example-org/sample-c#32.");
   await visit(page, "needs");
   await group(page, "w-prs")
-    .getByRole("button", { name: "Approve example-org/sample-c #32", exact: true })
+    .getByRole("button", {
+      name: "Approve example-org/sample-c #32",
+      exact: true,
+    })
     .click();
   await expect(
-    dialog(page).getByRole("heading", { name: "Approve pull request example-org/sample-c #32" }),
+    dialog(page).getByRole("heading", {
+      name: "Approve pull request example-org/sample-c #32",
+    }),
   ).toBeVisible();
   await expect(dialog(page).getByRole("button", { name: "Approve", exact: true })).toBeVisible();
   expect(sent).toEqual([
@@ -122,7 +129,7 @@ test("PLANT: Approve on a pull request row previews approve_pr at the head the t
   await dialog(page).getByRole("button", { name: "Approve", exact: true }).click();
   await expect(dialog(page)).toBeHidden();
   expect(done.count).toBe(1);
-  await expect(page.locator(".msg-region")).toContainText("Approved example-org/sample-c#32.");
+  await expect(page.locator(".cap-message")).toContainText("Approved example-org/sample-c#32.");
 });
 
 test("PLANT: Close on a pull request row asks a reason, then previews pr_close with it", async ({
@@ -131,14 +138,20 @@ test("PLANT: Close on a pull request row asks a reason, then previews pr_close w
   const sent = previews(page);
   await visit(page, "needs");
   await group(page, "w-prs")
-    .getByRole("button", { name: "Close example-org/sample-c #33", exact: true })
+    .getByRole("button", {
+      name: "Close example-org/sample-c #33",
+      exact: true,
+    })
     .click();
   await dialog(page)
     .getByRole("textbox", { name: "Reason", exact: true })
     .fill("replaced by a newer pull request");
   await dialog(page).getByRole("button", { name: "Preview" }).click();
   await expect(
-    dialog(page).getByRole("button", { name: "Close pull request", exact: true }),
+    dialog(page).getByRole("button", {
+      name: "Close pull request",
+      exact: true,
+    }),
   ).toBeVisible();
   expect(sent).toEqual([
     {
@@ -178,7 +191,7 @@ test("PLANT: ticking two pull requests approves both in one confirm, each previe
   await dialog(page).getByRole("button", { name: "Approve 2" }).click();
   await expect(dialog(page)).toBeHidden();
   expect(done.count).toBe(2);
-  await expect(page.locator(".msg-region")).toContainText("Approved one. Approved one.");
+  await expect(page.locator(".cap-message")).toContainText("Approved one. Approved one.");
 });
 
 test("PLANT: Answer opens a reply box on the row, and Send previews resume_job with the reply as its reason", async ({
@@ -204,7 +217,10 @@ test("PLANT: Answer opens a reply box on the row, and Send previews resume_job w
   expect(sent).toEqual([
     {
       action: "resume_job",
-      params: { id: "job_91b3c0de5a24", reason: "Option B, and keep the old table." },
+      params: {
+        id: "job_91b3c0de5a24",
+        reason: "Option B, and keep the old table.",
+      },
     },
   ]);
   await dialog(page).getByRole("button", { name: "Cancel" }).click();
@@ -221,7 +237,10 @@ test("Resume on a blocked job row previews resume_job; More about this job opens
   await row.getByRole("button", { name: "Send" }).click();
   await expect(dialog(page).getByRole("button", { name: "Resume job", exact: true })).toBeVisible();
   expect(sent).toEqual([
-    { action: "resume_job", params: { id: "job_15e10168e61c", reason: "merged #15" } },
+    {
+      action: "resume_job",
+      params: { id: "job_15e10168e61c", reason: "merged #15" },
+    },
   ]);
   await dialog(page).getByRole("button", { name: "Cancel" }).click();
   await row.getByRole("button", { name: "More about this job" }).click();
@@ -277,7 +296,9 @@ test("a preview refused for one ticked row still lists the others, and names the
   page,
 }) => {
   await page.route(PREVIEW_URL, async (route) => {
-    const body = route.request().postDataJSON() as { params: Record<string, string> };
+    const body = route.request().postDataJSON() as {
+      params: Record<string, string>;
+    };
     if (body.params.prs === "33")
       return route.fulfill({
         status: 400,

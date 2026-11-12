@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { useState } from "react";
 import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
@@ -75,7 +76,7 @@ export function Activity() {
           apply(nsInput, actorInput);
         }}
       >
-        <label className="sr-only" htmlFor="actNs">
+        <label className="cap-sr-only" htmlFor="actNs">
           Project
         </label>
         <select
@@ -91,7 +92,7 @@ export function Activity() {
             </option>
           ))}
         </select>
-        <label className="sr-only" htmlFor="actActor">
+        <label className="cap-sr-only" htmlFor="actActor">
           Who
         </label>
         {/* A picker, not a box to type an id into from memory (the UX audit's m7): every
@@ -109,20 +110,20 @@ export function Activity() {
             </option>
           ))}
         </select>
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Apply
         </button>
         {(namespace || actor) && (
-          <button type="button" className="btn" onClick={() => apply("", "")}>
+          <button type="button" className="cap-btn" onClick={() => apply("", "")}>
             Clear
           </button>
         )}
       </form>
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Banner tone="crit">
           Could not read the activity: {load.error}
           {data ? `. Showing the read from ${ago(parse(data.generated), now)}.` : ""}
-        </div>
+        </Banner>
       )}
       <Panel
         flush
@@ -145,8 +146,8 @@ export function Activity() {
             <Spinner label="Reading the activity..." />
           </div>
         ) : data && data.rows.length ? (
-          <div className="scroll-x">
-            <table className="list">
+          <div className="cap-table-wrap">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>When</th>

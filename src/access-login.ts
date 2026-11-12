@@ -8,7 +8,8 @@ import {
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
 import { isAdminEmail } from "@dustinedwards/site-runtime/access";
-import { capsidCookie, getCookie } from "./auth";
+import { capsidCookie } from "./auth";
+import { readCookie } from "@dustinedwards/site-runtime/headers";
 import type { Env } from "./env";
 // The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
 // identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27) for
@@ -137,7 +138,7 @@ export async function completeAccessLogin<T>(
   if (!code || !stateToken) return fail("missing code or state", 400, "MISSING_CODE_OR_STATE");
 
   const notThisBrowser = `state validation failed: this browser did not start the flow. ${flow.restartHint}`;
-  const stateCookie = getCookie(request, flow.stateCookie);
+  const stateCookie = readCookie(request, flow.stateCookie);
   if (!stateCookie) return fail(notThisBrowser, 403, "STATE_NOT_THIS_BROWSER");
   const stateKey = `${flow.kvPrefix}${stateToken}`;
   const raw = await env.OAUTH_KV.get(stateKey);

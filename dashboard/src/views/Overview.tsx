@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { StatTile, type StatTileProps, StatTiles } from "capsomer/react/stat-tile";
 import { Link } from "../lib/router";
 import { placePath, useApp } from "../app/ctx";
 import { counts, hasSites, offaccountState } from "../lib/derive";
 import { HOUR, ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
+import "capsomer/stat-tile.css";
 
 // The tiles at the top of Health (docs/design/design-portal-evaluation.md section 2; the UX
 // audit's m2 and m3, 2026-10): sites up, open findings, the primary backup and the
@@ -12,14 +13,13 @@ import { parse } from "capsomer/behavior/time";
 // counted on Needs you only, so there is no "Blocked on you" tile. With no site configured
 // there is no site tile.
 
-interface Tile {
-  label: string;
-  v: ReactNode;
-  d: string;
-  cls: "" | "ok" | "warn" | "crit";
-  // A page, or a page and its tab ("health#backups"), as placePath reads it.
-  go: string;
-}
+// Capsomer's StatTile; `go` is a page, or a page and its tab ("health#backups"), as placePath reads it.
+// Distributed over StatTileProps's union, so a no-data tile keeps its reason and no figure.
+type Tile = StatTileProps extends infer P
+  ? P extends StatTileProps
+    ? Omit<P, "href" | "renderLink"> & { go: string }
+    : never
+  : never;
 
 export function Overview() {
   const { feed, now } = useApp();
@@ -35,105 +35,95 @@ export function Overview() {
     : snap
       ? {
           label: "Sites up",
-          v: (
-            <>
-              {snap.sites.length - c.down - c.degraded}
-              <small>/{snap.sites.length}</small>
-            </>
-          ),
-          d: `${c.down} down · ${c.degraded} degraded`,
-          cls: c.down ? "crit" : c.degraded ? "warn" : "ok",
+          figure: snap.sites.length - c.down - c.degraded,
+          unit: `/${snap.sites.length}`,
+          detail: `${c.down} down · ${c.degraded} degraded`,
+          tone: c.down ? "crit" : c.degraded ? "warn" : "ok",
           go: "sites",
         }
       : {
           label: "Sites up",
-          v: <small>No data</small>,
-          d: "no watcher pass yet",
-          cls: "",
+          tone: "nodata",
+          reason: "no watcher pass yet",
           go: "sites",
         };
   const tiles: Tile[] = [
     ...(siteTile ? [siteTile] : []),
     {
       label: "Open findings",
-      v: String(findingsOpen),
-      d: snap ? `watcher pass ${ago(parse(snap.pass_at), now)}` : "no watcher pass yet",
-      cls: findingsOpen ? "warn" : "ok",
+      figure: findingsOpen,
+      detail: snap ? `watcher pass ${ago(parse(snap.pass_at), now)}` : "no watcher pass yet",
+      tone: findingsOpen ? "warn" : "ok",
       go: "health#problems",
     },
     backup && backup.age_hours != null
       ? {
           label: "Backup",
-          v: (
-            <>
-              {backup.age_hours.toFixed(1)}
-              <small>h</small>
-            </>
-          ),
-          d:
+          figure: backup.age_hours.toFixed(1),
+          unit: "h",
+          detail:
             backup.warning ??
             (backup.last_ok
               ? `last good dump ${ago(parse(backup.last_ok), now)}`
               : "no good dump recorded"),
-          cls: backup.warning ? "crit" : "ok",
+          tone: backup.warning ? "crit" : "ok",
           go: "health#backups",
         }
-      : {
-          label: "Backup",
-          v: <small>No data</small>,
-          d: snap?.health ? "no good dump recorded" : "health not read",
-          cls: snap?.health ? "crit" : "",
-          go: "health#backups",
-        },
+      : snap?.health
+        ? {
+            label: "Backup",
+            figure: "No data",
+            detail: "no good dump recorded",
+            tone: "crit",
+            go: "health#backups",
+          }
+        : {
+            label: "Backup",
+            tone: "nodata",
+            reason: "health not read",
+            go: "health#backups",
+          },
     copy && copyState
       ? {
           label: "Amazon copy",
-          v:
-            copyState.worst == null ? (
-              <small>No copy</small>
-            ) : (
-              <>
-                {(copyState.worst / HOUR).toFixed(0)}
-                <small>h</small>
-              </>
-            ),
-          d:
+          figure: copyState.worst == null ? "No copy" : (copyState.worst / HOUR).toFixed(0),
+          unit: copyState.worst == null ? undefined : "h",
+          detail:
             copyState.bad || copyState.warn
               ? copyState.headline
               : `oldest of ${copy.sites.length} sites · ${copyState.detail.toLowerCase()}`,
-          cls: copyState.bad ? "crit" : copyState.warn ? "warn" : "ok",
+          tone: copyState.bad ? "crit" : copyState.warn ? "warn" : "ok",
           go: "health#backups",
         }
-      : {
-          label: "Amazon copy",
-          v: <small>No data</small>,
-          d: snap ? "not read on the last pass" : "no watcher pass yet",
-          cls: snap ? "warn" : "",
-          go: "health#backups",
-        },
+      : snap
+        ? {
+            label: "Amazon copy",
+            figure: "No data",
+            detail: "not read on the last pass",
+            tone: "warn",
+            go: "health#backups",
+          }
+        : {
+            label: "Amazon copy",
+            tone: "nodata",
+            reason: "no watcher pass yet",
+            go: "health#backups",
+          },
   ];
   return (
     <div className="embedded" id="summary">
       {/* Figure and label on one line, the detail under them; a tile is never narrower
           than its text, so the row wraps instead of cutting a word (design D3). */}
-      <div className="tiles">
-        {tiles.map((t) => {
-          const body = (
-            <>
-              <span className="t1">
-                <span className="v">{t.v}</span>
-                <span className="l">{t.label}</span>
-              </span>
-              <span className="d">{t.d}</span>
-            </>
-          );
-          return (
-            <Link key={t.label} href={placePath(t.go)} className={`tile ${t.cls}`}>
-              {body}
-            </Link>
-          );
-        })}
-      </div>
+      <StatTiles label="Health figures">
+        {tiles.map(({ go, ...t }) => (
+          <StatTile
+            key={t.label}
+            {...t}
+            href={placePath(go)}
+            renderLink={({ href, ...props }) => <Link href={href} {...props} />}
+          />
+        ))}
+      </StatTiles>
     </div>
   );
 }
