@@ -28,11 +28,11 @@
       "lines": 0
     },
     "tests": {
-      "files": 267,
-      "cases": 2577
+      "files": 266,
+      "cases": 2570
     },
     "comments": {
-      "lines": 16474,
+      "lines": 16451,
       "code": 137707,
       "percentage": 10.68
     }

@@ -9,6 +9,7 @@ import { auditStatement } from "./store-guards";
 import { timeMs } from "./trends";
 import { passDue } from "./watcher";
 import { DAY_MS } from "./time";
+import { toSqlTime } from "@dustinedwards/site-runtime/time";
 
 // THE AUTO-MERGE SAFETY METER AND SHUTOFF (docs/design/design-merge-pipeline.md, "The
 // safety meter"). Merge units (src/merge-units.ts) narrow one path class after a bad
@@ -193,7 +194,7 @@ const SHA_LOOKUPS_MAX = 20;
 /** The revert pass over the repos of the last 90 days' merged outcome pull requests.
  *  Returns what it recorded; a GitHub failure for one repo is logged and the rest go on. */
 export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[]> {
-  const since = new Date(now.getTime() - WINDOW_MS).toISOString().replace("T", " ").slice(0, 19);
+  const since = toSqlTime(now.getTime() - WINDOW_MS);
   const { results } = await env.DB.prepare(
     `SELECT p.job_id AS job_id, p.pr_url AS pr_url, o.namespace AS namespace FROM job_outcome_prs p JOIN job_outcomes o ON o.job_id = p.job_id
      WHERE p.merged = 1 AND p.recorded_at >= ?1 ORDER BY p.recorded_at DESC LIMIT ?2`,

@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { Suspense, lazy, useState } from "react";
 import { Empty, Missing } from "capsomer/react/empty";
 import { PageHead } from "capsomer/react/page-head";
@@ -21,6 +22,8 @@ import { uptimeOptions } from "../ui/charts";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { trendChart } from "./charts";
 import { Convergence, SiteSecrets } from "./Convergence";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 // The settings form loads the first time Edit is pressed, so the page's first paint does not carry it.
 const SiteForm = lazy(() => import("./SiteConfig").then((m) => ({ default: m.SiteForm })));
 import { Uptime90 } from "./Uptime90";
@@ -55,7 +58,7 @@ export function SitePage() {
           kind="no-match"
           title="No site has this name."
           action={
-            <Link className="btn" href="/sites">
+            <Link className="cap-btn" href="/sites">
               All sites
             </Link>
           }
@@ -176,16 +179,14 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
   return (
     <>
       {detail && (
-        <div
-          className={`callout ${s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : ""}`}
-        >
+        <Banner tone={s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : "neutral"}>
           {detail}
-        </div>
+        </Banner>
       )}
       <div className="grid2">
         <Panel flush title="Probe" src={`watcher pass · checked ${ago(parse(s.checked_at), now)}`}>
           <div className="body">
-            <dl className="kv">
+            <dl className="cap-detail-record">
               <dt>Checked</dt>
               <dd>
                 {ago(parse(s.checked_at), now)} <Time at={s.checked_at} format="exact" />
@@ -262,8 +263,8 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
           <NoData reason={cfNoData(snap.cloudflare) ?? ""} />
         </div>
       ) : cf.deploys.length ? (
-        <div className="scroll-x">
-          <table className="list">
+        <div className="cap-table-wrap">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th scope="col">When</th>
@@ -330,7 +331,7 @@ function Setup({
           row ? (
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Edit ${row.namespace}`}
               onClick={() => setEditing(true)}
               disabled={editing}
@@ -342,7 +343,7 @@ function Setup({
       >
         {row ? (
           <div className="body">
-            <dl className="kv">
+            <dl className="cap-detail-record">
               <dt>Project</dt>
               <dd className="mono">{row.namespace}</dd>
               <dt>Name</dt>
@@ -419,7 +420,7 @@ function Setup({
           <div className="toolbar">
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Rotate the operator key of ${row.name}`}
               onClick={() =>
                 confirm({

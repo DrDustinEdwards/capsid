@@ -1,3 +1,4 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { FILTER_KEYS } from "../lib/keys";
 import { Suspense, useState } from "react";
@@ -78,7 +79,7 @@ export function Claims() {
           go(input, job);
         }}
       >
-        <label className="sr-only" htmlFor="clNs">
+        <label className="cap-sr-only" htmlFor="clNs">
           Project
         </label>
         <select
@@ -94,7 +95,7 @@ export function Claims() {
             </option>
           ))}
         </select>
-        <label className="sr-only" htmlFor="clAgent">
+        <label className="cap-sr-only" htmlFor="clAgent">
           Agent
         </label>
         <input
@@ -105,7 +106,7 @@ export function Claims() {
           value={input.agent}
           onChange={(e) => setInput({ ...input, agent: e.target.value })}
         />
-        <label className="sr-only" htmlFor="clSince">
+        <label className="cap-sr-only" htmlFor="clSince">
           Since
         </label>
         <input
@@ -116,7 +117,7 @@ export function Claims() {
           value={input.since}
           onChange={(e) => setInput({ ...input, since: e.target.value })}
         />
-        <label className="sr-only" htmlFor="clUntil">
+        <label className="cap-sr-only" htmlFor="clUntil">
           Before
         </label>
         <input
@@ -127,13 +128,13 @@ export function Claims() {
           value={input.until}
           onChange={(e) => setInput({ ...input, until: e.target.value })}
         />
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Apply
         </button>
         {filtered && (
           <button
             type="button"
-            className="btn"
+            className="cap-btn"
             onClick={() => go({ namespace: "", agent: "", since: "", until: "" }, job)}
           >
             Clear
@@ -141,16 +142,16 @@ export function Claims() {
         )}
       </form>
       {agg.error && (
-        <div className="callout crit" role="alert">
+        <Banner tone="crit">
           Could not read the claims: {agg.error}
           {data ? `. Showing the read from ${ago(parse(data.generated), now)}.` : ""}
-        </div>
+        </Banner>
       )}
       {data && data.truncated.length > 0 && (
-        <div className="callout warn" role="status">
+        <Banner tone="warn">
           This read hit its bound on: {data.truncated.join(", ")}. Narrow the filter, or read every
           row through the claims tool's export.
-        </div>
+        </Banner>
       )}
       {data && <ClaimsExport data={data} />}
       <Panel
@@ -174,8 +175,8 @@ export function Claims() {
             <Spinner label="Reading the claims..." />
           </div>
         ) : data && data.groups.length ? (
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>Agent</th>
@@ -243,8 +244,8 @@ export function Claims() {
       )}
       {checks.length > 0 && (
         <Panel flush title="By check" count={checks.length} src="every agent above, summed">
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>Check</th>
@@ -279,7 +280,7 @@ export function Claims() {
           go(filter, jobInput);
         }}
       >
-        <label className="sr-only" htmlFor="clJob">
+        <label className="cap-sr-only" htmlFor="clJob">
           Job id
         </label>
         <input
@@ -298,11 +299,11 @@ export function Claims() {
             </option>
           ))}
         </datalist>
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Open job
         </button>
         {job && (
-          <button type="button" className="btn" onClick={() => go(filter, "")}>
+          <button type="button" className="cap-btn" onClick={() => go(filter, "")}>
             Close job
           </button>
         )}
@@ -313,9 +314,9 @@ export function Claims() {
         </div>
       )}
       {detail.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read job {job}: {detail.error}
-        </div>
+        </Alert>
       )}
       {detail.data && <JobDetail data={detail.data} now={now} />}
     </div>
@@ -404,13 +405,13 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
   return (
     <div className="toolbar" role="group" aria-label="Export">
       <span className="faint small">Export as CSV:</span>
-      <button type="button" className="btn" onClick={agents}>
+      <button type="button" className="cap-btn" onClick={agents}>
         By agent
       </button>
-      <button type="button" className="btn" onClick={waits}>
+      <button type="button" className="cap-btn" onClick={waits}>
         Waits
       </button>
-      <button type="button" className="btn" onClick={usage}>
+      <button type="button" className="cap-btn" onClick={usage}>
         Usage
       </button>
     </div>

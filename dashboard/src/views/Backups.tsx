@@ -1,3 +1,4 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { Fragment, Suspense } from "react";
 import { useApp } from "../app/ctx";
@@ -13,6 +14,8 @@ import { NoSnapshot } from "./shared";
 import { Spinner } from "capsomer/react/empty";
 import { fetchBackups, useAnswer } from "../lib/api";
 import type { SiteBackupRow } from "../types";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 
 // Chart 10, the retention slots, from GET /portal/api/trends; Enarratio loads with it.
 const BackupSlots = trendChart("BackupSlots");
@@ -37,13 +40,13 @@ export function Backups() {
         <Panel flush title="Primary: Capsid D1" src="/health backup">
           <div className="body stack-gap">
             {!h ? (
-              <div className="callout">
+              <Alert tone="neutral">
                 <St kind="nodata">No data</St> Capsid health was not read on the last pass.
-              </div>
+              </Alert>
             ) : (
               <>
-                {h.backup.warning && <div className="callout crit">{h.backup.warning}</div>}
-                <dl className="kv">
+                {h.backup.warning && <Alert tone="crit">{h.backup.warning}</Alert>}
+                <dl className="cap-detail-record">
                   <dt>Last good dump</dt>
                   <dd className="num">
                     {h.backup.last_ok ? (
@@ -93,8 +96,8 @@ export function Backups() {
                       return (
                         <>
                           {bytes(s.size_bytes)} of {bytes(s.cap_bytes)} (
-                          {(use.fraction * 100).toFixed(use.fraction < 0.01 ? 2 : 0)}%){" "}
-                          {use.warn && <St kind="warn">over half the cap</St>}
+                          {(use.fraction * 100).toFixed(use.fraction < 0.01 ? 2 : 0)}
+                          %) {use.warn && <St kind="warn">over half the cap</St>}
                         </>
                       );
                     })()}
@@ -109,18 +112,18 @@ export function Backups() {
         <Panel flush title="Off-account: Amazon S3" src="watch.yml report">
           <div className="body stack-gap">
             {!o || !os ? (
-              <div className="callout">
+              <Alert tone="neutral">
                 <St kind="nodata">No data</St> The Amazon copy's report was not read on the last
                 pass.
-              </div>
+              </Alert>
             ) : (
               <>
                 {(os.bad || os.warn) && (
-                  <div className={`callout ${os.bad ? "crit" : "warn"}`}>
+                  <Alert tone={os.bad ? "crit" : "warn"}>
                     <b>{os.headline}.</b> {os.detail}.
-                  </div>
+                  </Alert>
                 )}
-                <dl className="kv">
+                <dl className="cap-detail-record">
                   {o.sites.map((s) => (
                     <Fragment key={s.site}>
                       <dt>{s.site}</dt>
@@ -241,7 +244,7 @@ function SiteBackups() {
           />{" "}
           <button
             type="button"
-            className="btn"
+            className="cap-btn"
             disabled={!data || data.sites.length === 0}
             onClick={() => backUp()}
           >
@@ -251,11 +254,7 @@ function SiteBackups() {
       }
     >
       <div className="body stack-gap">
-        {load.error && (
-          <div className="callout crit" role="alert">
-            Could not read the sites' backups: {load.error}
-          </div>
-        )}
+        {load.error && <Banner tone="crit">Could not read the sites' backups: {load.error}</Banner>}
         {!data ? (
           !load.error && (
             <div className="loading" role="status">
@@ -265,12 +264,12 @@ function SiteBackups() {
         ) : (
           <>
             {data.not_configured.length > 0 && (
-              <div className="callout">
+              <Alert tone="neutral">
                 Not checked from here yet (no <span className="mono">backup: true</span> in the
                 operator configuration): {data.not_configured.join(", ")}.
-              </div>
+              </Alert>
             )}
-            <table className="list">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th scope="col">Site</th>
@@ -278,7 +277,7 @@ function SiteBackups() {
                   <th scope="col">Files</th>
                   <th scope="col">Amazon</th>
                   <th scope="col">
-                    <span className="sr-only">Back up</span>
+                    <span className="cap-sr-only">Back up</span>
                   </th>
                 </tr>
               </thead>
@@ -354,7 +353,7 @@ function SiteRow({ site, now, backUp }: { site: SiteBackupRow; now: number; back
         {site.amazon?.newest ? ago(parse(site.amazon.newest), now) : <St kind="nodata">No copy</St>}
       </td>
       <td>
-        <button type="button" className="btn" onClick={backUp}>
+        <button type="button" className="cap-btn" onClick={backUp}>
           Back up now
         </button>
       </td>

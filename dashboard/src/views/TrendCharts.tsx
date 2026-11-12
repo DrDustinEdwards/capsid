@@ -291,7 +291,11 @@ export function ProjectChart({ counts }: { counts: ProjectCounts[] }) {
     seriesDomain: JOB_STATES,
     layout: "stacked",
     orientation: "horizontal",
-    colors: { Blocked: "var(--warn)", Running: "var(--info)", Queued: "var(--nodata)" },
+    colors: {
+      Blocked: "var(--warn)",
+      Running: "var(--info)",
+      Queued: "var(--nodata)",
+    },
     xLabel: null,
     yLabel: "Jobs",
     height: 64 + 36 * counts.length,
@@ -313,7 +317,12 @@ export function agreementRows(
   const per = new Map<string, Record<ClaimsAgreement, number>>();
   for (const g of groups) {
     const key = g.agent ?? "no claim yet";
-    const sum = per.get(key) ?? { agree: 0, disagree: 0, unclaimed: 0, unchecked: 0 };
+    const sum = per.get(key) ?? {
+      agree: 0,
+      disagree: 0,
+      unclaimed: 0,
+      unchecked: 0,
+    };
     for (const counts of Object.values(g.evaluations))
       for (const a of AGREEMENTS) sum[a] += counts[a];
     per.set(key, sum);
@@ -321,7 +330,11 @@ export function agreementRows(
   return [...per]
     .filter(([, c]) => AGREEMENTS.some((a) => c[a] > 0))
     .flatMap(([agent, c]) =>
-      AGREEMENTS.map((agreement) => ({ agent, agreement, checks: c[agreement] })),
+      AGREEMENTS.map((agreement) => ({
+        agent,
+        agreement,
+        checks: c[agreement],
+      })),
     );
 }
 
@@ -424,7 +437,11 @@ export function MergesChart() {
   const weeks = data.merges.weeks;
   const rollbacks = data.merges.rollbacks;
   const rows = weeks.flatMap((w) =>
-    MERGE_KINDS.map((k) => ({ week: w.week.slice(5), kind: MERGE_NAME[k], pulls: w[k] })),
+    MERGE_KINDS.map((k) => ({
+      week: w.week.slice(5),
+      kind: MERGE_NAME[k],
+      pulls: w[k],
+    })),
   );
   const total = (k: (typeof MERGE_KINDS)[number]) => weeks.reduce((a, w) => a + w[k], 0);
   const merged = total("auto") + total("approved") + total("seat");
@@ -481,8 +498,8 @@ export function DeploysTable() {
       id="deploy-measures"
     >
       <Stale error={error} />
-      <div className="scroll-x reflow">
-        <table className="list cards-below-1100">
+      <div className="cap-table-wrap" data-reflow="wide">
+        <table className="cap-table">
           <thead>
             <tr>
               <th>Repository</th>
@@ -537,7 +554,12 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
   if (!cf) return <ChartFrame noData={{ title, reason: why ?? "" }} />;
   if (!cf.errors24)
     return (
-      <ChartFrame noData={{ title, reason: cf.errors_reason ?? "the analytics read failed" }} />
+      <ChartFrame
+        noData={{
+          title,
+          reason: cf.errors_reason ?? "the analytics read failed",
+        }}
+      />
     );
   const e = cf.errors24;
   if (!e.length)
@@ -661,7 +683,11 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
  *  lanes start together; heavy lanes share one session, so they run one after another. A
  *  gated job is a warning. The window runs a tenth past the budget or the last job, so the
  *  last tick is not drawn on the edge. */
-function planEvents(plan: PortalPlan): { events: TimelineEvent[]; start: number; end: number } {
+function planEvents(plan: PortalPlan): {
+  events: TimelineEvent[];
+  start: number;
+  end: number;
+} {
   const events: TimelineEvent[] = [];
   const start = Date.parse(plan.generated);
   let heavyAt = start;

@@ -1,9 +1,9 @@
-import { toHex } from "@dustinedwards/site-runtime/encoding";
 import type { Env } from "./env";
 import type { PortalAction, PortalPreview } from "./ops-types/portal";
 import { type ActionResult, performAction } from "./controls-perform";
 import { type Plan, planAction } from "./controls-plan";
-import { signConfirm, verifyConfirm } from "./controls-token";
+import { confirmKeys } from "./auth";
+import { mintConfirm, redeemConfirm } from "@dustinedwards/site-runtime/confirm-token";
 import {
   type ActionParams,
   PORTAL_ACTIONS,
@@ -20,6 +20,10 @@ import {
 // controls-*.ts files beside it.
 
 export const TOKEN_TTL_SECONDS = 5 * 60;
+
+// The controls' confirmation key label (auth.ts confirmKeys): its own, so a namespace delete's token never performs a
+// control. A new label retires every outstanding token.
+const CONFIRM_LABEL = "capsid-portal-confirm:v2";
 
 /** What each action is about to do, naming the target, for the confirm step. */
 function describeAction(action: PortalAction, params: ActionParams): string {
@@ -211,8 +215,6 @@ function controlNamed(name: unknown): Control | null {
   return typeof name === "string" ? (CONTROLS.find((c) => c.name === name) ?? null) : null;
 }
 
-const randomJti = (): string => toHex(crypto.getRandomValues(new Uint8Array(16)));
-
 const NONCE_PREFIX = "control-nonce:";
 
 export type Previewed =
@@ -240,14 +242,11 @@ export async function previewControl(
   if (!parsed.ok) return { ok: false, status: 400, refusal: parsed.refusal };
   const plan = await control.plan(env, email, parsed.params, surface);
   if (!plan.ok) return { ok: false, status: 400, refusal: plan.refusal };
-  const exp = Math.floor(now.getTime() / 1000) + TOKEN_TTL_SECONDS;
-  const token = await signConfirm(env, {
-    v: 2,
-    jti: randomJti(),
-    action: control.name,
-    params: { ...parsed.params, ...plan.bind },
-    email,
-    exp,
+  const { token, expiresAt } = await mintConfirm({
+    keys: await confirmKeys(env, CONFIRM_LABEL),
+    claims: { action: control.name, params: { ...parsed.params, ...plan.bind }, email },
+    ttlSeconds: TOKEN_TTL_SECONDS,
+    now: now.getTime(),
   });
   return {
     ok: true,
@@ -257,7 +256,7 @@ export async function previewControl(
       changes: plan.changes,
       audit: plan.audit,
       token,
-      expires_at: new Date(exp * 1000).toISOString(),
+      expires_at: expiresAt,
     },
   };
 }
@@ -266,8 +265,8 @@ export type Performed =
   | { ok: true; action: PortalAction; result: Extract<ActionResult, { ok: true }> }
   | { ok: false; status: number; refusal: string };
 
-/** The perform step for either surface: the token must verify for the email, then it is
- *  spent (a confirmation is used once, whichever surface took it), then the control runs.
+/** The perform step for either surface: the token must verify for the email, and redeemConfirm
+ *  spends it (a confirmation is used once, whichever surface took it), then the control runs.
  *  A token is spent even when the control then refuses: the refusal is about state, and
  *  the next try starts from a fresh preview that shows the state as it is. KV has no
  *  compare-and-set, so two performs of one token inside the same instant could both
@@ -283,27 +282,36 @@ export async function performControl(
 ): Promise<Performed> {
   if (typeof token !== "string")
     return { ok: false, status: 400, refusal: "a perform needs the token its preview returned." };
-  const verified = await verifyConfirm(env, token, email, now);
-  if (!verified.ok) return { ok: false, status: verified.status, refusal: verified.refusal };
-  const { action, params, jti, exp } = verified.claims;
+  const redeemed = await redeemConfirm({
+    keys: await confirmKeys(env, CONFIRM_LABEL),
+    token,
+    expect: { email },
+    kv: env.APP_KV,
+    prefix: NONCE_PREFIX,
+    now: now.getTime(),
+  });
+  if (!redeemed.ok) return { ok: false, status: redeemed.status, refusal: redeemed.reason };
+  const { action, params } = redeemed.claims;
   const control = controlNamed(action);
   if (!control) return { ok: false, status: 400, refusal: UNKNOWN_ACTION(String(action)) };
-
-  const nonceKey = `${NONCE_PREFIX}${jti}`;
-  if ((await env.APP_KV.get(nonceKey)) !== null) {
+  if (!isStringRecord(params))
     return {
       ok: false,
-      status: 409,
-      refusal: "this confirmation was already used: preview again to get a new one.",
+      status: 403,
+      refusal:
+        "the confirmation token verifies but its params are not the shape this Worker signs: preview again.",
     };
-  }
-  // Held until the token itself would have expired, plus a minute for clock skew, and not
-  // under KV's 60 second floor.
-  await env.APP_KV.put(nonceKey, now.toISOString(), {
-    expirationTtl: Math.max(60, exp - Math.floor(now.getTime() / 1000) + 60),
-  });
 
   const result = await control.perform(env, email, source, now, params, surface);
   if (!result.ok) return { ok: false, status: 400, refusal: result.refusal };
   return { ok: true, action: control.name, result };
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every((v) => typeof v === "string")
+  );
 }

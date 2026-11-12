@@ -188,7 +188,7 @@ test("a token is for the administrator it was issued to, and expires", async () 
     const { token } = parse(await a.call({ action: "preview", ...MODE })) as { token: string };
     const other = await b.call({ action: "perform", token });
     assert.equal(other.isError, true);
-    assert.match(other.content[0].text, /issued to another session/);
+    assert.match(other.content[0].text, /issued for another email/);
 
     const stale = await performControl(
       env,

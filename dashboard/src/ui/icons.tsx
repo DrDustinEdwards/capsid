@@ -248,11 +248,19 @@ export function St({ kind, children }: { kind: Kind; children: ReactNode }) {
   );
 }
 
+const PILL_TONE: Partial<Record<Kind, string>> = {
+  queued: "nodata",
+  blocked: "warn",
+  done: "ok",
+  run: "info",
+  unknown: "muted",
+};
+
 export function Pill({ kind, children }: { kind: Kind; children: ReactNode }) {
-  const cls =
-    kind === "queued" ? "nodata" : kind === "blocked" ? "warn" : kind === "done" ? "ok" : kind;
+  // Capsomer's badge tones: run is its notice tone, and a state that is neither good nor bad is muted.
+  const tone = PILL_TONE[kind] ?? kind;
   return (
-    <span className={`pill ${cls}`}>
+    <span className="cap-pill" data-tone={tone}>
       <Icon kind={kind} />
       {children}
     </span>
@@ -268,7 +276,7 @@ export function NoData({ reason, brief }: { reason: string; brief?: boolean }) {
       <span className="st nodata" data-tip={reason || undefined}>
         <Icon kind="nodata" />
         No data
-        {reason && <span className="sr-only">: {reason}</span>}
+        {reason && <span className="cap-sr-only">: {reason}</span>}
       </span>
     );
   return (
