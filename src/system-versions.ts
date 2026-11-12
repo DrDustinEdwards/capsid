@@ -3,6 +3,7 @@ import { bounded } from "./limits";
 import type { OpsMaintenanceItem } from "./ops-types/views";
 import type { SharedCodeView } from "./ops-types/feed";
 import type { RepoPrivacy, SystemModel } from "./system-model";
+import { cmp, semver } from "./shared-code";
 import { DAY_MS } from "./time";
 
 // THE VERSIONS MODEL, per system (Dustin, 2026-11-03). src/shared-code.ts reads, from every
@@ -94,6 +95,10 @@ export type BehindSince = Record<string, string>;
 /** The drift lines, and the carried first-seen map for tomorrow. Pure.
  *  - A repo that installs two versions of one package, in two of its manifests.
  *  - A pin behind the newest release for longer than BEHIND_GRACE_MS.
+ *  - A pin older than the one read the night before, at once: a pin moved back runs an older devkit's check, and devkit's
+ *    own bin cannot refuse the pull request that does it, since that pull request runs the old check (the two-PR
+ *    rollback, capsid handoff/no-bloat-gaps-verify-0.41.md F). Carried as "pin|repo|package|where" keys in `since`.
+ *  - A repo that runs no no-bloat check (no_bloat_off), at once.
  *  - A repo, or a package's releases, that could not be read. */
 export function versionDrift(
   view: SharedCodeView,
@@ -110,7 +115,40 @@ export function versionDrift(
       line: `${a.namespace}'s versions could not be read (${a.error}), so its pins were not checked today.`,
     });
   }
+  for (const off of view.no_bloat_off ?? [])
+    items.push({ rule: "model-drift", namespace: off.namespace, job: null, line: off.line });
   for (const pkg of view.packages) {
+    // The newest pin per repo and place tonight, beside last night's.
+    const newest = new Map<
+      string,
+      { pinned: string; namespace: string; repo: string; where: string }
+    >();
+    for (const u of pkg.users) {
+      const v = u.pinned ? semver(u.pinned) : null;
+      if (!v) continue;
+      const where = u.where.replace(/ \(\d+ uses?\)$/, "");
+      const key = `pin|${u.repo ?? u.namespace}|${pkg.name}|${where}`;
+      const had = newest.get(key);
+      if (!had || cmp(v, semver(had.pinned)!) > 0)
+        newest.set(key, {
+          pinned: u.pinned!,
+          namespace: u.namespace,
+          repo: u.repo ?? u.namespace,
+          where,
+        });
+    }
+    for (const [key, pin] of newest) {
+      since[key] = pin.pinned;
+      const was = prior[key];
+      const old = was ? semver(was) : null;
+      if (old && cmp(semver(pin.pinned)!, old) < 0)
+        items.push({
+          rule: "model-drift",
+          namespace: pin.namespace,
+          job: null,
+          line: `${pin.repo} moved ${pkg.name} back from ${was} to ${pin.pinned} in ${pin.where}: an older release runs an older check. Move it forward, or find who moved it.`,
+        });
+    }
     if (pkg.tags_error)
       items.push({
         rule: "model-not-checked",

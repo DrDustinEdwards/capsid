@@ -2,7 +2,13 @@ import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import { parseReposList } from "./github/client";
 import { readNpm, readNpmVersions, readPackageConfig, type FetchLike } from "./ops-packages";
-import { npmLockVersions, pnpmLockVersions, workflowPins } from "./lockfiles";
+import {
+  noBloatJobs,
+  npmLockVersions,
+  pnpmLockVersions,
+  workflowPins,
+  type NoBloatJob,
+} from "./lockfiles";
 import { bundledModel } from "./public-data";
 import type { SystemModel } from "./system-model";
 import type { PackageSnapshot } from "./ops-types/sites";
@@ -132,12 +138,12 @@ export function presetSpec(entry: string): { repo: string; ref: string | null } 
 
 const SEMVER = /^v?(\d+)\.(\d+)\.(\d+)$/;
 
-function semver(tag: string): [number, number, number] | null {
+export function semver(tag: string): [number, number, number] | null {
   const m = SEMVER.exec(tag);
   return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
 }
 
-function cmp(a: [number, number, number], b: [number, number, number]): number {
+export function cmp(a: [number, number, number], b: [number, number, number]): number {
   return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 }
 
@@ -229,8 +235,12 @@ export interface AppRead {
     lockVersions: Record<string, string>;
   }>;
   presets: string[];
-  // Each workflow file's `uses:` pins.
-  workflows?: Array<{ path: string; pins: Array<{ repo: string; pinned: string | null }> }>;
+  // Each workflow file's `uses:` pins, and its jobs that call devkit's no-bloat check.
+  workflows?: Array<{
+    path: string;
+    pins: Array<{ repo: string; pinned: string | null }>;
+    no_bloat?: NoBloatJob[];
+  }>;
   error: string | null;
 }
 
@@ -359,7 +369,31 @@ export function sharedCodeView(
           : { namespace: a.namespace, error: a.error! },
       ),
     packages,
+    no_bloat_off: noBloatOff(apps),
   };
+}
+
+/** The repos with a root package.json where no workflow job runs devkit's no-bloat check: none calls pr.yml or
+ *  no-bloat.yml, or each that does turns it off. A private repository passes `no-bloat: false` to pr.yml and runs
+ *  no-bloat.yml weekly, so it is on. Only what was read is judged; a repo that could not be read is apps_failed's. */
+function noBloatOff(apps: readonly AppRead[]): NonNullable<SharedCodeView["no_bloat_off"]> {
+  const out: NonNullable<SharedCodeView["no_bloat_off"]> = [];
+  for (const app of apps) {
+    if (app.error !== null || !app.manifests.some((m) => m.path === "package.json")) continue;
+    const jobs = (app.workflows ?? []).flatMap((w) =>
+      (w.no_bloat ?? []).map((j) => ({ ...j, path: w.path })),
+    );
+    if (jobs.some((j) => j.off === null)) continue;
+    const repo = app.repo ?? app.namespace;
+    out.push({
+      namespace: app.namespace,
+      repo: app.repo ?? null,
+      line: jobs.length
+        ? `${repo} runs no no-bloat check: ${jobs.map((j) => `${j.path}: ${j.off}`).join("; ")}. Turn it back on, or find who turned it off.`
+        : `${repo} runs no no-bloat check: no workflow calls devkit's pr.yml or no-bloat.yml. Add the caller (devkit examples/pr-caller.yml).`,
+    });
+  }
+  return out;
 }
 
 type ReleaseFields = Pick<
@@ -568,8 +602,10 @@ async function readApp(
       .filter((p) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(p))
       .sort()
       .slice(0, WORKFLOWS_PER_APP);
-    for (const path of workflows)
-      app.workflows!.push({ path, pins: workflowPins(await rawFile(env, target.repo, path)) });
+    for (const path of workflows) {
+      const text = await rawFile(env, target.repo, path);
+      app.workflows!.push({ path, pins: workflowPins(text), no_bloat: noBloatJobs(text) });
+    }
   } catch (err) {
     app.error = errorMessage(err);
   }
