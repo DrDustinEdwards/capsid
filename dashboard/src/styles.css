@@ -1629,9 +1629,6 @@ td.ctl .toolbar.col {
   gap: 10px;
   font-size: 13px;
 }
-.when .faint {
-  white-space: nowrap;
-}
 
 /* The result of an action: stays until dismissed or replaced, not on a timer. */
 .msg-region {

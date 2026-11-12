@@ -11,10 +11,11 @@ import { SITE_TABS, parseRoute, tabOf, useApp, type SiteTab } from "../app/ctx";
 import { Link, useLocation } from "../lib/router";
 import { padRing, uptimeOf } from "capsomer/behavior/uptime-strip";
 import { PROBE, RING_SLOTS, cfNoData, cfOk, siteScripts } from "../lib/derive";
-import { ago, hostOf, ms, pct, shortId, utc } from "../lib/format";
+import { ago, hostOf, pct, shortId } from "../lib/format";
+import { parse, utc } from "capsomer/behavior/time";
 import type { OpsSiteConfig, SiteSnapshot } from "../types";
 import { NoData, Pill, St } from "../ui/icons";
-import { When } from "../ui/When";
+import { Time } from "capsomer/react/time";
 import { ChartSlot } from "../ui/ChartSlot";
 import { uptimeOptions } from "../ui/charts";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
@@ -182,12 +183,12 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
         </div>
       )}
       <div className="grid2">
-        <Panel flush title="Probe" src={`watcher pass · checked ${ago(ms(s.checked_at), now)}`}>
+        <Panel flush title="Probe" src={`watcher pass · checked ${ago(parse(s.checked_at), now)}`}>
           <div className="body">
             <dl className="kv">
               <dt>Checked</dt>
               <dd>
-                {ago(ms(s.checked_at), now)} <When t={ms(s.checked_at)} />
+                {ago(parse(s.checked_at), now)} <Time at={s.checked_at} format="exact" />
               </dd>
               <dt>URL</dt>
               <dd className="mono">
@@ -275,8 +276,8 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
             <tbody>
               {cf.deploys.map((d) => (
                 <tr key={d.id}>
-                  <td className="num" title={utc(ms(d.created_on))}>
-                    {ago(ms(d.created_on), now)}
+                  <td className="num" title={utc(parse(d.created_on))}>
+                    {ago(parse(d.created_on), now)}
                   </td>
                   <td className="mono">{shortId(d.version_id ?? d.id)}</td>
                   <td className="muted">{d.message ?? ""}</td>
@@ -308,7 +309,7 @@ function Setup({
   const { feed, now, confirm } = useApp();
   const [editing, setEditing] = useState(false);
   const none = <Missing />;
-  const at = row ? ms(row.updated_at) : NaN;
+  const at = row ? parse(row.updated_at) : NaN;
   return (
     <>
       {editing && row && (

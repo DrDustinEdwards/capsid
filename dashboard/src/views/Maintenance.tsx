@@ -5,7 +5,8 @@ import { ReadAgain } from "capsomer/react/read-state";
 import { useApp } from "../app/ctx";
 import { fetchMaintenance, useAnswer } from "../lib/api";
 import type { Kind } from "../lib/derive";
-import { ago, ms } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import type { MaintenanceRule, OpsMaintenanceItem, PortalMaintenance } from "../types";
 import { St } from "../ui/icons";
 
@@ -68,7 +69,7 @@ export function Maintenance() {
       count={data?.generated ? items.length : undefined}
       src={
         <>
-          {data?.generated ? `daily pass ${ago(ms(data.generated), now)} · ` : ""}
+          {data?.generated ? `daily pass ${ago(parse(data.generated), now)} · ` : ""}
           <ReadAgain reading={load.loading} onRead={load.reread} />
         </>
       }

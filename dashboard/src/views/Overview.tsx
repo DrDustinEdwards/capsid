@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { Link } from "../lib/router";
 import { placePath, useApp } from "../app/ctx";
 import { counts, hasSites, offaccountState } from "../lib/derive";
-import { HOUR, ago, ms } from "../lib/format";
+import { HOUR, ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 
 // The tiles at the top of Health (docs/design/design-portal-evaluation.md section 2; the UX
 // audit's m2 and m3, 2026-10): sites up, open findings, the primary backup and the
@@ -56,7 +57,7 @@ export function Overview() {
     {
       label: "Open findings",
       v: String(findingsOpen),
-      d: snap ? `watcher pass ${ago(ms(snap.pass_at), now)}` : "no watcher pass yet",
+      d: snap ? `watcher pass ${ago(parse(snap.pass_at), now)}` : "no watcher pass yet",
       cls: findingsOpen ? "warn" : "ok",
       go: "health#problems",
     },
@@ -72,7 +73,7 @@ export function Overview() {
           d:
             backup.warning ??
             (backup.last_ok
-              ? `last good dump ${ago(ms(backup.last_ok), now)}`
+              ? `last good dump ${ago(parse(backup.last_ok), now)}`
               : "no good dump recorded"),
           cls: backup.warning ? "crit" : "ok",
           go: "health#backups",
