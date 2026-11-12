@@ -15,10 +15,11 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { COMPLETE_MARKER, latestDump, type R2Like } from "@dustinedwards/d1-dump";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { isMain } from "@dustinedwards/devkit/node";
 export interface Site {
   name: string;
   bucket: string;
@@ -253,5 +254,4 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   return failed ? 1 : 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
-  process.exit(await main());
+if (isMain(import.meta.url)) process.exit(await main());

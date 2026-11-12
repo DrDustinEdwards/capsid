@@ -345,7 +345,7 @@ async function post(path: string, body: unknown, opts: Opts = {}): Promise<Reque
       (await portalSessionCookie({ email: opts.session ?? EMAIL }, SECRET, NOW)).split(";")[0],
     );
   const cookie = opts.csrfCookie === undefined ? CSRF : opts.csrfCookie;
-  if (cookie) cookies.push(`${PORTAL_CSRF_COOKIE}=${cookie}`);
+  if (cookie) cookies.push(`__Secure-${PORTAL_CSRF_COOKIE}=${cookie}`);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (cookies.length) headers.Cookie = cookies.join("; ");
   const header = opts.csrfHeader === undefined ? CSRF : opts.csrfHeader;
@@ -1174,7 +1174,7 @@ test("all fourteen routes refuse a bearer with 403 and send an anonymous caller 
   for (const [path, method, handler] of ROUTES) {
     const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
     const headers = {
-      Cookie: `${session}; ${PORTAL_CSRF_COOKIE}=${CSRF}`,
+      Cookie: `${session}; __Secure-${PORTAL_CSRF_COOKIE}=${CSRF}`,
       [PORTAL_CSRF_HEADER]: CSRF,
       "Sec-Fetch-Site": "same-origin",
     };
@@ -1241,16 +1241,11 @@ test("sign out expires the session and CSRF cookies at Path=/portal, and ends a 
   const res = await handlePortalSignOut(request, w.env, NOW);
   assert.equal(res.status, 204);
   const cookies = setCookies(res);
-  // Each under its __Secure- name and, for one release, the bare name it had before (src/auth.ts cookieName).
+  // Each under its __Secure- name.
   const names = cookies.map((c) => c.split("=")[0]).sort();
   assert.deepEqual(
     names,
-    [
-      "__Secure-capsid_portal",
-      `__Secure-${PORTAL_CSRF_COOKIE}`,
-      "capsid_portal",
-      PORTAL_CSRF_COOKIE,
-    ].sort(),
+    ["__Secure-capsid_portal", `__Secure-${PORTAL_CSRF_COOKIE}`].sort(),
     cookies.join(" | "),
   );
   for (const c of cookies) {

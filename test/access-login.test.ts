@@ -42,7 +42,7 @@ async function started(e: ReturnType<typeof env>["env"]) {
 
 const callback = (state: string, cookie: string) =>
   new Request(`${ORIGIN}${FLOW.callbackPath}?code=access-code&state=${state}`, {
-    headers: { Cookie: `${FLOW.stateCookie}=${cookie}` },
+    headers: { Cookie: `__Host-${FLOW.stateCookie}=${cookie}` },
   });
 
 test("PLANT: the state cookie cannot be computed from the state in the callback URL", async () => {

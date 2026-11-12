@@ -1,3 +1,4 @@
+import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
 import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import { median } from "./job-claims-read";
 import { COMPLETE_MARKER } from "@dustinedwards/d1-dump";
@@ -6,7 +7,7 @@ import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
 import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { APP_ROSTER } from "./roster";
-import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 import type {
   TrendBackupSlot,
   TrendCiDay,
@@ -471,29 +472,32 @@ async function readCiRepo(env: Env, namespace: string, days: string[]): Promise<
 
 async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
   const days = lastDays(now, TRENDS_CI_DAYS);
-  try {
-    const cached = await env.APP_KV.get(CI_CACHE_KEY);
-    if (cached) {
-      const parsed = JSON.parse(cached) as PortalTrends["ci"];
-      if (
-        parsed.repos.every(
-          (r) =>
-            r.days.length === days.length &&
-            r.days[r.days.length - 1]?.day === days[days.length - 1],
-        )
-      )
-        return parsed;
-    }
-  } catch (err) {
-    // An unreadable cache entry is read again from GitHub below.
-    logEvent(
-      "TRENDS_CI_CACHE_UNREADABLE",
-      {
-        message: `TRENDS_CI_CACHE_UNREADABLE ${CI_CACHE_KEY}: ${errorMessage(err)}`,
-      },
-      { level: "warn" },
-    );
-  }
+  // A kept read is served only while it covers the same days; only a full read is kept, so a
+  // GitHub outage is retried on the next look, not for an hour.
+  return kvCached(
+    env.APP_KV,
+    CI_CACHE_KEY,
+    {
+      ttl: CI_CACHE_SECONDS,
+      valid: (kept) => coversDays(kept, days),
+      keep: (out) => out.not_read.length === 0,
+    },
+    () => readCiFresh(env, now, days),
+  );
+}
+
+function coversDays(kept: unknown, days: string[]): boolean {
+  const repos = (kept as Partial<PortalTrends["ci"]> | null)?.repos;
+  return (
+    Array.isArray(repos) &&
+    repos.every(
+      (r) =>
+        r.days.length === days.length && r.days[r.days.length - 1]?.day === days[days.length - 1],
+    )
+  );
+}
+
+async function readCiFresh(env: Env, now: Date, days: string[]): Promise<PortalTrends["ci"]> {
   const repos: TrendCiRepo[] = [];
   const notRead: Array<{ namespace: string; error: string }> = [];
   const settled = await Promise.allSettled(
@@ -507,23 +511,7 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
         error: errorMessage(r.reason),
       });
   });
-  const out: PortalTrends["ci"] = { read_at: now.toISOString(), repos, not_read: notRead };
-  // Only a full read is kept, so a GitHub outage is retried on the next look, not for an hour.
-  // A failed cache write costs only the next look a fresh read, so it does not fail this one.
-  if (!notRead.length) {
-    try {
-      await env.APP_KV.put(CI_CACHE_KEY, JSON.stringify(out), { expirationTtl: CI_CACHE_SECONDS });
-    } catch (err) {
-      logEvent(
-        "TRENDS_CI_CACHE_WRITE_FAILED",
-        {
-          message: `TRENDS_CI_CACHE_WRITE_FAILED ${CI_CACHE_KEY}: ${errorMessage(err)}`,
-        },
-        { level: "warn" },
-      );
-    }
-  }
-  return out;
+  return { read_at: now.toISOString(), repos, not_read: notRead };
 }
 
 /** Every series, for `weeks` weeks of the weekly ones. */

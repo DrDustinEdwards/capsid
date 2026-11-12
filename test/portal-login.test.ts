@@ -184,7 +184,7 @@ test("a state cookie that is not the digest of the state is refused with the Por
   const e = env();
   const { state } = await started(e);
   const res = await handlePortalCallback(
-    callback(state, `capsid_portal_state=${"0".repeat(64)}`),
+    callback(state, `__Secure-capsid_portal_state=${"0".repeat(64)}`),
     e,
     new Date(),
   );
@@ -372,10 +372,9 @@ test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to 
       );
     }
   }
-  // Two hosts, each: the state cookie, the session and the cleared state, four sign-out
-  // cookies (two names, each prefixed and under its old name) and the CSRF cookie. A count,
-  // so a cookie that stops being collected fails.
-  assert.equal(seen.length, 16);
+  // Two hosts, each: the state cookie, the session and the cleared state, the two sign-out
+  // cookies and the CSRF cookie. A count, so a cookie that stops being collected fails.
+  assert.equal(seen.length, 12);
 });
 
 test("a co-owner completes the login: the cookie carries her email and verifies on a later request", async () => {

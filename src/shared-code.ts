@@ -1,3 +1,4 @@
+import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import { parseReposList } from "./github/client";
@@ -619,10 +620,21 @@ export async function readSharedCode(
   fetchImpl: FetchLike = (url, init) => fetch(url, init),
   model: SystemModel = bundledModel(),
 ): Promise<SharedCodeView> {
-  if (!fresh) {
-    const cached = await env.APP_KV.get(SHARED_CODE_CACHE_KEY);
-    if (cached) return JSON.parse(cached) as SharedCodeView;
-  }
+  // Only a configured view is kept: a missing table or an empty config is read again next time.
+  return kvCached(
+    env.APP_KV,
+    SHARED_CODE_CACHE_KEY,
+    { ttl: CACHE_TTL_SECONDS, refresh: fresh, keep: (view) => view.configured },
+    () => buildSharedCode(env, now, fetchImpl, model),
+  );
+}
+
+async function buildSharedCode(
+  env: Env,
+  now: Date,
+  fetchImpl: FetchLike,
+  model: SystemModel,
+): Promise<SharedCodeView> {
   let config: SharedConfig[];
   try {
     config = await readSharedConfig(env.DB);
@@ -704,9 +716,5 @@ export async function readSharedCode(
   // root package.json says nothing about it; its release is npm's.
   for (const pkg of config)
     if (pkg.registry !== "npm") releases.set(pkg.name, await readRelease(env, pkg.repo, fetchImpl));
-  const view = sharedCodeView(config, tags, apps, now, releases);
-  await env.APP_KV.put(SHARED_CODE_CACHE_KEY, JSON.stringify(view), {
-    expirationTtl: CACHE_TTL_SECONDS,
-  });
-  return view;
+  return sharedCodeView(config, tags, apps, now, releases);
 }

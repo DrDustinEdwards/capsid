@@ -81,10 +81,6 @@ export function switchReasonRefusal(action: PortalAction): string {
 export const UNKNOWN_ACTION = (action: string) =>
   `unknown Portal action '${action}'. The Portal does: ${PORTAL_ACTIONS.join(", ")}. Merging a pull request and minting a credential are deliberately not among them: a merge can start a deploy and stays behind can_merge, and a mint hands out a key.`;
 
-export function isPortalAction(value: unknown): value is PortalAction {
-  return typeof value === "string" && (PORTAL_ACTIONS as readonly string[]).includes(value);
-}
-
 /** A revision param as a positive integer, or null. */
 export function revisionOf(raw: string | undefined): number | null {
   if (!raw || !/^[1-9][0-9]{0,9}$/.test(raw)) return null;

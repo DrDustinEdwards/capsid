@@ -1,3 +1,4 @@
+import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
 import { githubJson } from "@dustinedwards/site-runtime/github";
 import { verifyJwt } from "@dustinedwards/site-runtime/access-login";
 import { untrusted, UNTRUSTED_DATA_RULE } from "@dustinedwards/site-runtime/anthropic";
@@ -438,10 +439,22 @@ export async function handleReviewRun(request: Request, env: Env): Promise<Respo
   } catch (err) {
     return textResponse(`could not read ${full}#${who.pr}: ${errorMessage(err)}`, 502);
   }
-  const cacheKey = `review:${full.toLowerCase()}:${who.pr}:${pull.head}`;
-  const cached = await env.APP_KV.get(cacheKey, "json");
-  if (cached) return Response.json(cached);
+  // A review is kept per head; an error is not kept, so the next push or a re-run asks again.
+  const result = await kvCached(
+    env.APP_KV,
+    `review:${full.toLowerCase()}:${who.pr}:${pull.head}`,
+    { ttl: CACHE_TTL_S, keep: (r) => r.status !== "error" },
+    () => reviewPull(env, who, pull, full),
+  );
+  return Response.json(result);
+}
 
+async function reviewPull(
+  env: Env,
+  who: ReviewCaller,
+  pull: Pull,
+  full: string,
+): Promise<ReviewResult> {
   let result: ReviewResult;
   let extra: Record<string, unknown> = {};
   if (RENOVATE.test(pull.author)) {
@@ -498,11 +511,8 @@ export async function handleReviewRun(request: Request, env: Env): Promise<Respo
     }
   }
   await record(env, who, result, extra);
-  // An error is not kept, so the next push or a re-run asks again.
-  if (result.status !== "error")
-    await env.APP_KV.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL_S });
   logEvent("PR_REVIEW", {
     message: `PR_REVIEW ${full}#${who.pr} ${result.status}${result.status === "reviewed" ? ` ${result.verdict}` : ""}`,
   });
-  return Response.json(result);
+  return result;
 }

@@ -10,21 +10,6 @@ export function capsidCookie(name: string, value: string, path: string, maxAge: 
   return hostCookie(name, value, { maxAge, path });
 }
 
-// Cookie lookup, once, for the consent flow and the Portal session: the prefixed name first, then the bare name the
-// cookies had before the prefixes, read for one release so live sessions survive. REMOVAL: the release after.
-export function getCookie(request: Request, name: string): string | null {
-  const header = request.headers.get("Cookie");
-  if (!header) return null;
-  const jar = new Map<string, string>();
-  for (const part of header.split(";")) {
-    const eq = part.indexOf("=");
-    if (eq === -1) continue;
-    const key = part.slice(0, eq).trim();
-    if (!jar.has(key)) jar.set(key, part.slice(eq + 1).trim());
-  }
-  return jar.get(`__Host-${name}`) ?? jar.get(`__Secure-${name}`) ?? jar.get(name) ?? null;
-}
-
 type AdminEnv = { ADMIN_EMAIL?: string; CO_OWNER_EMAILS?: string };
 
 // The admin roster is site-runtime's (./access, the one admin model of every site): ADMIN_EMAIL,
