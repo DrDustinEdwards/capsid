@@ -73,7 +73,7 @@ export interface SearchConsoleArgs {
 const NOT_CONFIGURED =
   "Search Console is not configured: the secret GSC_SERVICE_ACCOUNT_KEY (a Google service account's JSON key) is not set on Capsid. docs/search-console.md says how.";
 
-function readKey(raw: string | undefined): ServiceAccountKey {
+function serviceAccountKey(raw: string | undefined): ServiceAccountKey {
   const parsed = parseServiceAccountKey(raw, "GSC_SERVICE_ACCOUNT_KEY");
   if (parsed.ok) return parsed.key;
   throw new Error(parsed.state === "not-connected" ? NOT_CONFIGURED : parsed.detail);
@@ -202,7 +202,7 @@ export async function searchConsole(
   // Validated before any network call, so a bad window costs nothing.
   const window = report === "performance" ? dateWindow(args, now) : null;
 
-  const key = readKey(env.GSC_SERVICE_ACCOUNT_KEY);
+  const key = serviceAccountKey(env.GSC_SERVICE_ACCOUNT_KEY);
   const token = await accessToken(key, fetchImpl, now);
   const sites = (await google(fetchImpl, token, `${WEBMASTERS}/sites`)) as {
     siteEntry?: Array<{ siteUrl?: string; permissionLevel?: string }>;
