@@ -3,7 +3,7 @@ import { ghFetch, resolveRepo } from "./github/client";
 import type { MaintenanceItem } from "./maintenance";
 import type { OpsSnapshot } from "./ops-types/sites";
 import { readSnapshot } from "./ops-snapshot";
-import { HOUR_MS, DAY_MS } from "./time";
+import { HOUR_MS, days } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The daily maintenance pass's undeployed-merge rule (job_549550d73d4e, piece 5). Carrel sat
@@ -36,8 +36,6 @@ export interface DeployReaders {
   /** The head commit of the namespace's repo's default branch. Throws when not read. */
   defaultHead(namespace: string): Promise<DefaultHead>;
 }
-
-const days = (ms: number): string => `${(ms / DAY_MS).toFixed(1)} days`;
 
 /** Whether two shas name the same commit, when either may be abbreviated. */
 function sameSha(a: string, b: string): boolean {

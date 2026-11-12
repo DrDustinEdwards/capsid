@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { join, relative } from "node:path";
 import { test } from "node:test";
 import { gzipSync } from "node:zlib";
@@ -23,7 +24,6 @@ import {
   SITE,
   allPages,
   containersPath,
-  escapeHtml,
   flowPath,
   percent,
   stepPath,

@@ -6,7 +6,7 @@ import { PORTAL_HOST } from "./portal-host";
 import type { DigestState } from "./ops-types/views";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { weeklyDigestLines } from "./watcher-digest";
-import { DAY_MS } from "./time";
+import { DAY_MS, utcDay } from "./time";
 
 // THE DAILY EMAIL DIGEST (docs/design/design-merge-pipeline.md section 5; Dustin's DECIDE
 // 5 of 2026-10-09: Web Push for the four urgent things, and everything else in a daily
@@ -104,7 +104,7 @@ async function composeDigest(
   const rollbacks = rolled.results ?? [];
 
   const waiting = awaiting.length + questions.length + blocked.length;
-  const day = now.toISOString().slice(0, 10);
+  const day = utcDay(now);
   const text: string[] = [`Capsid, ${day}. Since ${since.replace("T", " ").slice(0, 16)} UTC.`, ""];
   const section = (title: string, lines: string[]) => {
     if (lines.length) text.push(title, ...lines, "");
@@ -194,7 +194,7 @@ export async function digestTick(
   if (now.getUTCHours() < DIGEST_HOUR_UTC)
     return { ran: false, note: `before ${DIGEST_HOUR_UTC}:00 UTC`, sent: false };
   const last = await readLast(env);
-  const today = now.toISOString().slice(0, 10);
+  const today = utcDay(now);
   if (last && last.at.slice(0, 10) === today)
     return { ran: false, note: `already ${last.outcome} ${last.at}`, sent: false };
   // Since the last digest that went out, so a failed day's news is in the next one; a

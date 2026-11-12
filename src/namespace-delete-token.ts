@@ -1,7 +1,6 @@
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
-import { hmacHex } from "./auth";
 import type { Env } from "./env";
-import { base64url, fromBase64urlText } from "@dustinedwards/site-runtime/encoding";
+import { base64url, fromBase64urlText, hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
@@ -44,7 +43,7 @@ async function tokenKey(env: Pick<Env, "COOKIE_ENCRYPTION_KEY">): Promise<string
     throw new Error(
       "COOKIE_ENCRYPTION_KEY is unset, so no delete confirmation can be signed or checked",
     );
-  return hmacHex(env.COOKIE_ENCRYPTION_KEY, TOKEN_CONTEXT);
+  return hmacSha256Hex(env.COOKIE_ENCRYPTION_KEY, TOKEN_CONTEXT);
 }
 
 export async function signDeleteToken(
@@ -52,7 +51,7 @@ export async function signDeleteToken(
   claims: DeleteClaims,
 ): Promise<string> {
   const payload = base64url(canonicalClaims(claims));
-  return `${payload}.${await hmacHex(await tokenKey(env), payload)}`;
+  return `${payload}.${await hmacSha256Hex(await tokenKey(env), payload)}`;
 }
 
 export type Verified = { ok: true; claims: DeleteClaims } | { ok: false; refusal: string };
@@ -69,7 +68,7 @@ export async function verifyDeleteToken(
     return { ok: false, refusal: "the confirmation token is malformed: preview again." };
   const dot = token.indexOf(".");
   const payload = token.slice(0, dot);
-  if (!(await safeEqual(token.slice(dot + 1), await hmacHex(await tokenKey(env), payload)))) {
+  if (!(await safeEqual(token.slice(dot + 1), await hmacSha256Hex(await tokenKey(env), payload)))) {
     return { ok: false, refusal: "the confirmation token does not verify: preview again." };
   }
   let claims: DeleteClaims;

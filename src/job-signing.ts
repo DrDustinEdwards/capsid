@@ -1,4 +1,4 @@
-import { hmacHex } from "./auth";
+import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { deriveTaskKey } from "./signed-docs";
 
@@ -43,7 +43,7 @@ export async function signJobText(
   fields: Record<string, string | null>,
 ): Promise<string | null> {
   if (!rootSecret) return null;
-  return hmacHex(await deriveTaskKey(rootSecret), payload(kind, jobId, fields));
+  return hmacSha256Hex(await deriveTaskKey(rootSecret), payload(kind, jobId, fields));
 }
 
 export async function checkJobText(
@@ -55,6 +55,9 @@ export async function checkJobText(
 ): Promise<SignatureCheck> {
   if (!signature) return "legacy-unsigned";
   if (!rootSecret) return "unconfigured";
-  const expected = await hmacHex(await deriveTaskKey(rootSecret), payload(kind, jobId, fields));
+  const expected = await hmacSha256Hex(
+    await deriveTaskKey(rootSecret),
+    payload(kind, jobId, fields),
+  );
   return (await safeEqual(signature.toLowerCase(), expected)) ? "verified" : "mismatch";
 }

@@ -3,7 +3,7 @@ import { ghFetch } from "./github/client";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "./ops-types/sites";
 import { auditStatement } from "./store-guards";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
-import { DAY_MS } from "./time";
+import { DAY_MS, isoWeek, utcDay } from "./time";
 import { callSignal } from "./call-signal";
 
 // The packages Capsid Portal watches (job_c6e4ab939a54). Ruled 2026-09-29: "Portal monitoring is optional and configured per install; packages panel
@@ -473,16 +473,6 @@ export async function readPackage(
   };
 }
 
-/** "2026-W40": the ISO 8601 week `d` falls in. */
-export function isoWeek(d: Date): string {
-  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const day = t.getUTCDay() || 7;
-  t.setUTCDate(t.getUTCDate() + 4 - day);
-  const yearStart = Date.UTC(t.getUTCFullYear(), 0, 1);
-  const week = Math.ceil(((t.getTime() - yearStart) / DAY_MS + 1) / 7);
-  return `${t.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-}
-
 /** The week's GitHub numbers, written once: the first pass of each ISO week that read
  *  the repository keeps its row, and later passes that week change nothing. */
 export function weekStatement(
@@ -510,8 +500,6 @@ export function weekStatement(
 
 // ---- The daily history, on demand ------------------------------------------------------
 
-const dayOf = (d: Date) => d.toISOString().slice(0, 10);
-
 /** When npm first published `name`, from the full document's time.created (the
  *  abbreviated one has no time object). An unpublished package keeps its document and
  *  its created time, so a former name still has a start. */
@@ -531,7 +519,7 @@ export function historyRanges(from: string, to: string): Array<[string, string]>
     const chunkEnd = new Date(
       Math.min(start.getTime() + (RANGE_CHUNK_DAYS - 1) * DAY_MS, end.getTime()),
     );
-    out.push([dayOf(start), dayOf(chunkEnd)]);
+    out.push([utcDay(start), utcDay(chunkEnd)]);
     start = new Date(chunkEnd.getTime() + DAY_MS);
   }
   return out;
@@ -550,7 +538,7 @@ async function dailyDownloads(
     );
   const from = first && first > NPM_FIRST_DAY ? first : NPM_FIRST_DAY;
   // npm counts each day after UTC midnight; yesterday is the newest it may have.
-  const to = dayOf(new Date(now.getTime() - DAY_MS));
+  const to = utcDay(new Date(now.getTime() - DAY_MS));
   const days: Array<{ day: string; downloads: number; name: string }> = [];
   for (const [a, b] of historyRanges(from, to)) {
     const got = await getJson(fetchImpl, `https://api.npmjs.org/downloads/range/${a}:${b}/${name}`);

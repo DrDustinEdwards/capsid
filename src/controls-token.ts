@@ -1,9 +1,8 @@
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
-import { hmacHex } from "./auth";
 import { isPortalAction, UNKNOWN_ACTION } from "./controls-base";
 import type { Env } from "./env";
 import type { PortalAction } from "./ops-types/portal";
-import { base64url, fromBase64urlText } from "@dustinedwards/site-runtime/encoding";
+import { base64url, fromBase64urlText, hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
@@ -45,12 +44,12 @@ async function confirmKey(env: Env): Promise<string> {
   // would sign with a value anybody knows.
   if (!env.COOKIE_ENCRYPTION_KEY)
     throw new Error("COOKIE_ENCRYPTION_KEY is unset, so no confirmation can be signed or checked");
-  return hmacHex(env.COOKIE_ENCRYPTION_KEY, TOKEN_CONTEXT);
+  return hmacSha256Hex(env.COOKIE_ENCRYPTION_KEY, TOKEN_CONTEXT);
 }
 
 export async function signConfirm(env: Env, claims: ConfirmClaims): Promise<string> {
   const payload = base64url(canonical(claims));
-  return `${payload}.${await hmacHex(await confirmKey(env), payload)}`;
+  return `${payload}.${await hmacSha256Hex(await confirmKey(env), payload)}`;
 }
 
 type Verified =
@@ -71,7 +70,9 @@ export async function verifyConfirm(
     };
   const dot = token.indexOf(".");
   const payload = token.slice(0, dot);
-  if (!(await safeEqual(token.slice(dot + 1), await hmacHex(await confirmKey(env), payload)))) {
+  if (
+    !(await safeEqual(token.slice(dot + 1), await hmacSha256Hex(await confirmKey(env), payload)))
+  ) {
     return {
       ok: false,
       status: 403,

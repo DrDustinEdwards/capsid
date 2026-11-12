@@ -10,7 +10,8 @@ import type {
   UsageSource,
   UsageTotals,
 } from "./ops-types/views";
-import { PR_URL_SOURCE, resolveRepo } from "./github/client";
+import { PR_URL_SOURCE } from "@dustinedwards/site-runtime/github";
+import { resolveRepo } from "./github/client";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 

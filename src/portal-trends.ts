@@ -1,3 +1,4 @@
+import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import type { Env } from "./env";
 import { OPS_RETURN_TO } from "./ops-feed";
 import { portalGate } from "./portal-auth";
@@ -24,13 +25,8 @@ export async function handlePortalTrends(
   const raw = new URL(request.url).searchParams.get("weeks")?.trim();
   const weeks = raw ? Number(raw) : DEFAULT_WEEKS;
   if (!Number.isInteger(weeks) || weeks < 1 || weeks > MAX_WEEKS) {
-    return new Response(
-      JSON.stringify({ error: `weeks must be a whole number from 1 to ${MAX_WEEKS}.` }),
-      { status: 400, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } },
-    );
+    return jsonResponse({ error: `weeks must be a whole number from 1 to ${MAX_WEEKS}.` }, 400);
   }
   const body = await readTrends(env, now, weeks);
-  return new Response(JSON.stringify(body), {
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
+  return jsonResponse(body);
 }

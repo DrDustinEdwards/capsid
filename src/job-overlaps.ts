@@ -1,5 +1,6 @@
 import type { Env } from "./env";
-import { PR_URL_SOURCE, parsePrUrl, resolveRepo } from "./github/client";
+import { PR_URL_SOURCE, parsePrUrl } from "@dustinedwards/site-runtime/github";
+import { resolveRepo } from "./github/client";
 import { readAllPages, readPrFiles } from "./github/pr-files";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";

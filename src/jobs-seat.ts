@@ -13,7 +13,8 @@ import {
 } from "./jobs-schema";
 import { approveByPolicy, classifyCommand, type GateClass } from "./gate-policy";
 import { readRepoFile } from "./github/contents";
-import { ghFetch, parsePrUrl, resolveRepo, type PrUrl } from "./github/client";
+import { parsePrUrl } from "@dustinedwards/site-runtime/github";
+import { ghFetch, resolveRepo } from "./github/client";
 import { verifySignedBody } from "./signed-docs";
 import { outcomeFrom, outcomeStatement, verifyEvidence } from "./job-outcomes";
 import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from "./jobs-mirror";
@@ -42,6 +43,8 @@ import {
   type JobResult,
 } from "./jobs-transition";
 import { plural } from "@drdustinedwards/site-helpers/text";
+
+type PrUrl = NonNullable<ReturnType<typeof parsePrUrl>>;
 
 // The transitions made on a job the caller does not hold: the seat's fail and release,
 // supersede and resume.

@@ -28,7 +28,7 @@ test("every secret compare goes through safeEqual, in every file", () => {
       .map((line, i) => ({ file: f.name, line: i + 1, text: line.trim() }))
       .filter(
         (l) =>
-          /(!==|===)\s*(await\s+)?(hmacHex|sha256Hex)\(/.test(l.text) ||
+          /(!==|===)\s*(await\s+)?(hmacSha256Hex|sha256Hex)\(/.test(l.text) ||
           /(csrfCookie|stateCookie|clientSecret)\s*(!==|===)/.test(l.text),
       ),
   );

@@ -4,7 +4,6 @@ import {
   backupSlots,
   ciDays,
   costWeeks,
-  isoWeek,
   lastDays,
   mondayOf,
   sessionMinutes,
@@ -18,13 +17,9 @@ import {
 const NOW = new Date("2026-10-11T04:30:00.000Z"); // a Sunday
 const at = (s: string) => timeMs(s);
 
-test("weeks start on Monday and carry their ISO label, across a year's end", () => {
+test("weeks start on Monday", () => {
   assert.equal(mondayOf("2026-10-11"), "2026-10-05");
   assert.equal(mondayOf("2026-10-05"), "2026-10-05");
-  assert.equal(isoWeek("2026-10-05"), "2026-W41");
-  // 2026-12-28 is the Monday of 2026-W53; 2027-01-04 begins 2027-W01.
-  assert.equal(isoWeek("2026-12-28"), "2026-W53");
-  assert.equal(isoWeek("2027-01-04"), "2027-W01");
   assert.deepEqual(weekStarts(NOW, 3), ["2026-09-21", "2026-09-28", "2026-10-05"]);
   assert.deepEqual(lastDays(NOW, 3), ["2026-10-09", "2026-10-10", "2026-10-11"]);
 });

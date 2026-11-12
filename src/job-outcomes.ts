@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { ciStatus } from "./github";
-import { ghFetch, parsePrUrl, resolveRepo } from "./github/client";
+import { parsePrUrl } from "@dustinedwards/site-runtime/github";
+import { ghFetch, resolveRepo } from "./github/client";
 import type { JobRow } from "./jobs-schema";
 import { MINUTE_MS } from "./time";
 
