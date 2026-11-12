@@ -50,7 +50,7 @@ import {
   type ViewId,
 } from "./ctx";
 import type { OpsFeed, PortalPerformed } from "../types";
-import { lasting, withMessage, type Message } from "../lib/messages";
+import { MessageProvider, MessageRegion, useMessage } from "capsomer/react/message";
 
 // Loaded the first time a panel opens or Ctrl K is pressed, then kept, so the initial bundle
 // carries neither (the size budget, after Capsomer 0.9.0's header joined the entry).
@@ -124,12 +124,6 @@ const BADGE_NOTE: Partial<Record<ViewId, string>> = {
 // 0 until the page has hydrated: the first render, on the server and in the browser alike,
 // measures every time from the feed's own read time (portalNow), so both say the same words
 // and React keeps the server's HTML. The clock starts once the page is live.
-// The toast's hide timer, one for the page.
-let toastTimer: ReturnType<typeof setTimeout> | undefined;
-
-// Message ids, one counter for the page.
-let nextMessageId = 1;
-
 // The header's freshness line: the feed's age and the watcher pass, on Capsomer's Freshness.
 function FeedFreshness({
   feed,
@@ -164,7 +158,21 @@ function FeedFreshness({
   );
 }
 
+// The newest feed's CSRF token, for an Undo run after later feeds arrived; one page, one value.
+let latestCsrf = "";
+
+// The results and failures of the page are Capsomer's Message region; its z key for the newest
+// Undo follows the single-key shortcuts switch.
 export function App() {
+  const singleKeys = useSingleKeys();
+  return (
+    <MessageProvider region={false} undoKey={singleKeys}>
+      <PortalApp />
+    </MessageProvider>
+  );
+}
+
+function PortalApp() {
   const { feed, error, signedOut, nextPollAt, accept, signOut } = useOpsFeed();
   const demo = useDemo();
   const [location, navigate] = useLocation();
@@ -205,103 +213,57 @@ export function App() {
   const [helpUsed, setHelpUsed] = useState(false);
   if (help && !helpUsed) setHelpUsed(true);
   const singleKeys = useSingleKeys();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { say, fail } = useMessage();
   // Read after the first paint: the server renders the menu open, and the browser's saved choice
   // then closes it, so the HTML and the first render agree.
   const [railPref, rememberRail] = useRemembered(RAIL_PREF);
   const railCollapsed = railPref === "collapsed";
-  const [toast, setToast] = useState<{ msg: string; on: boolean }>({ msg: "", on: false });
   const [spinning, setSpinning] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
 
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null);
 
-  // A longer message stays up longer, so an action's warning can be read.
-  const say = useCallback((msg: string) => {
-    setToast({ msg, on: true });
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(
-      () => setToast((t) => ({ ...t, on: false })),
-      Math.max(2400, msg.length * 70),
-    );
-  }, []);
-
   const confirm = useCallback((r: ConfirmRequest) => setConfirmReq(r), [setConfirmReq]);
 
-  // The newest first. Plain results before it go; anything lasting stays.
-  const post = useCallback(
-    (m: Omit<Message, "id">) => {
-      const id = nextMessageId++;
-      setMessages((all) => withMessage(all, { ...m, id }));
-    },
-    [setMessages],
-  );
-  const update = useCallback(
-    (id: number, m: Omit<Message, "id">) =>
-      setMessages((all) => all.map((x) => (x.id === id ? { ...m, id } : x))),
-    [setMessages],
-  );
-  const fail = useCallback(
-    (text: string) =>
-      post({ text, warning: null, undo: null, error: null, busy: false, failure: true }),
-    [post],
-  );
-
-  const performed = useCallback(
-    (p: PortalPerformed, undo?: UndoRequest) => {
-      accept(p.feed);
-      post({
-        text: p.summary,
-        warning: p.warning,
-        undo: undo ?? null,
-        error: null,
-        busy: false,
-        failure: false,
-      });
-    },
-    [accept, post],
-  );
-
   // Undo sends the reverse change as its own action (params.undo "true"), which the
-  // Worker records as portal-undo-<action>. Focus goes back to the switch it undid.
-  const csrfRef = useRef("");
+  // Worker records as portal-undo-<action>. A refusal throws, so the message keeps its Undo
+  // and says why; focus goes back to the switch it undid.
   useEffect(() => {
-    csrfRef.current = feed?.csrf ?? "";
+    latestCsrf = feed?.csrf ?? "";
   }, [feed]);
-  const undo = useCallback(
-    async (m: Message) => {
-      const u = m.undo;
-      if (!u || m.busy) return;
-      update(m.id, { ...m, busy: true, error: null });
-      const r = await runAction(csrfRef.current, { action: u.action, params: u.params });
-      if (r.kind === "signed-out") return (setMessages([]), signOut());
-      if (r.kind !== "ok") {
-        const why =
+  const undoAction = useCallback(
+    async (u: UndoRequest) => {
+      const r = await runAction(latestCsrf, {
+        action: u.action,
+        params: u.params,
+      });
+      if (r.kind === "signed-out") {
+        signOut();
+        throw new Error("the session ended. Sign in again.");
+      }
+      if (r.kind !== "ok")
+        throw new Error(
           r.kind === "error"
             ? `Undo could not reach the server: ${r.message}`
-            : `Undo was refused: ${r.message}`;
-        return update(m.id, { ...m, busy: false, error: why });
-      }
+            : `Undo was refused: ${r.message}`,
+        );
       accept(r.value.feed);
-      const done = {
-        text: `Undone. ${r.value.summary}`,
-        warning: r.value.warning,
-        undo: null,
-        error: null,
-        busy: false,
-        failure: false,
-      };
-      // A result that carried a warning keeps it, without its Undo, and the undo's own
-      // result arrives beside it; a plain one becomes the undo's result.
-      if (m.warning !== null) {
-        update(m.id, { ...m, undo: null, busy: false });
-        post(done);
-      } else update(m.id, done);
-      const back = u.focus;
-      if (back) requestAnimationFrame(() => document.getElementById(back)?.focus());
+      // The undo's own warning stays beside it, as any warning does.
+      if (r.value.warning) say(`Undone. ${r.value.summary}`, { warning: r.value.warning });
     },
-    [accept, post, setMessages, signOut, update],
+    [accept, say, signOut],
+  );
+  const performed = useCallback(
+    (p: PortalPerformed, u?: UndoRequest) => {
+      accept(p.feed);
+      say(p.summary, {
+        warning: p.warning ?? undefined,
+        undo: u ? () => undoAction(u) : undefined,
+        returnFocus: u?.focus ? () => document.getElementById(u.focus!) : undefined,
+      });
+    },
+    [accept, say, undoAction],
   );
 
   const go = useCallback(
@@ -363,13 +325,8 @@ export function App() {
     if (r.kind === "ok") {
       accept(r.feed);
       if (r.warning)
-        return post({
-          text: "Refreshed: a new watcher pass ran.",
+        return say("Refreshed: a new watcher pass ran.", {
           warning: r.warning,
-          undo: null,
-          error: null,
-          busy: false,
-          failure: false,
         });
       return say("Refreshed: a new watcher pass ran");
     }
@@ -383,7 +340,7 @@ export function App() {
       );
     }
     fail(`Refresh failed: ${r.message}`);
-  }, [accept, feed, say, fail, post, signOut, spinning]);
+  }, [accept, feed, say, fail, signOut, spinning]);
 
   // Sign out: the Worker expires the Portal's cookies, then the signed-out page says
   // it was a choice, not an expiry.
@@ -480,7 +437,12 @@ export function App() {
         when: () => !!document.getElementById("qsearch"),
         run: () => document.getElementById("qsearch")?.focus(),
       }),
-      register({ key: "r", label: "Refresh now", group: "General", run: () => void a().refresh() }),
+      register({
+        key: "r",
+        label: "Refresh now",
+        group: "General",
+        run: () => void a().refresh(),
+      }),
       register({
         key: "t",
         label: "Switch light and dark",
@@ -651,7 +613,10 @@ export function App() {
     };
   };
   const menu: AdminEntry[] = GROUPS.flatMap((g) => g.views.map((id) => entryFor(id, g.label)));
-  const tabEntries = tabs.map((id) => ({ ...entryFor(id), icon: <NavIcon id={id} size={20} /> }));
+  const tabEntries = tabs.map((id) => ({
+    ...entryFor(id),
+    icon: <NavIcon id={id} size={20} />,
+  }));
 
   const ctx: Ctx | null = feed
     ? {
@@ -726,7 +691,11 @@ export function App() {
       onSearch={() => setPalette(true)}
       inbox={
         feed
-          ? { count: feed.live.inbox.count, countNote: "waiting on you", href: routePath("needs") }
+          ? {
+              count: feed.live.inbox.count,
+              countNote: "waiting on you",
+              href: routePath("needs"),
+            }
           : undefined
       }
       onHelp={() => setHelp(true)}
@@ -769,7 +738,11 @@ export function App() {
       // Another app's address (the strip, the logo) is another origin: a plain anchor, since
       // the Portal's Link would put the demo's base in front of it.
       renderLink={(p) => (/^https?:/.test(p.href) ? <a {...p} /> : <Link {...p} />)}
-      mainProps={{ ref: mainRef, onClick: onRowActivate, onKeyDown: onRowActivate }}
+      mainProps={{
+        ref: mainRef,
+        onClick: onRowActivate,
+        onKeyDown: onRowActivate,
+      }}
     >
       {demo && <ModeBanner mode="demo" />}
       {content}
@@ -822,59 +795,7 @@ export function App() {
           />
         </Suspense>
       )}
-      <div className={`toast${toast.on ? " on" : ""}`} role="status" aria-live="polite">
-        {toast.msg}
-      </div>
-      <div
-        className="msg-region"
-        role="status"
-        aria-live="polite"
-        aria-label="Results and failures, until dismissed"
-      >
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`msg${lasting(message) ? " warn" : ""}`}
-            data-lasting={lasting(message) ? "" : undefined}
-          >
-            <span className="grow">
-              {message.failure ? <span role="alert">{message.text}</span> : message.text}
-              {message.warning && (
-                <>
-                  {" "}
-                  <b>Warning:</b> {message.warning}
-                </>
-              )}
-              {message.error && (
-                <span className="err" role="alert">
-                  {message.error}
-                </span>
-              )}
-            </span>
-            {message.undo && (
-              <button
-                type="button"
-                className="cap-btn"
-                disabled={message.busy}
-                onClick={() => void undo(message)}
-              >
-                {message.busy ? "Undoing..." : "Undo"}
-              </button>
-            )}
-            <button
-              type="button"
-              className="cap-btn"
-              disabled={message.busy}
-              onClick={() => {
-                setMessages((all) => all.filter((x) => x.id !== message.id));
-                mainRef.current?.focus();
-              }}
-            >
-              Dismiss
-            </button>
-          </div>
-        ))}
-      </div>
+      <MessageRegion />
       <div className="tip" ref={tipRef} aria-hidden="true" />
     </>
   );

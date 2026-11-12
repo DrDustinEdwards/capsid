@@ -39,8 +39,8 @@ export function DefaultBranches() {
     <>
       <Panel flush title="Default branches" src="watcher ci check · GitHub App">
         {snap ? (
-          <div className="scroll-x">
-            <table className="list">
+          <div className="cap-table-wrap">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>Project</th>
@@ -179,8 +179,8 @@ export function PullRequests() {
             count={live.merge_safety.namespaces.length}
             src="the tick's safety meter"
           >
-            <div className="scroll-x reflow">
-              <table className="list cards-below-1100">
+            <div className="cap-table-wrap" data-reflow="wide">
+              <table className="cap-table">
                 <thead>
                   <tr>
                     <th>Project</th>
@@ -193,7 +193,7 @@ export function PullRequests() {
                     <th>State</th>
                     <th>Why</th>
                     <th>
-                      <span className="sr-only">Action</span>
+                      <span className="cap-sr-only">Action</span>
                     </th>
                   </tr>
                 </thead>
@@ -265,8 +265,8 @@ export function PullRequests() {
         src="recorded against jobs"
         count={live.prs.length}
       >
-        <div className="scroll-x reflow">
-          <table className="list cards-below-1100">
+        <div className="cap-table-wrap" data-reflow="wide">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th>PR</th>
@@ -340,7 +340,11 @@ export function PullRequests() {
 // merge, and the tick's promote and demote proposals. Each row offers its control: Demote and
 // Promote sign the policy's next version (sign_policy_change, the version typed), and Lift
 // suspension is unit_resume, with a reason. docs/autonomy.md, "Earned promotion and demotion".
-type UnitRow = { unit: string; state: "auto" | "suspended" | "promote" | "demote"; why: string };
+type UnitRow = {
+  unit: string;
+  state: "auto" | "suspended" | "promote" | "demote";
+  why: string;
+};
 
 function unitRows(promoted: readonly string[], units: PortalMergeUnits): UnitRow[] {
   const rows = new Map<string, UnitRow>();
@@ -405,15 +409,15 @@ function MergeUnits() {
       src={units.generated ? `judged ${utc(ms(units.generated))}` : "not judged yet"}
     >
       {rows.length ? (
-        <div className="scroll-x reflow">
-          <table className="list cards-below-1100">
+        <div className="cap-table-wrap" data-reflow="wide">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th>Unit</th>
                 <th>State</th>
                 <th>Why</th>
                 <th>
-                  <span className="sr-only">Actions</span>
+                  <span className="cap-sr-only">Actions</span>
                 </th>
               </tr>
             </thead>

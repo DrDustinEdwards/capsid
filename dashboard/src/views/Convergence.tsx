@@ -7,6 +7,8 @@ import { fetchConvergence, useAnswer, type Load } from "../lib/api";
 import { ago, ms } from "../lib/format";
 import type { ConvergenceCheck, ConvergenceSite, PortalConvergence } from "../types";
 import { St } from "../ui/icons";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 
 // The convergence view in Sites (job_09e5f6cbf782): for each site that opted into Capsid
 // calling its operator API, GET /portal/api/convergence reads, live, what the site's
@@ -15,7 +17,10 @@ import { St } from "../ui/icons";
 // every control, the allowlist enforced in the Worker. Nothing on this panel is a value
 // of a secret; the Worker never sends one.
 
-function useConvergence(): { load: Load<PortalConvergence>; reread: () => void } {
+function useConvergence(): {
+  load: Load<PortalConvergence>;
+  reread: () => void;
+} {
   const load = useAnswer(["convergence"], fetchConvergence);
   return { load, reread: load.reread };
 }
@@ -97,7 +102,7 @@ function SitePanel({
           </Alert>
         )}
         {op && (
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>Operator API</dt>
             <dd className="mono">
               {site.origin}
@@ -147,7 +152,7 @@ function SitePanel({
               <St kind="nodata">Not read</St> {site.status.error}
             </Alert>
           ) : (
-            <dl className="kv">
+            <dl className="cap-detail-record">
               {site.status.fields.map((f) => (
                 <FieldRow key={f.key} k={f.key} v={f.value} />
               ))}
@@ -203,8 +208,8 @@ function Checks({
 }) {
   const sorted = [...checks].sort((a, b) => Number(a.ok) - Number(b.ok));
   return (
-    <div className="scroll-x">
-      <table className="list">
+    <div className="cap-table-wrap">
+      <table className="cap-table">
         <thead>
           <tr>
             <th>Check</th>

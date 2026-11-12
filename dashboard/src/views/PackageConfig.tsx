@@ -3,7 +3,7 @@ import { useApp } from "../app/ctx";
 import type { OpsPackageConfig } from "../types";
 import { ConfigForm, useConfigForm, type Editing } from "capsomer/react/config-form";
 import "capsomer/config-form.css";
-import { Field } from "./shared";
+import { Field } from "capsomer/react/field";
 import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
 
@@ -58,7 +58,11 @@ export function PackageForm({
       });
     confirm({
       action: "package_edit",
-      params: { ...paramsOf(d), name: editing.row.name, revision: String(editing.row.revision) },
+      params: {
+        ...paramsOf(d),
+        name: editing.row.name,
+        revision: String(editing.row.revision),
+      },
       title: `Change ${editing.row.name}`,
       onDone: onClose,
     });
@@ -83,7 +87,10 @@ export function PackageForm({
               onClick={() =>
                 confirm({
                   action: "package_remove",
-                  params: { name: editing.row.name, revision: String(editing.row.revision) },
+                  params: {
+                    name: editing.row.name,
+                    revision: String(editing.row.revision),
+                  },
                   title: `Remove ${editing.row.name}`,
                   onDone: onClose,
                 })
@@ -95,11 +102,11 @@ export function PackageForm({
         )
       }
     >
-      <Field id={f("name")} label="npm name">
+      <Field label="npm name">
         <input
           ref={first}
           id={f("name")}
-          className="field mono"
+          className="cap-input mono"
           value={d.name}
           readOnly={!adding}
           autoComplete="off"
@@ -107,10 +114,10 @@ export function PackageForm({
           onChange={(e) => setD({ ...d, name: e.target.value })}
         />
       </Field>
-      <Field id={f("repo")} label="GitHub repository">
+      <Field label="GitHub repository">
         <input
           id={f("repo")}
-          className="field mono"
+          className="cap-input mono"
           value={d.repo}
           placeholder="owner/name"
           autoComplete="off"
@@ -118,15 +125,10 @@ export function PackageForm({
           onChange={(e) => setD({ ...d, repo: e.target.value })}
         />
       </Field>
-      <Field
-        id={f("formerly")}
-        label="Formerly"
-        note="Its download history is shown joined to this one."
-      >
+      <Field label="Formerly" help="Its download history is shown joined to this one.">
         <input
           id={f("formerly")}
-          aria-describedby={`${f("formerly")}-note`}
-          className="field mono"
+          className="cap-input mono"
           value={d.formerly}
           placeholder="an earlier npm name"
           autoComplete="off"

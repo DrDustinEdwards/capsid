@@ -82,8 +82,8 @@ function AllSites() {
       <Uptime90 ns={ns} />
       {noSite.length > 0 && (
         <Panel flush title="Projects with no site" count={noSite.length}>
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>Project</th>
@@ -94,7 +94,7 @@ function AllSites() {
                   <th>Worker script</th>
                   <th>Revision</th>
                   <th>
-                    <span className="sr-only">Controls</span>
+                    <span className="cap-sr-only">Controls</span>
                   </th>
                 </tr>
               </thead>

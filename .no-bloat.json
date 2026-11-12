@@ -5,10 +5,7 @@
     },
     {
       "label": "knip (dashboard)",
-      "args": [
-        "--directory",
-        "dashboard"
-      ]
+      "args": ["--directory", "dashboard"]
     }
   ],
   "baseline": {
@@ -27,8 +24,8 @@
       "lines": 0
     },
     "tests": {
-      "files": 267,
-      "cases": 2571
+      "files": 266,
+      "cases": 2567
     },
     "comments": {
       "lines": 16464,

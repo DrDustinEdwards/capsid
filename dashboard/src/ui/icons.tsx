@@ -276,7 +276,7 @@ export function NoData({ reason, brief }: { reason: string; brief?: boolean }) {
       <span className="st nodata" data-tip={reason || undefined}>
         <Icon kind="nodata" />
         No data
-        {reason && <span className="sr-only">: {reason}</span>}
+        {reason && <span className="cap-sr-only">: {reason}</span>}
       </span>
     );
   return (

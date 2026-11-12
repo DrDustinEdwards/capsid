@@ -10,7 +10,7 @@ import { visit } from "./views.ts";
 const PREVIEW_URL = "**/api/actions/preview";
 
 const seat = (page: Page) => page.getByRole("switch", { name: "Overnight run", exact: true });
-const message = (page: Page) => page.locator(".msg-region");
+const message = (page: Page) => page.locator(".cap-message");
 
 async function newestActivity(page: Page): Promise<string> {
   const body = (await (await page.request.get("api/activity")).json()) as {
@@ -94,7 +94,7 @@ test("PLANT: applying moves the switch, returns focus to it, and leaves a messag
   await undo.click();
   await expect(seat(page)).not.toBeChecked();
   await expect(seat(page)).toBeFocused();
-  await expect(message(page)).toContainText("Undone.");
+  await expect(message(page)).toContainText("Undone");
   await expect(message(page).getByRole("button", { name: "Undo" })).toHaveCount(0);
   expect(await newestActivity(page)).toBe("portal.undo-overnight");
 

@@ -80,8 +80,8 @@ function WorkerPanel({ w }: { w: Worker }) {
           <St kind="nodata">Could not read: {w.error}</St>
         </p>
       ) : (
-        <table className="brief workers-bindings">
-          <caption className="sr-only">What {w.script} binds</caption>
+        <table className="cap-table workers-bindings">
+          <caption className="cap-sr-only">What {w.script} binds</caption>
           <colgroup>
             <col className="c-label" />
             <col />
@@ -130,8 +130,8 @@ function StoresPanel({ doc }: { doc: ResourcesDoc }) {
         </span>
       }
     >
-      <table className="brief workers-stores">
-        <caption className="sr-only">
+      <table className="cap-table workers-stores">
+        <caption className="cap-sr-only">
           Every D1 database, KV namespace and R2 bucket, and who uses it
         </caption>
         <thead>

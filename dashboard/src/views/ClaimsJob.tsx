@@ -12,6 +12,8 @@ import type {
 import { St } from "../ui/icons";
 import { Missing } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 
 export const AGREEMENTS: readonly ClaimsAgreement[] = [
   "agree",
@@ -39,7 +41,12 @@ export function wait(msValue: number | null) {
 }
 
 export function totals(group: ClaimsGroup): ClaimsAgreementCounts {
-  const out: ClaimsAgreementCounts = { agree: 0, disagree: 0, unclaimed: 0, unchecked: 0 };
+  const out: ClaimsAgreementCounts = {
+    agree: 0,
+    disagree: 0,
+    unclaimed: 0,
+    unchecked: 0,
+  };
   for (const counts of Object.values(group.evaluations))
     for (const a of AGREEMENTS) out[a] += counts[a];
   return out;
@@ -49,7 +56,12 @@ export function byCheck(groups: ClaimsGroup[]): Array<[string, ClaimsAgreementCo
   const out = new Map<string, ClaimsAgreementCounts>();
   for (const g of groups) {
     for (const [name, counts] of Object.entries(g.evaluations)) {
-      const sum = out.get(name) ?? { agree: 0, disagree: 0, unclaimed: 0, unchecked: 0 };
+      const sum = out.get(name) ?? {
+        agree: 0,
+        disagree: 0,
+        unclaimed: 0,
+        unchecked: 0,
+      };
       for (const a of AGREEMENTS) sum[a] += counts[a];
       out.set(name, sum);
     }
@@ -193,7 +205,7 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
             return (
               <div key={c.id} className="claim" data-claim={c.id}>
                 <div className="body">
-                  <dl className="kv">
+                  <dl className="cap-detail-record">
                     <dt>Claim</dt>
                     <dd className="mono">
                       #{c.id} · {c.action} · {c.agent} ·{" "}
@@ -210,8 +222,8 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
                   </dl>
                 </div>
                 {checks.length ? (
-                  <div className="scroll-x reflow">
-                    <table className="list cards-below-1100">
+                  <div className="cap-table-wrap" data-reflow="wide">
+                    <table className="cap-table">
                       <thead>
                         <tr>
                           <th>Check</th>
@@ -239,8 +251,8 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
           })
         )}
         {orphans.length > 0 && (
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100" aria-label="Checks with no claim">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table" aria-label="Checks with no claim">
               <thead>
                 <tr>
                   <th>Check</th>
@@ -269,8 +281,8 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
             No touch recorded: nobody gated, resumed, released or reviewed this job.
           </div>
         ) : (
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>When</th>

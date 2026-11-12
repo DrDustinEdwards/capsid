@@ -185,8 +185,8 @@ function Roster() {
             <Spinner label="Reading the projects..." />
           </div>
         ) : data && data.namespaces.length ? (
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100 roster">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table roster">
               <thead>
                 <tr>
                   <th>Project</th>
@@ -195,7 +195,7 @@ function Roster() {
                   <th>Jobs</th>
                   <th>Integrity</th>
                   <th>
-                    <span className="sr-only">Controls</span>
+                    <span className="cap-sr-only">Controls</span>
                   </th>
                 </tr>
               </thead>

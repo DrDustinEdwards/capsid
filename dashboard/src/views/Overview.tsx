@@ -3,6 +3,7 @@ import { Link } from "../lib/router";
 import { placePath, useApp } from "../app/ctx";
 import { counts, hasSites, offaccountState } from "../lib/derive";
 import { HOUR, ago, ms } from "../lib/format";
+import "capsomer/stat-tile.css";
 
 // The tiles at the top of Health (docs/design/design-portal-evaluation.md section 2; the UX
 // audit's m2 and m3, 2026-10): sites up, open findings, the primary backup and the
@@ -39,7 +40,12 @@ export function Overview() {
           tone: c.down ? "crit" : c.degraded ? "warn" : "ok",
           go: "sites",
         }
-      : { label: "Sites up", tone: "nodata", reason: "no watcher pass yet", go: "sites" };
+      : {
+          label: "Sites up",
+          tone: "nodata",
+          reason: "no watcher pass yet",
+          go: "sites",
+        };
   const tiles: Tile[] = [
     ...(siteTile ? [siteTile] : []),
     {
@@ -70,7 +76,12 @@ export function Overview() {
             tone: "crit",
             go: "health#backups",
           }
-        : { label: "Backup", tone: "nodata", reason: "health not read", go: "health#backups" },
+        : {
+            label: "Backup",
+            tone: "nodata",
+            reason: "health not read",
+            go: "health#backups",
+          },
     copy && copyState
       ? {
           label: "Amazon copy",

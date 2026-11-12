@@ -75,7 +75,7 @@ export function Activity() {
           apply(nsInput, actorInput);
         }}
       >
-        <label className="sr-only" htmlFor="actNs">
+        <label className="cap-sr-only" htmlFor="actNs">
           Project
         </label>
         <select
@@ -91,7 +91,7 @@ export function Activity() {
             </option>
           ))}
         </select>
-        <label className="sr-only" htmlFor="actActor">
+        <label className="cap-sr-only" htmlFor="actActor">
           Who
         </label>
         {/* A picker, not a box to type an id into from memory (the UX audit's m7): every
@@ -145,8 +145,8 @@ export function Activity() {
             <Spinner label="Reading the activity..." />
           </div>
         ) : data && data.rows.length ? (
-          <div className="scroll-x">
-            <table className="list">
+          <div className="cap-table-wrap">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>When</th>

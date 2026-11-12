@@ -4,7 +4,7 @@ import { RAIL_PREF } from "../src/lib/prefs.ts";
 import { ALL_VIEWS, VIEW_COUNT, expectNoSideways, measure, sideways, visit } from "./views.ts";
 
 // No sideways scrolling from 1024 px up: not the document, not main, and not any
-// wrapper inside main. Wide tables reflow into cards instead (styles.css, .reflow).
+// wrapper inside main. Wide tables reflow into cards instead (Capsomer table, data-reflow).
 
 // The narrowest desktop width, with the menu expanded and collapsed (its stored
 // preference, set before the app starts).
@@ -42,7 +42,10 @@ test("at 1024 px and at 390 px, no tab of a site's page scrolls sideways", async
             ? o
             : {
                 ...o,
-                root: o.root && { ...o.root, scroll: Math.min(o.root.scroll, o.root.client) },
+                root: o.root && {
+                  ...o.root,
+                  scroll: Math.min(o.root.scroll, o.root.client),
+                },
                 scrollers: [],
               },
           `${tab.label} at ${width}`,
@@ -76,7 +79,11 @@ for (const d of DRAWERS) {
 test.describe("on a phone", () => {
   // A mobile browser widens its layout viewport to fit anything that overflows the
   // document, so at phone width nothing may.
-  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  test.use({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
 
   for (const v of ALL_VIEWS) {
     test(`${v.label}: the document is no wider than the screen`, async ({ page }) => {

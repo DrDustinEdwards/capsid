@@ -188,8 +188,8 @@ function Shelf({
       }
     >
       {rows.length ? (
-        <table className="brief lib-table">
-          <caption className="sr-only">{title}</caption>
+        <table className="cap-table lib-table">
+          <caption className="cap-sr-only">{title}</caption>
           <thead>
             <tr>
               <th>Title</th>
@@ -260,8 +260,18 @@ function DocumentView({
 }) {
   const d = data.doc;
   const edges = [
-    ...data.outgoing.map((e) => ({ dir: "to", type: e.type, ns: e.to_ns, path: e.to_path })),
-    ...data.incoming.map((e) => ({ dir: "from", type: e.type, ns: e.from_ns, path: e.from_path })),
+    ...data.outgoing.map((e) => ({
+      dir: "to",
+      type: e.type,
+      ns: e.to_ns,
+      path: e.to_path,
+    })),
+    ...data.incoming.map((e) => ({
+      dir: "from",
+      type: e.type,
+      ns: e.from_ns,
+      path: e.from_path,
+    })),
   ];
   return (
     <Panel

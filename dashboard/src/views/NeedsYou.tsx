@@ -75,7 +75,11 @@ type Entry = { app: InboxApp; item: InboxItem };
 
 // Queues stopped by the circuit breaker (src/job-breaker.ts), from the roster read
 // (GET /portal/api/namespaces), read again with each feed so a reset drops its row.
-function useStops(): { stops: PortalNamespace[]; error: string | null; reread: () => void } {
+function useStops(): {
+  stops: PortalNamespace[];
+  error: string | null;
+  reread: () => void;
+} {
   const load = useAnswer([LIVE, "namespaces"], fetchNamespaces);
   return {
     stops: load.data?.namespaces.filter((n) => n.breaker.open) ?? [],
@@ -197,7 +201,7 @@ function Tick({ label, on, flip }: { label: string; on: boolean; flip: () => voi
   return (
     <label className="wtick">
       <input type="checkbox" checked={on} onChange={flip} />
-      <span className="sr-only">{label}</span>
+      <span className="cap-sr-only">{label}</span>
     </label>
   );
 }
@@ -239,7 +243,10 @@ function PrGroup({ entries }: { entries: Entry[] }) {
                 className="cap-btn"
                 data-variant="primary"
                 onClick={() =>
-                  confirm({ ...approveAllRequest(chosen), onDone: () => ticks.all(false) })
+                  confirm({
+                    ...approveAllRequest(chosen),
+                    onDone: () => ticks.all(false),
+                  })
                 }
               >
                 Approve {chosen.length} selected
@@ -468,7 +475,10 @@ function OtherGroup({ entries }: { entries: Entry[] }) {
   return (
     <Group id="w-other" title="Also waiting" count={entries.length}>
       {entries.map(({ app, item }, i) => {
-        const k = KIND[item.kind] ?? { label: item.kind, kind: "blocked" as const };
+        const k = KIND[item.kind] ?? {
+          label: item.kind,
+          kind: "blocked" as const,
+        };
         return (
           <li className="wrow" key={`${item.kind}|${item.title}|${i}`} data-kind={item.kind}>
             <div className="wmain">

@@ -7,6 +7,8 @@ import { St } from "../ui/icons";
 import { When } from "../ui/When";
 import { Panel } from "capsomer/react/panel";
 import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, useNsFilter } from "./shared";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 
 // Health's Problems tab: the watcher's findings and its last pass.
 export function Incidents() {
@@ -36,7 +38,7 @@ export function Incidents() {
           {snap ? (
             <>
               <div className="body">
-                <dl className="kv">
+                <dl className="cap-detail-record">
                   <dt>Finished</dt>
                   <dd>
                     {ago(ms(snap.pass_at), now)}{" "}
@@ -66,8 +68,8 @@ export function Incidents() {
                   </dd>
                 </dl>
               </div>
-              <div className="scroll-x">
-                <table className="list">
+              <div className="cap-table-wrap">
+                <table className="cap-table">
                   <thead>
                     <tr>
                       <th>Check</th>
@@ -125,8 +127,8 @@ export function ScheduledTasks() {
           </Alert>
         </div>
       ) : (
-        <div className="scroll-x">
-          <table className="list">
+        <div className="cap-table-wrap">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th>Task</th>

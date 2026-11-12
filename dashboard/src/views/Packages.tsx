@@ -12,6 +12,8 @@ import { areaChart } from "enarratio/lite/area";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { useDemo } from "../lib/router";
 import { useEditor } from "capsomer/react/config-form";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 
 // The Shared code and Completeness tabs load when opened, and the add and edit form the first
 // time it opens, so Published's first paint carries neither.
@@ -152,7 +154,7 @@ function HistoryPanel({ name }: { name: string }) {
         </p>
       ))}
       {d.weeks.length > 0 && (
-        <table className="list">
+        <table className="cap-table">
           <thead>
             <tr>
               <th>Week</th>
@@ -212,7 +214,7 @@ function PackagePanel({
         {!snap ? (
           <p className="faint">The watcher reads this package on its next pass.</p>
         ) : (
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>Version</dt>
             <dd>
               <Part part={snap.npm}>

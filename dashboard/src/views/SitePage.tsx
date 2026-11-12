@@ -21,6 +21,8 @@ import { uptimeOptions } from "../ui/charts";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { trendChart } from "./charts";
 import { Convergence, SiteSecrets } from "./Convergence";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 // The settings form loads the first time Edit is pressed, so the page's first paint does not carry it.
 const SiteForm = lazy(() => import("./SiteConfig").then((m) => ({ default: m.SiteForm })));
 import { Uptime90 } from "./Uptime90";
@@ -183,7 +185,7 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
       <div className="grid2">
         <Panel flush title="Probe" src={`watcher pass · checked ${ago(ms(s.checked_at), now)}`}>
           <div className="body">
-            <dl className="kv">
+            <dl className="cap-detail-record">
               <dt>Checked</dt>
               <dd>
                 {ago(ms(s.checked_at), now)} <When t={ms(s.checked_at)} />
@@ -260,8 +262,8 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
           <NoData reason={cfNoData(snap.cloudflare) ?? ""} />
         </div>
       ) : cf.deploys.length ? (
-        <div className="scroll-x">
-          <table className="list">
+        <div className="cap-table-wrap">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th scope="col">When</th>
@@ -340,7 +342,7 @@ function Setup({
       >
         {row ? (
           <div className="body">
-            <dl className="kv">
+            <dl className="cap-detail-record">
               <dt>Project</dt>
               <dd className="mono">{row.namespace}</dd>
               <dt>Name</dt>

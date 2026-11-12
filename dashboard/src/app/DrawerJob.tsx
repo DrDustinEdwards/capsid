@@ -10,6 +10,8 @@ import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
 import { jobMeta } from "../views/shared";
 import { useApp, type ConfirmRequest } from "./ctx";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 
 export function Head({
   label,
@@ -25,16 +27,23 @@ export function Head({
   onClose: () => void;
 }) {
   return (
-    <header>
-      <div className="grow">
-        <div className="label">{label}</div>
-        <h2 id="drawerTitle">{title}</h2>
-        <div className="mono muted">{sub}</div>
-      </div>
-      {badge}
+    <>
+      <header className="cap-dialog-header" data-divider>
+        <div className="cap-detail-heading">
+          <p className="cap-detail-kind">{label}</p>
+          <div className="cap-detail-titlerow">
+            <h2 className="cap-dialog-title" id="drawerTitle">
+              {title}
+            </h2>
+            {badge}
+          </div>
+          <p className="cap-detail-id">{sub}</p>
+        </div>
+      </header>
       <button
         type="button"
-        className="cap-btn"
+        className="cap-btn cap-dialog-close"
+        data-variant="quiet"
         data-icon-only
         data-close
         aria-label="Close"
@@ -42,14 +51,14 @@ export function Head({
       >
         ×
       </button>
-    </header>
+    </>
   );
 }
 
 function CopyBlock({ id, text, label }: { id: string; text: string; label: string }) {
   return (
     <>
-      <div className="cmd" id={id}>
+      <div className="cap-detail-cmd" id={id}>
         {text}
       </div>
       <div className="toolbar mt8">
@@ -97,7 +106,11 @@ function JobControls({ j }: { j: OpsJob }) {
                 title: `Unpark job: ${j.title}`,
                 undo: {
                   action: "park_job",
-                  params: { id: j.id, reason: j.parked_reason ?? "parked again", undo: "true" },
+                  params: {
+                    id: j.id,
+                    reason: j.parked_reason ?? "parked again",
+                    undo: "true",
+                  },
                 },
               })
             }
@@ -121,7 +134,11 @@ function JobControls({ j }: { j: OpsJob }) {
     params,
     title: `${j.question ? "Answer" : "Resume job"}: ${j.title}`,
   };
-  const release = { action: "release_job" as const, params, title: `Release job: ${j.title}` };
+  const release = {
+    action: "release_job" as const,
+    params,
+    title: `Release job: ${j.title}`,
+  };
   const park = {
     action: "park_job" as const,
     params,
@@ -150,7 +167,11 @@ function JobControls({ j }: { j: OpsJob }) {
       ? [
           {
             label: "Supersede",
-            req: { action: "supersede_job" as const, params, title: `Supersede job: ${j.title}` },
+            req: {
+              action: "supersede_job" as const,
+              params,
+              title: `Supersede job: ${j.title}`,
+            },
           },
         ]
       : []),
@@ -214,7 +235,11 @@ function JobControls({ j }: { j: OpsJob }) {
           className="cap-btn"
           data-variant="danger"
           onClick={() =>
-            confirm({ action: "fail_job", params, title: `Mark job failed: ${j.title}` })
+            confirm({
+              action: "fail_job",
+              params,
+              title: `Mark job failed: ${j.title}`,
+            })
           }
         >
           Mark failed
@@ -260,7 +285,7 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
         badge={<Pill kind={k.kind}>{k.label}</Pill>}
         onClose={onClose}
       />
-      <div className="dbody">
+      <div className="cap-dialog-body cap-detail-body">
         {j.status === "parked" && (
           <div>
             <p className="section-title">Parked until</p>
@@ -321,7 +346,7 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
         <JobControls j={j} />
         <div>
           <p className="section-title">Record</p>
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>Status</dt>
             <dd>
               <St kind={k.kind}>{k.label}</St> <span className="faint">{jobMeta(j, now)}</span>

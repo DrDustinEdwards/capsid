@@ -24,6 +24,8 @@ import type {
   WebVital,
 } from "../types";
 import { St } from "../ui/icons";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 // Only Capsid's own page shows its 404 table, so the report and its stylesheets load with it.
 const NotFound = lazy(() => import("./NotFound").then((m) => ({ default: m.NotFound })));
 
@@ -62,8 +64,8 @@ function SearchTable({
 }) {
   if (!rows.length) return <p className="body faint">No {label.toLowerCase()} in the window.</p>;
   return (
-    <div className="scroll-x search-rows">
-      <table className="list">
+    <div className="cap-table-wrap search-rows">
+      <table className="cap-table">
         <thead>
           <tr>
             <th scope="col">{label}</th>
@@ -100,7 +102,7 @@ function SearchTable({
 
 function Totals({ items }: { items: Array<[string, string]> }) {
   return (
-    <dl className="kv">
+    <dl className="cap-detail-record">
       {items.map(([k, v]) => (
         <Fragment key={k}>
           <dt>{k}</dt>
@@ -205,38 +207,49 @@ function Search({ ns }: { ns: string }) {
 // Core Web Vitals and the two diagnostic metrics, rated at the 75th percentile against
 // Google's published thresholds (web.dev/articles/vitals; /articles/fcp; /articles/ttfb):
 // good at or under the first number, poor over the second.
-const VITALS: Array<{ key: WebVital; name: string; good: number; poor: number; unit: "ms" | "" }> =
-  [
-    {
-      key: "largestContentfulPaint",
-      name: "Largest Contentful Paint",
-      good: 2500,
-      poor: 4000,
-      unit: "ms",
-    },
-    {
-      key: "interactionToNextPaint",
-      name: "Interaction to Next Paint",
-      good: 200,
-      poor: 500,
-      unit: "ms",
-    },
-    {
-      key: "cumulativeLayoutShift",
-      name: "Cumulative Layout Shift",
-      good: 0.1,
-      poor: 0.25,
-      unit: "",
-    },
-    {
-      key: "firstContentfulPaint",
-      name: "First Contentful Paint",
-      good: 1800,
-      poor: 3000,
-      unit: "ms",
-    },
-    { key: "timeToFirstByte", name: "Time to First Byte", good: 800, poor: 1800, unit: "ms" },
-  ];
+const VITALS: Array<{
+  key: WebVital;
+  name: string;
+  good: number;
+  poor: number;
+  unit: "ms" | "";
+}> = [
+  {
+    key: "largestContentfulPaint",
+    name: "Largest Contentful Paint",
+    good: 2500,
+    poor: 4000,
+    unit: "ms",
+  },
+  {
+    key: "interactionToNextPaint",
+    name: "Interaction to Next Paint",
+    good: 200,
+    poor: 500,
+    unit: "ms",
+  },
+  {
+    key: "cumulativeLayoutShift",
+    name: "Cumulative Layout Shift",
+    good: 0.1,
+    poor: 0.25,
+    unit: "",
+  },
+  {
+    key: "firstContentfulPaint",
+    name: "First Contentful Paint",
+    good: 1800,
+    poor: 3000,
+    unit: "ms",
+  },
+  {
+    key: "timeToFirstByte",
+    name: "Time to First Byte",
+    good: 800,
+    poor: 1800,
+    unit: "ms",
+  },
+];
 
 const vital = (x: number | null, unit: "ms" | "") =>
   x == null ? "" : unit === "ms" ? `${fmtN(Math.round(x))} ms` : x.toFixed(3);
@@ -247,8 +260,8 @@ function Vitals({ v }: { v: TrafficWebVitals }) {
       <p className="body faint">
         {fmtN(v.page_views_measured)} page views measured by Cloudflare's browser insights.
       </p>
-      <div className="scroll-x">
-        <table className="list">
+      <div className="cap-table-wrap">
+        <table className="cap-table">
           <thead>
             <tr>
               <th scope="col">Measure</th>
@@ -311,8 +324,8 @@ function Traffic({ ns }: { ns: string }) {
                   <>
                     {n.note && <p className="body faint">{n.note}</p>}
                     {real.length ? (
-                      <div className="scroll-x">
-                        <table className="list">
+                      <div className="cap-table-wrap">
+                        <table className="cap-table">
                           <thead>
                             <tr>
                               <th scope="col">Path</th>
@@ -354,9 +367,24 @@ function Traffic({ ns }: { ns: string }) {
                   <LogView
                     caption={`Server errors, ${d.days} days`}
                     columns={[
-                      { key: "path", label: "Path", mono: true, cell: (f) => f.path },
-                      { key: "status", label: "Status", num: true, cell: (f) => f.status },
-                      { key: "hits", label: "Hits", num: true, cell: (f) => fmtN(f.hits) },
+                      {
+                        key: "path",
+                        label: "Path",
+                        mono: true,
+                        cell: (f) => f.path,
+                      },
+                      {
+                        key: "status",
+                        label: "Status",
+                        num: true,
+                        cell: (f) => f.status,
+                      },
+                      {
+                        key: "hits",
+                        label: "Hits",
+                        num: true,
+                        cell: (f) => fmtN(f.hits),
+                      },
                     ]}
                     rows={e.failures}
                     rowKey={(f) => `${f.path} ${f.status}`}
@@ -386,8 +414,17 @@ function Traffic({ ns }: { ns: string }) {
                     caption={`AI crawlers, ${d.days} days`}
                     columns={[
                       { key: "name", label: "Crawler", cell: (r) => r.name },
-                      { key: "kind", label: "Kind", cell: (r) => CRAWLER_KIND[r.kind] ?? r.kind },
-                      { key: "hits", label: "Hits", num: true, cell: (r) => fmtN(r.hits) },
+                      {
+                        key: "kind",
+                        label: "Kind",
+                        cell: (r) => CRAWLER_KIND[r.kind] ?? r.kind,
+                      },
+                      {
+                        key: "hits",
+                        label: "Hits",
+                        num: true,
+                        cell: (r) => fmtN(r.hits),
+                      },
                       {
                         key: "answered",
                         label: "Answered",
@@ -458,7 +495,10 @@ function buildState(b: { status: string | null; outcome: string | null }): {
   const known = b.outcome ? BUILD[b.outcome] : undefined;
   if (known) return known;
   if (b.status && b.status !== "stopped")
-    return { kind: "run" as const, label: b.status === "queued" ? "Queued" : "Building" };
+    return {
+      kind: "run" as const,
+      label: b.status === "queued" ? "Queued" : "Building",
+    };
   return { kind: "nodata" as const, label: b.outcome ?? b.status ?? "Unknown" };
 }
 
@@ -512,8 +552,8 @@ export function SiteBuilds({ ns }: { ns: string }) {
           {d && (
             <Source src={d.builds}>
               {({ builds }) => (
-                <div className="scroll-x">
-                  <table className="list">
+                <div className="cap-table-wrap">
+                  <table className="cap-table">
                     <thead>
                       <tr>
                         <th scope="col">When</th>
@@ -522,7 +562,7 @@ export function SiteBuilds({ ns }: { ns: string }) {
                         <th scope="col">Commit</th>
                         <th scope="col">Message</th>
                         <th scope="col">
-                          <span className="sr-only">Log</span>
+                          <span className="cap-sr-only">Log</span>
                         </th>
                       </tr>
                     </thead>

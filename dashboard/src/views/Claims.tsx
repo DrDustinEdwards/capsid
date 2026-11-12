@@ -78,7 +78,7 @@ export function Claims() {
           go(input, job);
         }}
       >
-        <label className="sr-only" htmlFor="clNs">
+        <label className="cap-sr-only" htmlFor="clNs">
           Project
         </label>
         <select
@@ -94,7 +94,7 @@ export function Claims() {
             </option>
           ))}
         </select>
-        <label className="sr-only" htmlFor="clAgent">
+        <label className="cap-sr-only" htmlFor="clAgent">
           Agent
         </label>
         <input
@@ -105,7 +105,7 @@ export function Claims() {
           value={input.agent}
           onChange={(e) => setInput({ ...input, agent: e.target.value })}
         />
-        <label className="sr-only" htmlFor="clSince">
+        <label className="cap-sr-only" htmlFor="clSince">
           Since
         </label>
         <input
@@ -116,7 +116,7 @@ export function Claims() {
           value={input.since}
           onChange={(e) => setInput({ ...input, since: e.target.value })}
         />
-        <label className="sr-only" htmlFor="clUntil">
+        <label className="cap-sr-only" htmlFor="clUntil">
           Before
         </label>
         <input
@@ -174,8 +174,8 @@ export function Claims() {
             <Spinner label="Reading the claims..." />
           </div>
         ) : data && data.groups.length ? (
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>Agent</th>
@@ -243,8 +243,8 @@ export function Claims() {
       )}
       {checks.length > 0 && (
         <Panel flush title="By check" count={checks.length} src="every agent above, summed">
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>Check</th>
@@ -279,7 +279,7 @@ export function Claims() {
           go(filter, jobInput);
         }}
       >
-        <label className="sr-only" htmlFor="clJob">
+        <label className="cap-sr-only" htmlFor="clJob">
           Job id
         </label>
         <input

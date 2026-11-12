@@ -64,8 +64,8 @@ export function Deploys() {
             count={list.length}
             src="at most 10 per site, newest first"
           >
-            <div className="scroll-x">
-              <table className="list">
+            <div className="cap-table-wrap">
+              <table className="cap-table">
                 <thead>
                   <tr>
                     <th>When</th>
@@ -131,8 +131,8 @@ export function Deploys() {
               section="No deploy data"
               count={missing.length}
             >
-              <div className="scroll-x">
-                <table className="list">
+              <div className="cap-table-wrap">
+                <table className="cap-table">
                   <tbody>
                     {missing.map((s) => (
                       <tr key={siteKey(s)}>

@@ -177,8 +177,8 @@ function BackupCell({ s }: { s: SiteSnapshot }) {
 export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
   const { now } = useApp();
   return (
-    <div className="scroll-x reflow">
-      <table className="fleet cards-below-1100">
+    <div className="cap-table-wrap" data-reflow="wide">
+      <table className="cap-table fleet">
         <thead>
           <tr>
             <th>Site</th>
@@ -187,7 +187,7 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
             <th>Live deploy</th>
             <th>Errors 24h</th>
             <th>
-              Backup age <span className="th-note">only Capsid reports one</span>
+              Backup age <span className="cap-table-note">only Capsid reports one</span>
             </th>
             <th>Probe</th>
           </tr>
@@ -282,7 +282,12 @@ const GROUPS: QueueGroup[] = [
         .sort((a, b) => b.priority - a.priority || ms(a.updated_at) - ms(b.updated_at)),
     hideEmpty: true,
   },
-  { id: "done", label: "Done in the last 24h", pick: byStatus(["done"]), collapsed: true },
+  {
+    id: "done",
+    label: "Done in the last 24h",
+    pick: byStatus(["done"]),
+    collapsed: true,
+  },
   {
     id: "failed",
     label: "Failed or superseded, last 24h",
@@ -470,32 +475,5 @@ export function TimelinePanel({
         <NoSnapshot />
       )}
     </Panel>
-  );
-}
-
-// A labeled field in a config form (Capsomer's ConfigForm), its note under the control.
-export function Field({
-  id,
-  label,
-  note,
-  children,
-}: {
-  id: string;
-  label: string;
-  note?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="f">
-      <label htmlFor={id} className="section-title">
-        {label}
-      </label>
-      {children}
-      {note && (
-        <span id={`${id}-note`} className="faint note">
-          {note}
-        </span>
-      )}
-    </div>
   );
 }
