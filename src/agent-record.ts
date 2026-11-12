@@ -8,6 +8,7 @@
 // requests has no merge rate, and 0% would rank it below one that merged one in ten.
 
 import { agentActor } from "./agents-schema";
+import { median } from "./job-claims-read";
 
 // What this module needs to know about a credential, and no more. Not
 // `AgentSummary` from status.ts: that module builds the summaries and then asks
@@ -65,14 +66,6 @@ export interface RecordRows {
 function rate(numerator: number, denominator: number): number | null {
   if (denominator === 0) return null;
   return Math.round((numerator / denominator) * 1000) / 1000;
-}
-
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  // An even count averages the two middles and rounds to whole minutes.
-  return sorted.length % 2 === 1 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
 // Only a verified field counts toward a rate. Counts are stored whether or not the

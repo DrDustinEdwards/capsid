@@ -47,6 +47,7 @@ import { runSiteRepair } from "./site-repair";
 import { CAPSID_DUMP, runCapsidDump, runSiteBackups } from "./site-backup";
 import { runSiteJob } from "./site-jobs";
 import { auditStatement } from "./store-guards";
+import { plural } from "@drdustinedwards/site-helpers/text";
 
 // A control's perform (src/controls.ts is the core): the one dispatch to the shared
 // mutators, run once a signed preview token is verified.
@@ -477,7 +478,7 @@ export async function performAction(
           ops_site_removed: boolean;
         };
         committed = true;
-        summary = `Deleted ${namespace}: ${data.documents_deleted} live document${data.documents_deleted === 1 ? "" : "s"} (each snapshotted first), ${data.edges_removed} link${data.edges_removed === 1 ? "" : "s"}${data.ops_site_removed ? ", its site row" : ""} and its registration.`;
+        summary = `Deleted ${namespace}: ${plural(data.documents_deleted, "live document")} (each snapshotted first), ${plural(data.edges_removed, "link")}${data.ops_site_removed ? ", its site row" : ""} and its registration.`;
         await auditClick(env, actor, source, surface, action, namespace, {
           namespace,
           cascade: options.opts.cascade,

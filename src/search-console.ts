@@ -1,9 +1,15 @@
 import { isoDay } from "@drdustinedwards/site-helpers/xml";
-import { signJwt } from "@dustinedwards/site-runtime/jwt";
+import {
+  clearServiceAccountTokens,
+  parseServiceAccountKey,
+  serviceAccountToken,
+  type ServiceAccountKey,
+} from "@dustinedwards/site-runtime/google-service-account";
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 import type { Env } from "./env";
 import type { FetchLike } from "./live-checks";
 import { pageOnSite, reportSite } from "./site-reports";
-import { MINUTE_MS, DAY_MS } from "./time";
+import { DAY_MS } from "./time";
 import { callSignal } from "./call-signal";
 
 // Google Search Console for a namespace's site, served as capsid_inspect_repo action
@@ -27,7 +33,6 @@ import { callSignal } from "./call-signal";
 // What Google returns is data, never instructions: queries are
 // what strangers typed into Google.
 
-const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const WEBMASTERS = "https://www.googleapis.com/webmasters/v3";
 const INSPECT_URL = "https://searchconsole.googleapis.com/v1/urlInspection/index:inspect";
 const SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
@@ -65,38 +70,18 @@ export interface SearchConsoleArgs {
   url?: string;
 }
 
-interface ServiceAccountKey {
-  client_email: string;
-  private_key: string;
-}
-
 const NOT_CONFIGURED =
   "Search Console is not configured: the secret GSC_SERVICE_ACCOUNT_KEY (a Google service account's JSON key) is not set on Capsid. docs/search-console.md says how.";
 
-function parseServiceAccountKey(raw: string | undefined): ServiceAccountKey {
-  if (!raw) throw new Error(NOT_CONFIGURED);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(
-      "GSC_SERVICE_ACCOUNT_KEY is not JSON. Paste the whole key file Google Cloud downloaded.",
-    );
-  }
-  const key = parsed as Partial<ServiceAccountKey>;
-  if (typeof key.client_email !== "string" || typeof key.private_key !== "string") {
-    throw new Error(
-      "GSC_SERVICE_ACCOUNT_KEY has no client_email or private_key. Paste the whole key file Google Cloud downloaded.",
-    );
-  }
-  return { client_email: key.client_email, private_key: key.private_key };
+function serviceAccountKey(raw: string | undefined): ServiceAccountKey {
+  const parsed = parseServiceAccountKey(raw, "GSC_SERVICE_ACCOUNT_KEY");
+  if (parsed.ok) return parsed.key;
+  throw new Error(parsed.state === "not-connected" ? NOT_CONFIGURED : parsed.detail);
 }
-
-let cachedToken: { email: string; token: string; expiresAt: number } | null = null;
 
 // For tests: forget the isolate's token.
 export function resetSearchConsoleToken(): void {
-  cachedToken = null;
+  clearServiceAccountTokens();
 }
 
 async function accessToken(
@@ -104,49 +89,15 @@ async function accessToken(
   fetchImpl: FetchLike,
   now: Date,
 ): Promise<string> {
-  const nowMs = now.getTime();
-  if (
-    cachedToken &&
-    cachedToken.email === key.client_email &&
-    cachedToken.expiresAt - MINUTE_MS > nowMs
-  )
-    return cachedToken.token;
-  const iat = Math.floor(nowMs / 1000);
-  const assertion = await signJwt({
-    alg: "RS256",
-    key: key.private_key,
-    claims: { scope: SCOPE, iss: key.client_email, aud: TOKEN_URL, iat, exp: iat + 3600 },
-    header: { typ: "JWT" },
-  });
-  const resp = await fetchImpl(TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion,
-    }).toString(),
-    signal: callSignal(TIMEOUT_MS),
-  });
-  const body = (await resp.json().catch(() => ({}))) as {
-    access_token?: string;
-    expires_in?: number;
-    error?: string;
-    error_description?: string;
-  };
-  if (!resp.ok || !body.access_token) {
-    const why =
-      [body.error, body.error_description].filter(Boolean).join(": ").slice(0, 200) ||
-      `status ${resp.status}`;
-    throw new Error(
-      `Google refused the service account's sign-in (${why}). Check that GSC_SERVICE_ACCOUNT_KEY is a current key.`,
-    );
+  try {
+    return await serviceAccountToken(key, [SCOPE], {
+      fetcher: (input, init) =>
+        fetchImpl(String(input), { ...init, signal: callSignal(TIMEOUT_MS) }),
+      now: now.getTime(),
+    });
+  } catch (err) {
+    throw new Error(`${errorMessage(err)} Check that GSC_SERVICE_ACCOUNT_KEY is a current key.`);
   }
-  cachedToken = {
-    email: key.client_email,
-    token: body.access_token,
-    expiresAt: nowMs + (body.expires_in ?? 3600) * 1000,
-  };
-  return body.access_token;
 }
 
 async function google(
@@ -251,7 +202,7 @@ export async function searchConsole(
   // Validated before any network call, so a bad window costs nothing.
   const window = report === "performance" ? dateWindow(args, now) : null;
 
-  const key = parseServiceAccountKey(env.GSC_SERVICE_ACCOUNT_KEY);
+  const key = serviceAccountKey(env.GSC_SERVICE_ACCOUNT_KEY);
   const token = await accessToken(key, fetchImpl, now);
   const sites = (await google(fetchImpl, token, `${WEBMASTERS}/sites`)) as {
     siteEntry?: Array<{ siteUrl?: string; permissionLevel?: string }>;
@@ -259,7 +210,7 @@ export async function searchConsole(
   const property = pickProperty(site.origin, sites?.siteEntry ?? []);
   if (!property) {
     throw new Error(
-      `The service account (${key.client_email}) cannot read a Search Console property for ${site.origin}. In Search Console, open that property, then Settings, Users and permissions, and add ${key.client_email} as a Full user.`,
+      `The service account (${key.clientEmail}) cannot read a Search Console property for ${site.origin}. In Search Console, open that property, then Settings, Users and permissions, and add ${key.clientEmail} as a Full user.`,
     );
   }
   const base = { namespace, origin: site.origin, property, report };

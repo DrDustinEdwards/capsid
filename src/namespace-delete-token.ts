@@ -1,10 +1,9 @@
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { hmacHex } from "./auth";
 import type { Env } from "./env";
-import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+import { base64url, fromBase64urlText } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
 // The namespace delete's confirmation token (src/namespace-delete.ts previews and
 // performs the delete).
@@ -75,7 +74,7 @@ export async function verifyDeleteToken(
   }
   let claims: DeleteClaims;
   try {
-    claims = JSON.parse(decodeBase64url(payload)) as DeleteClaims;
+    claims = JSON.parse(fromBase64urlText(payload)) as DeleteClaims;
   } catch (err) {
     // Signed by this Worker and unreadable: a defect, said so.
     return {

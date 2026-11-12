@@ -4,7 +4,7 @@ import { PUSH_KEY } from "../lib/keys";
 import { useApp } from "../app/ctx";
 import { fetchPush, postPush, useAnswer, type Answer, type PushOp } from "../lib/api";
 import { BASE } from "../lib/base";
-import { ago, msSql } from "../lib/format";
+import { ago, ms } from "../lib/format";
 import type { PortalPush } from "../types";
 import { Panel } from "capsomer/react/panel";
 import { PushDevices } from "capsomer/react/web-push";
@@ -82,9 +82,9 @@ export function PhoneAlerts() {
             devices={devices.map((d) => ({
               id: d.id,
               label: d.label ?? `Device ${d.id}`,
-              detail: `turned on ${ago(msSql(d.created_at), now)}${
+              detail: `turned on ${ago(ms(d.created_at), now)}${
                 d.last_sent_at
-                  ? `, last alert ${ago(msSql(d.last_sent_at), now)}${d.last_status && (d.last_status < 200 || d.last_status > 299) ? ` (answered ${d.last_status})` : ""}`
+                  ? `, last alert ${ago(ms(d.last_sent_at), now)}${d.last_status && (d.last_status < 200 || d.last_status > 299) ? ` (answered ${d.last_status})` : ""}`
                   : ", no alert yet"
               }`,
             }))}

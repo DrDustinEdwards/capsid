@@ -18,11 +18,9 @@ import { logEvent, OWASP_EVENTS } from "@dustinedwards/site-runtime/log";
 import { emailKey } from "@dustinedwards/site-runtime/rate-limit";
 import type { Env } from "./env";
 import { isPortalHost, PORTAL_HOST, portalCookiePath, publicPortalPath } from "./portal-host";
-import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+import { base64url, fromBase64urlText } from "@dustinedwards/site-runtime/encoding";
 import { isSameOriginPath } from "@dustinedwards/site-runtime/url";
 import { isolationVerdict, originRefusal } from "@dustinedwards/site-runtime/origin";
-
-const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
 // Capsid Portal's own session. The OAuth provider mints tokens for MCP clients, and a
 // browser opening /portal has nothing to present, so the Portal signs in through the
@@ -151,7 +149,7 @@ async function verifySession(request: Request, env: Env): Promise<SessionPayload
   if (!(await safeEqual(sig, await hmacHex(env.COOKIE_ENCRYPTION_KEY, encoded)))) return null;
   let payload: SessionPayload;
   try {
-    payload = JSON.parse(decodeBase64url(encoded)) as SessionPayload;
+    payload = JSON.parse(fromBase64urlText(encoded)) as SessionPayload;
   } catch {
     return null;
   }

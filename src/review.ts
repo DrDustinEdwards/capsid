@@ -1,3 +1,4 @@
+import { githubJson } from "@dustinedwards/site-runtime/github";
 import { verifyJwt } from "@dustinedwards/site-runtime/access-login";
 import { untrusted, UNTRUSTED_DATA_RULE } from "@dustinedwards/site-runtime/anthropic";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
@@ -176,9 +177,10 @@ interface Pull {
 }
 
 async function ghJson<T>(env: Env, who: ReviewCaller, path: string): Promise<T> {
-  const resp = await ghFetch(env, who.owner, who.repo, `/repos/${who.owner}/${who.repo}${path}`);
-  if (!resp.ok) throw new Error(`GitHub answered ${resp.status} for ${path}`);
-  return (await resp.json()) as T;
+  return (await githubJson(
+    (p) => ghFetch(env, who.owner, who.repo, p),
+    `/repos/${who.owner}/${who.repo}${path}`,
+  )) as T;
 }
 
 async function readPull(env: Env, who: ReviewCaller): Promise<Pull> {

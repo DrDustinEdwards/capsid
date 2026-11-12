@@ -1,3 +1,4 @@
+import { canDispatch } from "@dustinedwards/site-runtime/github";
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 
@@ -43,8 +44,7 @@ export async function offaccountDispatchTick(env: Env, now: Date): Promise<Dispa
   return report;
 }
 
-// The one GitHub write in this file: a workflow_dispatch of offaccount.yml on `ref`, with no
-// inputs. The probe and the copy's start both go through it.
+// The copy's start: a workflow_dispatch of offaccount.yml on `ref`, with no inputs.
 function postDispatch(env: Env, ref: string): Promise<Response> {
   return ghFetch(
     env,
@@ -64,10 +64,8 @@ const PROBE_KEY = "offaccount-dispatch:probe";
 const PROBE_RETRY_KEY = "offaccount-dispatch:probe-retry";
 
 // Once per UTC day, before the copy is due: does the App still hold Actions: Write on
-// capsid-backups? The dispatch asks for a branch that does not exist. GitHub checks the
-// caller's permission first and the ref second, so an App that may dispatch is answered 422
-// ("No ref found") and starts nothing, and one that may not is answered 403 or 404. The
-// permission is otherwise exercised only on a late day, so lowering it would show up
+// capsid-backups? site-runtime's canDispatch asks for a branch that does not exist: 422 means
+// yes and starts nothing, 403 or 404 means no. The permission is otherwise exercised only on a late day, so lowering it would show up
 // exactly when the copy was already late. A refusal is a refused run, which /health shows.
 async function probeOncePerDay(
   env: Env,
@@ -75,7 +73,12 @@ async function probeOncePerDay(
 ): Promise<Extract<DispatchReport, { ran: true }> | null> {
   if ((await env.APP_KV.get(PROBE_KEY)) === day) return null;
   if (await env.APP_KV.get(PROBE_RETRY_KEY)) return null;
-  const resp = await postDispatch(env, "permission-probe-no-such-ref");
+  const resp = await canDispatch(
+    (path, init) => ghFetch(env, OWNER, REPO, path, init),
+    OWNER,
+    REPO,
+    WORKFLOW,
+  );
   if (resp.status === 422) {
     await env.APP_KV.put(PROBE_KEY, day, { expirationTtl: 3 * 24 * 3600 });
     return {

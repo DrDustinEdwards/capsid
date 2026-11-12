@@ -1,5 +1,6 @@
 import type { Env } from "../env";
 import { TEST_FILE } from "../merge-class";
+import { readAllPages as readPages } from "@dustinedwards/site-runtime/github";
 import { ghFetch } from "./client";
 
 // The one reader of a pull request's changed files. The auto-merge tick judges them
@@ -8,13 +9,13 @@ import { ghFetch } from "./client";
 
 // Paged GitHub lists are read to the end, and a list not read whole is reported rather
 // than judged. Bounded: GitHub serves at most FILES_LIMIT files for a pull request, and
-// callers pass their own page cap for other lists. The next page is requested by number;
-// the Link header only says one exists, so its URL never reaches ghFetch.
+// callers pass their own page cap for other lists. The reading is site-runtime's
+// readAllPages (by Link rel="next", the next page asked for by number).
 export const PER_PAGE = 100;
 export const FILES_LIMIT = 3000;
 const FILES_MAX_PAGES = FILES_LIMIT / PER_PAGE;
 
-export async function readAllPages<T>(
+export function readAllPages<T>(
   env: Env,
   owner: string,
   repo: string,
@@ -22,19 +23,11 @@ export async function readAllPages<T>(
   rowsOf: (body: unknown) => T[],
   maxPages: number,
 ): Promise<{ items: T[]; problem: string | null }> {
-  const items: T[] = [];
-  for (let page = 1; page <= maxPages; page++) {
-    const resp = await ghFetch(
-      env,
-      owner,
-      repo,
-      `${path}${path.includes("?") ? "&" : "?"}per_page=${PER_PAGE}&page=${page}`,
-    );
-    if (!resp.ok) return { items, problem: `page ${page} returned ${resp.status}` };
-    items.push(...(rowsOf(await resp.json()) ?? []));
-    if (!/rel="next"/.test(resp.headers.get("Link") ?? "")) return { items, problem: null };
-  }
-  return { items, problem: `more than ${maxPages} pages` };
+  return readPages<T>((p) => ghFetch(env, owner, repo, p), path, {
+    rowsOf,
+    maxPages,
+    perPage: PER_PAGE,
+  });
 }
 
 // A commit's check runs, read whole (readAllPages), shared by the auto-merge tick, what's
