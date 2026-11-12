@@ -41,6 +41,7 @@ import {
   refuse,
   type JobResult,
 } from "./jobs-transition";
+import { plural } from "@drdustinedwards/site-helpers/text";
 
 // The transitions made on a job the caller does not hold: the seat's fail and release,
 // supersede and resume.
@@ -473,14 +474,10 @@ export async function releaseJob(
 /** Why a job's row shows work was done on it, or null. */
 export function workRecorded(job: JobRow): string | null {
   const done: string[] = [];
-  if (job.blocked_count > 0)
-    done.push(`it has hit a gate ${job.blocked_count} time${job.blocked_count === 1 ? "" : "s"}`);
-  if (job.resumed_count > 0)
-    done.push(`it has been resumed ${job.resumed_count} time${job.resumed_count === 1 ? "" : "s"}`);
+  if (job.blocked_count > 0) done.push(`it has hit a gate ${plural(job.blocked_count, "time")}`);
+  if (job.resumed_count > 0) done.push(`it has been resumed ${plural(job.resumed_count, "time")}`);
   if (job.corrections_count > 0)
-    done.push(
-      `it has been sent back for correction ${job.corrections_count} time${job.corrections_count === 1 ? "" : "s"}`,
-    );
+    done.push(`it has been sent back for correction ${plural(job.corrections_count, "time")}`);
   if (job.result_ref) done.push(`it records a result_ref (${job.result_ref})`);
   return done.length ? done.join(", ") : null;
 }

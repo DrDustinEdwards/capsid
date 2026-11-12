@@ -9,6 +9,7 @@ import { signDeleteToken, type Verified, verifyDeleteToken } from "./namespace-d
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { plural } from "@drdustinedwards/site-helpers/text";
 // Deleting a namespace (capsid_admin_manage_namespaces actions delete_preview and
 // delete_perform): the plan, the refusals, the signed confirmation and the one batch.
 // Its operation is registered in src/tools/namespaces.ts, admin only (TOOL_GRANTS in
@@ -258,7 +259,7 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
   if (plan.counts.jobs_open > 0) {
     const jobs = plan.open_jobs.map((j) => `${j.id} (${j.status}, '${j.title}')`);
     refusals.push(
-      `${ns} has ${plan.counts.jobs_open} open job${plan.counts.jobs_open === 1 ? "" : "s"}: ${named(jobs, plan.counts.jobs_open)}. ` +
+      `${ns} has ${plural(plan.counts.jobs_open, "open job")}: ${named(jobs, plan.counts.jobs_open)}. ` +
         `cascade never reaches jobs. End each with the capsid_work_jobs tool: action 'supersede' for a queued job, action 'fail' for a claimed or blocked one (the admin may fail a job another credential holds), or 'release' then 'supersede'.`,
     );
   }
@@ -277,12 +278,12 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
   }
   if (plan.counts.documents_live > 0 && !opts.cascade) {
     refusals.push(
-      `${ns} holds ${plan.counts.documents_live} live document${plan.counts.documents_live === 1 ? "" : "s"}. Pass cascade: true to delete them; each is snapshotted to document_versions first. Archived documents (archive/...) are kept either way.`,
+      `${ns} holds ${plural(plan.counts.documents_live, "live document")}. Pass cascade: true to delete them; each is snapshotted to document_versions first. Archived documents (archive/...) are kept either way.`,
     );
   }
   if (plan.counts.policy_documents > 0 && !opts.allowImprovePaths) {
     refusals.push(
-      `${ns} holds ${plan.counts.policy_documents} signed policy document${plan.counts.policy_documents === 1 ? "" : "s"} (${named(plan.policy_paths, plan.counts.policy_documents)}). ` +
+      `${ns} holds ${plural(plan.counts.policy_documents, "signed policy document")} (${named(plan.policy_paths, plan.counts.policy_documents)}). ` +
         `Deleting one is a ruling, so it needs allow_improve_paths: true, which needs the can_touch_protected flag and is audit-logged.`,
     );
   }

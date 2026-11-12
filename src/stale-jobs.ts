@@ -1,3 +1,4 @@
+import { plural } from "@drdustinedwards/site-helpers/text";
 import type { Env } from "./env";
 import { MERGE_RESUME_ACTOR } from "./jobs-seat";
 import type { OpsStaleJob, StaleRule } from "./ops-types/views";
@@ -122,10 +123,6 @@ export function prsSettled(entry: StalePrEntry | undefined): boolean {
   return (
     entry !== undefined && entry.open === 0 && entry.unread === 0 && entry.merged + entry.closed > 0
   );
-}
-
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
 /**
