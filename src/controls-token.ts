@@ -3,10 +3,9 @@ import { hmacHex } from "./auth";
 import { isPortalAction, UNKNOWN_ACTION } from "./controls-base";
 import type { Env } from "./env";
 import type { PortalAction } from "./ops-types/portal";
-import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+import { base64url, fromBase64urlText } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
 // The confirmation token: base64url of the canonical claims, a dot, and the hex
 // HMAC-SHA256 of that base64url text under the derived key.
@@ -81,7 +80,7 @@ export async function verifyConfirm(
   }
   let claims: ConfirmClaims;
   try {
-    claims = JSON.parse(decodeBase64url(payload)) as ConfirmClaims;
+    claims = JSON.parse(fromBase64urlText(payload)) as ConfirmClaims;
   } catch (err) {
     // Signed by this Worker and unreadable: a defect, said so.
     return {

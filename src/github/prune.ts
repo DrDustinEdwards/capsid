@@ -1,3 +1,4 @@
+import { readAllPages } from "@dustinedwards/site-runtime/github";
 import type { RepoEnv as Env } from "../env";
 import { encodePath, getDefaultBranch, ghFetch, invalidateRepoReads, resolveRepo } from "./client";
 
@@ -125,25 +126,25 @@ export function pruneVerdict(
   return { prune: true, pr: latest.number };
 }
 
+// A refused page throws (the plan cannot be judged on part of a list); a list longer than
+// PAGE_CAP pages comes back marked incomplete.
 async function paged<T>(
   env: Env,
   owner: string,
   repo: string,
   path: string,
 ): Promise<{ rows: T[]; complete: boolean }> {
-  const rows: T[] = [];
-  for (let page = 1; page <= PAGE_CAP; page++) {
-    const sep = path.includes("?") ? "&" : "?";
-    const resp = await ghFetch(env, owner, repo, `${path}${sep}per_page=${PAGE_SIZE}&page=${page}`);
-    if (!resp.ok)
-      throw new Error(
-        `delete_branch merged: reading ${path} failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`,
-      );
-    const batch = (await resp.json()) as T[];
-    rows.push(...batch);
-    if (batch.length < PAGE_SIZE) return { rows, complete: true };
-  }
-  return { rows, complete: false };
+  const { items, problem, truncated } = await readAllPages<T>(
+    (p) => ghFetch(env, owner, repo, p),
+    path,
+    {
+      maxPages: PAGE_CAP,
+      perPage: PAGE_SIZE,
+    },
+  );
+  if (problem && !truncated)
+    throw new Error(`delete_branch merged: reading ${path} failed (${problem})`);
+  return { rows: items, complete: problem === null };
 }
 
 /** What the prune rule makes of a repo's branches: the ones it would delete, and every other

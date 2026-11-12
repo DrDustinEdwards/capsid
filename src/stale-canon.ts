@@ -1,3 +1,4 @@
+import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import type { Env } from "./env";
 import { isCanonPath } from "./canon";
 import { ghFetch, resolveRepo } from "./github/client";
@@ -145,8 +146,7 @@ export function staleCanonDoc(
 
 /** A D1 datetime ("2026-10-18 09:00:00", UTC) or an ISO string, as milliseconds. */
 export function instant(at: string): number {
-  const iso = /[zZ]$|[+-]\d\d:?\d\d$/.test(at) ? at : `${at.replace(" ", "T")}Z`;
-  return Date.parse(iso);
+  return parseSqlTime(at) ?? Number.NaN;
 }
 
 export interface Edge {

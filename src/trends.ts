@@ -1,3 +1,5 @@
+import { parseSqlTime } from "@dustinedwards/site-runtime/time";
+import { median } from "./job-claims-read";
 import { COMPLETE_MARKER } from "@dustinedwards/d1-dump";
 import { DUMP_RETENTION } from "./backup";
 import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
@@ -82,13 +84,7 @@ export function lastDays(now: Date, days: number): string[] {
 /** An audit or touch time to milliseconds. Both "YYYY-MM-DD HH:MM:SS" (SQLite's
  *  datetime('now'), no zone) and ISO are written; both are UTC. */
 export function timeMs(at: string): number {
-  return Date.parse(
-    at.includes("T")
-      ? /[zZ]|[+-]\d\d:?\d\d$/.test(at)
-        ? at
-        : `${at}Z`
-      : `${at.replace(" ", "T")}Z`,
-  );
+  return parseSqlTime(at) ?? Number.NaN;
 }
 
 /** Minutes and sessions per week from activity times: a session ends after a gap over
@@ -319,14 +315,7 @@ function deployStats(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([repo, t]) => {
       const decided = t.shipped + t.refused;
-      const sorted = [...t.restores].sort((a, b) => a - b);
-      const mid = sorted.length >> 1;
-      const median =
-        sorted.length === 0
-          ? null
-          : sorted.length % 2
-            ? sorted[mid]!
-            : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
+      const restoreMedian = median(t.restores);
       return {
         repo,
         deploys: decided + t.unverified,
@@ -336,7 +325,7 @@ function deployStats(
         rolled_back: t.rolled_back,
         unverified: t.unverified,
         change_failure_rate: decided ? Math.round((t.refused / decided) * 1000) / 1000 : null,
-        restore_median_seconds: median,
+        restore_median_seconds: restoreMedian,
       };
     });
 }

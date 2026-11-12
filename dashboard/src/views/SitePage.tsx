@@ -11,7 +11,7 @@ import { SITE_TABS, parseRoute, tabOf, useApp, type SiteTab } from "../app/ctx";
 import { Link, useLocation } from "../lib/router";
 import { padRing, uptimeOf } from "capsomer/behavior/uptime-strip";
 import { PROBE, RING_SLOTS, cfNoData, cfOk, siteScripts } from "../lib/derive";
-import { ago, hostOf, ms, msSql, pct, shortId, utc } from "../lib/format";
+import { ago, hostOf, ms, pct, shortId, utc } from "../lib/format";
 import type { OpsSiteConfig, SiteSnapshot } from "../types";
 import { NoData, Pill, St } from "../ui/icons";
 import { When } from "../ui/When";
@@ -308,7 +308,7 @@ function Setup({
   const { feed, now, confirm } = useApp();
   const [editing, setEditing] = useState(false);
   const none = <Missing />;
-  const at = row ? msSql(row.updated_at) : NaN;
+  const at = row ? ms(row.updated_at) : NaN;
   return (
     <>
       {editing && row && (

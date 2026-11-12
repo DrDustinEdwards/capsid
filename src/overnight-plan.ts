@@ -10,7 +10,7 @@ import type {
   UsageSource,
   UsageTotals,
 } from "./ops-types/views";
-import { resolveRepo } from "./github/client";
+import { PR_URL_SOURCE, resolveRepo } from "./github/client";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 
@@ -380,7 +380,7 @@ interface ReportedRow extends UsageTotals {
   job_id: string;
 }
 
-const PR_URL = /https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/\d+/g;
+const PR_URL = new RegExp(PR_URL_SOURCE, "g");
 
 export const pullRequestsIn = (text: string | null): string[] => [
   ...new Set(text?.match(PR_URL) ?? []),

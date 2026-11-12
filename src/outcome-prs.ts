@@ -1,3 +1,4 @@
+import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import type { Env } from "./env";
 import { PR_URL_SOURCE, ghFetch, parsePrUrl, resolveRepo } from "./github/client";
 import { prFacts, verifyEvidence } from "./job-outcomes";
@@ -170,14 +171,9 @@ export function unverifiableStatements(
   ];
 }
 
-// A time from GitHub (ISO with a zone) or from D1 (datetime('now'), "YYYY-MM-DD HH:MM:SS",
-// which is UTC) as milliseconds, or NaN.
+// A time from GitHub (ISO with a zone) or from D1 (UTC with no zone) as milliseconds, or NaN.
 function instant(t: string | null | undefined): number {
-  if (!t) return Number.NaN;
-  const iso = /^\d{4}-\d\d-\d\d \d/.test(t)
-    ? `${t.replace(" ", "T")}${/(Z|[+-]\d\d:?\d\d)$/.test(t) ? "" : "Z"}`
-    : t;
-  return Date.parse(iso);
+  return parseSqlTime(t) ?? Number.NaN;
 }
 
 /** When the repository a pull request URL names was created, or null when it could not

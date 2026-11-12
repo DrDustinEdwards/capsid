@@ -7,9 +7,7 @@ import {
 import type { Agent } from "./agents";
 import { checkScope } from "./scope";
 import { MAX_ROWS } from "./limits";
-import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
-
-const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
+import { base64url, fromBase64urlText } from "@dustinedwards/site-runtime/encoding";
 
 // Scopes for resources and prompts. guardRegistrations wraps registerTool only, and
 // a raw request handler is not a registration, so these handlers check scope here.
@@ -88,7 +86,7 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
     let afterPath = "";
     if (typeof cursor === "string" && cursor.length > 0) {
       try {
-        const parsed = JSON.parse(decodeBase64url(cursor)) as { n?: unknown; p?: unknown };
+        const parsed = JSON.parse(fromBase64urlText(cursor)) as { n?: unknown; p?: unknown };
         afterNs = typeof parsed.n === "string" ? parsed.n : "";
         afterPath = typeof parsed.p === "string" ? parsed.p : "";
       } catch {

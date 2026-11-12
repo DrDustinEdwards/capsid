@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApp } from "../app/ctx";
-import { ago, msSql, utc } from "../lib/format";
+import { ago, ms, utc } from "../lib/format";
 import { St } from "../ui/icons";
 import type { OpsSiteConfig } from "../types";
 import { ConfigForm, useConfigForm, type Editing } from "capsomer/react/config-form";
@@ -262,7 +262,7 @@ export function SiteForm({
 
 export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
   const { now } = useApp();
-  const at = msSql(s.updated_at);
+  const at = ms(s.updated_at);
   const none = <Missing />;
   return (
     <tr data-row="">

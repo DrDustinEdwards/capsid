@@ -7,10 +7,9 @@ import { bundledModel } from "./public-data";
 import type { SystemModel } from "./system-model";
 import type { PackageSnapshot } from "./ops-types/sites";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "./ops-types/feed";
-import { fromBase64 } from "@dustinedwards/site-runtime/encoding";
+import { fromBase64Text } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase64(text));
 
 // SHARED CODE: how far the centralization has got (job_584b4e7f2824; ruling
 // capsid/rulings/shared-homes-2026-10-06.md). For each shared package in configuration
@@ -431,7 +430,7 @@ export async function readRootManifest(
   const data = (await resp.json()) as { content?: unknown; encoding?: unknown };
   if (data.encoding !== "base64" || typeof data.content !== "string")
     throw new Error(`${full}'s package.json came back without its content`);
-  return rootManifest(decodeBase64(data.content));
+  return rootManifest(fromBase64Text(data.content));
 }
 
 async function readRelease(env: Env, full: string, fetchImpl: FetchLike): Promise<ReleaseRead> {

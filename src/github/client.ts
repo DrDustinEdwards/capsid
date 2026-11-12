@@ -9,14 +9,17 @@ import { repoPathProblem } from "../limits";
 import type { RepoEnv as Env } from "../env";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { githubAppJwt } from "@dustinedwards/site-runtime/jwt";
+import {
+  GITHUB_API,
+  githubHeaders,
+  installationToken,
+  parsePrUrl,
+  PR_URL_SOURCE,
+} from "@dustinedwards/site-runtime/github";
 import { callSignal } from "../call-signal";
 
-const GH = "https://api.github.com";
-const GH_HEADERS: Record<string, string> = {
-  Accept: "application/vnd.github+json",
-  "X-GitHub-Api-Version": "2022-11-28",
-  "User-Agent": "capsid",
-};
+const GH = GITHUB_API;
+const GH_HEADERS = githubHeaders(null, "capsid");
 
 const TOKEN_TTL_SECONDS = 3300; // installation tokens live 60 min; refresh a little early
 const INSTALL_TTL_SECONDS = 86400; // installation id is stable
@@ -39,12 +42,8 @@ export interface RepoRef {
 }
 
 async function createAppJwt(env: Env): Promise<string> {
-  if (!env.GITHUB_APP_CLIENT_ID || !env.GITHUB_APP_PRIVATE_KEY) {
-    throw new Error(
-      "GitHub App not configured: set GITHUB_APP_CLIENT_ID and GITHUB_APP_PRIVATE_KEY",
-    );
-  }
-  return githubAppJwt(env.GITHUB_APP_CLIENT_ID, env.GITHUB_APP_PRIVATE_KEY);
+  const { appId, privateKey } = appCredentials(env);
+  return githubAppJwt(appId, privateKey);
 }
 
 async function appFetch(env: Env, path: string, init?: RequestInit): Promise<Response> {
@@ -60,45 +59,38 @@ async function appFetch(env: Env, path: string, init?: RequestInit): Promise<Res
   });
 }
 
-async function getInstallationId(env: Env, owner: string, repo: string): Promise<string> {
-  const cached = await env.APP_KV.get(installKey(owner));
-  if (cached) return cached;
-  const resp = await appFetch(env, `/repos/${owner}/${repo}/installation`);
-  if (!resp.ok) {
-    // A bad JWT answers 401; a valid one with no installation covering the repo
-    // answers 404. So a 404 means the credentials are fine and the App is not
-    // installed on that repo.
+function appCredentials(env: Env): { appId: string; privateKey: string } {
+  if (!env.GITHUB_APP_CLIENT_ID || !env.GITHUB_APP_PRIVATE_KEY) {
     throw new Error(
-      `could not resolve GitHub App installation for ${owner}/${repo} (${resp.status}): ${await resp.text()}` +
-        (resp.status === 404
-          ? " (404 means the App is not installed on this repo; the credentials are fine)"
-          : ""),
+      "GitHub App not configured: set GITHUB_APP_CLIENT_ID and GITHUB_APP_PRIVATE_KEY",
     );
   }
-  const data = (await resp.json()) as { id: number };
-  const id = String(data.id);
-  await env.APP_KV.put(installKey(owner), id, { expirationTtl: INSTALL_TTL_SECONDS });
-  return id;
+  return { appId: env.GITHUB_APP_CLIENT_ID, privateKey: env.GITHUB_APP_PRIVATE_KEY };
 }
 
 async function getInstallationToken(env: Env, owner: string, repo: string): Promise<string> {
   const cacheKey = tokenKey(owner, repo);
   const cached = await env.APP_KV.get(cacheKey);
   if (cached) return cached;
-  const installationId = await getInstallationId(env, owner, repo);
-  // Scoped to the one repo asked about. An access_tokens POST with no body mints a
-  // token for every repo the installation covers, and that token then sits in APP_KV.
-  // With `repositories` it holds exactly the repo the caller resolved.
-  const resp = await appFetch(env, `/app/installations/${installationId}/access_tokens`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ repositories: [repo] }),
+  const knownId = await env.APP_KV.get(installKey(owner));
+  // Scoped to the one repo asked about. A token minted with no `repositories` covers every
+  // repo the installation does, and that token would then sit in APP_KV.
+  const minted = await installationToken({
+    ...appCredentials(env),
+    userAgent: "capsid",
+    owner,
+    repo,
+    installationId: knownId ?? undefined,
+    repositories: [repo],
+    fetcher: (input, init) =>
+      fetch(input, { ...init, signal: init?.signal ?? callSignal(GH_TIMEOUT_MS) }),
   });
-  if (!resp.ok)
-    throw new Error(`installation token request failed (${resp.status}): ${await resp.text()}`);
-  const data = (await resp.json()) as { token: string };
-  await env.APP_KV.put(cacheKey, data.token, { expirationTtl: TOKEN_TTL_SECONDS });
-  return data.token;
+  if (!knownId)
+    await env.APP_KV.put(installKey(owner), minted.installationId, {
+      expirationTtl: INSTALL_TTL_SECONDS,
+    });
+  await env.APP_KV.put(cacheKey, minted.token, { expirationTtl: TOKEN_TTL_SECONDS });
+  return minted.token;
 }
 
 // What the App can see, for the watcher's unmapped-repo check (src/unmapped-repos.ts).
@@ -136,16 +128,13 @@ export async function listInstalledRepos(
 
   const repos: InstalledRepo[] = [];
   for (const id of installations) {
-    const minted = await appFetch(env, `/app/installations/${id}/access_tokens`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ permissions: { metadata: "read" } }),
+    const { token } = await installationToken({
+      ...appCredentials(env),
+      userAgent: "capsid",
+      installationId: id,
+      permissions: { metadata: "read" },
+      fetcher: (input, init) => fetch(input, { ...init, signal: callSignal(GH_TIMEOUT_MS) }),
     });
-    if (!minted.ok)
-      throw new Error(
-        `could not mint a metadata-only token for installation ${id} (${minted.status})`,
-      );
-    const { token } = (await minted.json()) as { token: string };
     let total = Infinity;
     const seen: InstalledRepo[] = [];
     for (let page = 1; seen.length < total; page++) {
@@ -366,22 +355,8 @@ export function requireSinglePrimary(list: RepoEntry[]): string | null {
 // with different character classes let the gate accept owner/repo strings the
 // verifier refused. The owner and repo are what the URL says, not what the namespace
 // maps: a caller resolves them through resolveRepo before reaching GitHub.
-export const PR_URL_SOURCE = String.raw`https:\/\/github\.com\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)\/pull\/(\d+)`;
-const PR_URL_EXACT = new RegExp(`^${PR_URL_SOURCE}(?:[/?#].*)?$`);
-
-export interface PrUrl {
-  owner: string;
-  repo: string;
-  number: number;
-}
-
-// Anchored at both ends: a reference that merely mentions a pull request is not one.
-export function parsePrUrl(ref: string | null | undefined): PrUrl | null {
-  if (!ref) return null;
-  const match = PR_URL_EXACT.exec(ref.trim());
-  if (!match) return null;
-  return { owner: match[1], repo: match[2], number: Number(match[3]) };
-}
+export { PR_URL_SOURCE, parsePrUrl };
+export type PrUrl = NonNullable<ReturnType<typeof parsePrUrl>>;
 
 // Resolve a namespace to one of its mapped repos. `selector` is the optional `repo`
 // tool argument: a label from the namespace's repos array ("primary", "legacy") or a
