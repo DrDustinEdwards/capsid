@@ -124,6 +124,14 @@ export function versionDrift(
       { pinned: string; namespace: string; repo: string; where: string }
     >();
     for (const u of pkg.users) {
+      // A workflow pinned to a commit no release tag names runs code no release check has passed.
+      if (u.pinned && /^[0-9a-f]{40}$/.test(u.pinned))
+        items.push({
+          rule: "model-drift",
+          namespace: u.namespace,
+          job: null,
+          line: `${u.repo ?? u.namespace} pins ${pkg.name} at ${u.pinned.slice(0, 7)} in ${u.where.replace(/ \(\d+ uses?\)$/, "")}, a commit no release tag names. Pin a release's sha.`,
+        });
       const v = u.pinned ? semver(u.pinned) : null;
       if (!v) continue;
       const where = u.where.replace(/ \(\d+ uses?\)$/, "");
