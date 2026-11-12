@@ -18,7 +18,7 @@ import type {
   TrendQueueDay,
   PortalTrends,
 } from "./ops-types/views";
-import { MINUTE_MS, DAY_MS } from "./time";
+import { MINUTE_MS, DAY_MS, isoWeek, utcDay } from "./time";
 
 // The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3,
 // ruled 2026-10-09: DECIDE 5, the trends route, and DECIDE 6, all eleven visuals). The feed
@@ -48,37 +48,25 @@ const CI_CACHE_KEY = "portal:trends-ci:v1";
 const CI_CACHE_SECONDS = 60 * 60;
 const BACKUP_PREFIX = "backups/json/";
 
-const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-
 /** The Monday (UTC) of the week a day falls in, as YYYY-MM-DD. */
 export function mondayOf(day: string): string {
   const t = Date.parse(`${day}T00:00:00Z`);
   const dow = (new Date(t).getUTCDay() + 6) % 7;
-  return dayOf(t - dow * DAY_MS);
-}
-
-/** The ISO 8601 week label of a Monday, as "2026-W41". */
-export function isoWeek(monday: string): string {
-  const t = Date.parse(`${monday}T00:00:00Z`);
-  // The ISO year is the year of the week's Thursday.
-  const thursday = new Date(t + 3 * DAY_MS);
-  const year = thursday.getUTCFullYear();
-  const jan4 = Date.UTC(year, 0, 4);
-  const week1 = jan4 - ((new Date(jan4).getUTCDay() + 6) % 7) * DAY_MS;
-  const n = Math.round((t - week1) / (7 * DAY_MS)) + 1;
-  return `${year}-W${String(n).padStart(2, "0")}`;
+  return utcDay(new Date(t - dow * DAY_MS));
 }
 
 /** The Mondays of the last `weeks` weeks, oldest first, ending with this week's. */
 export function weekStarts(now: Date, weeks: number): string[] {
-  const thisMonday = Date.parse(`${mondayOf(dayOf(now.getTime()))}T00:00:00Z`);
-  return Array.from({ length: weeks }, (_, i) => dayOf(thisMonday - (weeks - 1 - i) * 7 * DAY_MS));
+  const thisMonday = Date.parse(`${mondayOf(utcDay(new Date(now.getTime())))}T00:00:00Z`);
+  return Array.from({ length: weeks }, (_, i) =>
+    utcDay(new Date(thisMonday - (weeks - 1 - i) * 7 * DAY_MS)),
+  );
 }
 
 /** The last `days` days, oldest first, ending today. */
 export function lastDays(now: Date, days: number): string[] {
-  const today = Date.parse(`${dayOf(now.getTime())}T00:00:00Z`);
-  return Array.from({ length: days }, (_, i) => dayOf(today - (days - 1 - i) * DAY_MS));
+  const today = Date.parse(`${utcDay(new Date(now.getTime()))}T00:00:00Z`);
+  return Array.from({ length: days }, (_, i) => utcDay(new Date(today - (days - 1 - i) * DAY_MS)));
 }
 
 /** An audit or touch time to milliseconds. Both "YYYY-MM-DD HH:MM:SS" (SQLite's
@@ -102,7 +90,7 @@ export function sessionMinutes(
     let end = start;
     while (i + 1 < sorted.length && sorted[i + 1]! - end <= SESSION_GAP_MS) end = sorted[++i]!;
     i++;
-    const week = out.get(mondayOf(dayOf(start)));
+    const week = out.get(mondayOf(utcDay(new Date(start))));
     if (!week) continue;
     week.sessions += 1;
     week.minutes += (end - start) / MINUTE_MS + 1;
@@ -159,7 +147,7 @@ async function readMinutes(
   }
   return {
     weeks: mondays.map((m) => ({
-      week: isoWeek(m),
+      week: isoWeek(new Date(`${m}T00:00:00Z`)),
       start: m,
       minutes: minutes.get(m)!.minutes,
       sessions: minutes.get(m)!.sessions,
@@ -249,7 +237,14 @@ async function readMerges(
   const weeks = new Map<string, TrendMergeWeek>(
     mondays.map((m) => [
       m,
-      { week: isoWeek(m), start: m, auto: 0, approved: 0, seat: 0, closed: 0 },
+      {
+        week: isoWeek(new Date(`${m}T00:00:00Z`)),
+        start: m,
+        auto: 0,
+        approved: 0,
+        seat: 0,
+        closed: 0,
+      },
     ]),
   );
   for (const r of rows.results) {
@@ -356,7 +351,7 @@ export function costWeeks(
   return mondays.map((m) => {
     const w = weeks.get(m)!;
     return {
-      week: isoWeek(m),
+      week: isoWeek(new Date(`${m}T00:00:00Z`)),
       start: m,
       usd: w.jobs ? Math.round(w.usd * 100) / 100 : null,
       jobs: w.jobs,

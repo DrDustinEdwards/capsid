@@ -5,7 +5,7 @@ import { portalGate } from "./portal-auth";
 import { readSharedCode } from "./shared-code";
 import { readCompleteness } from "./completeness";
 import { readResources } from "./system-facts-store";
-import { textResponse } from "@dustinedwards/site-runtime/http";
+import { textResponse, jsonResponse } from "@dustinedwards/site-runtime/http";
 import { notFoundReport } from "@dustinedwards/site-runtime/not-found";
 import type { PortalNotFound } from "./ops-types/sites";
 
@@ -34,10 +34,7 @@ export async function handlePortalPackageHistory(
   const cfg = await readPackageRow(env.DB, name);
   if (!cfg) return textResponse(`${name} is not a configured package.`, 404);
   const body = await packageHistory(env, cfg, fetchImpl, now);
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
+  return jsonResponse(body);
 }
 
 // The Sites view's 404 panel (area 8, N4): GET /portal/api/not-found. Capsid's own counts,
@@ -81,10 +78,7 @@ export async function handlePortalNotFound(
       error: errorMessage(err).slice(0, 200),
     };
   }
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
+  return jsonResponse(body);
 }
 
 // The Shared code view's read: GET /portal/api/shared-code (src/shared-code.ts). Like the
@@ -100,10 +94,7 @@ export async function handlePortalSharedCode(
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const body = await readSharedCode(env, now);
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
+  return jsonResponse(body);
 }
 
 // The Completeness view's read: GET /portal/api/completeness (src/completeness.ts). devkit's
@@ -119,10 +110,7 @@ export async function handlePortalCompleteness(
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const body = await readCompleteness(env, now);
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
+  return jsonResponse(body);
 }
 
 // The Workers tab's read: GET /portal/api/resources, the secrets and data model the nightly
@@ -146,8 +134,5 @@ export async function handlePortalResources(
     buckets: [],
     problems: ["The nightly build has not read Cloudflare yet."],
   };
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
+  return jsonResponse(body);
 }

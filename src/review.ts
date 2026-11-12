@@ -4,6 +4,7 @@ import { untrusted, UNTRUSTED_DATA_RULE } from "@dustinedwards/site-runtime/anth
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
+import { bearerToken } from "@dustinedwards/site-runtime/agent-keys";
 import { textResponse } from "@dustinedwards/site-runtime/http";
 import { readJob } from "./jobs-transition";
 import { pathClassOf, type PathClass } from "./merge-class";
@@ -153,7 +154,7 @@ export function reviewCaller(claims: Record<string, unknown>): ReviewCaller | { 
 }
 
 async function caller(request: Request): Promise<ReviewCaller | Response> {
-  const token = /^Bearer (\S+)$/.exec(request.headers.get("Authorization") ?? "")?.[1];
+  const token = bearerToken(request.headers.get("Authorization"));
   if (!token) return textResponse("a GitHub Actions OIDC token is required", 401);
   try {
     const verdict = await verifyJwt(token, await issuerKeys(), {

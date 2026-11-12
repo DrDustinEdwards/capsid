@@ -9,11 +9,11 @@
 // how Capsid works is the model's own flow text.
 
 import { graph, thing, website } from "@drdustinedwards/site-helpers/schema";
+import { escapeHtml } from "@dustinedwards/site-runtime/html";
 
 import {
   ORIGIN,
   SITE,
-  escapeHtml,
   flowStage,
   flowsOf,
   layout,

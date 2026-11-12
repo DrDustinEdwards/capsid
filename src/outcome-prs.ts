@@ -1,6 +1,7 @@
 import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import type { Env } from "./env";
-import { PR_URL_SOURCE, ghFetch, parsePrUrl, resolveRepo } from "./github/client";
+import { PR_URL_SOURCE, parsePrUrl } from "@dustinedwards/site-runtime/github";
+import { ghFetch, resolveRepo } from "./github/client";
 import { prFacts, verifyEvidence } from "./job-outcomes";
 import { auditStatement } from "./store-guards";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";

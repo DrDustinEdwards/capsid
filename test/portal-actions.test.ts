@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hmacHex } from "../src/auth.ts";
+import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { PORTAL_CSRF_COOKIE, type OpsFeedData } from "../src/ops-feed.ts";
 import type { OpsSiteConfig } from "../src/ops-types/sites.ts";
@@ -426,7 +426,7 @@ function tamper(token: string, edit: (claims: Record<string, unknown>) => void):
 // A token signed the way the Worker signs one, for claims no preview would issue.
 async function forge(claims: Record<string, unknown>): Promise<string> {
   const payload = base64url(JSON.stringify(claims));
-  return `${payload}.${await hmacHex(await hmacHex(SECRET, "capsid-portal-confirm:v2"), payload)}`;
+  return `${payload}.${await hmacSha256Hex(await hmacSha256Hex(SECRET, "capsid-portal-confirm:v2"), payload)}`;
 }
 
 // The absences

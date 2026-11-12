@@ -1,7 +1,8 @@
 import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
 import { loadMergePolicy } from "./auto-merge-policy";
 import type { Env } from "./env";
-import { ghFetch, parsePrUrl, resolveRepo } from "./github/client";
+import { parsePrUrl } from "@dustinedwards/site-runtime/github";
+import { ghFetch, resolveRepo } from "./github/client";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import type { OpsMergeSafety, OpsMergeSafetyRow } from "./ops-types/feed";
 import { auditStatement } from "./store-guards";

@@ -1,3 +1,4 @@
+import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import type { Env } from "./env";
 import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalStale } from "./ops-types/views";
@@ -29,7 +30,5 @@ export async function handlePortalStale(
     truncated: read.truncated,
     note: read.note ?? null,
   };
-  return new Response(JSON.stringify(body), {
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
+  return jsonResponse(body);
 }

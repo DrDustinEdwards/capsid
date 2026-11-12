@@ -1,4 +1,4 @@
-import { hmacHex } from "./auth";
+import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import type { Env } from "./env";
 import {
@@ -91,7 +91,7 @@ export async function claimJti(
 // rotation is a one-character change. scripts/derive-backup-key.mjs computes the same
 // value to set the repo secret.
 export async function deriveBackupCredentialKey(rootSecret: string): Promise<string> {
-  return hmacHex(rootSecret, "capsid-backup-credential:v1");
+  return hmacSha256Hex(rootSecret, "capsid-backup-credential:v1");
 }
 
 // Timestamp and body joined by a dot. The timestamp is inside the signature, or an
@@ -129,7 +129,7 @@ async function verifyHmac(
     };
   }
   const key = await opts.deriveKey(env.IMPROVE_SCORE_SECRET);
-  const expected = await hmacHex(key, signaturePayload(signed.timestamp, signed.body));
+  const expected = await hmacSha256Hex(key, signaturePayload(signed.timestamp, signed.body));
   if (!(await safeEqual(signed.signature.trim().toLowerCase(), expected))) {
     return { ok: false, status: 401, refusal: opts.badSig };
   }

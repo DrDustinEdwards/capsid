@@ -48,7 +48,8 @@ import {
 } from "./watcher";
 import { gatherFindings } from "./watcher-gather";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
-import { textResponse } from "@dustinedwards/site-runtime/http";
+import { warningHeaders } from "./http";
+import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 import { MINUTE_MS, DAY_MS } from "./time";
 
 // The Watch Floor's one read (capsid/research/design-ops-console.md): GET
@@ -511,13 +512,10 @@ function opsFeedAnswer(
 ): Response {
   const csrf = portalCsrf(request);
   const feed: OpsFeed = { ...data, csrf: csrf.value, user: portalDisplay(user) };
-  const headers = new Headers({
-    "Content-Type": "application/json",
-    "Cache-Control": "no-store",
+  return jsonResponse(feed, 200, {
     ...extra,
+    ...(csrf.setCookie ? { "Set-Cookie": csrf.setCookie } : {}),
   });
-  if (csrf.setCookie) headers.set("Set-Cookie", csrf.setCookie);
-  return new Response(JSON.stringify(feed), { status: 200, headers });
 }
 
 // What the two handlers can be handed in a test in place of the live reads. The
@@ -639,10 +637,5 @@ export async function handleOpsRefresh(
     logEvent("OPS_REFRESH_AUDIT_FAILED", { message: warning }, { level: "error" });
   }
   const feed = await (deps.feed ?? opsFeed)(env, now);
-  return opsFeedAnswer(
-    request,
-    gate.user,
-    feed,
-    warning ? { "X-Capsid-Warning": warning.replace(/[^\x20-\x7e]+/g, " ") } : {},
-  );
+  return opsFeedAnswer(request, gate.user, feed, warningHeaders(warning));
 }

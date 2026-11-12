@@ -460,7 +460,7 @@ describe("GET /portal/api/maintenance, through the Worker", () => {
       ).ran,
     ).toBe(true);
     const after = await read();
-    expect(after.cache).toBe("no-store");
+    expect(after.cache).toBe("private, no-store");
     expect(after.body.generated).toBe(NOW.toISOString());
     expect(after.body.items.map((i) => i.rule)).toEqual(["later-passed"]);
     expect(after.body.read).toEqual({ prs: 0, branches: 7, repos: 7, roster: 7, deploys: 0 });

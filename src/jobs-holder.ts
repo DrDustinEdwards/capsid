@@ -43,7 +43,7 @@ import {
 import { actorKind, touchStatement } from "./job-touches";
 import { ciRefusal } from "./complete-ci";
 import { breakerExemption, type BreakerExemption } from "./fail-exemption";
-import { parsePrUrl } from "./github/client";
+import { parsePrUrl } from "@dustinedwards/site-runtime/github";
 
 // The transitions the driver holding a job makes: complete, fail and block.
 

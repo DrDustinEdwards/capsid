@@ -1,4 +1,5 @@
-import { parsePrUrl, resolveRepo } from "./github/client";
+import { parsePrUrl } from "@dustinedwards/site-runtime/github";
+import { resolveRepo } from "./github/client";
 import { readPrFiles } from "./github/pr-files";
 import type { Env } from "./env";
 import { riskOf, type Risk } from "./model-routing";

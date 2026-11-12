@@ -3,7 +3,7 @@ import { ghFetch, resolveRepo } from "./github/client";
 import { readAllPages, readCheckRuns } from "./github/pr-files";
 import { ciVerdict, jobIdFromBody } from "./auto-merge-policy";
 import type { MaintenanceItem } from "./maintenance";
-import { HOUR_MS, DAY_MS } from "./time";
+import { HOUR_MS, days } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The daily maintenance pass's pull request rules (job_549550d73d4e, piece 2). Two lists:
@@ -50,8 +50,6 @@ export interface PrReaders {
     check: PrCheck,
   ): Promise<{ step: string | null; problem: string | null }>;
 }
-
-const days = (ms: number): string => `${(ms / DAY_MS).toFixed(1)} days`;
 
 /** A driver's pull request, not a draft, whose checks are all green: it waits for the seat. */
 export function greenAwaitingSeat(namespace: string, prs: OpenPr[], now: Date): MaintenanceItem[] {

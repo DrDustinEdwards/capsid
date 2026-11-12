@@ -4,6 +4,7 @@ import { npmVersions, readPackageConfig, type FetchLike } from "./ops-packages";
 import { heading, proseOnly } from "./job-body-check";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { parsePrUrl } from "@dustinedwards/site-runtime/github";
 // The third job body check (src/job-body-check.ts): a body that states a pull request is
 // merged, a version is tagged or a package version is published is checked against GitHub
 // and npm at post and edit, and refused when what Capsid reads says otherwise. The case:
@@ -134,9 +135,9 @@ export function factClaims(body: string): FactClaim[] {
         for (const pattern of MERGED) {
           for (const m of text.matchAll(pattern)) {
             for (const item of m[1].match(new RegExp(PR_ITEM, "g")) ?? []) {
-              const url = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(item);
-              const repo = url ? url[1] : null;
-              const number = Number(url ? url[2] : item.slice(1));
+              const url = parsePrUrl(item);
+              const repo = url ? `${url.owner}/${url.repo}` : null;
+              const number = url ? url.number : Number(item.slice(1));
               add(`merged:${repo ?? ""}#${number}`, {
                 kind: "merged",
                 line: index + 1,

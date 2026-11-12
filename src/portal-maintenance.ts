@@ -1,3 +1,4 @@
+import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import type { Env } from "./env";
 import { ROSTER } from "./roster";
 import { readMaintenance } from "./maintenance";
@@ -43,7 +44,5 @@ export async function handlePortalMaintenance(
         items: [],
         read: { prs: 0, branches: 0, repos: 0, roster: ROSTER.length, deploys: 0 },
       };
-  return new Response(JSON.stringify(body), {
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
+  return jsonResponse(body);
 }

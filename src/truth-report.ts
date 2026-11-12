@@ -1,6 +1,6 @@
 import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import { ruleDocCap, ruleDocProblem, staleSummary, type RuleDocProblem } from "./rule-docs";
-import { DAY_MS } from "./time";
+import { DAY_MS, utcDay } from "./time";
 interface TruthFinding {
   // What was checked, and what did not pass.
   check: string;
@@ -427,7 +427,7 @@ export function renderTruthReport(report: TruthReport): string {
 
 // One document per namespace per day; a second run the same day overwrites.
 export function reportPath(date: Date): string {
-  return `${REPORTS_PREFIX}lint-${date.toISOString().slice(0, 10)}.md`;
+  return `${REPORTS_PREFIX}lint-${utcDay(date)}.md`;
 }
 
 // Pull the integrity number back out of a stored report. Returns null on anything

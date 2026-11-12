@@ -1,6 +1,7 @@
 import { remoteKeys, verifyJwt, type KeySource } from "@dustinedwards/site-runtime/access-login";
 import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
+import { bearerToken } from "@dustinedwards/site-runtime/agent-keys";
 import { textResponse } from "@dustinedwards/site-runtime/http";
 import { readJob } from "./jobs-transition";
 import { jobDocPath } from "./jobs-schema";
@@ -58,7 +59,7 @@ async function caller(request: Request, env: Env): Promise<Caller> {
     ok: false,
     response: textResponse(why, status),
   });
-  const token = /^Bearer (\S+)$/.exec(request.headers.get("Authorization") ?? "")?.[1];
+  const token = bearerToken(request.headers.get("Authorization"));
   if (!token) return refuse(401, "a GitHub Actions OIDC token is required");
   let claims: Record<string, unknown>;
   const claim = (name: string) =>

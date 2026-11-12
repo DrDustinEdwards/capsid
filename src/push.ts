@@ -21,7 +21,7 @@ import {
   type PushSubscriptionKeys,
 } from "@dustinedwards/site-runtime/web-push";
 import { jsonResponse as json, textResponse as text } from "@dustinedwards/site-runtime/http";
-import { HOUR_MS, DAY_MS } from "./time";
+import { HOUR_MS, DAY_MS, utcDay } from "./time";
 
 // PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7; Dustin's DECIDE 5
 // and 6 of 2026-10-09). Web Push to the devices the administrator turned on in the
@@ -253,7 +253,7 @@ async function gatherUrgent(
   // 7, the error rate: the watcher's site-errors findings from its last pass. A snapshot
   // that cannot be read alerts nothing; the Portal shows that it could not be read.
   const snapshot = await readSnapshot(env).catch(() => null);
-  const day = now.toISOString().slice(0, 10);
+  const day = utcDay(now);
   for (const fingerprint of snapshot?.checks.flatMap((c) => c.findings) ?? []) {
     if (!fingerprint.startsWith("site-errors-")) continue;
     const namespace = fingerprint.slice("site-errors-".length);

@@ -49,9 +49,6 @@ const VERB = {
   serves: ["serves", "is served by"],
 };
 
-// The family's one escaper (site-runtime ./html), for any value; code.mjs and graph.mjs take it from here.
-export { escapeHtml };
-
 /** @param {string} id */
 export const systemPath = (id) => `/s/${id}/`;
 /** @param {string} id */

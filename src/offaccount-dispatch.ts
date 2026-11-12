@@ -1,6 +1,7 @@
 import { canDispatch } from "@dustinedwards/site-runtime/github";
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
+import { utcDay } from "./time";
 
 // Starts capsid-backups' nightly copy (offaccount.yml) from this Worker's tick instead of
 // waiting on GitHub's schedule. GitHub documents that a scheduled workflow can be delayed
@@ -30,7 +31,7 @@ function dispatchDue(now: Date): boolean {
 // created today (schedule, a person's dispatch or an earlier try of this step), so a day the
 // schedule was on time, or a person already ran it, is not run twice.
 export async function offaccountDispatchTick(env: Env, now: Date): Promise<DispatchReport> {
-  const day = now.toISOString().slice(0, 10);
+  const day = utcDay(now);
   const probed = await probeOncePerDay(env, day);
   // A failed probe is the report; a passed one is the report only when the copy is not due.
   if (probed && (!probed.ok || !dispatchDue(now))) return probed;

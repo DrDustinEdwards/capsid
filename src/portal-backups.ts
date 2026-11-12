@@ -1,3 +1,4 @@
+import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import type { Env } from "./env";
 import { OPS_RETURN_TO } from "./ops-feed";
 import { portalGate } from "./portal-auth";
@@ -19,7 +20,5 @@ export async function handlePortalBackups(
 ): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
-  return new Response(JSON.stringify(await readSiteBackups(env)), {
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
+  return jsonResponse(await readSiteBackups(env));
 }

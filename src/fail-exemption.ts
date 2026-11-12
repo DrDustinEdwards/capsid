@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { JobRow } from "./jobs-schema";
-import { parsePrUrl } from "./github/client";
+import { parsePrUrl } from "@dustinedwards/site-runtime/github";
 import { readNamedPrs } from "./complete-ci";
 import { checklistItems, unchangedItems } from "./job-checklist";
 

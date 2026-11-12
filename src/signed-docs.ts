@@ -1,7 +1,6 @@
-import { hmacHex } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import type { Env } from "./env";
-import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { hmacSha256Hex, sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The Worker signs the documents it later acts on: a job's body (src/jobs-claim.ts) and
@@ -14,7 +13,7 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 const TASK_KEY_CONTEXT = "capsid-improve-task:v1";
 
 export async function deriveTaskKey(rootSecret: string): Promise<string> {
-  return hmacHex(rootSecret, TASK_KEY_CONTEXT);
+  return hmacSha256Hex(rootSecret, TASK_KEY_CONTEXT);
 }
 
 export const TASK_SIGNATURE_FIELD = "capsid-task-signature";
@@ -47,7 +46,7 @@ export function splitSignedTask(text: string): {
 /** Wrap a rendered task body in the frontmatter block carrying its signature. */
 export async function signTaskBody(rootSecret: string, body: string): Promise<string> {
   const key = await deriveTaskKey(rootSecret);
-  const signature = await hmacHex(key, body);
+  const signature = await hmacSha256Hex(key, body);
   return `---\n${TASK_SIGNATURE_FIELD}: ${signature}\n---\n${body}`;
 }
 
@@ -84,7 +83,7 @@ export async function verifySignedBody(
     };
   }
   const key = await deriveTaskKey(rootSecret);
-  const expected = await hmacHex(key, body);
+  const expected = await hmacSha256Hex(key, body);
   if (!(await safeEqual(signature.toLowerCase(), expected))) {
     return {
       ok: false,

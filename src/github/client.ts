@@ -9,13 +9,7 @@ import { repoPathProblem } from "../limits";
 import type { RepoEnv as Env } from "../env";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { githubAppJwt } from "@dustinedwards/site-runtime/jwt";
-import {
-  GITHUB_API,
-  githubHeaders,
-  installationToken,
-  parsePrUrl,
-  PR_URL_SOURCE,
-} from "@dustinedwards/site-runtime/github";
+import { GITHUB_API, githubHeaders, installationToken } from "@dustinedwards/site-runtime/github";
 import { callSignal } from "../call-signal";
 
 const GH = GITHUB_API;
@@ -348,15 +342,6 @@ export function requireSinglePrimary(list: RepoEntry[]): string | null {
     ? null
     : `repos must have exactly one entry labeled "primary" (found ${primaries})`;
 }
-
-// https://github.com/<owner>/<repo>/pull/<number>, as GitHub returns it and a driver
-// pastes it. The one spelling for every site that reads one (the CI gate, the evidence
-// verifier and the prose scan in outcome-prs.ts): separate spellings
-// with different character classes let the gate accept owner/repo strings the
-// verifier refused. The owner and repo are what the URL says, not what the namespace
-// maps: a caller resolves them through resolveRepo before reaching GitHub.
-export { PR_URL_SOURCE, parsePrUrl };
-export type PrUrl = NonNullable<ReturnType<typeof parsePrUrl>>;
 
 // Resolve a namespace to one of its mapped repos. `selector` is the optional `repo`
 // tool argument: a label from the namespace's repos array ("primary", "legacy") or a

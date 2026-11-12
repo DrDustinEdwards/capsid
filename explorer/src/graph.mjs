@@ -9,7 +9,7 @@
 // module once, in the table.
 import dagre from "@dagrejs/dagre";
 
-import { escapeHtml } from "./pages.mjs";
+import { escapeHtml } from "@dustinedwards/site-runtime/html";
 
 // The status glyphs at box size: Capsomer's shapes (components/status), drawn in 12 px.
 const GLYPH = {
