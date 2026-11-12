@@ -12,15 +12,16 @@
     }
   ],
   "baseline": {
-    "measured_at": "8c485f6",
+    "measured_at": "b1fac51",
     "knip (Worker)": {},
     "knip (dashboard)": {
-      "Unused exports": 1
+      "exports": 5
     },
     "jscpd": {
       "clones": 40,
-      "lines": 338,
-      "percentage": 0.43
+      "lines": 328,
+      "percentage": 0.39,
+      "unread": 5
     },
     "shared copies": {
       "clones": 0,
