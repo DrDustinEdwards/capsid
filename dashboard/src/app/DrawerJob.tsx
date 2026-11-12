@@ -1,3 +1,4 @@
+import { Alert } from "capsomer/react/banner";
 import type { ReactNode } from "react";
 import { CopyButton } from "capsomer/react/copy";
 import { jobBadge, resumeCall } from "../lib/derive";
@@ -31,7 +32,14 @@ export function Head({
         <div className="mono muted">{sub}</div>
       </div>
       {badge}
-      <button type="button" className="btn iconbtn" data-close aria-label="Close" onClick={onClose}>
+      <button
+        type="button"
+        className="cap-btn"
+        data-icon-only
+        data-close
+        aria-label="Close"
+        onClick={onClose}
+      >
         ×
       </button>
     </header>
@@ -80,7 +88,8 @@ function JobControls({ j }: { j: OpsJob }) {
         <div className="toolbar">
           <button
             type="button"
-            className="btn primary"
+            className="cap-btn"
+            data-variant="primary"
             onClick={() =>
               confirm({
                 action: "unpark_job",
@@ -151,7 +160,12 @@ function JobControls({ j }: { j: OpsJob }) {
       <div>
         <p className="section-title">Change it</p>
         <div className="toolbar">
-          <button type="button" className="btn primary" onClick={() => confirm(primary.req)}>
+          <button
+            type="button"
+            className="cap-btn"
+            data-variant="primary"
+            onClick={() => confirm(primary.req)}
+          >
             {primary.label}
           </button>
         </div>
@@ -168,13 +182,18 @@ function JobControls({ j }: { j: OpsJob }) {
       </div>
       {more.length > 0 && (
         <details className="more-actions">
-          <summary className="btn">
+          <summary className="cap-btn">
             <span className="chev" aria-hidden="true" />
             More actions
           </summary>
           <div className="toolbar mt8">
             {more.map((m) => (
-              <button key={m.label} type="button" className="btn" onClick={() => confirm(m.req)}>
+              <button
+                key={m.label}
+                type="button"
+                className="cap-btn"
+                onClick={() => confirm(m.req)}
+              >
                 {m.label}
               </button>
             ))}
@@ -192,7 +211,8 @@ function JobControls({ j }: { j: OpsJob }) {
       <DangerZone note="Ends it as failed, against its holder.">
         <button
           type="button"
-          className="btn danger"
+          className="cap-btn"
+          data-variant="danger"
           onClick={() =>
             confirm({ action: "fail_job", params, title: `Mark job failed: ${j.title}` })
           }
@@ -211,7 +231,8 @@ export function AgentControls({ a }: { a: OpsAgent }) {
     <DangerZone note="Ends this credential. The preview lists what else it changes.">
       <button
         type="button"
-        className="btn danger"
+        className="cap-btn"
+        data-variant="danger"
         onClick={() =>
           confirm({
             action: "revoke_agent",
@@ -243,15 +264,15 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
         {j.status === "parked" && (
           <div>
             <p className="section-title">Parked until</p>
-            <div className="callout">{j.parked_reason ?? "No reason was recorded."}</div>
+            <Alert tone="neutral">{j.parked_reason ?? "No reason was recorded."}</Alert>
           </div>
         )}
         {j.status === "blocked" && j.question && (
           <div>
             <p className="section-title">Asks you</p>
-            <div className="callout warn" data-question="">
+            <Alert tone="warn">
               {(j.waits_on ?? "No question was recorded.").replace(/^QUESTION:\s*/, "")}
-            </div>
+            </Alert>
             <p className="faint small">
               Answer it with the button below: your reason and note go to its driver as the resume
               note.
@@ -262,14 +283,16 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
           <>
             <div>
               <p className="section-title">Waits on</p>
-              <div className="callout warn">{j.waits_on ?? "No reason was recorded."}</div>
+              <Alert tone="warn">{j.waits_on ?? "No reason was recorded."}</Alert>
             </div>
             <div>
               <p className="section-title">Run this</p>
               {j.command_signature === "mismatch" ? (
-                <div className="callout crit" data-signature="mismatch">
-                  Withheld. This command's signature does not match, so it was changed after the
-                  block wrote it. Do not run anything from this job; tell the seat.
+                <div data-signature="mismatch">
+                  <Alert tone="crit">
+                    Withheld. This command's signature does not match, so it was changed after the
+                    block wrote it. Do not run anything from this job; tell the seat.
+                  </Alert>
                 </div>
               ) : j.command ? (
                 <>

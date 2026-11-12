@@ -548,7 +548,7 @@ export function SiteBuilds({ ns }: { ns: string }) {
                               {id && (
                                 <button
                                   type="button"
-                                  className="btn"
+                                  className="cap-btn"
                                   aria-expanded={open === id}
                                   aria-label={`${open === id ? "Hide" : "Show"} the log of build ${shortId(id)}`}
                                   onClick={() => setOpen(open === id ? null : id)}

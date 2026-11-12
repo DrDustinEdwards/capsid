@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import {
   Suspense,
   lazy,
@@ -674,9 +675,7 @@ export function App() {
     content = (
       <div className="page">
         {error ? (
-          <div className="callout crit" role="alert">
-            Could not read the feed: {error}. It retries every minute.
-          </div>
+          <Banner tone="crit">Could not read the feed: {error}. It retries every minute.</Banner>
         ) : (
           <div className="loading" role="status">
             <Spinner label="Reading the feed..." />
@@ -688,10 +687,10 @@ export function App() {
     content = (
       <>
         {error && (
-          <div className="banner" role="alert">
+          <Banner tone="warn">
             Could not read the feed: {error}. Showing the last good read from{" "}
             {ago(ms(feed.live.generated), now)}.
-          </div>
+          </Banner>
         )}
         <Suspense
           fallback={
@@ -855,7 +854,7 @@ export function App() {
             {message.undo && (
               <button
                 type="button"
-                className="btn"
+                className="cap-btn"
                 disabled={message.busy}
                 onClick={() => void undo(message)}
               >
@@ -864,7 +863,7 @@ export function App() {
             )}
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               disabled={message.busy}
               onClick={() => {
                 setMessages((all) => all.filter((x) => x.id !== message.id));

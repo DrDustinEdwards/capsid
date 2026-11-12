@@ -1,3 +1,4 @@
+import { Alert } from "capsomer/react/banner";
 import type { Kind } from "../lib/derive";
 import { age, utc, ms, ago } from "../lib/format";
 import type {
@@ -163,10 +164,10 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
         <div className="body">
           <p>{job.title}</p>
           {data.truncated.length > 0 && (
-            <div className="callout warn" role="status">
+            <Alert tone="warn">
               Cut at {data.limit} rows each: {data.truncated.join(", ")}. The tool's export reads
               every row.
-            </div>
+            </Alert>
           )}
           {data.outcome === null && (
             <p className="faint">No outcome recorded: the job has not completed or failed.</p>

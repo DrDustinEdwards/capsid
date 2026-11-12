@@ -72,24 +72,6 @@
   color: var(--warn);
   white-space: nowrap;
 }
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 11px;
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  background: var(--raised);
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-.btn:hover {
-  border-color: var(--muted);
-}
-.btn kbd,
 kbd {
   font-family: var(--mono);
   font-size: var(--fs-label);
@@ -98,11 +80,6 @@ kbd {
   border: 1px solid var(--line-strong);
   background: var(--surface);
   color: var(--muted);
-}
-.iconbtn {
-  width: 32px;
-  padding: 0;
-  justify-content: center;
 }
 
 /* main is the containing block for anything absolutely positioned inside it (.sr-only
@@ -192,54 +169,6 @@ main {
 }
 .prcards .wrow + .wrow {
   border-top: 1px solid var(--line);
-}
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 8px 2px 6px;
-  border-radius: 999px;
-  font-size: var(--fs-detail);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.pill.ok {
-  background: var(--ok-soft);
-  color: var(--ok);
-}
-.pill.warn {
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-.pill.crit {
-  background: var(--crit-soft);
-  color: var(--crit);
-}
-.pill.nodata {
-  background: var(--nodata-soft);
-  color: var(--muted);
-}
-.pill.run {
-  background: var(--info-soft);
-  color: var(--info);
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
-  color: var(--muted);
-  font-size: var(--fs-detail);
-  font-weight: 500;
-}
-.chip[aria-pressed="true"] {
-  border-color: var(--accent);
-  color: var(--text);
-  background: var(--accent-soft);
 }
 .ns {
   font-family: var(--mono);
@@ -535,7 +464,7 @@ summary {
   cursor: pointer;
 }
 .trends > summary::-webkit-details-marker,
-summary.btn::-webkit-details-marker {
+summary.cap-btn::-webkit-details-marker {
   display: none;
 }
 .trends > summary .faint {
@@ -553,7 +482,7 @@ details[open] > summary .chev {
   .wact {
     flex-basis: 100%;
   }
-  .wact .btn {
+  .wact .cap-btn {
     flex: 1 1 0;
     justify-content: center;
     height: 44px;
@@ -659,66 +588,6 @@ table.brief.workers-stores .st {
     white-space: normal;
     overflow-wrap: anywhere;
   }
-}
-
-/* stat tiles: figure and label on one line, the detail beneath. A tile is never
-   narrower than its text (flex 1 0 auto), so the row wraps to more rows instead of
-   cutting a word; only a tile wider than the whole row wraps its detail (design D3). */
-.tiles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.tile {
-  flex: 1 0 auto;
-  max-width: 100%;
-  display: grid;
-  gap: 1px;
-  padding: 7px 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-  text-decoration: none;
-}
-.tile:hover {
-  border-color: var(--line-strong);
-  text-decoration: none;
-}
-.tile .t1 {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  white-space: nowrap;
-}
-.tile .v {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-}
-.tile .v small {
-  font-size: var(--fs-detail);
-  font-weight: 400;
-  color: var(--muted);
-  letter-spacing: 0;
-}
-.tile .l {
-  font-size: var(--fs-detail);
-  color: var(--muted);
-}
-.tile .d {
-  font-size: var(--fs-detail);
-  color: var(--muted);
-}
-.tile.crit .v {
-  color: var(--crit);
-}
-.tile.warn .v {
-  color: var(--warn);
-}
-.tile.ok .v {
-  color: var(--ok);
 }
 
 /* A compact table (Shared code's users). */
@@ -1092,18 +961,6 @@ table.brief {
 .search::placeholder {
   color: var(--dim);
 }
-.meter {
-  height: 8px;
-  border-radius: 4px;
-  background: var(--sunken);
-  overflow: hidden;
-  max-width: 320px;
-}
-.meter i {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-}
 
 /* drawer: Capsomer's Dialog as a right side sheet (app/Drawer.tsx); its slide, scrim and reduced motion are Capsomer's. */
 .drawer > header {
@@ -1179,21 +1036,6 @@ table.brief {
   text-transform: uppercase;
   color: var(--muted);
   margin: 0 0 8px;
-}
-.callout {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 13px;
-  background: var(--raised);
-}
-.callout.warn {
-  border-color: var(--warn);
-  background: var(--warn-soft);
-}
-.callout.crit {
-  border-color: var(--crit);
-  background: var(--crit-soft);
 }
 
 dialog {
@@ -1314,48 +1156,6 @@ dialog {
   text-transform: none;
   color: var(--dim);
 }
-.chip.flag {
-  height: 20px;
-  font-size: var(--fs-label);
-  margin-right: 4px;
-}
-.meter i.warn {
-  background: var(--warn);
-}
-.meter i.crit {
-  background: var(--crit);
-}
-.btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.btn.primary {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--primary-fg);
-  font-weight: 600;
-}
-.btn.danger {
-  background: var(--crit-soft);
-  border-color: var(--crit);
-  color: var(--crit);
-  font-weight: 600;
-}
-.linkbtn {
-  border: 0;
-  padding: 0;
-  background: none;
-  color: var(--accent-text);
-  font: inherit;
-}
-.linkbtn:hover {
-  text-decoration: underline;
-}
-.linkbtn:disabled {
-  color: var(--dim);
-  text-decoration: none;
-  cursor: default;
-}
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1415,14 +1215,6 @@ main .sev-crit[data-row]:focus-visible {
   box-shadow:
     inset 3px 0 var(--crit),
     inset 0 0 0 1px var(--accent-line);
-}
-.banner {
-  margin: 16px 24px 0;
-  border: 1px solid var(--warn);
-  background: var(--warn-soft);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 13px;
 }
 .loading {
   padding: 40px 0;
@@ -1593,35 +1385,6 @@ td.ctl .toolbar.col {
   flex-wrap: wrap;
   font-size: var(--fs-detail);
   color: var(--muted);
-}
-.seg {
-  display: inline-flex;
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  overflow: hidden;
-  height: 30px;
-}
-.seg label {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 10px;
-  font-weight: 500;
-  color: var(--muted);
-  background: var(--surface);
-  cursor: pointer;
-}
-.seg input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-.seg input:checked + label {
-  background: var(--accent-soft);
-  color: var(--text);
-}
-.seg input:focus-visible + label {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
 }
 .prefrow {
   display: flex;

@@ -66,7 +66,7 @@ export function NsChips({ list }: { list: string[] }) {
         <button
           key={n}
           type="button"
-          className="chip"
+          className="cap-chip"
           aria-pressed={ns === n}
           onClick={() => setNs(n)}
         >
@@ -92,7 +92,7 @@ export function FilterEmpty({
         kind="no-match"
         title={children}
         action={
-          <button type="button" className="btn" onClick={onShowAll}>
+          <button type="button" className="cap-btn" onClick={onShowAll}>
             Show all
           </button>
         }

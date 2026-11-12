@@ -112,7 +112,8 @@ export function ProjectForm({
             </label>
             <button
               type="button"
-              className="btn danger"
+              className="cap-btn"
+              data-variant="danger"
               aria-label={`Delete ${ns}`}
               onClick={remove}
             >
@@ -168,7 +169,7 @@ export function ProjectForm({
             />
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Remove repo ${i + 1}`}
               disabled={rows.length === 1}
               onClick={() => setRows((all) => all.filter((x) => x.key !== r.key))}
@@ -180,7 +181,7 @@ export function ProjectForm({
         <div>
           <button
             type="button"
-            className="btn"
+            className="cap-btn"
             onClick={() => setRows((all) => [...all, draftRow()])}
           >
             Add a repo

@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { useState } from "react";
 import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
@@ -108,20 +109,20 @@ export function Activity() {
             </option>
           ))}
         </select>
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Apply
         </button>
         {(namespace || actor) && (
-          <button type="button" className="btn" onClick={() => apply("", "")}>
+          <button type="button" className="cap-btn" onClick={() => apply("", "")}>
             Clear
           </button>
         )}
       </form>
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Banner tone="crit">
           Could not read the activity: {load.error}
           {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+        </Banner>
       )}
       <Panel
         flush

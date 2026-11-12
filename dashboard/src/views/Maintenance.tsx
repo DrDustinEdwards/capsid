@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { useState } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
@@ -73,11 +74,7 @@ export function Maintenance() {
         </>
       }
     >
-      {load.error && (
-        <div className="callout crit" role="alert">
-          Could not read the Maintenance list: {load.error}
-        </div>
-      )}
+      {load.error && <Banner tone="crit">Could not read the Maintenance list: {load.error}</Banner>}
       {!data && load.loading ? (
         <div className="loading" role="status">
           <Spinner label="Reading the Maintenance list..." />
@@ -95,7 +92,7 @@ export function Maintenance() {
             <div className="att-more">
               <button
                 type="button"
-                className="linkbtn"
+                className="cap-link-btn"
                 aria-expanded={more}
                 onClick={() => setMore(!more)}
               >

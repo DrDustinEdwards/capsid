@@ -1,3 +1,4 @@
+import { Alert } from "capsomer/react/banner";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { StatusMatrix } from "capsomer/react/status-matrix";
@@ -84,7 +85,7 @@ export function Completeness() {
   const count = (s: CompletenessStatus) => cells.filter((c) => c.status === s).length;
   return (
     <div className="embedded">
-      <div className={`callout${data.finished ? "" : " warn"} done-verdict`}>
+      <Alert tone={data.finished ? "neutral" : "warn"}>
         <b>{data.finished ? "Finished." : "Not finished."}</b> {fmtN(count("complete"))} of{" "}
         {fmtN(cells.length)} cells complete, {fmtN(count("partial"))} partial,{" "}
         {fmtN(count("missing"))} missing
@@ -92,7 +93,7 @@ export function Completeness() {
         {data.finished
           ? `Every cell is complete and has passed ${CLEAN_DAYS} daily runs in a row.`
           : `Finished means every cell complete and clean for ${CLEAN_DAYS} daily runs.`}
-      </div>
+      </Alert>
       <Panel
         flush
         title="Every area on every site"

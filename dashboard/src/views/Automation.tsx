@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { useApp } from "../app/ctx";
 import { ReasonForm, SwitchWithReason } from "capsomer/react/switch-reason";
 import { useApplySwitch } from "../ui/applySwitch";
@@ -87,25 +87,27 @@ export function Automation() {
             }
           />
           <div className="runs">
-            <span id="overnight-runs-on-label">Runs on</span>
-            <span className="seg" role="radiogroup" aria-labelledby="overnight-runs-on-label">
-              {RUNS_ON.map((r) => (
-                <Fragment key={r.value}>
-                  <input
-                    type="radio"
-                    name="overnight-runs-on"
-                    id={`overnight-runs-on-${r.value}`}
-                    value={r.value}
-                    checked={shownNight === r.value}
-                    onChange={() => {
-                      if (!nightOn) return setNightChosen(r.value);
-                      setPendingNight(r.value === night.mode ? null : r.value);
-                    }}
-                  />
-                  <label htmlFor={`overnight-runs-on-${r.value}`}>{r.label}</label>
-                </Fragment>
-              ))}
-            </span>
+            <fieldset className="cap-seg">
+              <legend>Runs on</legend>
+              <div className="cap-seg-options" data-size="sm">
+                {RUNS_ON.map((r) => (
+                  <label key={r.value} htmlFor={`overnight-runs-on-${r.value}`}>
+                    <input
+                      type="radio"
+                      name="overnight-runs-on"
+                      id={`overnight-runs-on-${r.value}`}
+                      value={r.value}
+                      checked={shownNight === r.value}
+                      onChange={() => {
+                        if (!nightOn) return setNightChosen(r.value);
+                        setPendingNight(r.value === night.mode ? null : r.value);
+                      }}
+                    />{" "}
+                    {r.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <ReasonForm
               open={pendingNight !== null}
               id="overnight-runs-on-why"

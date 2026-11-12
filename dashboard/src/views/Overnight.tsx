@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { Suspense, useEffect, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
@@ -22,9 +23,9 @@ const TonightTimeline = trendChart("TonightTimeline");
 
 function Failed({ what, error }: { what: string; error: string | null }) {
   return error ? (
-    <div className="callout crit" role="alert">
+    <Banner tone="crit">
       Could not read {what}: {error}
-    </div>
+    </Banner>
   ) : null;
 }
 
@@ -56,12 +57,12 @@ export function Tonight() {
     >
       <Failed what="the plan" error={load.error} />
       {plan && plan.policy !== "document" && (
-        <div className="callout warn">
+        <Banner tone="warn">
           {plan.policy_note ??
             (plan.policy === "default"
               ? "No overnight policy document: every repo counts as heavy."
               : "The overnight policy document did not parse.")}
-        </div>
+        </Banner>
       )}
       {!plan && load.loading ? (
         <div className="loading" role="status">

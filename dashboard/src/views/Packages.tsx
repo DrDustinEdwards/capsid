@@ -1,3 +1,4 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { Suspense, lazy, useState } from "react";
 import { useApp } from "../app/ctx";
 import { fetchPackageHistory, useAnswer } from "../lib/api";
@@ -129,12 +130,12 @@ function HistoryPanel({ name }: { name: string }) {
   });
   if (!h.data && !h.error) {
     return (
-      <button type="button" className="btn" disabled={h.loading} onClick={() => setAsked(true)}>
+      <button type="button" className="cap-btn" disabled={h.loading} onClick={() => setAsked(true)}>
         {h.loading ? "Reading npm…" : "Load the daily download history"}
       </button>
     );
   }
-  if (!h.data) return <div className="callout warn">The history could not be read: {h.error}</div>;
+  if (!h.data) return <Alert tone="warn">The history could not be read: {h.error}</Alert>;
   const d = h.data;
   const byName = new Map<string, number>();
   for (const day of d.days) byName.set(day.name, (byName.get(day.name) ?? 0) + day.downloads);
@@ -196,7 +197,12 @@ function PackagePanel({
       src={
         <>
           {snap ? `read ${ago(ms(snap.at), now)} · ` : "not read yet · "}
-          <button type="button" className="btn" aria-label={`Edit ${cfg.name}`} onClick={onEdit}>
+          <button
+            type="button"
+            className="cap-btn"
+            aria-label={`Edit ${cfg.name}`}
+            onClick={onEdit}
+          >
             Edit
           </button>
         </>
@@ -366,7 +372,8 @@ function Published() {
       <div className="toolbar">
         <button
           type="button"
-          className="btn primary"
+          className="cap-btn"
+          data-variant="primary"
           onClick={ed.add}
           disabled={ed.editing?.kind === "add"}
         >
@@ -379,9 +386,9 @@ function Published() {
         </Suspense>
       )}
       {!rows.length && (
-        <div className="callout" role="status">
+        <Banner tone="neutral">
           No package is configured yet. Add one to watch its versions, downloads and dependents.
-        </div>
+        </Banner>
       )}
       {rows.length > 0 && !feed.snapshot && <NoSnapshot />}
       {rows.map((cfg) => (

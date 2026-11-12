@@ -206,7 +206,7 @@ function Roster() {
                     <td data-label="Flags">
                       {a.flags.length ? (
                         a.flags.map((f) => (
-                          <span key={f} className="chip flag">
+                          <span key={f} className="cap-pill" data-variant="outline">
                             {f}
                           </span>
                         ))

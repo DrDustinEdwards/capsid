@@ -46,6 +46,9 @@ import "capsomer/switch-reason.css";
 import "capsomer/meter.css";
 import "capsomer/chart-frame.css";
 import "capsomer/uptime-strip.css";
+import "capsomer/chips.css";
+import "capsomer/segmented.css";
+import "capsomer/stat-tile.css";
 // The whole chart stylesheet: Enarratio's base, the token mapping, gridlines, series inks and
 // the color pairs (capsomer CHANGELOG 0.56.0).
 import "capsomer/enarratio.css";

@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
@@ -106,13 +107,18 @@ function Row({
       </td>
       <td className="ctl">
         <div className="toolbar col">
-          <button type="button" className="btn" aria-label={`Edit ${n.namespace}`} onClick={onEdit}>
+          <button
+            type="button"
+            className="cap-btn"
+            aria-label={`Edit ${n.namespace}`}
+            onClick={onEdit}
+          >
             Edit
           </button>
           {n.breaker.open && (
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Reset ${n.namespace}`}
               onClick={() =>
                 confirm({
@@ -145,7 +151,8 @@ function Roster() {
       <div className="toolbar">
         <button
           type="button"
-          className="btn primary"
+          className="cap-btn"
+          data-variant="primary"
           onClick={ed.add}
           disabled={ed.editing?.kind === "add"}
         >
@@ -154,10 +161,10 @@ function Roster() {
       </div>
       {ed.editing && <ProjectForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />}
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Banner tone="crit">
           Could not read the projects: {load.error}
           {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+        </Banner>
       )}
       <Panel
         flush
