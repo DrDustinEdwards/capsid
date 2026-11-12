@@ -4,6 +4,7 @@ import { MINUTE_MS } from "./time";
 import { callSignal } from "./call-signal";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { callOperator as operatorCall } from "@dustinedwards/site-runtime/operator";
 // A SITE'S OPERATOR API (job_09e5f6cbf782, Dustin 2026-10-03). Capsid is the operations
 // hub and may trigger an allowlist of a site's own repair tools, so the repairs, the
 // convergence view and the watchdog could leave the site (it did, 2026-11-06). A site opts in by configuration
@@ -220,40 +221,22 @@ export async function callOperator(
       0,
       `the Capsid Worker secret ${site.operator.auth_var} is not set, so nothing was called.`,
     );
-  let response: Response;
-  let payload: unknown;
-  try {
-    response = await fetchImpl(site.origin + site.operator.path, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        "user-agent": "capsid",
-      },
-      body: JSON.stringify({ tool, args: opts.args ?? {} }),
-      redirect: "manual",
-      signal: callSignal(CALL_TIMEOUT_MS),
-    });
-    payload = await response.json().catch(() => null);
-  } catch (err) {
-    return fail(0, `${tool} did not complete: ${errorMessage(err)}`);
-  }
-  const body = (payload && typeof payload === "object" ? payload : {}) as {
-    ok?: unknown;
-    data?: unknown;
-    error?: unknown;
-  };
-  if (!response.ok || body.ok !== true) {
-    const said = typeof body.error === "string" ? body.error : "no error was given";
-    return fail(response.status, `${tool} answered ${response.status}: ${said}`);
-  }
+  const answer = await operatorCall(site.origin + site.operator.path, token, tool, {
+    args: opts.args ?? {},
+    fetch: fetchImpl as typeof fetch,
+    signal: callSignal(CALL_TIMEOUT_MS),
+    userAgent: "capsid",
+  });
+  if (!answer.ok) return fail(answer.status, answer.error ?? `${tool} failed`);
   const data =
-    body.data && typeof body.data === "object" ? (body.data as Record<string, unknown>) : null;
+    answer.data && typeof answer.data === "object"
+      ? (answer.data as Record<string, unknown>)
+      : null;
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
   return {
     ok: true,
-    status: response.status,
-    data: opts.reading || opts.backup || opts.job ? body.data : null,
+    status: answer.status,
+    data: opts.reading || opts.backup || opts.job ? answer.data : null,
     converged: typeof data?.converged === "boolean" ? data.converged : null,
     expected: num(data?.expected),
     present: num(data?.present),
