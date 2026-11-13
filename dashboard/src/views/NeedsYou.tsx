@@ -18,6 +18,7 @@ import {
 import type { InboxApp, InboxItem, OpsAwaitingSeat, OpsJob, PortalNamespace } from "../types";
 import { InboxMark, St } from "../ui/icons";
 import { Empty } from "capsomer/react/empty";
+import { indeterminate, useSelection, type Selection } from "capsomer/react/state-hooks";
 import { Panel } from "capsomer/react/panel";
 import { RowReply } from "capsomer/react/row-list";
 import "capsomer/row-list.css";
@@ -108,7 +109,9 @@ function Waiting() {
       src={`read ${ago(parse(inbox.generated), now)}`}
       footer={
         quiet.length > 0 ? (
-          <span className="faint">Nothing waiting: {quiet.map((a) => a.name).join(", ")}</span>
+          <span className="cap-text" data-tone="dim">
+            Nothing waiting: {quiet.map((a) => a.name).join(", ")}
+          </span>
         ) : undefined
       }
     >
@@ -146,7 +149,10 @@ function Group({
     <section className="wgroup" aria-labelledby={`${id}-h`} data-group={id}>
       <div className="wgroup-head">
         <h3 id={`${id}-h`}>
-          {title} <span className="num faint">{count}</span>
+          {title}{" "}
+          <span className="cap-text cap-num" data-tone="dim">
+            {count}
+          </span>
         </h3>
         {batch}
       </div>
@@ -155,43 +161,14 @@ function Group({
   );
 }
 
-// The ticked keys of one group, kept to the rows still shown.
-function useTicks(keys: string[]): {
-  ticked: string[];
-  has: (k: string) => boolean;
-  flip: (k: string) => void;
-  all: (on: boolean) => void;
-} {
-  const [set, setSet] = useState<ReadonlySet<string>>(new Set());
-  const ticked = keys.filter((k) => set.has(k));
-  return {
-    ticked,
-    has: (k) => set.has(k),
-    flip: (k) =>
-      setSet((s) => (s.has(k) ? new Set([...s].filter((x) => x !== k)) : new Set([...s, k]))),
-    all: (on) => setSet(on ? new Set(keys) : new Set()),
-  };
-}
-
-function SelectAll({
-  label,
-  keys,
-  ticks,
-}: {
-  label: string;
-  keys: string[];
-  ticks: ReturnType<typeof useTicks>;
-}) {
-  const n = ticks.ticked.length;
+function SelectAll({ label, ticks }: { label: string; ticks: Selection }) {
   return (
     <label className="wselect">
       <input
         type="checkbox"
-        checked={n > 0 && n === keys.length}
-        ref={(el) => {
-          if (el) el.indeterminate = n > 0 && n < keys.length;
-        }}
-        onChange={(e) => ticks.all(e.target.checked)}
+        checked={ticks.all}
+        ref={indeterminate(ticks.some)}
+        onChange={(e) => ticks.setAll(e.target.checked)}
       />
       <span>{label}</span>
     </label>
@@ -227,7 +204,7 @@ function PrGroup({ entries }: { entries: Entry[] }) {
   const rows = entries.map((e) => ({ ...e, seat: seatFor(feed, e.item.link) }));
   const approvable = rows.flatMap((r) => (r.seat && canApprove(r.seat) ? [r.seat] : []));
   const keys = approvable.map(prAnchor);
-  const ticks = useTicks(keys);
+  const ticks = useSelection(keys);
   const chosen = approvable.filter((a) => ticks.has(prAnchor(a)));
   return (
     <Group
@@ -237,17 +214,14 @@ function PrGroup({ entries }: { entries: Entry[] }) {
       batch={
         approvable.length > 1 && (
           <div className="wbatch">
-            <SelectAll label="Select all" keys={keys} ticks={ticks} />
+            <SelectAll label="Select all" ticks={ticks} />
             {chosen.length > 0 && (
               <button
                 type="button"
                 className="cap-btn"
                 data-variant="primary"
                 onClick={() =>
-                  confirm({
-                    ...approveAllRequest(chosen),
-                    onDone: () => ticks.all(false),
-                  })
+                  confirm({ ...approveAllRequest(chosen), onDone: () => ticks.setAll(false) })
                 }
               >
                 Approve {chosen.length} selected
@@ -279,7 +253,7 @@ function PrRow({
   app: InboxApp;
   item: InboxItem;
   seat: OpsAwaitingSeat | undefined;
-  ticks: ReturnType<typeof useTicks> | null;
+  ticks: Selection | null;
 }) {
   const { now, confirm } = useApp();
   const name = seat ? `${seat.repo} #${seat.number}` : item.title;
@@ -290,7 +264,7 @@ function PrRow({
         <Tick
           label={`Select ${name}`}
           on={ticks.has(prAnchor(ok))}
-          flip={() => ticks.flip(prAnchor(ok))}
+          flip={() => ticks.toggle(prAnchor(ok))}
         />
       ) : ticks ? (
         <span className="wtick" />
@@ -326,7 +300,7 @@ function PrRow({
           </button>
         )}
         {seat && !ok && (
-          <span className="faint wnote">
+          <span className="cap-text wnote" data-tone="dim">
             {seat.class === "typed"
               ? "Approve it by typing its number in chat."
               : "Not approvable here."}
@@ -423,7 +397,9 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
             {verb}
           </button>
         )}
-        {!blocked && j && <span className="faint wnote">{`Now ${j.status}.`}</span>}
+        {!blocked && j && (
+          <span className="cap-text wnote" data-tone="dim">{`Now ${j.status}.`}</span>
+        )}
       </div>
     </li>
   );
@@ -533,7 +509,7 @@ function WeeklyDigest() {
           <div className="wgroup-head">
             <h3>
               {site}
-              <span className="num faint">
+              <span className="cap-text cap-num" data-tone="dim">
                 {" "}
                 {open.filter((f) => f.namespace === site).length} open
               </span>
@@ -567,7 +543,10 @@ function Trends() {
     <details className="trends" id="trends">
       <summary>
         <span className="chev" aria-hidden="true" />
-        Trends <span className="faint">your time per week, and where waiting goes</span>
+        Trends{" "}
+        <span className="cap-text" data-tone="dim" data-size="small">
+          your time per week, and where waiting goes
+        </span>
       </summary>
       <div className="trends-body chart-row">
         <ChartSlot>

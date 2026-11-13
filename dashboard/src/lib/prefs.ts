@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { readPref, writePref } from "capsomer/behavior/shell";
+import { readPref } from "capsomer/behavior/shell";
 import { SINGLE_KEYS_PREF, setSingleKeys, singleKeysOn } from "capsomer/behavior/shortcuts";
 import {
   applyStoredTheme,
@@ -10,7 +10,7 @@ import {
 // Per-viewer conveniences in localStorage, through Capsomer: the theme (theme-switch), the
 // side menu (admin-shell) and single-key shortcuts (shortcuts). Blocked storage falls back to
 // the default, and a choice then lasts for this page load only.
-export { readPref, writePref, setSingleKeys };
+export { setSingleKeys };
 
 // The side menu's state: "collapsed" or "expanded". Anything else, including no value or
 // storage that cannot be read, is expanded.

@@ -43,7 +43,9 @@ export function Deploys() {
             {r}
           </button>
         ))}
-        <span className="faint ml6">range</span>
+        <span className="cap-text ml6" data-tone="dim">
+          range
+        </span>
       </div>
       <TimelinePanel
         title="Timeline"
@@ -88,27 +90,29 @@ export function Deploys() {
                       data-open={`site:${siteKey(s)}`}
                       tabIndex={0}
                     >
-                      <td className="num" title={utc(parse(d.created_on))}>
+                      <td className="cap-num" title={utc(parse(d.created_on))}>
                         {ago(parse(d.created_on), now)}
                       </td>
                       <td>
                         <b>{s.name}</b>
                       </td>
-                      <td className="mono">
+                      <td className="cap-mono">
                         {d.version_id ? (
                           shortId(d.version_id)
                         ) : (
-                          <span className="faint">none recorded</span>
+                          <span className="cap-text" data-tone="dim">
+                            none recorded
+                          </span>
                         )}
                       </td>
-                      <td className="muted">{d.message ?? ""}</td>
-                      <td className="muted">{d.triggered_by ?? ""}</td>
-                      <td className="muted">{d.author_email ?? ""}</td>
+                      <td className="cap-muted">{d.message ?? ""}</td>
+                      <td className="cap-muted">{d.triggered_by ?? ""}</td>
+                      <td className="cap-muted">{d.author_email ?? ""}</td>
                     </tr>
                   ))}
                   {!list.length && (
                     <tr>
-                      <td colSpan={6} className="faint">
+                      <td colSpan={6} className="cap-text" data-tone="dim">
                         {ns === "all" ? (
                           "No deploys in this range."
                         ) : (
@@ -142,7 +146,7 @@ export function Deploys() {
                         <td>
                           <b>{s.name}</b>
                         </td>
-                        <td className="muted">{cfNoData(s.cloudflare)}</td>
+                        <td className="cap-muted">{cfNoData(s.cloudflare)}</td>
                       </tr>
                     ))}
                   </tbody>

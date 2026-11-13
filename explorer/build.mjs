@@ -19,7 +19,6 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -35,8 +34,15 @@ import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
 import { writeIntegrity } from "@dustinedwards/site-runtime/sri";
 import { parsePublicModel } from "capsomer/behavior/system-model";
-import { inlineCss, minifyCss } from "capsomer/build";
 import { themeScript } from "capsomer/theme-server";
+import {
+  CAPSOMER_ROOT,
+  bundleScript,
+  capsomerStylesheet,
+  copyFonts,
+  inlineCss,
+  minifyCss,
+} from "capsomer/build";
 import { buildSync } from "esbuild";
 
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
@@ -48,9 +54,8 @@ const SECURITY_TXT_EXPIRES = "2027-10-25T00:00:00Z";
 import { servedTools } from "./src/surface.mjs";
 
 const here = import.meta.dirname;
-// Capsomer imports site-runtime (its escapeHtml), which the repo root installs; the staged copy sits in a temp directory, so name both places.
+// The Worker imports site-runtime and Prelum, which the repo root installs, so the hash's bundle names both places.
 const nodePaths = [join(here, "node_modules"), join(here, "..", "node_modules")];
-const require = createRequire(import.meta.url);
 const LIVE = "https://mcp.dustinedwards.info/public";
 
 /** @param {string} source a path or an https URL */
@@ -189,34 +194,31 @@ export async function build({
 
   const assets = join(out, "assets");
   mkdirSync(assets, { recursive: true });
-  const capsomer = dirname(require.resolve("capsomer/package.json"));
-  const css = [
-    "css/fonts.css",
-    "css/tokens.css",
-    "tokens/family-teal.css",
-    "css/base.css",
-    // The link system's kinds after the base, as components/link/link.md asks.
-    "components/link/link.css",
-    "components/button/button.css",
-    "components/table/table.css",
-    "components/status/status.css",
-    "components/system-map/system-map.css",
-    "components/tabs/tabs.css",
-    "components/field/field.css",
-    "components/popover/popover.css",
-    "components/tooltip/tooltip.css",
-    "components/dialog/dialog.css",
-    "components/theme-switch/theme-switch.css",
-    "components/site-header/site-header.css",
-    "components/manual/manual.css",
-    "components/family-footer/family-footer.css",
-    "components/chart-frame/chart-frame.css",
-    "components/graph/graph.css",
-    "components/meter/meter.css",
-    "tokens/site-capsid.css",
-  ]
-    .map((rel) => inlineCss(join(capsomer, rel)))
-    .join("\n");
+  // Capsomer's stylesheet in its layer order (capsomer/build): the faces from ../fonts/ (copied below), the teal family,
+  // the parts the pages use and the Capsid site layer.
+  const css = capsomerStylesheet({
+    family: "teal",
+    site: "capsid",
+    fontsUrl: "../fonts/",
+    parts: [
+      "button",
+      "table",
+      "status",
+      "system-map",
+      "tabs",
+      "field",
+      "popover",
+      "tooltip",
+      "dialog",
+      "theme-switch",
+      "site-header",
+      "manual",
+      "family-footer",
+      "chart-frame",
+      "meter",
+      "graph",
+    ],
+  });
   // Every stylesheet blocks the first paint, so each ships minified: Capsomer's sources are mostly comments, and on a
   // phone (Lighthouse's slow 4G) their bytes held the home page's LCP within 50 ms of its 2.5 s budget (2026-11-01).
   writeFileSync(join(assets, "capsomer.css"), await minifyCss(css));
@@ -225,53 +227,16 @@ export async function build({
   // draws a chart links it (src/pages.mjs).
   writeFileSync(
     join(assets, "enarratio.css"),
-    await minifyCss(inlineCss(join(capsomer, "css", "enarratio.css"))),
+    await minifyCss(inlineCss(join(CAPSOMER_ROOT, "css", "enarratio.css"))),
   );
   writeFileSync(
     join(assets, "explorer.css"),
     await minifyCss(readFileSync(join(here, "src", "explorer.css"), "utf8")),
   );
-  // The page's one module, bundled: src/explorer.js imports tabs, Capsomer's chart-enhance and the
-  // system map's and the header's modules by the paths they are staged at here, each folder whole
-  // (its React wrapper aside), because they import their siblings by "./" and each other by
-  // "../name/" (the map takes email's escapeHtml, and its two views are Capsomer's tabs). One file, so the script tag's integrity covers all of it: sixteen modulepreloads
+  // The page's one module, bundled with every import inlined (capsomer/build): Capsomer's system map, tabs, header, theme
+  // switch, meters and chart-enhance. One file, so the script tag's integrity covers all of it: sixteen modulepreloads
   // carrying the imports' integrity cost the home page 0.7 s of Lighthouse LCP.
-  const stage = join(out, ".bundle");
-  mkdirSync(stage, { recursive: true });
-  for (const name of [
-    "system-map",
-    "tabs",
-    "email",
-    "site-header",
-    "theme-switch",
-    "dialog",
-    "popover",
-    "tooltip",
-    "shell",
-    "shortcuts",
-    "meter",
-    "shortcuts",
-    "hooks",
-    "count-up",
-  ]) {
-    const dir = join(capsomer, "dist", "components", name);
-    mkdirSync(join(stage, "capsomer", name), { recursive: true });
-    for (const file of readdirSync(dir).filter(
-      (f) => f.endsWith(".js") && !f.endsWith(".react.js"),
-    ))
-      copyFileSync(join(dir, file), join(stage, "capsomer", name, file));
-  }
-  copyFileSync(join(here, "src", "explorer.js"), join(stage, "explorer.js"));
-  buildSync({
-    entryPoints: [join(stage, "explorer.js")],
-    outfile: join(assets, "explorer.js"),
-    bundle: true,
-    nodePaths: nodePaths,
-    format: "esm",
-    minify: true,
-    logLevel: "warning",
-  });
-  rmSync(stage, { recursive: true });
+  writeFileSync(join(assets, "explorer.js"), await bundleScript(join(here, "src", "explorer.js")));
   // The remembered theme, set before the first paint so the page never flashes the other one: Capsomer's themeScript
   // (cap-theme in localStorage; with nothing remembered the system's setting applies). A file, not an inline script,
   // so the policy needs no hash. It also marks the page as scripted before the first paint, so what script adds (the
@@ -295,9 +260,9 @@ export async function build({
     ),
   );
   copyFileSync(join(here, "src", "og-card.png"), join(assets, "og-card.png"));
-  // The family's faces (capsomer/fonts.css, inlined above), served from here because the policy
-  // allows fonts from 'self' only: Capsomer's fonts/ beside assets/, where its "../fonts/" points.
-  cpSync(join(capsomer, "fonts"), join(out, "fonts"), { recursive: true });
+  // The faces (inlined above), served from here because the policy allows fonts from 'self' only: Capsomer's fonts/
+  // beside assets/, where the stylesheet's "../fonts/" points.
+  copyFonts(join(out, "fonts"));
   // _headers from the explorer's entry in site-runtime's registry (capsid), by its one bin: the shared set, the page
   // policy reporting to Capsid's /csp-report, and Prelum's training reservation (the TDMRep header ai.txt names).
   const headersBin = join(

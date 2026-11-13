@@ -1,6 +1,5 @@
 import { Banner } from "capsomer/react/banner";
-import { useState } from "react";
-import { useLocation, useSearch } from "../lib/router";
+import { useUrlFilters } from "capsomer/react/route-hooks";
 import { useApp } from "../app/ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
@@ -23,33 +22,15 @@ const TARGET_LABEL: Record<"job" | "document", string> = {
 
 export function Activity() {
   const { feed, now: appNow } = useApp();
-  const search = useSearch();
-  const [, navigate] = useLocation();
-  const params = new URLSearchParams(search);
-  const namespace = params.get("namespace") ?? "";
-  const actor = params.get("actor") ?? "";
-  const [nsInput, setNsInput] = useState(namespace);
-  const [actorInput, setActorInput] = useState(actor);
-
-  // The address changed (back, a link): the fields follow it. Adjusted while rendering, not in an effect.
-  const [seen, setSeen] = useState({ namespace, actor });
-  if (seen.namespace !== namespace || seen.actor !== actor) {
-    setSeen({ namespace, actor });
-    setNsInput(namespace);
-    setActorInput(actor);
-  }
+  // The filter lives in the address (capsomer/react/route-hooks): the fields follow it (back, a link)
+  // and apply on submit, replacing the history entry.
+  const filters = useUrlFilters(["namespace", "actor"] as const);
+  const { namespace, actor } = filters.applied;
+  const { namespace: nsInput, actor: actorInput } = filters.input;
 
   const load = useAnswer<PortalActivity>(["activity", namespace, actor], () =>
     fetchActivity({ namespace, actor }),
   );
-
-  const apply = (ns: string, who: string) => {
-    const qs = new URLSearchParams();
-    if (ns.trim()) qs.set("namespace", ns.trim());
-    if (who.trim()) qs.set("actor", who.trim());
-    const s = qs.toString();
-    navigate(s ? `/activity?${s}` : "/activity", { replace: true });
-  };
 
   const data = load.data;
   // The rows were just read from the server, so none is later than the read itself.
@@ -73,7 +54,7 @@ export function Activity() {
         aria-label="Filter activity"
         onSubmit={(e) => {
           e.preventDefault();
-          apply(nsInput, actorInput);
+          filters.apply();
         }}
       >
         <label className="cap-sr-only" htmlFor="actNs">
@@ -83,7 +64,7 @@ export function Activity() {
           id="actNs"
           className="search"
           value={nsInput}
-          onChange={(e) => setNsInput(e.target.value)}
+          onChange={(e) => filters.setInput({ namespace: e.target.value })}
         >
           <option value="">All projects</option>
           {names.map((n) => (
@@ -101,7 +82,7 @@ export function Activity() {
           id="actActor"
           className="search"
           value={actorInput}
-          onChange={(e) => setActorInput(e.target.value)}
+          onChange={(e) => filters.setInput({ actor: e.target.value })}
         >
           <option value="">Anyone</option>
           {actors.map((a) => (
@@ -114,7 +95,11 @@ export function Activity() {
           Apply
         </button>
         {(namespace || actor) && (
-          <button type="button" className="cap-btn" onClick={() => apply("", "")}>
+          <button
+            type="button"
+            className="cap-btn"
+            onClick={() => filters.apply({ namespace: "", actor: "" })}
+          >
             Clear
           </button>
         )}
@@ -166,35 +151,42 @@ export function Activity() {
                     data-open={`audit:${r.id}`}
                     tabIndex={0}
                   >
-                    <td className="num" title={utc(parse(r.at))}>
+                    <td className="cap-num" title={utc(parse(r.at))}>
                       {ago(parse(r.at), now)}
                     </td>
-                    <td className="mono">
+                    <td className="cap-mono">
                       {r.actor ?? <Missing />}
                       {r.client && <div className="src">via {r.client}</div>}
                     </td>
                     <td>
                       {actionWords(r.action) ?? (
-                        <span className="mono">{r.action ?? <Missing />}</span>
+                        <span className="cap-mono">{r.action ?? <Missing />}</span>
                       )}
-                      {r.target && <span className="faint"> {TARGET_LABEL[r.target]}</span>}
-                      {actionWords(r.action) && <div className="src mono">{r.action}</div>}
+                      {r.target && (
+                        <span className="cap-text" data-tone="dim">
+                          {" "}
+                          {TARGET_LABEL[r.target]}
+                        </span>
+                      )}
+                      {actionWords(r.action) && <div className="src cap-mono">{r.action}</div>}
                     </td>
-                    <td className="mono">{r.namespace ?? <Missing />}</td>
-                    <td className="mono wrap">{r.path ?? <Missing />}</td>
+                    <td className="cap-mono">{r.namespace ?? <Missing />}</td>
+                    <td className="cap-mono wrap">{r.path ?? <Missing />}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : data ? (
-          <div className="body faint">
+          <div className="cap-text body" data-tone="dim">
             {data.filter.namespace || data.filter.actor
               ? "No rows match these filters."
               : "The audit log has no rows."}
           </div>
         ) : (
-          <div className="body faint">No read yet.</div>
+          <div className="cap-text body" data-tone="dim">
+            No read yet.
+          </div>
         )}
       </Panel>
     </div>

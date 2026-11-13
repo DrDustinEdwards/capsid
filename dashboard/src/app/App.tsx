@@ -21,6 +21,7 @@ import { AdminShell, type AdminEntry } from "capsomer/react/admin-shell";
 import { SignedOutPage } from "capsomer/react/error-page";
 import { ModeBanner } from "capsomer/react/mode-banner";
 import "capsomer/mode-banner.css";
+import { useScrollToHash } from "capsomer/react/route-hooks";
 import { Outlet } from "react-router";
 import { Link, useDemo, useLocation, useSearch } from "../lib/router";
 import {
@@ -185,19 +186,7 @@ function PortalApp() {
   const route = parseRoute(location);
   // A page opened with a section's anchor scrolls to it once the section is drawn: the
   // sections load after the page does.
-  useEffect(() => {
-    const id = window.location.hash.slice(1);
-    if (!id) return;
-    let frames = 0;
-    let raf = 0;
-    const seek = () => {
-      const el = document.getElementById(decodeURIComponent(id));
-      if (el) el.scrollIntoView();
-      else if (frames++ < 120) raf = requestAnimationFrame(seek);
-    };
-    raf = requestAnimationFrame(seek);
-    return () => cancelAnimationFrame(raf);
-  }, [location]);
+  useScrollToHash();
   // Relative times are measured on the server's clock (serverNow): the skew is taken
   // when each feed arrives, and now never falls behind the feed's own read time.
   const tick = useNow(15_000);

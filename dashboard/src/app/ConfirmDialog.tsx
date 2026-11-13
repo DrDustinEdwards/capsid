@@ -9,12 +9,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "capsomer/react/dialog";
+import { useTwoStep } from "capsomer/react/confirm-dialog";
 import { Disclosure } from "capsomer/react/disclosure";
 import { Field } from "capsomer/react/field";
-import "capsomer/banner.css";
-import "capsomer/button.css";
 import "capsomer/disclosure.css";
-import "capsomer/field.css";
 import { performAction, previewAction, type Answer } from "../lib/api";
 import { ago } from "../lib/format";
 import { parse, utc } from "capsomer/behavior/time";
@@ -95,7 +93,6 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const confirmRef = useRef<HTMLInputElement>(null);
   const started = useRef(false);
-  const alive = useRef(true);
   const needsReason = NEEDS_REASON.has(req.action);
   // A reason typed before the dialog opened (the reply box on a Needs you row) is the
   // reason: the dialog previews with it at once and shows it, rather than asking again.
@@ -108,21 +105,18 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   // the token carries it; a wrong number is refused with the right one.
   const typesConfirm = TYPED_CONFIRM.has(req.action);
   const [typedVersion, setTypedVersion] = useState("");
-  const [preview, setPreview] = useState<PortalPreview | null>(null);
-  const [pending, setPending] = useState<null | "preview" | "perform">(null);
-  // field: the error is about the reason or version field itself, so it is shown there.
-  const [error, setError] = useState<{ text: string; expired: boolean; field?: boolean } | null>(
-    null,
-  );
+  // Preview, then perform (capsomer/react/confirm-dialog's useTwoStep). An error's field flag says
+  // it is about the reason or version field itself, so it is shown there.
+  const step = useTwoStep({
+    preview: (params: Record<string, string>) =>
+      previewAction(csrf, { action: req.action, params }),
+    perform: (shown: PortalPreview) => performAction(csrf, shown.token),
+    onDone: (r: PortalPerformed) => finish(r),
+    onSignedOut: () => finish("signed-out"),
+  });
+  const { preview, pending, error, setError, runPerform } = step;
   const label = performLabel(req.action, req.params);
   const destructive = DESTRUCTIVE.has(req.action);
-
-  const failed = (r: Exclude<Answer<unknown>, { kind: "ok" }>) => {
-    if (r.kind === "signed-out") return finish("signed-out");
-    if (r.kind === "expired") return setError({ text: r.message, expired: true });
-    if (r.kind === "refused") return setError({ text: r.message, expired: false });
-    setError({ text: `Could not reach the server: ${r.message}`, expired: false });
-  };
 
   // Every click on Preview ends in something the person can see: the preview, a
   // refusal, a timeout, or the reason it could not be sent. A click that does nothing
@@ -157,44 +151,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
       ...(typedNote ? { note: typedNote } : {}),
       ...(typesConfirm ? { confirm: version } : {}),
     };
-    setPending("preview");
-    setError(null);
-    setPreview(null);
-    try {
-      const r = await previewAction(csrf, { action: req.action, params });
-      if (!alive.current) return;
-      if (r.kind === "ok") setPreview(r.value);
-      else failed(r);
-    } catch (e) {
-      if (alive.current)
-        setError({
-          text: `The preview could not be shown: ${e instanceof Error ? e.message : String(e)}`,
-          expired: false,
-        });
-    } finally {
-      if (alive.current) setPending(null);
-    }
-  };
-
-  const runPerform = async () => {
-    if (!preview) return;
-    setPending("perform");
-    setError(null);
-    try {
-      const r = await performAction(csrf, preview.token);
-      if (!alive.current) return;
-      if (r.kind === "ok") return finish(r.value);
-      if (r.kind === "expired") setPreview(null);
-      failed(r);
-    } catch (e) {
-      if (alive.current)
-        setError({
-          text: `The result could not be shown: ${e instanceof Error ? e.message : String(e)}. Check Activity before trying again.`,
-          expired: false,
-        });
-    } finally {
-      if (alive.current) setPending(null);
-    }
+    await step.runPreview(params);
   };
 
   // The reason is read from the field itself as well as from state, so a value the
@@ -202,16 +159,12 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   const reasonNow = () => reasonRef.current?.value ?? reason;
 
   useEffect(() => {
-    alive.current = true;
     // Once, even under StrictMode's double effect: an action without a reason
     // previews as soon as the dialog opens.
     if (!started.current) {
       started.current = true;
       if (!askReason && !typesConfirm) void runPreview("");
     }
-    return () => {
-      alive.current = false;
-    };
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount (the started ref guards StrictMode): the dialog asks for its preview as it opens
   }, []);
 
@@ -220,7 +173,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- refocus when the preview arrives; a changed action does not move focus
   }, [preview]);
 
-  const busy = pending != null;
+  const busy = step.busy;
   const fieldError = error?.field ? error.text : undefined;
 
   let primary = null;
@@ -266,18 +219,19 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
         <DialogTitle>{req.title}</DialogTitle>
         {preview && <DialogDescription data-summary="">{preview.summary}</DialogDescription>}
       </DialogHeader>
-      <DialogBody className="stack-gap">
+      <DialogBody className="cap-stack" data-gap="4">
         {given && (
           <div>
             <p className="section-title">Your reply</p>
-            <p className="note prewrap" data-given-reason="">
+            <p className="cap-text prewrap note" data-size="small" data-given-reason="">
               {given}
             </p>
           </div>
         )}
         {typesConfirm && !askReason && !preview && (
           <form
-            className="stack-gap"
+            className="cap-stack"
+            data-gap="4"
             noValidate
             onSubmit={(e) => {
               e.preventDefault();
@@ -310,7 +264,8 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
         )}
         {askReason && !preview && (
           <form
-            className="stack-gap"
+            className="cap-stack"
+            data-gap="4"
             noValidate
             onSubmit={(e) => {
               e.preventDefault();
@@ -360,7 +315,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
           </form>
         )}
         {pending === "preview" && (
-          <div className="faint" role="status">
+          <div className="cap-text" data-tone="dim" role="status">
             Checking what this will change...
           </div>
         )}
@@ -369,7 +324,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
             change's lines are what is being decided, so they start open. */}
         {preview && (
           <Disclosure summary="Details" defaultOpen={OPEN_DETAILS.has(req.action)}>
-            <div className="stack-gap">
+            <div className="cap-stack" data-gap="4">
               <div>
                 <p className="section-title">What changes</p>
                 {preview.changes.length ? (
@@ -379,22 +334,26 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
                     ))}
                   </ul>
                 ) : (
-                  <div className="faint">The server lists no change.</div>
+                  <div className="cap-text" data-tone="dim">
+                    The server lists no change.
+                  </div>
                 )}
               </div>
               <div>
                 <p className="section-title">Audit rows it writes</p>
                 {preview.audit.length ? (
-                  <ul className="plain mono">
+                  <ul className="plain cap-mono">
                     {preview.audit.map((a, i) => (
                       <li key={i}>{a}</li>
                     ))}
                   </ul>
                 ) : (
-                  <div className="faint">The server lists no audit row.</div>
+                  <div className="cap-text" data-tone="dim">
+                    The server lists no audit row.
+                  </div>
                 )}
               </div>
-              <p className="faint note">
+              <p className="cap-text note" data-tone="dim" data-size="small">
                 This confirmation is good until {utc(parse(preview.expires_at))} (
                 {ago(parse(preview.expires_at))}).
               </p>
@@ -547,25 +506,31 @@ function BatchDialog({
       <DialogHeader>
         <DialogTitle>{req.title}</DialogTitle>
       </DialogHeader>
-      <DialogBody className="stack-gap">
+      <DialogBody className="cap-stack" data-gap="4">
         <ol className="plain batch-list">
           {rows.map((r) => (
             <li key={r.item.label} data-batch-item={r.item.label}>
               <b>{r.item.label}</b>
               {r.preview ? (
-                <span className="muted note"> {r.preview.summary}</span>
+                <span className="cap-text note" data-tone="muted" data-size="small">
+                  {" "}
+                  {r.preview.summary}
+                </span>
               ) : r.error ? (
                 <Alert>
                   <ErrorText>{r.error}</ErrorText>
                 </Alert>
               ) : (
-                <span className="faint"> Checking...</span>
+                <span className="cap-text" data-tone="dim">
+                  {" "}
+                  Checking...
+                </span>
               )}
             </li>
           ))}
         </ol>
         {pending === "preview" && (
-          <div className="faint" role="status">
+          <div className="cap-text" data-tone="dim" role="status">
             Checking what each one will change...
           </div>
         )}

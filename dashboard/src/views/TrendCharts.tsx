@@ -3,7 +3,6 @@ import { areaChart } from "enarratio/lite/area";
 import { barChart } from "enarratio/lite/bar";
 import { lineChart } from "enarratio/lite/line";
 import { ChartFrame, ChartPanel } from "capsomer/react/chart-frame";
-import "capsomer/chart-frame.css";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, useAnswer } from "../lib/api";
@@ -40,7 +39,11 @@ import { formatMoney } from "@dustinedwards/site-runtime/money";
 // A later read that failed keeps the last answer on screen; this says so, so the failure is
 // not hidden behind numbers that are no longer current.
 function Stale({ error }: { error: string | null }) {
-  return error ? <p className="faint">Not refreshed: {error}</p> : null;
+  return error ? (
+    <p className="cap-text" data-tone="dim">
+      Not refreshed: {error}
+    </p>
+  ) : null;
 }
 
 // ---- 1. Minutes of Dustin per week ------------------------------------------------------
@@ -52,7 +55,11 @@ export function MinutesTile() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
   if (!data)
-    return <p className="faint minutes-none">Your time per week could not be read: {error}</p>;
+    return (
+      <p className="cap-text minutes-none" data-tone="dim">
+        Your time per week could not be read: {error}
+      </p>
+    );
   return (
     <>
       <Minutes minutes={data.minutes} />
@@ -188,9 +195,18 @@ export function WaitingChart() {
   );
   if (!load.data && load.loading) return null;
   if (!load.data)
-    return <p className="faint wait-none">Where waiting goes could not be read: {load.error}</p>;
+    return (
+      <p className="cap-text wait-none" data-tone="dim">
+        Where waiting goes could not be read: {load.error}
+      </p>
+    );
   const { rows, classes, shown, allHours } = waitRows(load.data.waits);
-  if (!rows.length) return <p className="faint wait-none">No wait ended in the last 14 days.</p>;
+  if (!rows.length)
+    return (
+      <p className="cap-text wait-none" data-tone="dim">
+        No wait ended in the last 14 days.
+      </p>
+    );
   const top = rows.filter((r) => r.gate === rows[0]!.gate).reduce((a, r) => a + r.hours, 0);
   const opts = {
     data: rows,
@@ -224,7 +240,12 @@ export function WaitingChart() {
 export function QueueChart() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
-  if (!data) return <p className="faint">The queue's last 14 days could not be read: {error}</p>;
+  if (!data)
+    return (
+      <p className="cap-text" data-tone="dim">
+        The queue's last 14 days could not be read: {error}
+      </p>
+    );
   const days = data.queue;
   if (!days.length) return null;
   const first = days[0]!;
@@ -382,10 +403,19 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
 export function CostChart() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
-  if (!data) return <p className="faint">Weekly cost could not be read: {error}</p>;
+  if (!data)
+    return (
+      <p className="cap-text" data-tone="dim">
+        Weekly cost could not be read: {error}
+      </p>
+    );
   const weeks = data.cost.weeks;
   if (!weeks.some((w) => w.usd !== null))
-    return <p className="faint">No model cost was recorded in these {weeks.length} weeks.</p>;
+    return (
+      <p className="cap-text" data-tone="dim">
+        No model cost was recorded in these {weeks.length} weeks.
+      </p>
+    );
   const now = weeks[weeks.length - 1]!;
   const opts = {
     data: weeks.map((w) => ({ week: w.start, usd: w.usd })),
@@ -424,7 +454,12 @@ const MERGE_NAME: Record<(typeof MERGE_KINDS)[number], string> = {
 export function MergesChart() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
-  if (!data) return <p className="faint">Merges per week could not be read: {error}</p>;
+  if (!data)
+    return (
+      <p className="cap-text" data-tone="dim">
+        Merges per week could not be read: {error}
+      </p>
+    );
   const weeks = data.merges.weeks;
   const rollbacks = data.merges.rollbacks;
   const rows = weeks.flatMap((w) =>
@@ -477,7 +512,12 @@ const restoreWords = (s: number | null) =>
 export function DeploysTable() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
-  if (!data) return <p className="faint">Deploys could not be read: {error}</p>;
+  if (!data)
+    return (
+      <p className="cap-text" data-tone="dim">
+        Deploys could not be read: {error}
+      </p>
+    );
   const repos = data.deploys.repos;
   return (
     <Panel
@@ -508,7 +548,10 @@ export function DeploysTable() {
                 <td data-label="Refused">
                   {r.refused}
                   {r.unverified ? (
-                    <span className="faint"> ({r.unverified} could not be checked)</span>
+                    <span className="cap-text" data-tone="dim">
+                      {" "}
+                      ({r.unverified} could not be checked)
+                    </span>
                   ) : null}
                 </td>
                 <td data-label="Change failure rate">{pct(r.change_failure_rate, 0)}</td>
@@ -519,7 +562,7 @@ export function DeploysTable() {
             ))}
             {repos.length === 0 && (
               <tr>
-                <td colSpan={6} className="faint">
+                <td colSpan={6} className="cap-text" data-tone="dim">
                   No deploy went through a live gate in this window.
                 </td>
               </tr>
@@ -732,7 +775,7 @@ export function BackupSlots() {
   const b = data?.backups;
   return (
     <Panel flush title="Retention slots" src="backup bucket, complete runs" id="backup-slots">
-      <div className="body stack-gap">
+      <div className="body cap-stack" data-gap="4">
         {b && <Stale error={error} />}
         {!b ? (
           loading ? null : (
@@ -798,7 +841,7 @@ export function CiHistory() {
       src="GitHub, default branch runs, kept an hour"
       id="ci-history"
     >
-      <div className="body stack-gap">
+      <div className="body cap-stack" data-gap="4">
         {ci && <Stale error={error} />}
         {!ci ? (
           loading ? null : (

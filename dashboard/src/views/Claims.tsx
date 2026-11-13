@@ -1,9 +1,9 @@
 import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { FILTER_KEYS } from "../lib/keys";
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
 import { Missing, Spinner } from "capsomer/react/empty";
-import { useLocation, useSearch } from "../lib/router";
+import { useUrlFilters } from "capsomer/react/route-hooks";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, fetchClaimsJob, useAnswer } from "../lib/api";
 import { age, ago } from "../lib/format";
@@ -22,45 +22,33 @@ const AgreementChart = trendChart("AgreementChart");
 type FilterKey = (typeof FILTER_KEYS)[number];
 type Filter = Record<FilterKey, string>;
 
+// Checks is Jobs' tab (/queue), so the tab stays in the address beside the filter.
+const PARAMS = [...FILTER_KEYS, "job"] as const;
+const CHECKS_TAB = { tab: "checks" };
+
 // The filters and the open job live in the address (?namespace=&agent=&since=&until=&job=),
 // so a view can be reloaded or shared. The inputs apply on submit.
 export function Claims() {
   const { feed, now } = useApp();
-  const search = useSearch();
-  const [, navigate] = useLocation();
-  const params = new URLSearchParams(search);
+  const filters = useUrlFilters(PARAMS, { fixed: CHECKS_TAB });
+  const { job } = filters.applied;
   const filter: Filter = {
-    namespace: params.get("namespace") ?? "",
-    agent: params.get("agent") ?? "",
-    since: params.get("since") ?? "",
-    until: params.get("until") ?? "",
+    namespace: filters.applied.namespace,
+    agent: filters.applied.agent,
+    since: filters.applied.since,
+    until: filters.applied.until,
   };
-  const job = params.get("job") ?? "";
-  const [input, setInput] = useState<Filter>(filter);
-  const [jobInput, setJobInput] = useState(job);
+  const input = filters.input;
+  const jobInput = filters.input.job;
   const key = FILTER_KEYS.map((k) => filter[k]).join("\u0000");
-
-  // The address changed: the fields follow it. Adjusted while rendering, not in an effect.
-  const [seen, setSeen] = useState({ key, job });
-  if (seen.key !== key || seen.job !== job) {
-    setSeen({ key, job });
-    setInput({ ...filter });
-    setJobInput(job);
-  }
+  // The filter form applies the fields with the open job; the job form, the job with the filter.
+  const go = (next: Filter, nextJob: string) => filters.apply({ ...next, job: nextJob });
 
   const agg = useAnswer<PortalClaimsAggregate>(["claims", key], () => fetchClaimsAggregate(filter));
   const detail = useAnswer<PortalClaimsJob>(["claims", "job", job], () => fetchClaimsJob(job), {
     keep: false,
     enabled: job !== "",
   });
-
-  const go = (next: Filter, nextJob: string) => {
-    // Checks is Jobs' tab, so the tab stays in the address beside the filter.
-    const qs = new URLSearchParams({ tab: "checks" });
-    for (const k of FILTER_KEYS) if (next[k].trim()) qs.set(k, next[k].trim());
-    if (nextJob.trim()) qs.set("job", nextJob.trim());
-    navigate(`/queue?${qs}`, { replace: true });
-  };
 
   const data = agg.data;
   const names = feed.live.namespaces.map((n) => n.name);
@@ -86,7 +74,7 @@ export function Claims() {
           id="clNs"
           className="search"
           value={input.namespace}
-          onChange={(e) => setInput({ ...input, namespace: e.target.value })}
+          onChange={(e) => filters.setInput({ namespace: e.target.value })}
         >
           <option value="">All projects</option>
           {names.map((n) => (
@@ -104,7 +92,7 @@ export function Claims() {
           type="search"
           placeholder="Agent, e.g. agent:sample-driver"
           value={input.agent}
-          onChange={(e) => setInput({ ...input, agent: e.target.value })}
+          onChange={(e) => filters.setInput({ agent: e.target.value })}
         />
         <label className="cap-sr-only" htmlFor="clSince">
           Since
@@ -115,7 +103,7 @@ export function Claims() {
           type="date"
           title="Since (inclusive)"
           value={input.since}
-          onChange={(e) => setInput({ ...input, since: e.target.value })}
+          onChange={(e) => filters.setInput({ since: e.target.value })}
         />
         <label className="cap-sr-only" htmlFor="clUntil">
           Before
@@ -126,7 +114,7 @@ export function Claims() {
           type="date"
           title="Before (exclusive)"
           value={input.until}
-          onChange={(e) => setInput({ ...input, until: e.target.value })}
+          onChange={(e) => filters.setInput({ until: e.target.value })}
         />
         <button type="submit" className="cap-btn">
           Apply
@@ -191,22 +179,22 @@ export function Claims() {
               <tbody>
                 {data.groups.map((g) => (
                   <tr key={`${g.agent ?? ""}\u0000${g.namespace}`} data-row="">
-                    <td className="mono wrap" data-label="Agent">
+                    <td className="cap-mono wrap" data-label="Agent">
                       {g.agent ?? <Missing>no claim yet</Missing>}
                     </td>
-                    <td className="mono" data-label="Project">
+                    <td className="cap-mono" data-label="Project">
                       {g.namespace}
                     </td>
-                    <td className="num" data-label="Jobs">
+                    <td className="cap-num" data-label="Jobs">
                       {g.jobs}
                     </td>
-                    <td className="num" data-label="Claims">
+                    <td className="cap-num" data-label="Claims">
                       {g.claims}
                     </td>
                     <td data-label="Checks">
                       <AgreementCounts c={totals(g)} />
                     </td>
-                    <td className="mono wrap" data-label="Touches">
+                    <td className="cap-mono wrap" data-label="Touches">
                       {g.touches.count ? (
                         `${g.touches.count}: ${counts(g.touches.by_kind)}`
                       ) : (
@@ -230,11 +218,13 @@ export function Claims() {
             </table>
           </div>
         ) : data ? (
-          <div className="body faint">
+          <div className="cap-text body" data-tone="dim">
             {filtered ? "No claims match these filters." : "No claim has been recorded yet."}
           </div>
         ) : (
-          <div className="body faint">No read yet.</div>
+          <div className="cap-text body" data-tone="dim">
+            No read yet.
+          </div>
         )}
       </Panel>
       {data && data.groups.length > 0 && (
@@ -257,11 +247,11 @@ export function Claims() {
               <tbody>
                 {checks.map(([name, c]) => (
                   <tr key={name} data-row="">
-                    <td className="mono" data-label="Check">
+                    <td className="cap-mono" data-label="Check">
                       {name}
                     </td>
                     {AGREEMENTS.map((a) => (
-                      <td key={a} className="num" data-label={a}>
+                      <td key={a} className="cap-num" data-label={a}>
                         {c[a]}
                       </td>
                     ))}
@@ -290,7 +280,7 @@ export function Claims() {
           list="clJobs"
           placeholder="Job id, e.g. job_0123456789ab"
           value={jobInput}
-          onChange={(e) => setJobInput(e.target.value)}
+          onChange={(e) => filters.setInput({ job: e.target.value })}
         />
         <datalist id="clJobs">
           {feed.live.jobs.map((j) => (
@@ -404,7 +394,9 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
   };
   return (
     <div className="toolbar" role="group" aria-label="Export">
-      <span className="faint small">Export as CSV:</span>
+      <span className="cap-text hint" data-tone="dim" data-size="small">
+        Export as CSV:
+      </span>
       <button type="button" className="cap-btn" onClick={agents}>
         By agent
       </button>

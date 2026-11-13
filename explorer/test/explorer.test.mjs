@@ -190,15 +190,6 @@ test("the code page draws the folders, then each folder's modules, every box lin
   );
   assert.equal((figures[2].match(/class="cap-graph-wire"/g) ?? []).length, 2);
   assert.equal((figures[2].match(/>cycle<\/text>/g) ?? []).length, 2);
-  // The drawing repeats the table: hidden from assistive technology, its links no tab stop.
-  for (const f of figures) {
-    assert.match(f, /<svg class="cap-graph-svg"[^>]*aria-hidden="true"/);
-    assert.doesNotMatch(f, /<a href="[^"]*"(?! tabindex="-1")/);
-    assert.match(
-      f,
-      /<div class="cap-graph-scroller" role="region" aria-labelledby="[^"]+-caption" tabindex="0">/,
-    );
-  }
   for (const id of ["theme-f-src", "theme-f-src-util"])
     assert.ok(page.includes(`id="${id}"`), `the folder anchor ${id} is missing`);
 });

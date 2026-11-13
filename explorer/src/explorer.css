@@ -1473,11 +1473,6 @@ th[aria-sort="ascending"] .sort::after {
   white-space: nowrap;
 }
 
-/* The code level's drawing is Capsomer's graph (capsomer/graph.css); only its spacing is the page's. */
-.cap-graph {
-  margin: var(--space-5) 0;
-}
-
 /* The NASA Graphics Standards Manual (NHB 1430.2, Danne & Blackburn, 1976), from its own pages:
    the index's bold section label over a hairline (page i), titles small and bold (5.1), forms
    ruled into labeled boxes (4.1), signs as dark panels of white type with an arrow (6.1, 6.2),

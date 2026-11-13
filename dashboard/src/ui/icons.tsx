@@ -323,6 +323,5 @@ const NAV_ICONS: Record<string, { d: string; box?: number }> = {
 export function NavIcon({ id, size = 16 }: { id: string; size?: number }) {
   const icon = NAV_ICONS[id];
   if (!icon) return null;
-  const className = size > 16 ? "navicon navicon-lg" : "navicon";
-  return <CapIcon d={icon.d} box={icon.box} className={className} />;
+  return <CapIcon {...icon} className={size > 16 ? "navicon navicon-lg" : "navicon"} />;
 }

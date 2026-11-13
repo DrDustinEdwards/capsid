@@ -2,7 +2,6 @@ import { useApp } from "../app/ctx";
 import { pct } from "../lib/format";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
-import "capsomer/uptime-strip.css";
 import { uptimeStrip, type UptimeSlot } from "enarratio";
 import { markup } from "capsomer/behavior/trusted-html";
 
@@ -34,7 +33,9 @@ export function Uptime90({ ns }: { ns: string }) {
   return (
     <Panel flush title={title} src={src}>
       {rows.length === 0 ? (
-        <p className="faint">No probe counted yet.</p>
+        <p className="cap-text" data-tone="dim">
+          No probe counted yet.
+        </p>
       ) : (
         <div className="cap-table-wrap">
           <table className="cap-table">
@@ -93,8 +94,8 @@ export function Uptime90({ ns }: { ns: string }) {
                         </span>
                       )}
                     </td>
-                    <td className="num">{s.days}</td>
-                    <td className="num">{s.below}</td>
+                    <td className="cap-num">{s.days}</td>
+                    <td className="cap-num">{s.below}</td>
                   </tr>
                 );
               })}

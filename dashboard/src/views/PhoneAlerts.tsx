@@ -11,7 +11,6 @@ import type { PortalPush } from "../types";
 import { Panel } from "capsomer/react/panel";
 import { PushDevices } from "capsomer/react/web-push";
 import "capsomer/web-push.css";
-import "capsomer/button.css";
 
 // Phone alerts (src/push.ts; docs/design/design-merge-pipeline.md section 5): turn Web
 // Push on for this browser, list the devices that have it, turn one off, send a test.
@@ -65,8 +64,8 @@ export function PhoneAlerts() {
   return (
     <>
       <Panel flush title="Phone alerts" count={devices.length} src="Web Push">
-        <div className="body stack-gap">
-          <p className="faint">
+        <div className="body cap-stack" data-gap="4">
+          <p className="cap-text" data-tone="dim">
             Six things only: a money pull request waiting over 2 hours, a rollback, a job at the
             correction cap, a question over 4 hours old on a job with priority 70 or more,
             auto-merge paused by the safety shutoff, and a visual pull request waiting for your
@@ -112,8 +111,8 @@ export function PhoneAlerts() {
 function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: number }) {
   return (
     <Panel flush title="Daily digest" src="email">
-      <div className="body stack-gap">
-        <p className="faint">
+      <div className="body cap-stack" data-gap="4">
+        <p className="cap-text" data-tone="dim">
           One email a day after {digest.hour_utc}:00 UTC: pull requests waiting on you by class,
           questions, blocked jobs, rollbacks, and what finished or became ready since the last one.
         </p>
@@ -130,7 +129,9 @@ function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: numbe
                 <p>Nothing is sent until it is.</p>
                 <details>
                   <summary>What it needs</summary>
-                  <p className="small">{digest.problem}</p>
+                  <p className="cap-text hint" data-size="small">
+                    {digest.problem}
+                  </p>
                 </details>
               </>
             }
@@ -142,7 +143,7 @@ function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: numbe
               Last attempt failed {ago(Date.parse(digest.last.at), now)}: {digest.last.note}
             </Alert>
           ) : (
-            <p className="faint">
+            <p className="cap-text" data-tone="dim">
               Last sent {ago(Date.parse(digest.last.at), now)}: {digest.last.note}
             </p>
           ))}

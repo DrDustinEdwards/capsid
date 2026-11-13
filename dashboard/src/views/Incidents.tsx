@@ -46,15 +46,15 @@ export function Incidents() {
                     {passStale(snap, now) && <St kind="warn">stale</St>}
                   </dd>
                   <dt>Cadence</dt>
-                  <dd className="num">every {snap.cadence_min} min</dd>
+                  <dd className="cap-num">every {snap.cadence_min} min</dd>
                   <dt>Duration</dt>
-                  <dd className="num">{(snap.pass_ms / 1000).toFixed(1)}s</dd>
+                  <dd className="cap-num">{(snap.pass_ms / 1000).toFixed(1)}s</dd>
                   <dt>Site map</dt>
                   <dd>
                     {!snap.site_map ? (
                       <St kind="nodata">Not read</St>
                     ) : snap.site_map.unmapped.length || snap.site_map.unknown.length ? (
-                      <span className="mono">
+                      <span className="cap-mono">
                         {snap.site_map.unmapped.length
                           ? `unmapped: ${snap.site_map.unmapped.join(", ")}`
                           : ""}
@@ -81,7 +81,7 @@ export function Incidents() {
                   <tbody>
                     {snap.checks.map((c) => (
                       <tr key={c.id}>
-                        <td className="mono">{c.id}</td>
+                        <td className="cap-mono">{c.id}</td>
                         <td>
                           {c.state === "could-not-run" ? (
                             <St kind="nodata">Could not run</St>
@@ -91,7 +91,7 @@ export function Incidents() {
                             <St kind="warn">Finding open</St>
                           )}
                         </td>
-                        <td className="muted">{c.findings.join("; ")}</td>
+                        <td className="cap-muted">{c.findings.join("; ")}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -146,7 +146,7 @@ export function ScheduledTasks() {
                   <tr key={t.id} data-task={t.id}>
                     <td>
                       {t.label}
-                      <div className="faint">
+                      <div className="cap-text" data-tone="dim">
                         {t.period_ms == null
                           ? "runs with its work"
                           : `every ${age(now - t.period_ms, now)}`}
@@ -161,7 +161,7 @@ export function ScheduledTasks() {
                         <St kind="ok">Running</St>
                       )}
                     </td>
-                    <td className="num">
+                    <td className="cap-num">
                       {last ? (
                         <>
                           <St kind={TASK_OUTCOME[last.outcome].kind}>
@@ -170,14 +170,18 @@ export function ScheduledTasks() {
                           {ago(parse(last.finished_at), now)}
                         </>
                       ) : (
-                        <span className="faint">none recorded</span>
+                        <span className="cap-text" data-tone="dim">
+                          none recorded
+                        </span>
                       )}
                     </td>
-                    <td className="muted">
+                    <td className="cap-muted">
                       {last?.reason}
                       {earlier.length > 0 && (
                         <details>
-                          <summary className="faint">{earlier.length} earlier</summary>
+                          <summary className="cap-text" data-tone="dim">
+                            {earlier.length} earlier
+                          </summary>
                           <ul className="plain">
                             {earlier.map((r) => (
                               <li key={r.started_at}>

@@ -119,7 +119,7 @@ function JobControls({ j }: { j: OpsJob }) {
             Unpark
           </button>
         </div>
-        <p className="faint small">
+        <p className="cap-text hint" data-tone="dim" data-size="small">
           Unpark puts it back in the queue at its priority. The result offers Undo.
         </p>
       </div>
@@ -178,7 +178,7 @@ function JobControls({ j }: { j: OpsJob }) {
       : []),
   ];
   return (
-    <div className="stack-gap" data-job-controls="">
+    <div className="cap-stack" data-gap="4" data-job-controls="">
       <div>
         <p className="section-title">Change it</p>
         <div className="toolbar">
@@ -191,7 +191,7 @@ function JobControls({ j }: { j: OpsJob }) {
             {primary.label}
           </button>
         </div>
-        <p className="faint small">
+        <p className="cap-text hint" data-tone="dim" data-size="small">
           {blocked
             ? j.question
               ? "Answer sends your reply to its driver as the resume note."
@@ -220,7 +220,7 @@ function JobControls({ j }: { j: OpsJob }) {
               </button>
             ))}
           </div>
-          <p className="faint small">
+          <p className="cap-text hint" data-tone="dim" data-size="small">
             {blocked
               ? "Close as shipped ends it as done when its work already landed, credited to the driver. "
               : ""}
@@ -299,7 +299,7 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             <Alert tone="warn">
               {(j.waits_on ?? "No question was recorded.").replace(/^QUESTION:\s*/, "")}
             </Alert>
-            <p className="faint small">
+            <p className="cap-text hint" data-tone="dim" data-size="small">
               Answer it with the button below: your reason and note go to its driver as the resume
               note.
             </p>
@@ -324,7 +324,12 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
                 <>
                   <CopyBlock id="cmdText" text={j.command} label="Copy command" />
                   {j.command_signature !== "verified" && (
-                    <p className="faint small" data-signature={j.command_signature ?? "none"}>
+                    <p
+                      className="cap-text hint"
+                      data-tone="dim"
+                      data-size="small"
+                      data-signature={j.command_signature ?? "none"}
+                    >
                       {j.command_signature === "legacy-unsigned"
                         ? "Unsigned: written before blocks were signed, so nothing vouches that this is the command the driver wrote. Read it before running it."
                         : "The signature could not be checked on this Worker."}
@@ -332,13 +337,15 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
                   )}
                 </>
               ) : (
-                <div className="faint">No command was recorded.</div>
+                <div className="cap-text" data-tone="dim">
+                  No command was recorded.
+                </div>
               )}
             </div>
             <div>
               <p className="section-title">Or resume it from chat</p>
               <CopyBlock id="resumeText" text={resumeCall(j)} label="Copy for a chat session" />
-              <p className="faint small">
+              <p className="cap-text hint" data-tone="dim" data-size="small">
                 Resume it with the button below, or paste this into a chat session.
               </p>
             </div>
@@ -350,12 +357,15 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
           <dl className="cap-detail-record">
             <dt>Status</dt>
             <dd>
-              <St kind={k.kind}>{k.label}</St> <span className="faint">{jobMeta(j, now)}</span>
+              <St kind={k.kind}>{k.label}</St>{" "}
+              <span className="cap-text" data-tone="dim">
+                {jobMeta(j, now)}
+              </span>
             </dd>
             <dt>Priority</dt>
-            <dd className="num">{j.priority}</dd>
+            <dd className="cap-num">{j.priority}</dd>
             <dt>Posted by</dt>
-            <dd className="mono">{j.posted_by}</dd>
+            <dd className="cap-mono">{j.posted_by}</dd>
             <dt>Created</dt>
             <dd>
               {ago(parse(j.created_at), now)} <Time at={j.created_at} format="exact" />
@@ -367,11 +377,11 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             {j.claimed_by && (
               <>
                 <dt>Held by</dt>
-                <dd className="mono">{j.claimed_by}</dd>
+                <dd className="cap-mono">{j.claimed_by}</dd>
               </>
             )}
             <dt>Blocked / resumed</dt>
-            <dd className="num">
+            <dd className="cap-num">
               {j.blocked_count} / {j.resumed_count}
             </dd>
             <dt>Gate required</dt>
@@ -379,11 +389,11 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             {j.finding && (
               <>
                 <dt>Finding</dt>
-                <dd className="mono">{j.finding.fingerprint}</dd>
+                <dd className="cap-mono">{j.finding.fingerprint}</dd>
                 {j.finding.seen_count !== null && (
                   <>
                     <dt>Seen</dt>
-                    <dd className="num">
+                    <dd className="cap-num">
                       {j.finding.seen_count} {j.finding.seen_count === 1 ? "time" : "times"}
                       {j.finding.last_seen ? `, last ${j.finding.last_seen}` : ""}
                     </dd>
@@ -394,7 +404,7 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             {j.result_ref && (
               <>
                 <dt>Result</dt>
-                <dd className="mono">
+                <dd className="cap-mono">
                   {/^https?:\/\//.test(j.result_ref) ? (
                     <a href={j.result_ref} target="_blank" rel="noopener noreferrer">
                       {j.result_ref}
@@ -426,7 +436,7 @@ function FragmentPr({ url, merged }: { url: string; merged: boolean | null }) {
         <a href={url} target="_blank" rel="noopener noreferrer">
           {url.replace(/^https:\/\/github\.com\//, "")}
         </a>{" "}
-        <span className="faint">
+        <span className="cap-text" data-tone="dim">
           {merged === true ? "merged" : merged === false ? "not merged" : "open"}
         </span>
       </dd>
