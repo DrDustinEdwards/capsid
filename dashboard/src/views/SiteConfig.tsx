@@ -8,6 +8,7 @@ import { Field } from "capsomer/react/field";
 import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
 import "capsomer/select.css";
+import "./config-form.css";
 
 // The site configuration (live.sites, the ops_sites table): one row per namespace. A row
 // with an origin is a site the watcher probes; a row with no origin records that the

@@ -84,81 +84,6 @@ main {
   color: var(--dim);
 }
 
-/* attention strip. Lists carry no rules between rows: hover and selection carry the
-   structure. One status glyph per row, and a red left edge on critical rows only. */
-.attention {
-  border: var(--line-w) solid var(--line);
-  border-radius: var(--radius-l);
-  background: var(--surface);
-  overflow: hidden;
-}
-.attention > header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: 9px var(--space-5);
-  background: var(--raised);
-  flex-wrap: wrap;
-}
-.attention h2 {
-  margin: 0;
-  font-size: var(--fs-detail);
-  font-weight: var(--weight-heading);
-}
-.att-row {
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-2-5) var(--space-5);
-  cursor: pointer;
-}
-.att-row:hover {
-  background: var(--raised);
-}
-.att-row .what {
-  min-width: 0;
-}
-.att-row .what b {
-  font-weight: var(--weight-semibold);
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.att-row .what div {
-  color: var(--muted);
-  font-size: var(--fs-detail);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.att-row .when {
-  font-size: var(--fs-detail);
-  color: var(--muted);
-  text-align: right;
-  white-space: nowrap;
-}
-
-/* A group of like rows, and the notices, open in place (APG Disclosure). The button is
-   the row's one control, stretched over it, so the whole row toggles. Children sit under
-   the group, indented to the title's column. */
-.att-row.grp {
-  position: relative;
-}
-.rowlink {
-  display: block;
-  width: 100%;
-  border: 0;
-  background: none;
-  padding: 0;
-  text-align: left;
-  font-weight: var(--weight-semibold);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rowlink::after,
 .stretch::after {
   content: "";
   position: absolute;
@@ -166,14 +91,6 @@ main {
 }
 tr:has(.stretch) {
   position: relative;
-}
-.rowlink:focus-visible {
-  outline: none;
-}
-.att-row:has(.rowlink:focus-visible) {
-  outline: var(--focus-width) solid var(--accent);
-  outline-offset: calc(-1 * var(--focus-offset));
-  border-radius: 4px;
 }
 .chev {
   display: inline-block;
@@ -185,51 +102,10 @@ tr:has(.stretch) {
   transform: rotate(-45deg);
   transition: transform 0.12s;
 }
-.att-row:has([aria-expanded="true"]) .chev,
 .disclose[aria-expanded="true"] .chev {
   transform: rotate(45deg);
 }
-.att-child {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-2) var(--space-5) var(--space-2) 116px;
-  background: var(--raised);
-  cursor: pointer;
-}
-.att-child:hover {
-  background: var(--sunken);
-}
-.att-child .what {
-  min-width: 0;
-}
-.att-child .what b {
-  font-weight: var(--weight-medium);
-  display: block;
-  overflow-wrap: anywhere;
-}
-.att-child .what div {
-  color: var(--muted);
-  font-size: var(--fs-detail);
-  overflow-wrap: anywhere;
-}
-.att-child .when {
-  font-size: var(--fs-detail);
-  color: var(--muted);
-  white-space: nowrap;
-}
-.grouplink {
-  padding: var(--space-2) var(--space-5) var(--space-3) 116px;
-  background: var(--raised);
-  font-size: var(--fs-detail);
-}
-.notices {
-  border-top: var(--line-w) solid var(--line);
-}
-.notices .rowlink {
-  font-weight: var(--weight-medium);
-}
+
 .att-more {
   padding: var(--space-2) var(--space-5) var(--space-3) 116px;
   font-size: var(--fs-detail);
@@ -386,25 +262,6 @@ details > summary + .cap-cluster {
   }
 }
 
-/* Library: the results, and one document's text. Empty shelves and links
-   reuse Shared code's classes below. */
-.lib-results {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.lib-results li {
-  padding: var(--space-3-5) var(--space-5);
-  border-bottom: var(--line-w) solid var(--line);
-  overflow-wrap: anywhere;
-}
-.lib-body {
-  padding: var(--space-4) var(--space-5);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font: var(--fs-detail)/1.55 var(--mono);
-}
-
 /* Shared code: the read line, each package's users, and its local copies. */
 .shared-read {
   margin: var(--space-4) 0 0;
@@ -465,8 +322,7 @@ table.workers-stores .cap-status {
   gap: var(--space-2);
 }
 @media (max-width: 820px) {
-  .shared-users .c-where,
-  .lib-table .c-where {
+  .shared-users .c-where {
     display: none;
   }
   .shared-users td,
@@ -476,14 +332,6 @@ table.workers-stores .cap-status {
     white-space: normal;
     overflow-wrap: anywhere;
   }
-}
-
-/* a site's own page: its status, address and project under its name */
-.site-lead {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-4);
-  flex-wrap: wrap;
 }
 
 /* fleet table */
@@ -504,15 +352,6 @@ table.workers-stores .cap-status {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: 0 var(--space-6);
   align-items: start;
-}
-.wait-chart,
-.minutes-chart {
-  margin: 0 0 var(--space-5);
-}
-.slot-head {
-  font-size: var(--fs-detail);
-  margin-bottom: var(--space-2);
-  overflow-wrap: anywhere;
 }
 .upct {
   font-size: var(--fs-label);
@@ -724,11 +563,6 @@ dialog {
 .body {
   padding: 14px var(--space-5);
 }
-.conv-h {
-  margin: 0;
-  font-size: var(--fs-detail);
-  font-weight: var(--weight-heading);
-}
 .src.hot,
 .cap-mono.hot,
 .cap-num.hot {
@@ -766,8 +600,6 @@ ul.plain {
 }
 .qrow:focus-visible,
 .frow:focus-visible,
-.att-row:focus-visible,
-.att-child:focus-visible,
 tr[data-open]:focus-visible {
   outline-offset: calc(-1 * var(--focus-offset));
 }
@@ -792,25 +624,8 @@ main .sev-crit[data-row]:focus-visible {
   text-align: center;
 }
 @media (max-width: 820px) {
-  .att-child,
-  .grouplink,
   .att-more {
     padding-left: var(--space-5);
-  }
-  /* The kind's word goes, its glyph stays; titles wrap instead of being cut. */
-  .att-row {
-    grid-template-columns: 14px minmax(0, 1fr) auto;
-  }
-  .att-row .kind .cap-status {
-    font-size: 0;
-    gap: 0;
-  }
-  .att-row .kind .cap-status-glyph {
-    font-size: var(--fs-detail);
-  }
-  .att-row .what b,
-  .rowlink {
-    white-space: normal;
   }
   .qrow {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -835,71 +650,6 @@ main .sev-crit[data-row]:focus-visible {
   }
 }
 
-/* Settings: the site form */
-.cap-config-form .check {
-  grid-column: 1 / -1;
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
-  font-size: var(--fs-detail);
-}
-.cap-config-form :is(.full, .cap-danger) {
-  grid-column: 1 / -1;
-}
-.cap-config-form .cap-danger .check {
-  grid-column: auto;
-}
-
-.state-note {
-  font-size: var(--fs-detail);
-  color: var(--muted);
-}
-.auto {
-  display: grid;
-}
-.auto-row {
-  display: grid;
-  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-3) var(--space-5);
-  padding: var(--space-3-5) var(--space-5);
-  border-top: var(--line-w) solid var(--line);
-}
-.auto-row:first-child {
-  border-top: 0;
-}
-.auto-row .what b {
-  display: block;
-}
-.auto-row .what span {
-  font-size: var(--fs-detail);
-  color: var(--muted);
-}
-.auto-row .runs {
-  grid-column: 2;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  font-size: var(--fs-detail);
-  color: var(--muted);
-}
-.prefrow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3-5);
-  font-size: var(--fs-detail);
-}
-
-@media (max-width: 820px) {
-  .auto-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .auto-row .runs {
-    grid-column: 1;
-  }
-}
-
 /* A visual pull request's preview and screenshots in Awaiting the seat (Ci.tsx). */
 .visual-look {
   display: flex;
@@ -913,21 +663,6 @@ main .sev-crit[data-row]:focus-visible {
 }
 .visual-look a {
   white-space: nowrap;
-}
-/* A build log: strangers' text, kept as written, scrolled in place. */
-pre.log {
-  margin: 0;
-  padding: var(--space-4) var(--space-5);
-  max-height: 480px;
-  overflow: auto;
-  background: var(--sunken);
-  font-family: var(--mono);
-  font-size: var(--fs-detail);
-  line-height: var(--leading-normal);
-  white-space: pre;
-}
-.search-rows + .search-rows {
-  margin-top: var(--space-4);
 }
 
 /* The menu's icons are Capsomer's Icon (1.25em by default); the menu's own sizes. */

@@ -1,0 +1,10 @@
+/* The trend charts (TrendCharts.tsx), loaded with their chunk rather than with the shell. */
+.wait-chart,
+.minutes-chart {
+  margin: 0 0 var(--space-5);
+}
+.slot-head {
+  font-size: var(--fs-detail);
+  margin-bottom: var(--space-2);
+  overflow-wrap: anywhere;
+}

@@ -23,6 +23,7 @@ import { trendChart } from "./charts";
 import { Convergence, SiteSecrets } from "./Convergence";
 import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
+import "./SitePage.css";
 // The settings form loads the first time Edit is pressed, so the page's first paint does not carry it.
 const SiteForm = lazy(() => import("./SiteConfig").then((m) => ({ default: m.SiteForm })));
 import { Uptime90 } from "./Uptime90";

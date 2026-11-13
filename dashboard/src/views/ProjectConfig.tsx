@@ -9,6 +9,7 @@ import "capsomer/repeater-field.css";
 import { Field, TextField } from "capsomer/react/field";
 import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
+import "./config-form.css";
 
 // ADD, CHANGE OR DELETE A PROJECT (the Portal audit's new map, 2026-11-06): the namespace_add,
 // namespace_edit and namespace_remove controls, which share their rules and audit rows with

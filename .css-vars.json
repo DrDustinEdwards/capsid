@@ -1,4 +1,7 @@
 {
   "dirs": ["dashboard/src", "explorer/src"],
-  "declared_in": ["dashboard/node_modules/capsomer", "explorer/node_modules/capsomer"]
+  "declared_in": ["dashboard/node_modules/capsomer", "explorer/node_modules/capsomer"],
+  "classes": [
+    { "package": "dashboard/node_modules/capsomer", "dirs": ["dashboard/src"], "prefix": "cap-" }
+  ]
 }
