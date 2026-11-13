@@ -4,7 +4,10 @@ import type { Env } from "./env";
 import { PORTAL_PATH, portalGate } from "./portal-auth";
 import { isPortalHost } from "./portal-host";
 import { textResponse as text } from "@dustinedwards/site-runtime/http";
-import { compressUntransformed, PRIVATE_PAGE_HEADERS } from "@dustinedwards/site-runtime/edge-cache";
+import {
+  compressUntransformed,
+  PRIVATE_PAGE_HEADERS,
+} from "@dustinedwards/site-runtime/edge-cache";
 
 // Capsid Portal (capsid/research/design-ops-console.md, moved from /console/app/ by
 // capsid/research/design-portal-unify.md): React Router pages rendered here, on the server, with
