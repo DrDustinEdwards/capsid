@@ -1,4 +1,5 @@
 import { Banner } from "capsomer/react/banner";
+import { AnchorBar } from "capsomer/react/anchor-bar";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy } from "react";
@@ -11,7 +12,6 @@ import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import type { OpsJob, PortalStale, StaleRule } from "../types";
 import { St } from "../ui/icons";
-import { Anchors } from "../ui/anchors";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
@@ -113,7 +113,9 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
           title={ns === "all" ? "No job looks stuck." : `No job in ${ns} looks stuck.`}
         />
       ) : (
-        <div className="body faint">No read yet.</div>
+        <div className="cap-text body" data-tone="dim">
+          No read yet.
+        </div>
       )}
     </Panel>
   );
@@ -159,7 +161,7 @@ function JobsTab() {
   const inPanel = new Set(stale.load.data?.rows.map((r) => r.id) ?? []);
   return (
     <div className="page">
-      <Anchors />
+      <AnchorBar />
       <PageHead title="Jobs" />
       <PageTabs label="Jobs" path="/queue" tabs={QUEUE_TABS} current="jobs" />
       <div className="toolbar">

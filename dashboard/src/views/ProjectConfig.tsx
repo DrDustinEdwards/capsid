@@ -125,7 +125,7 @@ export function ProjectForm({
         <input
           ref={adding ? first : undefined}
           id={f("ns")}
-          className="cap-input mono"
+          className="cap-input cap-mono"
           value={ns}
           readOnly={!adding}
           autoComplete="off"
@@ -151,7 +151,7 @@ export function ProjectForm({
                   <input
                     {...control}
                     ref={!adding && index === 0 ? first : undefined}
-                    className="cap-input mono"
+                    className="cap-input cap-mono"
                     placeholder="owner/name"
                     value={r.repo}
                     autoComplete="off"
@@ -161,7 +161,7 @@ export function ProjectForm({
                 )}
               </Field>
               <TextField
-                className="mono"
+                className="cap-mono"
                 label="Label"
                 placeholder="primary"
                 value={r.label}
@@ -174,7 +174,7 @@ export function ProjectForm({
         </RepeaterField>
       </div>
       {adding && (
-        <p className="faint note full">
+        <p className="cap-text full note" data-tone="dim" data-size="small">
           No driver agent is minted here: a mint hands out a key, so it stays with the admin tools.
           Add the project's site on Sites.
         </p>

@@ -18,10 +18,10 @@ type Worker = ResourcesDoc["workers"][number];
 type User = ResourcesDoc["databases"][number]["used_by"][number];
 
 const names = (list: string[]) =>
-  list.length ? <span className="mono">{list.join(", ")}</span> : <Missing />;
+  list.length ? <span className="cap-mono">{list.join(", ")}</span> : <Missing />;
 const pairs = (list: Array<{ binding: string; to: string }>) =>
   list.length ? (
-    <span className="mono">{list.map((p) => `${p.binding} → ${p.to}`).join(", ")}</span>
+    <span className="cap-mono">{list.map((p) => `${p.binding} → ${p.to}`).join(", ")}</span>
   ) : (
     <Missing />
   );
@@ -66,14 +66,17 @@ function WorkerPanel({ w }: { w: Worker }) {
       src={
         w.system ? (
           <>
-            system <span className="mono">{w.system}</span>
+            system <span className="cap-mono">{w.system}</span>
           </>
         ) : (
           <St kind="warn">No system lists it</St>
         )
       }
       footer={
-        <span className="faint">{`${w.secrets.length} ${w.secrets.length === 1 ? "secret" : "secrets"} · ${w.d1.length + w.kv.length + w.r2.length} ${w.d1.length + w.kv.length + w.r2.length === 1 ? "store" : "stores"}`}</span>
+        <span
+          className="cap-text"
+          data-tone="dim"
+        >{`${w.secrets.length} ${w.secrets.length === 1 ? "secret" : "secrets"} · ${w.d1.length + w.kv.length + w.r2.length} ${w.d1.length + w.kv.length + w.r2.length === 1 ? "store" : "stores"}`}</span>
       }
     >
       {w.error ? (
@@ -126,7 +129,7 @@ function StoresPanel({ doc }: { doc: ResourcesDoc }) {
         <>{`${doc.databases.length} D1 · ${doc.kv_namespaces.length} KV · ${doc.buckets.length} R2`}</>
       }
       footer={
-        <span className="faint">
+        <span className="cap-text" data-tone="dim">
           {unbound ? `${unbound} bound by no Worker` : "Every store is bound"}
         </span>
       }
@@ -146,11 +149,14 @@ function StoresPanel({ doc }: { doc: ResourcesDoc }) {
           {doc.databases.map((d) => (
             <tr key={`d1-${d.name}`}>
               <td>
-                <span className="mono">{d.name}</span>
+                <span className="cap-mono">{d.name}</span>
                 {d.tables ? (
                   <details>
-                    <summary className="faint">{`${d.tables.length} ${d.tables.length === 1 ? "table" : "tables"}`}</summary>
-                    <span className="mono">{d.tables.join(", ")}</span>
+                    <summary
+                      className="cap-text"
+                      data-tone="dim"
+                    >{`${d.tables.length} ${d.tables.length === 1 ? "table" : "tables"}`}</summary>
+                    <span className="cap-mono">{d.tables.join(", ")}</span>
                   </details>
                 ) : (
                   <div>
@@ -165,7 +171,7 @@ function StoresPanel({ doc }: { doc: ResourcesDoc }) {
           {doc.kv_namespaces.map((k) => (
             <tr key={`kv-${k.title}`}>
               <td>
-                <span className="mono">{k.title}</span>
+                <span className="cap-mono">{k.title}</span>
               </td>
               <td>KV</td>
               <td>{usedBy(k.used_by)}</td>
@@ -174,7 +180,7 @@ function StoresPanel({ doc }: { doc: ResourcesDoc }) {
           {doc.buckets.map((b) => (
             <tr key={`r2-${b.name}`}>
               <td>
-                <span className="mono">{b.name}</span>
+                <span className="cap-mono">{b.name}</span>
               </td>
               <td>R2</td>
               <td>{usedBy(b.used_by)}</td>
@@ -221,7 +227,10 @@ function NotRead({ load }: { load: ReturnType<typeof useResources> }) {
 function ReadNote({ doc }: { doc: ResourcesDoc }) {
   const { now } = useApp();
   return (
-    <p className="faint shared-read">{`Read from Cloudflare ${ago(parse(doc.read_at), now)}, nightly. Names only: no secret or variable value is ever read.`}</p>
+    <p
+      className="cap-text shared-read"
+      data-tone="dim"
+    >{`Read from Cloudflare ${ago(parse(doc.read_at), now)}, nightly. Names only: no secret or variable value is ever read.`}</p>
   );
 }
 
@@ -285,7 +294,9 @@ export function UnownedResources({ siteScripts }: { siteScripts: ReadonlyArray<s
         <WorkerPanel key={w.script} w={w} />
       ))}
       {rest.length === 0 && (
-        <p className="faint">Every Worker belongs to a site; each is on its site's Setup tab.</p>
+        <p className="cap-text" data-tone="dim">
+          Every Worker belongs to a site; each is on its site's Setup tab.
+        </p>
       )}
       <StoresPanel doc={doc} />
       <ReadNote doc={doc} />

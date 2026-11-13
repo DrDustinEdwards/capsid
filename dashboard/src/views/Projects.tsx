@@ -48,7 +48,7 @@ function Report({ n }: { n: PortalNamespace }) {
       {rep.integrity == null ? (
         <St kind="nodata">No integrity figure</St>
       ) : (
-        <span className="num">{pct(rep.integrity, 0)}</span>
+        <span className="cap-num">{pct(rep.integrity, 0)}</span>
       )}
       <div className="src">report {ago(parse(rep.generated), now)}</div>
     </>
@@ -68,7 +68,7 @@ function Row({
   return (
     <tr data-row="">
       <td>
-        <b className="mono">{n.namespace}</b>
+        <b className="cap-mono">{n.namespace}</b>
         {n.breaker.open && (
           <>
             <div className="mt4">
@@ -85,8 +85,13 @@ function Row({
         {n.repos.length ? (
           n.repos.map((r) => (
             <div key={r.repo}>
-              <span className="mono">{r.repo}</span>
-              {r.label !== "primary" && <span className="faint"> {r.label}</span>}
+              <span className="cap-mono">{r.repo}</span>
+              {r.label !== "primary" && (
+                <span className="cap-text" data-tone="dim">
+                  {" "}
+                  {r.label}
+                </span>
+              )}
             </div>
           ))
         ) : (
@@ -96,7 +101,7 @@ function Row({
       <td data-label="Driver">
         <Driver ns={n.namespace} />
       </td>
-      <td data-label="Jobs" className="num nowrap">
+      <td data-label="Jobs" className="cap-num nowrap">
         {n.jobs.queued} queued · {n.jobs.claimed} running
         <div className="src">
           {n.jobs.blocked} blocked · {n.jobs.done_today} done today
@@ -212,9 +217,13 @@ function Roster() {
             </table>
           </div>
         ) : data ? (
-          <div className="body faint">The roster has no projects.</div>
+          <div className="cap-text body" data-tone="dim">
+            The roster has no projects.
+          </div>
         ) : (
-          <div className="body faint">No read yet.</div>
+          <div className="cap-text body" data-tone="dim">
+            No read yet.
+          </div>
         )}
       </Panel>
     </>

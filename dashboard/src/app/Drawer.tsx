@@ -103,7 +103,9 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
           <div>
             <p className="section-title">What changed</p>
             {d.changes.length === 0 ? (
-              <p className="faint">No field changed.</p>
+              <p className="cap-text" data-tone="dim">
+                No field changed.
+              </p>
             ) : (
               <dl className="cap-detail-record">
                 {d.changes.map((c) => (
@@ -111,16 +113,18 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
                     <dt>{c.field}</dt>
                     <dd className="cap-detail-diff">
                       {c.before !== null && (
-                        <del className="mono" aria-label={`before: ${c.before}`}>
+                        <del className="cap-mono" aria-label={`before: ${c.before}`}>
                           {c.before}
                         </del>
                       )}
                       {c.after !== null ? (
-                        <ins className="mono" aria-label={`after: ${c.after}`}>
+                        <ins className="cap-mono" aria-label={`after: ${c.after}`}>
                           {c.after}
                         </ins>
                       ) : (
-                        <span className="faint">removed</span>
+                        <span className="cap-text" data-tone="dim">
+                          removed
+                        </span>
                       )}
                     </dd>
                   </Fragment>
@@ -137,7 +141,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
               {ago(parse(r.at), now)} <Time at={r.at} format="exact" />
             </dd>
             <dt>Actor</dt>
-            <dd className="mono">{r.actor ?? <NoValue />}</dd>
+            <dd className="cap-mono">{r.actor ?? <NoValue />}</dd>
             {r.client && (
               <>
                 <dt>Via</dt>
@@ -147,24 +151,24 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
             {r.path && (
               <>
                 <dt>Path</dt>
-                <dd className="mono wrap">{r.path}</dd>
+                <dd className="cap-mono wrap">{r.path}</dd>
               </>
             )}
             {d.fields.map((f) => (
               <Fragment key={f.name}>
                 <dt>{f.name}</dt>
-                <dd className="mono wrap">{f.value}</dd>
+                <dd className="cap-mono wrap">{f.value}</dd>
               </Fragment>
             ))}
           </dl>
           {d.unreadable && (
-            <p className="faint">
+            <p className="cap-text" data-tone="dim">
               This row's recorded detail is not JSON, so it cannot be shown. Rows this old predate
               that rule.
             </p>
           )}
           {d.withheld > 0 && (
-            <p className="faint">
+            <p className="cap-text" data-tone="dim">
               {d.withheld} recorded {d.withheld === 1 ? "field is" : "fields are"} not shown:
               hashes, signatures and nested values stay in the audit log.
             </p>
@@ -195,7 +199,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
       <div className="cap-dialog-body cap-detail-body">
         <dl className="cap-detail-record">
           <dt>Namespaces</dt>
-          <dd className="mono">{nsList(a)}</dd>
+          <dd className="cap-mono">{nsList(a)}</dd>
           <dt>Last seen</dt>
           <dd>
             {a.last_seen ? (
@@ -223,19 +227,19 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
             </>
           )}
           <dt>Jobs</dt>
-          <dd className="num">
+          <dd className="cap-num">
             {a.jobs_done} done · {a.jobs_failed} failed · {a.jobs_blocked} blocked
           </dd>
           <dt>Pull requests</dt>
-          <dd className="num">
+          <dd className="cap-num">
             {a.prs_merged} merged of {a.prs_opened} opened
           </dd>
           <dt>CI green</dt>
-          <dd className="num">
+          <dd className="cap-num">
             {a.ci_green_rate == null ? "-" : `${Math.round(a.ci_green_rate * 100)}%`}
           </dd>
           <dt>Median job</dt>
-          <dd className="num">
+          <dd className="cap-num">
             {a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}
           </dd>
           <dt>Flags</dt>
@@ -255,7 +259,9 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
               </div>
             ))
           ) : (
-            <div className="faint">Nothing claimed or blocked.</div>
+            <div className="cap-text" data-tone="dim">
+              Nothing claimed or blocked.
+            </div>
           )}
         </div>
       </div>

@@ -64,15 +64,17 @@ export function DefaultBranches() {
                       <td>
                         <St kind={st.kind}>{st.label}</St>
                       </td>
-                      <td className="mono">{c.latest ? c.latest.head_sha.slice(0, 7) : "-"}</td>
+                      <td className="cap-mono">{c.latest ? c.latest.head_sha.slice(0, 7) : "-"}</td>
                       <td
-                        className="num"
+                        className="cap-num"
                         title={c.latest ? utc(parse(c.latest.created_at)) : undefined}
                       >
                         {c.latest ? (
                           ago(parse(c.latest.created_at), now)
                         ) : (
-                          <span className="faint">runs could not be read</span>
+                          <span className="cap-text" data-tone="dim">
+                            runs could not be read
+                          </span>
                         )}
                       </td>
                       <td>
@@ -139,7 +141,7 @@ export function PullRequests() {
             and the control that writes it from docs/policy/auto-merge.md and signs it
             (sign_policy_from_repo). The version is typed in the dialog. */}
         <Panel title="Auto-merge policy" src="signed policy · loadMergePolicy">
-          <div className="stack-gap">
+          <div className="cap-stack" data-gap="4">
             {live.merge_policy.loads ? (
               <p>
                 <St kind="ok">Loads</St> version {live.merge_policy.version},{" "}
@@ -150,7 +152,7 @@ export function PullRequests() {
                 <p>
                   <St kind="crit">Does not load</St> Nothing is auto-merged until it does.
                 </p>
-                <p className="muted prewrap">{live.merge_policy.reason}</p>
+                <p className="cap-muted prewrap">{live.merge_policy.reason}</p>
               </>
             )}
             <div className="toolbar">
@@ -204,33 +206,35 @@ export function PullRequests() {
                       <td className="nowrap">
                         <b>{n.namespace}</b>
                       </td>
-                      <td className="num" data-label="Auto">
+                      <td className="cap-num" data-label="Auto">
                         {n.auto_merged}
                       </td>
-                      <td className="num" data-label="Approved">
+                      <td className="cap-num" data-label="Approved">
                         {n.approved}
                       </td>
-                      <td className="num" data-label="Verified">
+                      <td className="cap-num" data-label="Verified">
                         {n.deploys_verified}
                       </td>
-                      <td className="num" data-label="Rolled back">
+                      <td className="cap-num" data-label="Rolled back">
                         {n.rolled_back}
                       </td>
-                      <td className="num" data-label="Rollback failed">
+                      <td className="cap-num" data-label="Rollback failed">
                         {n.rollback_failed}
                       </td>
-                      <td className="num" data-label="Reverts">
+                      <td className="cap-num" data-label="Reverts">
                         {n.reverts}
                       </td>
                       <td data-label="State">
                         {n.paused ? (
                           <St kind="warn">Paused</St>
                         ) : (
-                          <span className="faint">running</span>
+                          <span className="cap-text" data-tone="dim">
+                            running
+                          </span>
                         )}
                       </td>
                       {/* The reason wraps in its own cell: a status chip does not wrap. */}
-                      <td className="muted" data-label="Why">
+                      <td className="cap-muted" data-label="Why">
                         {n.paused?.reason ?? ""}
                       </td>
                       <td>
@@ -288,13 +292,19 @@ export function PullRequests() {
                     data-open={job ? `job:${job.id}` : undefined}
                     tabIndex={job ? 0 : undefined}
                   >
-                    <td className="mono">
+                    <td className="cap-mono">
                       <AwayLink href={p.pr_url} newTab>
                         {prLabel(p.pr_url)}
                       </AwayLink>
                     </td>
                     <td data-label="Job">
-                      {job ? job.title : <span className="mono faint">{p.job_id}</span>}
+                      {job ? (
+                        job.title
+                      ) : (
+                        <span className="cap-text cap-mono" data-tone="dim">
+                          {p.job_id}
+                        </span>
+                      )}
                     </td>
                     <td data-label="State">
                       {p.merged === true ? (
@@ -305,14 +315,16 @@ export function PullRequests() {
                         <St kind="run">Open</St>
                       )}
                     </td>
-                    <td className="num" data-label="Verified">
+                    <td className="cap-num" data-label="Verified">
                       {p.merge_verified_at ? (
                         ago(parse(p.merge_verified_at), now)
                       ) : (
-                        <span className="faint">not yet</span>
+                        <span className="cap-text" data-tone="dim">
+                          not yet
+                        </span>
                       )}
                     </td>
-                    <td className="num" data-label="Recorded">
+                    <td className="cap-num" data-label="Recorded">
                       {ago(parse(p.recorded_at), now)}
                     </td>
                   </tr>
@@ -320,7 +332,7 @@ export function PullRequests() {
               })}
               {!live.prs.length && (
                 <tr>
-                  <td colSpan={5} className="faint">
+                  <td colSpan={5} className="cap-text" data-tone="dim">
                     No pull requests recorded in the last 7 days.
                   </td>
                 </tr>
@@ -383,7 +395,7 @@ function MergeUnits() {
   if (!units)
     return (
       <Panel title="Merge units" id="merge-units">
-        <p className={load.error ? "prewrap" : "muted"}>
+        <p className={load.error ? "prewrap" : "cap-muted"}>
           {load.error
             ? `The merge units could not be read: ${load.error}`
             : "Reading the merge units..."}
@@ -428,11 +440,11 @@ function MergeUnits() {
                 const listed = policy.units.includes(r.unit);
                 return (
                   <tr key={r.unit}>
-                    <td className="mono nowrap">{r.unit}</td>
+                    <td className="cap-mono nowrap">{r.unit}</td>
                     <td data-label="State">
                       <St kind={st.kind}>{st.label}</St>
                     </td>
-                    <td className="muted" data-label="Why">
+                    <td className="cap-muted" data-label="Why">
                       {r.why ||
                         (r.state === "auto"
                           ? "merges with no human when every other check passes"
@@ -500,13 +512,13 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
   return (
     <li className="wrow prcard" data-row="" id={prAnchor(a)}>
       <div className="wmain">
-        <AwayLink className="wtitle mono" href={prUrl(a)} newTab>
-          {name}
+        <AwayLink className="wtitle" href={prUrl(a)} newTab>
+          <span className="cap-mono">{name}</span>
         </AwayLink>
         <span className="held">
           <St kind="warn">{checkWords(a.failed)}</St>
         </span>
-        <span className="muted">{a.why}</span>
+        <span className="cap-muted">{a.why}</span>
         {a.visual && <VisualLook visual={a.visual} />}
         <span className="wmeta">
           {a.namespace} · waiting {age(parse(a.at), now)}
@@ -533,7 +545,7 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
           Close
         </button>
         {!canApprove(a) && (
-          <span className="faint wnote">
+          <span className="cap-text wnote" data-tone="dim">
             {a.class === "typed"
               ? "Approve it by typing its number in chat."
               : "Not approvable here."}
@@ -562,7 +574,7 @@ function VisualLook({ visual }: { visual: NonNullable<OpsAwaitingSeat["visual"]>
         </AwayLink>
       ))}
       {!visual.preview && !visual.shots.length && (
-        <span className="faint">
+        <span className="cap-text" data-tone="dim">
           The pull request names no preview or screenshots; open it on GitHub.
         </span>
       )}

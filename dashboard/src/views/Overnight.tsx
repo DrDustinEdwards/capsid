@@ -80,8 +80,8 @@ export function Tonight() {
           {plan.lanes.map((lane) => (
             <div className="qgroup" key={lane.repo} data-lane={lane.repo}>
               <h3>
-                <span className="mono">{lane.repo}</span>{" "}
-                <span className="num faint">
+                <span className="cap-mono">{lane.repo}</span>{" "}
+                <span className="cap-text cap-num" data-tone="dim">
                   {lane.planned_minutes} min{lane.heavy ? " · heavy, shares the budget" : ""}
                 </span>
               </h3>
@@ -114,7 +114,10 @@ export function Tonight() {
           {plan.skipped.length > 0 && (
             <div className="qgroup" data-group="skipped">
               <h3>
-                Skipped <span className="num faint">{plan.skipped.length}</span>
+                Skipped{" "}
+                <span className="cap-text cap-num" data-tone="dim">
+                  {plan.skipped.length}
+                </span>
               </h3>
               {plan.skipped.map((j) => (
                 <div
@@ -138,7 +141,7 @@ export function Tonight() {
             </div>
           )}
           {plan.truncated && (
-            <div className="body faint">
+            <div className="cap-text body" data-tone="dim">
               More jobs are queued than the plan reads; the rest wait for another night.
             </div>
           )}
@@ -146,7 +149,9 @@ export function Tonight() {
       ) : plan ? (
         <Empty kind="all-clear" title="Nothing is queued for tonight." />
       ) : (
-        <div className="body faint">No read yet.</div>
+        <div className="cap-text body" data-tone="dim">
+          No read yet.
+        </div>
       )}
     </Panel>
   );
@@ -193,9 +198,10 @@ export function SinceLastLooked() {
       ) : d ? (
         <div className="digest">
           <p className="digest-line" data-digest="">
-            <b className="num">{d.finished.length}</b> finished · <b className="num">{merged}</b>{" "}
-            merged · <b className="num">{d.pull_requests_ready.length}</b> ready for you ·{" "}
-            <b className="num">{d.blocked.length}</b> blocked
+            <b className="cap-num">{d.finished.length}</b> finished ·{" "}
+            <b className="cap-num">{merged}</b> merged ·{" "}
+            <b className="cap-num">{d.pull_requests_ready.length}</b> ready for you ·{" "}
+            <b className="cap-num">{d.blocked.length}</b> blocked
           </p>
           {(d.pull_requests_ready.length > 0 || d.blocked.length > 0) && (
             // One line first (UX audit, the proposed Needs you); the lists behind it.
@@ -208,7 +214,7 @@ export function SinceLastLooked() {
                       <AwayLink href={p.url} newTab>
                         {p.url.replace("https://github.com/", "")}
                       </AwayLink>{" "}
-                      <span className="faint">
+                      <span className="cap-text" data-tone="dim">
                         {p.state === "unchecked" ? "not checked yet" : p.state}
                       </span>
                     </li>
@@ -227,7 +233,9 @@ export function SinceLastLooked() {
                       className="click"
                     >
                       <b>{b.title}</b>{" "}
-                      <span className="faint">blocked {ago(parse(b.at), now)}</span>
+                      <span className="cap-text" data-tone="dim">
+                        blocked {ago(parse(b.at), now)}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -235,11 +243,15 @@ export function SinceLastLooked() {
             </details>
           )}
           {d.truncated.length > 0 && (
-            <p className="faint small">Cut short: {d.truncated.join("; ")}.</p>
+            <p className="cap-text hint" data-tone="dim" data-size="small">
+              Cut short: {d.truncated.join("; ")}.
+            </p>
           )}
         </div>
       ) : (
-        <div className="faint">No read yet.</div>
+        <div className="cap-text" data-tone="dim">
+          No read yet.
+        </div>
       )}
     </Panel>
   );

@@ -4,63 +4,27 @@
   --top: 44px;
 }
 
-/* After Capsomer's base.css (main.tsx) in the same layer, so the Portal's denser type wins. */
+/* After Capsomer's base.css (main.tsx) in the same layer, so the Portal's denser type wins. Margin,
+   ground, ink, links, the pointer on buttons and the focus ring are Capsomer's (base.css). */
 @layer cap.base {
   html,
   body {
     min-height: 100%;
   }
   body {
-    margin: 0;
-    background: var(--ground);
-    color: var(--text);
     font: 400 13px/1.4 var(--ui);
-    -webkit-font-smoothing: antialiased;
   }
-  button {
-    cursor: pointer;
-  }
-  /* Text takes --accent-text (4.5:1 on every surface); --accent is for fills, rings and icons at
-     3:1. A link in running text is underlined, since color alone can't set it apart from the words
+  /* A link in running text is underlined, since color alone can't set it apart from the words
      around it (WCAG 1.4.1). */
-  a {
-    color: var(--accent-text);
-    text-decoration: none;
-  }
   a:hover,
-  main a:not([class], .anchors a) {
+  main a:not([class]) {
     text-decoration: underline;
   }
-  :focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
 }
-/* Monospace is for identifiers only: ids, shas, fingerprints, commands, agent and
-   namespace names, paths. Times, counts, percentages and hostnames are .num, the UI face
-   with tabular figures. Nothing is set below 11 px, and nothing below 13 px on a phone. */
-.mono {
-  font-family: var(--mono);
-  font-size: var(--fs-detail);
-  letter-spacing: -0.01em;
-}
-.num {
-  font-variant-numeric: tabular-nums;
-}
-.muted {
-  color: var(--muted);
-}
-.faint {
-  color: var(--dim);
-}
-.label {
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
+/* Text roles are Capsomer's: .cap-mono for identifiers only (ids, shas, fingerprints, commands,
+   agent and namespace names, paths), .cap-num for times, counts, percentages and hostnames, and
+   .cap-text for size and tone (capsomer/utilities.css). Nothing is set below 11 px, and nothing
+   below 13 px on a phone (the capsid-portal site entry). */
 /* The shell is Capsomer's AdminShell (capsomer/admin-shell.css); the freshness line is Capsomer's
    Freshness; only the page's own controls are styled here. */
 .sample {
@@ -354,7 +318,7 @@ tr:has(.stretch) {
   font-size: 13px;
   font-weight: var(--weight-heading);
 }
-.wgroup-head .num {
+.wgroup-head .cap-num {
   font-weight: 400;
 }
 .wbatch {
@@ -463,9 +427,8 @@ summary {
 summary.cap-btn::-webkit-details-marker {
   display: none;
 }
-.trends > summary .faint {
+.trends > summary .cap-text {
   font-weight: 400;
-  font-size: var(--fs-detail);
 }
 details[open] > summary .chev {
   transform: rotate(45deg);
@@ -581,54 +544,6 @@ table.workers-stores .st {
 .embedded {
   display: grid;
   gap: 14px;
-}
-
-/* The anchor bar (ui/anchors.tsx): pinned to the top of main on a long view, on the
-   ground tone. main keeps focused rows clear of it (scroll-padding-top, WCAG 2.4.11),
-   from before it mounts, so a section opened by its address is not left under it. */
-.anchor-host {
-  display: contents;
-}
-.anchors {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin: -16px -24px 0;
-  padding: 6px 24px;
-  background: var(--ground);
-  overflow-x: auto;
-}
-.anchors-label {
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-right: 8px;
-  white-space: nowrap;
-}
-/* legacy-scan:keep the current section's marker bar, a tab-style active indicator the guide's rubric drops */
-.anchors a {
-  border-bottom: 2px solid transparent;
-  color: var(--muted);
-  font-size: var(--fs-detail);
-  font-weight: 500;
-  padding: 4px 8px;
-  white-space: nowrap;
-  text-decoration: none;
-}
-.anchors a:hover {
-  color: var(--text);
-}
-.anchors a[aria-current] {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-}
-:root:has(.anchor-host) {
-  scroll-padding-top: 48px;
 }
 
 /* a site's own page: its status, address and project under its name */
@@ -867,9 +782,6 @@ dialog {
 #root {
   height: 100%;
 }
-.ml-auto {
-  margin-left: auto;
-}
 .ml6 {
   margin-left: 6px;
 }
@@ -882,21 +794,17 @@ dialog {
 .w30 {
   width: 30%;
 }
-.small {
-  font-size: var(--fs-detail);
+/* The space around a small note (.cap-text data-size="small"): a hint under a control has 6px
+   above it, a note in a stack none. */
+.hint {
   margin: 6px 0 0;
 }
 .note {
   margin: 0;
-  font-size: var(--fs-detail);
 }
 /* The padded block inside a flush Capsomer Panel, beside a table or feed that runs to its edges. */
 .body {
   padding: 14px 16px;
-}
-.stack-gap {
-  display: grid;
-  gap: 12px;
 }
 .row-gap {
   display: inline-flex;
@@ -910,8 +818,8 @@ dialog {
   font-weight: var(--weight-heading);
 }
 .src.hot,
-.mono.hot,
-.num.hot {
+.cap-mono.hot,
+.cap-num.hot {
   color: var(--crit);
 }
 .spark,
@@ -948,9 +856,6 @@ ul.plain {
   display: grid;
   gap: 4px;
   font-size: 13px;
-}
-ul.plain.mono {
-  font-size: var(--fs-detail);
 }
 [data-open] {
   cursor: pointer;
@@ -991,10 +896,6 @@ main .sev-crit[data-row]:focus-visible {
   .page {
     padding: 16px;
     gap: 16px;
-  }
-  .anchors {
-    margin: -16px -16px 0;
-    padding: 6px 16px;
   }
   .att-child,
   .grouplink,

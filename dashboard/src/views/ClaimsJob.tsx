@@ -37,7 +37,7 @@ export function wait(msValue: number | null) {
   return msValue === null ? (
     <Missing>no wait</Missing>
   ) : (
-    <span className="num">{age(0, msValue)}</span>
+    <span className="cap-num">{age(0, msValue)}</span>
   );
 }
 
@@ -121,7 +121,7 @@ export function AgreementCounts({ c }: { c: ClaimsAgreementCounts }) {
   const parts = AGREEMENTS.filter((a) => c[a] > 0);
   if (parts.length === 0) return <Missing>no checks</Missing>;
   return (
-    <span className="mono">
+    <span className="cap-mono">
       {parts.map((a, i) => (
         <span key={a}>
           {i > 0 ? " · " : ""}
@@ -137,23 +137,23 @@ function EvaluationRows({ rows }: { rows: JobEvaluationRow[] }) {
     <>
       {rows.map((e) => (
         <tr key={e.id} data-row="">
-          <td className="mono" data-label="Check">
+          <td className="cap-mono" data-label="Check">
             {e.name}
           </td>
-          <td className="mono wrap" data-label="Claimed">
+          <td className="cap-mono wrap" data-label="Claimed">
             {e.claimed ?? <Missing>not stated</Missing>}
           </td>
-          <td className="mono wrap" data-label="Verified">
+          <td className="cap-mono wrap" data-label="Verified">
             {e.verified ?? <Missing>not checked</Missing>}
           </td>
           <td data-label="Agreement">
             <Agreement a={e.agreement} />
           </td>
-          <td className="num" data-label="Score">
+          <td className="cap-num" data-label="Score">
             {e.score_label}
             {e.score_value !== null ? ` (${e.score_value})` : ""}
           </td>
-          <td className="mono wrap" data-label="By">
+          <td className="cap-mono wrap" data-label="By">
             {e.evaluator_id}
           </td>
         </tr>
@@ -183,7 +183,9 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
             </Alert>
           )}
           {data.outcome === null && (
-            <p className="faint">No outcome recorded: the job has not completed or failed.</p>
+            <p className="cap-text" data-tone="dim">
+              No outcome recorded: the job has not completed or failed.
+            </p>
           )}
         </div>
       </Panel>
@@ -194,7 +196,7 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
         src="each claim as the agent sent it, and each check the Worker ran on it"
       >
         {data.claims.length === 0 ? (
-          <div className="body faint">
+          <div className="cap-text body" data-tone="dim">
             No claim recorded for this job: it has not reached complete, fail or block since claims
             were recorded.
           </div>
@@ -208,20 +210,20 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
                 <div className="body">
                   <dl className="cap-detail-record">
                     <dt>Claim</dt>
-                    <dd className="mono">
+                    <dd className="cap-mono">
                       #{c.id} · {c.action} · {c.agent} ·{" "}
                       <span title={utc(parse(c.recorded_at))}>
                         {ago(parse(c.recorded_at), now)}
                       </span>
                     </dd>
                     <dt>Stated</dt>
-                    <dd className="mono">
+                    <dd className="cap-mono">
                       {said.length ? said.join(" · ") : <Missing>no structured claim</Missing>}
                     </dd>
                     <dt>Versions</dt>
-                    <dd className="mono">{v || <Missing>not stated</Missing>}</dd>
+                    <dd className="cap-mono">{v || <Missing>not stated</Missing>}</dd>
                     <dt>Worker</dt>
-                    <dd className="mono">{c.capsid_sha ?? <Missing>unknown build</Missing>}</dd>
+                    <dd className="cap-mono">{c.capsid_sha ?? <Missing>unknown build</Missing>}</dd>
                   </dl>
                 </div>
                 {checks.length ? (
@@ -243,7 +245,7 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
                     </table>
                   </div>
                 ) : (
-                  <div className="body faint">
+                  <div className="cap-text body" data-tone="dim">
                     {c.action === "block"
                       ? "A block is a claim with no check: nothing is verified until the job ends."
                       : "No check recorded for this claim."}
@@ -280,7 +282,7 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
         src="every time a human, or a policy acting for one, touched this job, oldest first"
       >
         {data.touches.length === 0 ? (
-          <div className="body faint">
+          <div className="cap-text body" data-tone="dim">
             No touch recorded: nobody gated, resumed, released or reviewed this job.
           </div>
         ) : (
@@ -298,17 +300,20 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
               <tbody>
                 {data.touches.map((t) => (
                   <tr key={t.id} data-row="">
-                    <td className="num" data-label="When" title={utc(parse(t.at))}>
+                    <td className="cap-num" data-label="When" title={utc(parse(t.at))}>
                       {ago(parse(t.at), now)}
                     </td>
-                    <td className="mono" data-label="Kind">
+                    <td className="cap-mono" data-label="Kind">
                       {t.kind}
                     </td>
-                    <td className="mono wrap" data-label="Actor">
-                      {t.actor} <span className="faint">({t.actor_kind})</span>
+                    <td className="cap-mono wrap" data-label="Actor">
+                      {t.actor}{" "}
+                      <span className="cap-text" data-tone="dim">
+                        ({t.actor_kind})
+                      </span>
                     </td>
                     <td data-label="Waited">{wait(t.waited_ms)}</td>
-                    <td className="mono wrap" data-label="Detail">
+                    <td className="cap-mono wrap" data-label="Detail">
                       {t.detail ?? <Missing />}
                     </td>
                   </tr>

@@ -39,7 +39,9 @@ function Archive() {
     <div className="embedded">
       <Panel flush title="Archive" src="agents · agents_archive">
         {rows.length === 0 ? (
-          <div className="body faint">No agent has been revoked.</div>
+          <div className="cap-text body" data-tone="dim">
+            No agent has been revoked.
+          </div>
         ) : (
           <div className="cap-table-wrap" data-reflow="wide">
             <table className="cap-table">
@@ -81,10 +83,10 @@ function Archive() {
                         </St>
                       )}
                     </td>
-                    <td data-label="Done / failed / blocked" className="num">
+                    <td data-label="Done / failed / blocked" className="cap-num">
                       {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}
                     </td>
-                    <td data-label="PRs merged" className="num">
+                    <td data-label="PRs merged" className="cap-num">
                       {a.prs_merged} of {a.prs_opened}
                     </td>
                     <td data-label="Last seen">
@@ -120,7 +122,7 @@ function Access() {
   return (
     <div className="embedded">
       <Panel flush title="AI access" src="each MCP server's owner page">
-        <div className="body faint">
+        <div className="cap-text body" data-tone="dim">
           Grants you gave AI clients, with Revoke, and every tool call. Each opens on its server
           after a sign-in.
         </div>
@@ -194,19 +196,19 @@ function Roster() {
                         {a.last_seen ? ago(parse(a.last_seen), now) : "never"}
                       </div>
                     </td>
-                    <td data-label="Done / failed / blocked" className="num">
+                    <td data-label="Done / failed / blocked" className="cap-num">
                       {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}
                     </td>
-                    <td data-label="PRs merged" className="num">
+                    <td data-label="PRs merged" className="cap-num">
                       {a.prs_merged} of {a.prs_opened}
                     </td>
-                    <td data-label="Merge rate" className="num">
+                    <td data-label="Merge rate" className="cap-num">
                       {pct(a.pr_merge_rate, 0)}
                     </td>
-                    <td data-label="CI green" className="num">
+                    <td data-label="CI green" className="cap-num">
                       {pct(a.ci_green_rate, 0)}
                     </td>
-                    <td data-label="Median job" className="num">
+                    <td data-label="Median job" className="cap-num">
                       {a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}
                     </td>
                     <td data-label="Flags">

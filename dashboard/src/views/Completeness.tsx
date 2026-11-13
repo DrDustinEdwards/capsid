@@ -137,7 +137,7 @@ export function Completeness() {
       {data.areas.map((a) => (
         <AreaPanel key={a.id} area={a} columns={columns} publicOnly={data.public_token} />
       ))}
-      <p className="faint shared-read">
+      <p className="cap-text shared-read" data-tone="dim">
         Newest run {data.as_of ? ago(parse(data.as_of), now) : "unknown"}; read{" "}
         {ago(parse(data.read), now)}. Runs daily at 06:23 UTC. Kept for ten minutes.
       </p>
@@ -187,7 +187,11 @@ function AreaPanel({
           )}
         </>
       }
-      footer={<span className="faint">{linesText(area, publicOnly)}</span>}
+      footer={
+        <span className="cap-text" data-tone="dim">
+          {linesText(area, publicOnly)}
+        </span>
+      }
     >
       {open.length ? (
         <ul className="done-open" aria-label={`Not complete in ${area.name}`}>
@@ -200,7 +204,7 @@ function AreaPanel({
               </St>{" "}
               <span>{cell.reason}</span>
               {cell.clean_days !== null && cell.status === "partial" && (
-                <span className="faint">
+                <span className="cap-text" data-tone="dim">
                   {" "}
                   · clean {cell.clean_days} of {CLEAN_DAYS} days
                 </span>
@@ -209,8 +213,10 @@ function AreaPanel({
                 <ul className="done-errors">
                   {cell.errors.map((e, i) => (
                     <li key={i}>
-                      <span className="mono">{e.check}</span>{" "}
-                      <span className="faint">{e.detail}</span>
+                      <span className="cap-mono">{e.check}</span>{" "}
+                      <span className="cap-text" data-tone="dim">
+                        {e.detail}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -220,7 +226,9 @@ function AreaPanel({
           ))}
         </ul>
       ) : (
-        <p className="faint shared-none">Every cell that applies is complete.</p>
+        <p className="cap-text shared-none" data-tone="dim">
+          Every cell that applies is complete.
+        </p>
       )}
       {done.length > 0 && (
         <p className="done-complete">
@@ -251,7 +259,7 @@ function groups(
 
 function Evidence({ urls }: { urls: string[] }) {
   return (
-    <span className="faint">
+    <span className="cap-text" data-tone="dim">
       {" · "}
       {urls.map((u, i) => (
         <span key={u}>

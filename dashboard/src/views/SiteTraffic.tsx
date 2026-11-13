@@ -62,23 +62,28 @@ function SearchTable({
   label: string;
   more?: string | null;
 }) {
-  if (!rows.length) return <p className="body faint">No {label.toLowerCase()} in the window.</p>;
+  if (!rows.length)
+    return (
+      <p className="cap-text body" data-tone="dim">
+        No {label.toLowerCase()} in the window.
+      </p>
+    );
   return (
     <div className="cap-table-wrap search-rows">
       <table className="cap-table">
         <thead>
           <tr>
             <th scope="col">{label}</th>
-            <th scope="col" className="num">
+            <th scope="col" className="cap-num">
               Clicks
             </th>
-            <th scope="col" className="num">
+            <th scope="col" className="cap-num">
               Impressions
             </th>
-            <th scope="col" className="num">
+            <th scope="col" className="cap-num">
               CTR
             </th>
-            <th scope="col" className="num">
+            <th scope="col" className="cap-num">
               Position
             </th>
           </tr>
@@ -86,16 +91,20 @@ function SearchTable({
         <tbody>
           {rows.map((r) => (
             <tr key={r.key}>
-              <td className={label === "Pages" ? "mono wrap" : "wrap"}>{r.key}</td>
-              <td className="num">{fmtN(r.clicks)}</td>
-              <td className="num">{fmtN(r.impressions)}</td>
-              <td className="num">{r.ctr == null ? "" : pct(r.ctr, 1)}</td>
-              <td className="num">{r.position == null ? "" : r.position.toFixed(1)}</td>
+              <td className={label === "Pages" ? "cap-mono wrap" : "wrap"}>{r.key}</td>
+              <td className="cap-num">{fmtN(r.clicks)}</td>
+              <td className="cap-num">{fmtN(r.impressions)}</td>
+              <td className="cap-num">{r.ctr == null ? "" : pct(r.ctr, 1)}</td>
+              <td className="cap-num">{r.position == null ? "" : r.position.toFixed(1)}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      {more && <p className="body faint">{more}</p>}
+      {more && (
+        <p className="cap-text body" data-tone="dim">
+          {more}
+        </p>
+      )}
     </div>
   );
 }
@@ -106,7 +115,7 @@ function Totals({ items }: { items: Array<[string, string]> }) {
       {items.map(([k, v]) => (
         <Fragment key={k}>
           <dt>{k}</dt>
-          <dd className="num">{v}</dd>
+          <dd className="cap-num">{v}</dd>
         </Fragment>
       ))}
     </dl>
@@ -125,7 +134,7 @@ function Search({ ns }: { ns: string }) {
               {(g) => (
                 <>
                   <div className="body">
-                    <p className="faint">
+                    <p className="cap-text" data-tone="dim">
                       {g.property} · {g.start_date} to {g.end_date}
                     </p>
                     <Totals
@@ -163,7 +172,7 @@ function Search({ ns }: { ns: string }) {
               {(b) => (
                 <>
                   <div className="body">
-                    <p className="faint">
+                    <p className="cap-text" data-tone="dim">
                       {b.site} · {b.start_date} to {b.end_date}
                     </p>
                     <Totals
@@ -172,7 +181,11 @@ function Search({ ns }: { ns: string }) {
                         ["Impressions", fmtN(b.totals.impressions)],
                       ]}
                     />
-                    {b.note && <p className="faint">{b.note}</p>}
+                    {b.note && (
+                      <p className="cap-text" data-tone="dim">
+                        {b.note}
+                      </p>
+                    )}
                   </div>
                   <SearchTable
                     label="Queries"
@@ -257,7 +270,7 @@ const vital = (x: number | null, unit: "ms" | "") =>
 function Vitals({ v }: { v: TrafficWebVitals }) {
   return (
     <>
-      <p className="body faint">
+      <p className="cap-text body" data-tone="dim">
         {fmtN(v.page_views_measured)} page views measured by Cloudflare's browser insights.
       </p>
       <div className="cap-table-wrap">
@@ -265,13 +278,13 @@ function Vitals({ v }: { v: TrafficWebVitals }) {
           <thead>
             <tr>
               <th scope="col">Measure</th>
-              <th scope="col" className="num">
+              <th scope="col" className="cap-num">
                 Median
               </th>
-              <th scope="col" className="num">
+              <th scope="col" className="cap-num">
                 75th percentile
               </th>
-              <th scope="col" className="num">
+              <th scope="col" className="cap-num">
                 90th percentile
               </th>
             </tr>
@@ -293,11 +306,11 @@ function Vitals({ v }: { v: TrafficWebVitals }) {
               return (
                 <tr key={m.key}>
                   <td>{m.name}</td>
-                  <td className="num">{vital(q?.p50 ?? null, m.unit)}</td>
-                  <td className="num">
+                  <td className="cap-num">{vital(q?.p50 ?? null, m.unit)}</td>
+                  <td className="cap-num">
                     {vital(p75, m.unit)} <St kind={kind}>{word}</St>
                   </td>
-                  <td className="num">{vital(q?.p90 ?? null, m.unit)}</td>
+                  <td className="cap-num">{vital(q?.p90 ?? null, m.unit)}</td>
                 </tr>
               );
             })}
@@ -322,14 +335,18 @@ function Traffic({ ns }: { ns: string }) {
                 const real = n.paths.filter((p) => !p.probe);
                 return (
                   <>
-                    {n.note && <p className="body faint">{n.note}</p>}
+                    {n.note && (
+                      <p className="cap-text body" data-tone="dim">
+                        {n.note}
+                      </p>
+                    )}
                     {real.length ? (
                       <div className="cap-table-wrap">
                         <table className="cap-table">
                           <thead>
                             <tr>
                               <th scope="col">Path</th>
-                              <th scope="col" className="num">
+                              <th scope="col" className="cap-num">
                                 Hits
                               </th>
                             </tr>
@@ -337,17 +354,19 @@ function Traffic({ ns }: { ns: string }) {
                           <tbody>
                             {real.map((p) => (
                               <tr key={p.path}>
-                                <td className="mono wrap">{p.path}</td>
-                                <td className="num">{fmtN(p.hits)}</td>
+                                <td className="cap-mono wrap">{p.path}</td>
+                                <td className="cap-num">{fmtN(p.hits)}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
                     ) : (
-                      <p className="body faint">No missing page was asked for.</p>
+                      <p className="cap-text body" data-tone="dim">
+                        No missing page was asked for.
+                      </p>
                     )}
-                    <p className="body faint">
+                    <p className="cap-text body" data-tone="dim">
                       {n.probes} scanner probes not listed
                       {n.truncated ? `; the top paths of ${n.total_paths} only` : ""}.
                     </p>
@@ -519,7 +538,7 @@ function BuildLog({ build }: { build: string }) {
             {(l) => (
               <>
                 {(l.truncated || l.note) && (
-                  <p className="body faint">
+                  <p className="cap-text body" data-tone="dim">
                     {l.note ?? `The last ${l.lines.length} of ${l.line_count} lines.`}
                   </p>
                 )}
@@ -573,7 +592,7 @@ export function SiteBuilds({ ns }: { ns: string }) {
                         return (
                           <tr key={id ?? i}>
                             <td
-                              className="num"
+                              className="cap-num"
                               title={b.created_on ? utc(parse(b.created_on)) : undefined}
                             >
                               {b.created_on ? ago(parse(b.created_on), now) : ""}
@@ -581,9 +600,9 @@ export function SiteBuilds({ ns }: { ns: string }) {
                             <td>
                               <St kind={st.kind}>{st.label}</St>
                             </td>
-                            <td className="mono">{b.branch ?? ""}</td>
-                            <td className="mono">{b.commit ? shortId(b.commit, 7) : ""}</td>
-                            <td className="muted wrap">{b.commit_message ?? ""}</td>
+                            <td className="cap-mono">{b.branch ?? ""}</td>
+                            <td className="cap-mono">{b.commit ? shortId(b.commit, 7) : ""}</td>
+                            <td className="cap-muted wrap">{b.commit_message ?? ""}</td>
                             <td className="ctl">
                               {id && (
                                 <button
