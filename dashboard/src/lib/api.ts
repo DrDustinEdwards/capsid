@@ -2,7 +2,6 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import {
   SignedOut,
   answerOf,
-  ask,
   createFlag,
   createQueryClient as createClient,
   sessionEnded,
@@ -106,7 +105,7 @@ export function createQueryClient(): QueryClient {
   });
 }
 
-export { ask, useAnswer, type Answer, type Load };
+export { useAnswer, type Answer, type Load };
 
 // The feed is read only by the page itself (on load, the minute poll and a return to
 // the tab), never by a click, so it is marked background: the Worker's idle hour
