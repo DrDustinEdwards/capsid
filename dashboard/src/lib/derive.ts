@@ -150,8 +150,12 @@ export function ciState(c: CiObservation): { kind: Kind; label: string; red: boo
   if (!l) return { kind: "nodata", label: "Could not read", red: false };
   if (l.conclusion == null) return { kind: "run", label: l.status.replace(/_/g, " "), red: false };
   // Capsomer's one reading of a conclusion: skipped is no data, canceled and timed out warn.
+  // An empty conclusion reads as still running (the info tone), so it is the run state here.
+  // A finished run is never muted today; if Capsomer ever says so, it shows as no data.
   const o = outcomeStatus(l.conclusion, { success: "Green" });
-  return { kind: o.tone as Kind, label: o.label, red: o.tone === "crit" };
+  if (o.running) return { kind: "run", label: o.label, red: false };
+  const kind: Kind = o.tone === "info" || o.tone === "muted" ? "nodata" : o.tone;
+  return { kind, label: o.label, red: kind === "crit" };
 }
 
 // ---- watcher staleness --------------------------------------------------------
