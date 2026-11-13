@@ -1,5 +1,4 @@
 import { Alert, Banner } from "capsomer/react/banner";
-import { AwayLink } from "capsomer/react/link";
 import { Suspense, lazy, useState } from "react";
 import { useApp } from "../app/ctx";
 import { fetchPackageHistory, useAnswer } from "../lib/api";
@@ -282,13 +281,17 @@ function PackagePanel({
               <div className="cap-text hint" data-size="small">
                 Counts from deps.dev, which it calls indicative rather than exact. No public API
                 lists them:{" "}
-                <AwayLink href={`https://www.npmjs.com/package/${enc}?activeTab=dependents`} newTab>
+                <a
+                  href={`https://www.npmjs.com/package/${enc}?activeTab=dependents`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   npm's list
-                </AwayLink>{" "}
+                </a>{" "}
                 ·{" "}
-                <AwayLink href={`https://deps.dev/npm/${enc}`} newTab>
+                <a href={`https://deps.dev/npm/${enc}`} target="_blank" rel="noopener noreferrer">
                   deps.dev
-                </AwayLink>
+                </a>
                 . GitHub offers no API for the repositories that use it.
               </div>
             </dd>
@@ -298,9 +301,13 @@ function PackagePanel({
                 {() =>
                   snap.github.state === "ok" && (
                     <>
-                      <AwayLink href={`https://github.com/${snap.github.repo}`} newTab>
+                      <a
+                        href={`https://github.com/${snap.github.repo}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
                         <span className="cap-mono">{snap.github.repo}</span>
-                      </AwayLink>{" "}
+                      </a>{" "}
                       · <span className="cap-num">{snap.github.stars}</span> stars ·{" "}
                       <span className="cap-num">{snap.github.open_issues}</span> open issues ·{" "}
                       <span className="cap-num">
