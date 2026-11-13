@@ -4,36 +4,21 @@
   --top: 44px;
 }
 
-/* After Capsomer's base.css (main.tsx) in the same layer, so the Portal's denser type wins. */
+/* After Capsomer's base.css (main.tsx) in the same layer, so the Portal's denser type wins. Margin,
+   ground, ink, links, the pointer on buttons and the focus ring are Capsomer's (base.css). */
 @layer cap.base {
   html,
   body {
     min-height: 100%;
   }
   body {
-    margin: 0;
-    background: var(--ground);
-    color: var(--text);
     font: 400 13px/1.4 var(--ui);
-    -webkit-font-smoothing: antialiased;
   }
-  button {
-    cursor: pointer;
-  }
-  /* Text takes --accent-text (4.5:1 on every surface); --accent is for fills, rings and icons at
-     3:1. A link in running text is underlined, since color alone can't set it apart from the words
+  /* A link in running text is underlined, since color alone can't set it apart from the words
      around it (WCAG 1.4.1). */
-  a {
-    color: var(--accent-text);
-    text-decoration: none;
-  }
   a:hover,
   main a:not([class]) {
     text-decoration: underline;
-  }
-  :focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
   }
 }
 /* Text roles are Capsomer's: .cap-mono for identifiers only (ids, shas, fingerprints, commands,

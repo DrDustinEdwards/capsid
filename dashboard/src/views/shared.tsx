@@ -1,7 +1,6 @@
 import { trendChart } from "./charts";
 import { Empty } from "capsomer/react/empty";
 import { Meter } from "capsomer/react/meter";
-import "capsomer/meter.css";
 import { Panel } from "capsomer/react/panel";
 import { useCallback, useState, type ReactNode } from "react";
 import { useLocation, useSearch } from "../lib/router";

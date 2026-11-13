@@ -3,10 +3,6 @@ import { Switch } from "capsomer/react/switch";
 import { ThemeSwitch } from "capsomer/react/theme-switch";
 import { THEME_PREF, setSingleKeys, useSingleKeys } from "../lib/prefs";
 import { Panel } from "capsomer/react/panel";
-import "capsomer/button.css";
-import "capsomer/field.css";
-import "capsomer/switch.css";
-import "capsomer/switch-reason.css";
 // The lazy Automation section's segmented control: loaded with the route, so that section
 // brings no stylesheet of its own to wait for before it hydrates.
 import "capsomer/segmented.css";

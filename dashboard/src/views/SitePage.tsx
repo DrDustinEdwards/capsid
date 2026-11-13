@@ -5,8 +5,6 @@ import { PageHead } from "capsomer/react/page-head";
 import "capsomer/page-head.css";
 import { Panel } from "capsomer/react/panel";
 import { ChartFrame } from "capsomer/react/chart-frame";
-import "capsomer/chart-frame.css";
-import "capsomer/uptime-strip.css";
 import { uptimeStrip } from "enarratio";
 import { SITE_TABS, parseRoute, tabOf, useApp, type SiteTab } from "../app/ctx";
 import { Link, useLocation } from "../lib/router";

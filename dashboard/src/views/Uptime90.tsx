@@ -2,7 +2,6 @@ import { useApp } from "../app/ctx";
 import { pct } from "../lib/format";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
-import "capsomer/uptime-strip.css";
 import { uptimeStrip, type UptimeSlot } from "enarratio";
 import { markup } from "capsomer/behavior/trusted-html";
 

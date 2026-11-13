@@ -2,7 +2,6 @@ import { Alert } from "capsomer/react/banner";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { StatusMatrix } from "capsomer/react/status-matrix";
-import "capsomer/table.css";
 import "capsomer/status-matrix.css";
 import { useApp } from "../app/ctx";
 import { fetchCompleteness, useAnswer } from "../lib/api";

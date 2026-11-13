@@ -3,7 +3,6 @@ import { areaChart } from "enarratio/lite/area";
 import { barChart } from "enarratio/lite/bar";
 import { lineChart } from "enarratio/lite/line";
 import { ChartFrame } from "capsomer/react/chart-frame";
-import "capsomer/chart-frame.css";
 import { Panel } from "capsomer/react/panel";
 import type { ReactNode } from "react";
 import { useApp } from "../app/ctx";
