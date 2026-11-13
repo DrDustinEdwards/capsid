@@ -129,20 +129,26 @@ export interface RevertsReport {
   recorded: string[];
 }
 
-/** One namespace's revert pass: the recently merged pull requests that revert an
- *  auto-merged one, each recorded once. Returns what it recorded. */
-export async function recordReverts(env: Env, namespace: string, now: Date): Promise<string[]> {
-  const { owner, repo } = await resolveRepo(env, namespace);
-  const full = `${owner}/${repo}`;
+/** A repository's most recently updated closed pull requests. Throws when GitHub refuses. */
+async function readClosedPrs(env: Env, owner: string, repo: string): Promise<ClosedPr[]> {
   const resp = await ghFetch(
     env,
     owner,
     repo,
     `/repos/${owner}/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=${CLOSED_PRS_READ}`,
   );
-  if (!resp.ok) throw new Error(`the closed pull requests of ${full} returned ${resp.status}`);
+  if (!resp.ok)
+    throw new Error(`the closed pull requests of ${owner}/${repo} returned ${resp.status}`);
+  return (await resp.json()) as ClosedPr[];
+}
+
+/** One namespace's revert pass: the recently merged pull requests that revert an
+ *  auto-merged one, each recorded once. Returns what it recorded. */
+export async function recordReverts(env: Env, namespace: string, now: Date): Promise<string[]> {
+  const { owner, repo } = await resolveRepo(env, namespace);
+  const full = `${owner}/${repo}`;
   const recorded: string[] = [];
-  for (const closed of (await resp.json()) as ClosedPr[]) {
+  for (const closed of await readClosedPrs(env, owner, repo)) {
     if (!closed.merged_at) continue;
     // A revert older than the evidence window answers nothing the meter still reads.
     if (now.getTime() - Date.parse(closed.merged_at) > WINDOW_MS) continue;
@@ -221,15 +227,8 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
   for (const { owner, repo, prs } of [...repos.values()].slice(0, OUTCOME_REPOS_MAX)) {
     const full = `${owner}/${repo}`;
     try {
-      const resp = await ghFetch(
-        env,
-        owner,
-        repo,
-        `/repos/${owner}/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=${CLOSED_PRS_READ}`,
-      );
-      if (!resp.ok) throw new Error(`the closed pull requests of ${full} returned ${resp.status}`);
       let shaLookups = 0;
-      for (const closed of (await resp.json()) as ClosedPr[]) {
+      for (const closed of await readClosedPrs(env, owner, repo)) {
         if (!closed.merged_at || now.getTime() - Date.parse(closed.merged_at) > WINDOW_MS) continue;
         const targets = revertTargets(closed.title ?? "", closed.body ?? "", full);
         const numbers = new Set(targets.prs);

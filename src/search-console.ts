@@ -8,7 +8,7 @@ import {
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import type { Env } from "./env";
 import type { FetchLike } from "./live-checks";
-import { pageOnSite, reportSite } from "./site-reports";
+import { checkInspectUrl, pageOnSite, reportSite } from "./site-reports";
 import { DAY_MS } from "./time";
 import { callSignal } from "./call-signal";
 
@@ -191,10 +191,7 @@ export async function searchConsole(
   now: Date = new Date(),
 ) {
   const report: SearchReport = args.report ?? "performance";
-  if (report !== "inspect" && args.url !== undefined)
-    throw new Error(`url is for report inspect; report ${report} does not take it.`);
-  if (report === "inspect" && !args.url)
-    throw new Error("report inspect needs url, the page to inspect.");
+  checkInspectUrl(report, args.url);
 
   const site = await reportSite(env, namespace, "Search Console property");
 

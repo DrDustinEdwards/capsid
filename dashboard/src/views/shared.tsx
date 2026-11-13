@@ -79,6 +79,39 @@ export function NsChips({ list }: { list: string[] }) {
   );
 }
 
+// The project filter of Activity and Claims: every roster project, and the applied one even when
+// the roster no longer has it.
+export function ProjectSelect({
+  id,
+  value,
+  applied,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  applied: string;
+  onChange: (namespace: string) => void;
+}) {
+  const { feed } = useApp();
+  const names = feed.live.namespaces.map((n) => n.name);
+  if (applied && !names.includes(applied)) names.push(applied);
+  return (
+    <>
+      <label className="cap-sr-only" htmlFor={id}>
+        Project
+      </label>
+      <select id={id} className="search" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">All projects</option>
+        {names.map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </select>
+    </>
+  );
+}
+
 // What a filtered list says when the filter leaves it empty: which filter, and a way back
 // (pattern catalog, N-empty).
 export function FilterEmpty({

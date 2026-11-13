@@ -9,6 +9,7 @@ import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
 import { Missing } from "capsomer/react/empty";
+import type { OpsAgent } from "../types";
 
 // Chart 6, weekly model spend, sits under the roster.
 const CostChart = trendChart("CostChart");
@@ -32,6 +33,32 @@ const ARCHIVE_AFTER_MS = 7 * 24 * 3_600_000;
 
 // The revoked agents: still in the live table and waiting their 7 days, then the archived,
 // newest move first. Both are history, so each row opens the agent's drawer as the roster's do.
+// An agent's first cell in both tables: its name, kind and namespaces.
+function AgentName({ a }: { a: OpsAgent }) {
+  return (
+    <td>
+      <b>{a.name}</b>
+      <div className="src">
+        {a.kind} · {nsList(a)}
+      </div>
+    </td>
+  );
+}
+
+// An agent's work in both tables: its jobs by outcome and its merged pull requests.
+function AgentWork({ a }: { a: OpsAgent }) {
+  return (
+    <>
+      <td data-label="Done / failed / blocked" className="cap-num">
+        {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}
+      </td>
+      <td data-label="PRs merged" className="cap-num">
+        {a.prs_merged} of {a.prs_opened}
+      </td>
+    </>
+  );
+}
+
 function Archive() {
   const { feed, now } = useApp();
   const rows = archiveAgents(feed.live.agents);
@@ -64,12 +91,7 @@ function Archive() {
                     data-open={`agent:${a.name}`}
                     tabIndex={0}
                   >
-                    <td>
-                      <b>{a.name}</b>
-                      <div className="src">
-                        {a.kind} · {nsList(a)}
-                      </div>
-                    </td>
+                    <AgentName a={a} />
                     <td data-label="Revoked">{ago(parse(a.revoked_at as string), now)}</td>
                     <td data-label="Archive">
                       {a.archived_at ? (
@@ -83,12 +105,7 @@ function Archive() {
                         </Status>
                       )}
                     </td>
-                    <td data-label="Done / failed / blocked" className="cap-num">
-                      {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}
-                    </td>
-                    <td data-label="PRs merged" className="cap-num">
-                      {a.prs_merged} of {a.prs_opened}
-                    </td>
+                    <AgentWork a={a} />
                     <td data-label="Last seen">
                       {a.last_seen ? ago(parse(a.last_seen), now) : "never"}
                     </td>
@@ -184,24 +201,14 @@ function Roster() {
                     data-open={`agent:${a.name}`}
                     tabIndex={0}
                   >
-                    <td>
-                      <b>{a.name}</b>
-                      <div className="src">
-                        {a.kind} · {nsList(a)}
-                      </div>
-                    </td>
+                    <AgentName a={a} />
                     <td data-label="Last seen">
                       <Status {...KIND_STATUS[st.kind]}>{st.label}</Status>
                       <div className="src">
                         {a.last_seen ? ago(parse(a.last_seen), now) : "never"}
                       </div>
                     </td>
-                    <td data-label="Done / failed / blocked" className="cap-num">
-                      {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}
-                    </td>
-                    <td data-label="PRs merged" className="cap-num">
-                      {a.prs_merged} of {a.prs_opened}
-                    </td>
+                    <AgentWork a={a} />
                     <td data-label="Merge rate" className="cap-num">
                       {pct(a.pr_merge_rate, 0)}
                     </td>

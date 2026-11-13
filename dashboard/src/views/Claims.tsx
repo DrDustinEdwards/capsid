@@ -12,6 +12,7 @@ import { parse } from "capsomer/behavior/time";
 import { toCsv } from "@dustinedwards/site-runtime/csv";
 import { downloadCsv } from "@dustinedwards/site-runtime/csv-client";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../types";
+import { ProjectSelect } from "./shared";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
 import { byCheck, AgreementCounts, totals, counts, wait, JobDetail, AGREEMENTS } from "./ClaimsJob";
@@ -52,8 +53,6 @@ export function Claims() {
   });
 
   const data = agg.data;
-  const names = feed.live.namespaces.map((n) => n.name);
-  if (filter.namespace && !names.includes(filter.namespace)) names.push(filter.namespace);
   const filtered = FILTER_KEYS.some((k) => filter[k]);
   const checks = data ? byCheck(data.groups) : [];
 
@@ -69,22 +68,12 @@ export function Claims() {
           go(input, job);
         }}
       >
-        <label className="cap-sr-only" htmlFor="clNs">
-          Project
-        </label>
-        <select
+        <ProjectSelect
           id="clNs"
-          className="search"
           value={input.namespace}
-          onChange={(e) => filters.setInput({ namespace: e.target.value })}
-        >
-          <option value="">All projects</option>
-          {names.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
+          applied={filter.namespace}
+          onChange={(namespace) => filters.setInput({ namespace })}
+        />
         <label className="cap-sr-only" htmlFor="clAgent">
           Agent
         </label>

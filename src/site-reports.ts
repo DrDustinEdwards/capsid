@@ -16,6 +16,14 @@ export async function reportSite(env: Env, namespace: string, what: string) {
   return site;
 }
 
+/** Refuses a url on a report other than inspect, and inspect with no url. */
+export function checkInspectUrl(report: string, url: string | undefined): void {
+  if (report !== "inspect" && url !== undefined)
+    throw new Error(`url is for report inspect; report ${report} does not take it.`);
+  if (report === "inspect" && !url)
+    throw new Error("report inspect needs url, the page to inspect.");
+}
+
 /** The page to inspect, refused unless it is an https page on the site's own host. */
 export function pageOnSite(origin: string, namespace: string, url: string): string {
   let parsed: URL;

@@ -10,7 +10,7 @@ import type { PortalActivity } from "../types";
 import { Missing, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
-import { PageHead } from "./shared";
+import { PageHead, ProjectSelect } from "./shared";
 
 // The filters live in the address (?namespace=&actor=), so a filtered view can be
 // reloaded or shared. The inputs apply on submit, not on each keystroke.
@@ -36,8 +36,6 @@ export function Activity() {
   const data = load.data;
   // The rows were just read from the server, so none is later than the read itself.
   const now = data ? Math.max(appNow, parse(data.generated)) : appNow;
-  const names = feed.live.namespaces.map((n) => n.name);
-  if (namespace && !names.includes(namespace)) names.push(namespace);
   const actors = [
     ...new Set([
       ...feed.live.agents.map((a) => `agent:${a.name}`),
@@ -59,22 +57,12 @@ export function Activity() {
           filters.apply();
         }}
       >
-        <label className="cap-sr-only" htmlFor="actNs">
-          Project
-        </label>
-        <select
+        <ProjectSelect
           id="actNs"
-          className="search"
           value={nsInput}
-          onChange={(e) => filters.setInput({ namespace: e.target.value })}
-        >
-          <option value="">All projects</option>
-          {names.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
+          applied={namespace}
+          onChange={(namespace) => filters.setInput({ namespace })}
+        />
         <label className="cap-sr-only" htmlFor="actActor">
           Who
         </label>

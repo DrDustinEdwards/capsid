@@ -162,49 +162,11 @@ export function Backups() {
                   </dd>
                   <dt>Last copy run</dt>
                   <dd>
-                    {o.last_run ? (
-                      <>
-                        {o.last_run.conclusion === "success" ? (
-                          <Status tone="ok">success</Status>
-                        ) : o.last_run.conclusion ? (
-                          <Status tone="crit">{o.last_run.conclusion}</Status>
-                        ) : (
-                          <Status tone="info" running>
-                            running
-                          </Status>
-                        )}{" "}
-                        {o.last_run.url && (
-                          <a href={o.last_run.url} target="_blank" rel="noopener noreferrer">
-                            run
-                          </a>
-                        )}
-                      </>
-                    ) : (
-                      <Status tone="nodata">none</Status>
-                    )}
+                    <RunOutcome run={o.last_run} />
                   </dd>
                   <dt>Last passing drill</dt>
                   <dd>
-                    {o.last_drill ? (
-                      <>
-                        {o.last_drill.conclusion === "success" ? (
-                          <Status tone="ok">success</Status>
-                        ) : o.last_drill.conclusion ? (
-                          <Status tone="crit">{o.last_drill.conclusion}</Status>
-                        ) : (
-                          <Status tone="info" running>
-                            running
-                          </Status>
-                        )}{" "}
-                        {o.last_drill.url && (
-                          <a href={o.last_drill.url} target="_blank" rel="noopener noreferrer">
-                            run
-                          </a>
-                        )}
-                      </>
-                    ) : (
-                      <Status tone="nodata">none</Status>
-                    )}
+                    <RunOutcome run={o.last_drill} />
                   </dd>
                 </dl>
               </>
@@ -307,6 +269,29 @@ function SiteBackups() {
         )}
       </div>
     </Panel>
+  );
+}
+
+// A workflow run of the Amazon copy (its last copy, its last drill): how it ended, and a link.
+function RunOutcome({ run }: { run: { conclusion: string | null; url: string | null } | null }) {
+  if (!run) return <Status tone="nodata">none</Status>;
+  return (
+    <>
+      {run.conclusion === "success" ? (
+        <Status tone="ok">success</Status>
+      ) : run.conclusion ? (
+        <Status tone="crit">{run.conclusion}</Status>
+      ) : (
+        <Status tone="info" running>
+          running
+        </Status>
+      )}{" "}
+      {run.url && (
+        <a href={run.url} target="_blank" rel="noopener noreferrer">
+          run
+        </a>
+      )}
+    </>
   );
 }
 

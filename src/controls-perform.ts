@@ -57,27 +57,6 @@ function required(params: ActionParams, field: string): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-// The click's own audit row, naming the admin and the address the click came from
-// (sourceAddress). The shared mutators' rows do not always say who asked.
-async function auditClick(
-  env: Env,
-  actor: string,
-  source: string | null,
-  surface: Surface,
-  action: PortalAction,
-  namespace: string | null,
-  params: object,
-  name = `${auditPrefix(surface)}${action}`,
-) {
-  await env.DB.batch([
-    auditStatement(env.DB, actor, name, namespace, null, {
-      ...params,
-      surface,
-      source_address: source,
-    }),
-  ]);
-}
-
 export type ActionResult =
   // It happened. warning is set when the click's own audit row was not written.
   | { ok: true; summary: string; warning: string | null }
@@ -108,6 +87,22 @@ export async function performAction(
     return { ok: false, refusal: switchReasonRefusal(action) };
   const undo = params.undo === "true";
   const click = clickAuditAction(action, params, surface);
+  // The click's own audit row, naming the admin and the address the click came from
+  // (sourceAddress), for the surface and the action unless `name` says otherwise. The shared
+  // mutators' rows do not always say who asked.
+  const auditClick = async (
+    namespace: string | null,
+    detail: object,
+    name = `${auditPrefix(surface)}${action}`,
+  ) => {
+    await env.DB.batch([
+      auditStatement(env.DB, actor, name, namespace, null, {
+        ...detail,
+        surface,
+        source_address: source,
+      }),
+    ]);
+  };
   const switchDetail = (result: object) => ({
     ...result,
     reason: switchReason,
@@ -122,7 +117,7 @@ export async function performAction(
         if (!result.ok) return { ok: false, refusal: result.error };
         committed = true;
         summary = `Reset the circuit breaker for ${namespace}.`;
-        await auditClick(env, actor, source, surface, action, namespace, result.state);
+        await auditClick(namespace, result.state);
         break;
       }
       case "overnight": {
@@ -139,11 +134,6 @@ export async function performAction(
             ? "Turned the overnight run off."
             : `Set the overnight run to run on ${result.mode === "api" ? "the API key" : "the subscription"}.`;
         await auditClick(
-          env,
-          actor,
-          source,
-          surface,
-          action,
           null,
           switchDetail({
             mode: result.mode,
@@ -189,7 +179,7 @@ export async function performAction(
             : action === "release_job"
               ? `Released ${id} back to the queue.`
               : `Marked ${id} failed.`;
-        await auditClick(env, actor, source, surface, action, result.job?.namespace ?? null, {
+        await auditClick(result.job?.namespace ?? null, {
           id,
           reason,
           ...(note ? { note } : {}),
@@ -218,7 +208,7 @@ export async function performAction(
           return { ok: false, refusal: result.refusal ?? "close_shipped was refused." };
         committed = true;
         summary = `Closed ${id} as shipped; the outcome is credited to ${job.claimed_by ?? "its holder"}.`;
-        await auditClick(env, actor, source, surface, action, job.namespace, {
+        await auditClick(job.namespace, {
           id,
           reason,
           held_by: job.claimed_by,
@@ -242,7 +232,7 @@ export async function performAction(
           return { ok: false, refusal: result.refusal ?? "supersede_job was refused." };
         committed = true;
         summary = `Superseded ${id}${replaced_by ? ` with ${replaced_by}` : ""}.`;
-        await auditClick(env, actor, source, surface, action, result.job?.namespace ?? null, {
+        await auditClick(result.job?.namespace ?? null, {
           id,
           reason,
           ...(replaced_by ? { replaced_by } : {}),
@@ -267,11 +257,6 @@ export async function performAction(
         committed = true;
         summary = action === "park_job" ? `Parked ${id}.` : `Unparked ${id}; it is queued again.`;
         await auditClick(
-          env,
-          actor,
-          source,
-          surface,
-          action,
           result.job?.namespace ?? null,
           { id, reason, ...(undo ? { undo: true } : {}) },
           click,
@@ -289,11 +274,6 @@ export async function performAction(
         summary = await performApproval(env, actor, plan, required(params, "reason"), now);
         committed = true;
         await auditClick(
-          env,
-          actor,
-          source,
-          surface,
-          action,
           plan.namespace,
           {
             repo: plan.repo,
@@ -318,11 +298,6 @@ export async function performAction(
         summary = done.summary;
         committed = true;
         await auditClick(
-          env,
-          actor,
-          source,
-          surface,
-          action,
           "capsid",
           {
             change: params.change,
@@ -347,11 +322,6 @@ export async function performAction(
         summary = done.summary;
         committed = true;
         await auditClick(
-          env,
-          actor,
-          source,
-          surface,
-          action,
           "capsid",
           {
             confirm: params.confirm,
@@ -376,11 +346,6 @@ export async function performAction(
         summary = done.summary;
         committed = true;
         await auditClick(
-          env,
-          actor,
-          source,
-          surface,
-          action,
           (params.unit ?? "").split("/")[0]!.trim() || null,
           { unit: params.unit, reason },
           click,
@@ -401,11 +366,6 @@ export async function performAction(
         summary = done.summary;
         committed = true;
         await auditClick(
-          env,
-          actor,
-          source,
-          surface,
-          action,
           (params.namespace ?? "").trim() || null,
           { namespace: params.namespace, reason },
           click,
@@ -430,7 +390,7 @@ export async function performAction(
           if (!done.ok) return { ok: false, refusal: done.refusal };
           committed = true;
           summary = `Registered ${namespace}, mapped to ${mapped.list.map((r) => r.repo).join(", ")}.`;
-          await auditClick(env, actor, source, surface, action, namespace, {
+          await auditClick(namespace, {
             namespace,
             repos: mapped.list,
           });
@@ -447,7 +407,7 @@ export async function performAction(
           if (!done.ok) return { ok: false, refusal: done.refusal };
           committed = true;
           summary = `Changed ${namespace}'s repo mapping to ${mapped.list.map((r) => `${r.repo} (${r.label})`).join(", ")}.`;
-          await auditClick(env, actor, source, surface, action, namespace, {
+          await auditClick(namespace, {
             namespace,
             repos: mapped.list,
             previous: done.previous,
@@ -479,7 +439,7 @@ export async function performAction(
         };
         committed = true;
         summary = `Deleted ${namespace}: ${plural(data.documents_deleted, "live document")} (each snapshotted first), ${plural(data.edges_removed, "link")}${data.ops_site_removed ? ", its site row" : ""} and its registration.`;
-        await auditClick(env, actor, source, surface, action, namespace, {
+        await auditClick(namespace, {
           namespace,
           cascade: options.opts.cascade,
           allow_improve_paths: options.opts.allowImprovePaths,
@@ -507,7 +467,7 @@ export async function performAction(
         summary = result.matched
           ? `Rotated ${namespace}'s site key: set on ${result.site.script} and on ${result.carrel.script}. The value is not shown anywhere.`
           : `${result.note} ${result.carrel.script}: ${result.carrel.error ?? "not set"}`;
-        await auditClick(env, actor, source, surface, action, namespace, {
+        await auditClick(namespace, {
           namespace,
           site_set: result.site.set,
           carrel_set: result.carrel.set,
@@ -549,7 +509,7 @@ export async function performAction(
             head_branch_deleted: result.head_branch_deleted,
           }),
         ]);
-        await auditClick(env, actor, source, surface, action, namespace, {
+        await auditClick(namespace, {
           repo: result.repo,
           number,
           reason,
@@ -564,7 +524,7 @@ export async function performAction(
           return { ok: false, refusal: result.refusal ?? `revoking ${name} was refused.` };
         committed = true;
         summary = `Revoked the agent ${name}.`;
-        await auditClick(env, actor, source, surface, action, null, { name });
+        await auditClick(null, { name });
         break;
       }
       case "site_add":
@@ -601,7 +561,7 @@ export async function performAction(
             : action === "site_edit"
               ? `Changed ${result.site.namespace}: ${describeSite(result.site)}.`
               : `Removed ${result.site.namespace} from the site configuration.`;
-        await auditClick(env, actor, source, surface, action, result.site.namespace, params);
+        await auditClick(result.site.namespace, params);
         break;
       }
       case "package_add":
@@ -638,7 +598,7 @@ export async function performAction(
             : action === "package_edit"
               ? `Changed ${result.pkg.name}: ${describePackage(result.pkg)}.`
               : `Removed ${result.pkg.name} from the packages.`;
-        await auditClick(env, actor, source, surface, action, null, params);
+        await auditClick(null, params);
         break;
       }
       case "site_repair": {
@@ -656,7 +616,7 @@ export async function performAction(
         if (!outcome.ran) return { ok: false, refusal: outcome.refusal };
         committed = true;
         summary = `${namespace}: ${outcome.line}.${outcome.recorded ? "" : " The call's audit row was not written (SITE_REPAIR_NOT_RECORDED in the log)."}`;
-        await auditClick(env, actor, source, surface, action, namespace, {
+        await auditClick(namespace, {
           tool,
           ok: outcome.call.ok,
           converged: outcome.call.converged,
@@ -674,7 +634,7 @@ export async function performAction(
         if (!outcome.ran) return { ok: false, refusal: outcome.refusal };
         committed = true;
         summary = `${namespace}: ${outcome.line}.${outcome.recorded ? "" : " The call's audit row was not written (SITE_JOB_NOT_RECORDED in the log)."}`;
-        await auditClick(env, actor, source, surface, action, namespace, {
+        await auditClick(namespace, {
           job: name,
           ok: outcome.ok,
         });
@@ -689,7 +649,7 @@ export async function performAction(
           if (!dump.ok) return { ok: false, refusal: dump.line };
           committed = true;
           summary = `${dump.line}.`;
-          await auditClick(env, actor, source, surface, action, namespace, { dump: true });
+          await auditClick(namespace, { dump: true });
           break;
         }
         const outcome = await runSiteBackups(env, { namespace, actor, via: surface }, now);
@@ -702,7 +662,7 @@ export async function performAction(
           };
         const unrecorded = outcome.runs.some((r) => r.ran && !r.recorded);
         summary = `${outcome.runs.map((r) => `${r.namespace}: ${r.ran ? r.line : `skipped, ${r.refusal}`}`).join(". ")}.${unrecorded ? " A call's audit row was not written (SITE_BACKUP_NOT_RECORDED in the log)." : ""}`;
-        await auditClick(env, actor, source, surface, action, namespace ?? null, {
+        await auditClick(namespace ?? null, {
           sites: outcome.runs.map((r) => ({
             namespace: r.namespace,
             ran: r.ran,

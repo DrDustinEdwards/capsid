@@ -5,9 +5,7 @@ import type { ConvergenceCheck, ConvergenceSite } from "./ops-types/views";
 import { REPAIR_AUDIT_ACTION } from "./site-repair";
 import { callOperator, tokenSet, toolRefusal, type FetchLike } from "./site-operator";
 import { readStoredSecrets } from "./secret-presence";
-import { callSignal } from "./call-signal";
-
-import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { clip, readHealth } from "./site-watch";
 // THE CONVERGENCE VIEW (job_09e5f6cbf782): per site that opted in, what its own operator
 // API says (sync_status: the repository count against D1, the search index and the Ask
 // index, and any named divergence) beside what its health route says per content type,
@@ -18,12 +16,8 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 // a site page's own tabs call Cloudflare from the Portal (test/ops-cloudflare.test.ts).
 // Every part fails on its own and says why, so one unreadable part is never shown as zero.
 
-const HEALTH_TIMEOUT_MS = 10_000;
-const TEXT_MAX = 300;
 const STATUS_FIELDS_MAX = 40;
 const RECENT_REPAIRS = 5;
-
-const clip = (s: string) => (s.length > TEXT_MAX ? `${s.slice(0, TEXT_MAX - 1)}…` : s);
 
 /** A health body's checks, each with the repair it maps to. Only the fields the view shows
  *  are kept, as text or numbers: the body is the site's, read as data. */
@@ -84,22 +78,6 @@ export function statusFields(data: unknown): Array<{ key: string; value: string 
     }
   }
   return out;
-}
-
-async function readHealth(
-  fetchImpl: FetchLike,
-  url: string,
-): Promise<{ status: number; body: unknown; error: string | null }> {
-  try {
-    const res = await fetchImpl(url, {
-      headers: { "user-agent": "capsid", "cache-control": "no-cache" },
-      redirect: "manual",
-      signal: callSignal(HEALTH_TIMEOUT_MS),
-    });
-    return { status: res.status, body: await res.json().catch(() => null), error: null };
-  } catch (err) {
-    return { status: 0, body: null, error: clip(errorMessage(err)) };
-  }
 }
 
 /** One site's view. */

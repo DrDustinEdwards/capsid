@@ -11,6 +11,7 @@ import {
   onSighting,
   type FindingMemory,
   type FindingRow,
+  type SightingVerdict,
 } from "./watcher-findings";
 import { type SiteMapDrift } from "./ops-sites";
 import { weekStatement } from "./ops-packages";
@@ -306,6 +307,37 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
   const posted: string[] = [];
   const held: string[] = [];
   const routed: string[] = [];
+  // The verdicts that record without posting, the same for every class: false for "post".
+  // A bump is the deduplication working: counted rather than posted and refused, so the log
+  // does not fill with refusals every pass while it persists.
+  const recordSighting = async (
+    verdict: SightingVerdict,
+    row: FindingRow | null,
+    f: Finding,
+  ): Promise<boolean> => {
+    if (verdict.do === "bump")
+      moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, "sighting");
+    else if (verdict.do === "adopt")
+      moved(
+        row
+          ? await readers.memory.open(row, f, verdict.jobId, now)
+          : await readers.memory.insert(f, "open", verdict.jobId, now),
+        f.fingerprint,
+        "adoption of its open job",
+      );
+    else if (verdict.do === "dismiss") {
+      held.push(f.fingerprint);
+      moved(await readers.memory.dismiss(row as FindingRow, f, now), f.fingerprint, "dismissal");
+    } else if (verdict.do === "quiet") {
+      held.push(f.fingerprint);
+      moved(
+        await readers.memory.sight(row as FindingRow, f, now),
+        f.fingerprint,
+        `sighting (${verdict.why})`,
+      );
+    } else return false;
+    return true;
+  };
   for (const f of found) {
     const row: FindingRow | null = rows.get(f.fingerprint) ?? null;
     if (findingClass(f.fingerprint) !== "job") {
@@ -321,27 +353,7 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
           ? await readers.memory.job(row.job_id)
           : null;
       const verdict = justMoved ? ({ do: "post" } as const) : onSighting(row, heldJob, rowJob, now);
-      if (verdict.do === "bump")
-        moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, "sighting");
-      else if (verdict.do === "adopt")
-        moved(
-          row
-            ? await readers.memory.open(row, f, verdict.jobId, now)
-            : await readers.memory.insert(f, "open", verdict.jobId, now),
-          f.fingerprint,
-          "adoption of its open job",
-        );
-      else if (verdict.do === "dismiss") {
-        held.push(f.fingerprint);
-        moved(await readers.memory.dismiss(row as FindingRow, f, now), f.fingerprint, "dismissal");
-      } else if (verdict.do === "quiet") {
-        held.push(f.fingerprint);
-        moved(
-          await readers.memory.sight(row as FindingRow, f, now),
-          f.fingerprint,
-          `sighting (${verdict.why})`,
-        );
-      } else {
+      if (!(await recordSighting(verdict, row, f))) {
         const ok = !row
           ? await readers.memory.insert(f, "open", null, now)
           : row.state === "open" && row.job_id === null
@@ -356,30 +368,7 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
     const rowJob =
       !openJob && row?.state === "open" && row.job_id ? await readers.memory.job(row.job_id) : null;
     const verdict = onSighting(row, openJob, rowJob, now);
-
-    if (verdict.do === "bump") {
-      // Already open is the deduplication working. Counted rather than posted and
-      // refused, so the log does not fill with refusals every pass while it persists.
-      moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, "sighting");
-    } else if (verdict.do === "adopt") {
-      moved(
-        row
-          ? await readers.memory.open(row, f, verdict.jobId, now)
-          : await readers.memory.insert(f, "open", verdict.jobId, now),
-        f.fingerprint,
-        "adoption of its open job",
-      );
-    } else if (verdict.do === "dismiss") {
-      held.push(f.fingerprint);
-      moved(await readers.memory.dismiss(row as FindingRow, f, now), f.fingerprint, "dismissal");
-    } else if (verdict.do === "quiet") {
-      held.push(f.fingerprint);
-      moved(
-        await readers.memory.sight(row as FindingRow, f, now),
-        f.fingerprint,
-        `sighting (${verdict.why})`,
-      );
-    } else {
+    if (!(await recordSighting(verdict, row, f))) {
       // The bound on posts per pass. The rest are found again next pass.
       if (posted.length >= MAX_FINDINGS_PER_PASS) continue;
       const result = await readers.post(f);

@@ -1,6 +1,6 @@
 import { type HealthReport, BACKUP_STALE_HOURS } from "./health";
 import { median } from "capsomer/behavior/format";
-import type { ServerErrors, SiteCloudflare } from "./ops-types/sites";
+import type { HourBucket, ServerErrors, SiteCloudflare } from "./ops-types/sites";
 import type { OpsSnapshot, SiteProbe } from "./ops-snapshot";
 import type { SiteMapDrift } from "./ops-sites";
 import type { LiveFinding } from "./live-checks";
@@ -603,32 +603,41 @@ export function siteDownFindings(prev: OpsSnapshot | null, probes: SiteProbe[]):
 // used 13.6 million in one hour from 2.46 million invocations, and nothing said so until the bill.
 export const CPU_HOUR_LIMIT_MS = 1_000_000;
 
+type WatchedSite = { namespace: string; name: string };
+
+/** Each site's Worker and its most recent complete hour, the last of its hourly buckets. A
+ *  site with no analytics this pass is left out, so it is not judged. */
+function latestHours(
+  sites: ReadonlyArray<WatchedSite>,
+  cloudflare: Record<string, SiteCloudflare>,
+): Array<{ site: WatchedSite; script: string; hour: HourBucket }> {
+  return sites.flatMap((site) => {
+    const cf = cloudflare[site.namespace];
+    if (cf?.state !== "ok" || !cf.errors24 || cf.errors24.length === 0) return [];
+    return [{ site, script: cf.script, hour: cf.errors24[cf.errors24.length - 1] }];
+  });
+}
+
 /** A site whose Worker used more than CPU_HOUR_LIMIT_MS of CPU time in the most recent
  *  complete hour. A site with no analytics this pass is not judged. */
 export function siteCpuFindings(
-  sites: ReadonlyArray<{ namespace: string; name: string }>,
+  sites: ReadonlyArray<WatchedSite>,
   cloudflare: Record<string, SiteCloudflare>,
 ): Finding[] {
-  const out: Finding[] = [];
-  for (const site of sites) {
-    const cf = cloudflare[site.namespace];
-    if (cf?.state !== "ok" || !cf.errors24 || cf.errors24.length === 0) continue;
-    const hour = cf.errors24[cf.errors24.length - 1];
-    if (hour.cpu_ms <= CPU_HOUR_LIMIT_MS) continue;
-    out.push(
+  return latestHours(sites, cloudflare)
+    .filter(({ hour }) => hour.cpu_ms > CPU_HOUR_LIMIT_MS)
+    .map(({ site, script, hour }) =>
       finding(
         site.namespace,
         `site-cpu-${site.namespace}`,
         `${site.name} used over ${CPU_HOUR_LIMIT_MS.toLocaleString("en-US")} CPU ms in one hour`,
         [
-          `script: ${cf.script}`,
+          `script: ${script}`,
           `hour from ${hour.hour}: ${hour.cpu_ms} CPU ms over ${hour.requests} invocations`,
           "Workers Paid includes 30 million CPU ms a month; each million over costs $0.02. Find what is invoking the Worker.",
         ],
       ),
     );
-  }
-  return out;
 }
 
 // The error-rate threshold (capsid/research/design-ops-console.md, approved): more
@@ -645,15 +654,12 @@ export const ERROR_RATE_MIN_REQUESTS = 100;
  *  used, never their sum, and the thrown count stands alone when the edge read failed.
  *  A site with no analytics this pass is not judged. */
 export function siteErrorFindings(
-  sites: ReadonlyArray<{ namespace: string; name: string }>,
+  sites: ReadonlyArray<WatchedSite>,
   cloudflare: Record<string, SiteCloudflare>,
   serverErrors: Record<string, ServerErrors> | null = null,
 ): Finding[] {
   const out: Finding[] = [];
-  for (const site of sites) {
-    const cf = cloudflare[site.namespace];
-    if (cf?.state !== "ok" || !cf.errors24 || cf.errors24.length === 0) continue;
-    const hour = cf.errors24[cf.errors24.length - 1];
+  for (const { site, script, hour } of latestHours(sites, cloudflare)) {
     const served = serverErrors?.[site.namespace];
     const returned = served?.count;
     const errors = Math.max(hour.errors, returned ?? 0);
@@ -665,7 +671,7 @@ export function siteErrorFindings(
         `site-errors-${site.namespace}`,
         `${site.name} errored on more than ${ERROR_RATE_THRESHOLD * 100} percent of requests`,
         [
-          `script: ${cf.script}`,
+          `script: ${script}`,
           `hour from ${hour.hour}: ${errors} errors of ${hour.requests} requests (${((errors / hour.requests) * 100).toFixed(1)} percent)`,
           `${hour.errors} invocations threw, exceeded their resources or hit an internal error; ${returned === undefined ? "returned 5xx not read this pass" : `${returned} answers were 5xx at the edge (sampled, an estimate)`}.`,
           ...(served?.top.length
