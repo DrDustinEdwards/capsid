@@ -1055,22 +1055,6 @@ main .sev-crit[data-row]:focus-visible {
 .cap-config-form :is(.full, .cap-danger) {
   grid-column: 1 / -1;
 }
-.cap-config-form .repos {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-.cap-config-form .repos legend {
-  padding: 0;
-}
-.repo-row {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
-  gap: 8px;
-}
 .cap-config-form .cap-danger .check {
   grid-column: auto;
 }

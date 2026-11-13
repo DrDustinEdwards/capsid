@@ -41,6 +41,7 @@ import "capsomer/button.css";
 import "capsomer/copy.css";
 import "capsomer/icons.css";
 import "capsomer/field.css";
+import "capsomer/repeater-field.css";
 import "capsomer/switch.css";
 import "capsomer/switch-reason.css";
 import "capsomer/meter.css";
