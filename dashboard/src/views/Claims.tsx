@@ -69,6 +69,9 @@ export function Claims() {
           go(input, job);
         }}
       >
+        {/* Named fields and the tab, so a press before the page hydrates is the same GET to this address. */}
+        <input type="hidden" name="tab" value={CHECKS_TAB.tab} />
+        {job && <input type="hidden" name="job" value={job} />}
         <ProjectSelect
           id="clNs"
           value={input.namespace}
@@ -80,6 +83,7 @@ export function Claims() {
         </label>
         <input
           id="clAgent"
+          name="agent"
           className="search"
           type="search"
           placeholder="Agent, e.g. agent:sample-driver"
@@ -91,6 +95,7 @@ export function Claims() {
         </label>
         <input
           id="clSince"
+          name="since"
           className="search"
           type="date"
           title="Since (inclusive)"
@@ -102,6 +107,7 @@ export function Claims() {
         </label>
         <input
           id="clUntil"
+          name="until"
           className="search"
           type="date"
           title="Before (exclusive)"
@@ -263,11 +269,16 @@ export function Claims() {
           go(filter, jobInput);
         }}
       >
+        <input type="hidden" name="tab" value={CHECKS_TAB.tab} />
+        {FILTER_KEYS.map((k) =>
+          filter[k] ? <input key={k} type="hidden" name={k} value={filter[k]} /> : null,
+        )}
         <label className="cap-sr-only" htmlFor="clJob">
           Job id
         </label>
         <input
           id="clJob"
+          name="job"
           className="search"
           type="search"
           list="clJobs"
