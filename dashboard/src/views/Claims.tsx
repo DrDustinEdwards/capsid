@@ -1,9 +1,10 @@
 import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { FILTER_KEYS } from "../lib/keys";
-import { Suspense, useState } from "react";
+import { Suspense, useState, type FormEvent } from "react";
+import { FilterBar, hasFilters, withParams } from "capsomer/react/filter-bar";
 import { Missing, Spinner } from "capsomer/react/empty";
-import { useLocation, useSearch } from "../lib/router";
+import { Link, useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, fetchClaimsJob, useAnswer } from "../lib/api";
 import { age, ago } from "../lib/format";
@@ -36,15 +37,13 @@ export function Claims() {
     until: params.get("until") ?? "",
   };
   const job = params.get("job") ?? "";
-  const [input, setInput] = useState<Filter>(filter);
   const [jobInput, setJobInput] = useState(job);
   const key = FILTER_KEYS.map((k) => filter[k]).join("\u0000");
 
-  // The address changed: the fields follow it. Adjusted while rendering, not in an effect.
+  // The address changed: the job field follows it. Adjusted while rendering, not in an effect.
   const [seen, setSeen] = useState({ key, job });
   if (seen.key !== key || seen.job !== job) {
     setSeen({ key, job });
-    setInput({ ...filter });
     setJobInput(job);
   }
 
@@ -56,38 +55,37 @@ export function Claims() {
 
   const go = (next: Filter, nextJob: string) => {
     // Checks is Jobs' tab, so the tab stays in the address beside the filter.
-    const qs = new URLSearchParams({ tab: "checks" });
-    for (const k of FILTER_KEYS) if (next[k].trim()) qs.set(k, next[k].trim());
-    if (nextJob.trim()) qs.set("job", nextJob.trim());
-    navigate(`/queue?${qs}`, { replace: true });
+    navigate(withParams("/queue", { tab: "checks", ...next, job: nextJob }), { replace: true });
+  };
+  const apply = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const next = { ...filter };
+    for (const k of FILTER_KEYS) next[k] = String(form.get(k) ?? "");
+    go(next, job);
   };
 
   const data = agg.data;
   const names = feed.live.namespaces.map((n) => n.name);
   if (filter.namespace && !names.includes(filter.namespace)) names.push(filter.namespace);
-  const filtered = FILTER_KEYS.some((k) => filter[k]);
+  const filtered = hasFilters(filter, FILTER_KEYS);
   const checks = data ? byCheck(data.groups) : [];
 
   return (
     <div className="embedded">
-      <form
-        className="toolbar"
-        role="search"
-        aria-label="Filter claims"
-        onSubmit={(e) => {
-          e.preventDefault();
-          go(input, job);
-        }}
+      {/* The address changed (back, a link): the fields follow it, so the bar starts over. */}
+      <FilterBar
+        key={key}
+        label="Filter claims"
+        onSubmit={apply}
+        clearLabel="Clear"
+        clearHref={filtered ? withParams("/queue", { tab: "checks", job }) : null}
+        renderLink={(props) => <Link {...props} />}
       >
         <label className="cap-sr-only" htmlFor="clNs">
           Project
         </label>
-        <select
-          id="clNs"
-          className="search"
-          value={input.namespace}
-          onChange={(e) => setInput({ ...input, namespace: e.target.value })}
-        >
+        <select id="clNs" className="search" name="namespace" defaultValue={filter.namespace}>
           <option value="">All projects</option>
           {names.map((n) => (
             <option key={n} value={n}>
@@ -102,9 +100,9 @@ export function Claims() {
           id="clAgent"
           className="search"
           type="search"
+          name="agent"
           placeholder="Agent, e.g. agent:sample-driver"
-          value={input.agent}
-          onChange={(e) => setInput({ ...input, agent: e.target.value })}
+          defaultValue={filter.agent}
         />
         <label className="cap-sr-only" htmlFor="clSince">
           Since
@@ -113,9 +111,9 @@ export function Claims() {
           id="clSince"
           className="search"
           type="date"
+          name="since"
           title="Since (inclusive)"
-          value={input.since}
-          onChange={(e) => setInput({ ...input, since: e.target.value })}
+          defaultValue={filter.since}
         />
         <label className="cap-sr-only" htmlFor="clUntil">
           Before
@@ -124,23 +122,11 @@ export function Claims() {
           id="clUntil"
           className="search"
           type="date"
+          name="until"
           title="Before (exclusive)"
-          value={input.until}
-          onChange={(e) => setInput({ ...input, until: e.target.value })}
+          defaultValue={filter.until}
         />
-        <button type="submit" className="cap-btn">
-          Apply
-        </button>
-        {filtered && (
-          <button
-            type="button"
-            className="cap-btn"
-            onClick={() => go({ namespace: "", agent: "", since: "", until: "" }, job)}
-          >
-            Clear
-          </button>
-        )}
-      </form>
+      </FilterBar>
       {agg.error && (
         <Banner tone="crit">
           Could not read the claims: {agg.error}

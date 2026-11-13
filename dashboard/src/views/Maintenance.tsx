@@ -1,4 +1,5 @@
 import { Banner } from "capsomer/react/banner";
+import { AwayLink } from "capsomer/react/link";
 import { useState } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
@@ -128,9 +129,9 @@ function Row({ item, opens }: { item: OpsMaintenanceItem; opens: boolean }) {
       <div className="t">
         <div className="why">{item.line}</div>
         {item.pr && (
-          <a href={item.pr} target="_blank" rel="noreferrer">
+          <AwayLink href={item.pr} newTab>
             {item.pr.replace(/^https:\/\/github\.com\//, "")}
-          </a>
+          </AwayLink>
         )}
       </div>
       <div className="m">

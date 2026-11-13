@@ -1,5 +1,6 @@
 import { parseDocParam } from "../lib/keys";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { type FormEvent, type ReactNode } from "react";
+import { FilterBar, withParams } from "capsomer/react/filter-bar";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { Link, useLocation, useSearch } from "../lib/router";
@@ -76,50 +77,42 @@ export function Library() {
   const params = new URLSearchParams(search);
   const q = params.get("q")?.trim() || "";
   const doc = parseDocParam(params.get("doc"));
-  const [draft, setDraft] = useState(q);
   const docNs = doc?.ns ?? null;
   const docPath = doc?.path ?? null;
-  // The address changed: the field follows it. Adjusted while rendering, not in an effect.
-  const [seenQ, setSeenQ] = useState(q);
-  if (seenQ !== q) {
-    setSeenQ(q);
-    setDraft(q);
-  }
   const load = useAnswer<PortalLibrary>(["library", docNs, docPath, q], () =>
     fetchLibrary(
       docNs !== null && docPath !== null ? { ns: docNs, path: docPath } : q ? { q } : null,
     ),
   );
-  const submit = (e: FormEvent) => {
+  const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const next = draft.trim();
+    const next = String(new FormData(e.currentTarget).get("q") ?? "");
     // The page itself, not location: a search made with a job's drawer open closes it.
-    const page = routePath("library");
-    navigate(next ? `${page}?${new URLSearchParams({ q: next }).toString()}` : page);
+    navigate(withParams(routePath("library"), { q: next }));
   };
   const data = load.data;
   return (
     <div className="page">
       <PageHead title="Library" />
-      <form className="lib-search" role="search" onSubmit={submit}>
+      {/* The address changed (back, a link): the field follows it, so the bar starts over. */}
+      <FilterBar
+        key={q}
+        label="Search the knowledge store"
+        onSubmit={submit}
+        applyLabel="Search"
+        clearLabel="All shelves"
+        clearHref={q || doc ? routePath("library") : null}
+        renderLink={(props) => <Link {...props} />}
+      >
         <input
           className="search"
           type="search"
           name="q"
           placeholder="Search the knowledge store"
           aria-label="Search the knowledge store"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          defaultValue={q}
         />
-        <button type="submit" className="cap-btn">
-          Search
-        </button>
-        {(q || doc) && (
-          <Link href={routePath("library")} className="cap-btn">
-            All shelves
-          </Link>
-        )}
-      </form>
+      </FilterBar>
       {load.loading ? (
         <div className="loading">
           <Spinner label="Reading the library" />

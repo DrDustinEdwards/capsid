@@ -10,6 +10,9 @@
 
 import { graph, thing, website } from "@drdustinedwards/site-helpers/schema";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
+import { Hero } from "capsomer/react/hero";
+import { createElement as h } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   ORIGIN,
@@ -185,16 +188,7 @@ export function verdict(kind, said, read) {
 function hero(stats) {
   const v = stats.verification;
   const [kind, , read] = CHECKS[0];
-  return `<section class="hero cap-page" aria-labelledby="hero-title">
-${manualHead("/")}
-<div class="hero-words">
-<h1 id="hero-title">AI agents say it's done. Capsid checks.</h1>
-<p class="lead">Capsid is an open-source MCP server you run on Cloudflare. Your agents start every session from the same project notes. Each one can use only the tools you allow. When an agent says a job is done, Capsid asks GitHub whether it is.</p>
-<p class="hero-actions"><a class="cap-btn" data-variant="primary" href="https://github.com/DrDustinEdwards/capsid#installation">Install it</a><a class="hero-link" href="#tour">See how a job runs</a></p>
-<p class="hero-note">This site runs on a live Capsid server. The tools, steps and numbers come from it and update every day.</p>
-</div>
-<div class="desk" data-ui data-desk>
-<h2 class="desk-title" data-plain>Catch an agent <span>An example job. Change what the agent reports.</span></h2>
+  const desk = `<h2 class="desk-title" data-plain>Catch an agent <span>An example job. Change what the agent reports.</span></h2>
 <div class="desk-kinds" role="group" aria-label="What the agent reports">${CHECKS.map(([k, name, n], i) => `<button type="button" class="desk-kind" data-kind="${k}" data-read="${n}" aria-pressed="${i === 0}">${name}</button>`).join("")}</div>
 <div class="desk-row">
 <div class="desk-cell"><span class="desk-label">The agent says</span><span class="desk-value" data-desk-said>${valueWords(kind, read)}</span><span class="desk-step"><button type="button" data-desk-step="-1" aria-label="One less">\u2212</button><button type="button" data-desk-step="1" aria-label="One more">+</button></span></div>
@@ -204,8 +198,38 @@ ${manualHead("/")}
 <p class="desk-verdict" role="status" data-desk-verdict>${verdict(kind, read, read)}</p>
 <p class="desk-play"><button type="button" class="cap-btn" data-variant="primary" data-desk-fool>Try to fool it</button><span data-desk-tally></span></p>
 <p class="desk-fact">In the last 90 days this server checked ${v.evaluations_90d.toLocaleString("en-US")} claims, and ${percent(v.agreement_rate_90d)} matched GitHub. <a href="/numbers/">All the numbers</a></p>
-</div>
-</section>`;
+`;
+  const words = renderToStaticMarkup(
+    h(Hero, {
+      title: "AI agents say it's done. Capsid checks.",
+      lead: "Capsid is an open-source MCP server you run on Cloudflare. Your agents start every session from the same project notes. Each one can use only the tools you allow. When an agent says a job is done, Capsid asks GitHub whether it is.",
+      actions: [
+        h(
+          "a",
+          {
+            key: "install",
+            className: "cap-btn",
+            "data-variant": "primary",
+            "data-size": "lg",
+            href: "https://github.com/DrDustinEdwards/capsid#installation",
+          },
+          "Install it",
+        ),
+        h("a", { key: "tour", className: "hero-link", href: "#tour" }, "See how a job runs"),
+      ],
+      note: "This site runs on a live Capsid server. The tools, steps and numbers come from it and update every day.",
+      aside: h("div", {
+        className: "desk",
+        "data-ui": "",
+        "data-desk": "",
+        dangerouslySetInnerHTML: { __html: desk },
+      }),
+    }),
+  );
+  return `<div class="front cap-page">
+${manualHead("/")}
+${words}
+</div>`;
 }
 
 /**
