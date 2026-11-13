@@ -10,7 +10,8 @@ name: test-on-base
 on:
   pull_request:
     branches: [master, main]
-    types: [opened, synchronize, reopened, labeled]
+    # Not opened: the session labels the pull request after it opens, and that `labeled` event is the one that runs.
+    types: [synchronize, reopened, labeled]
 
 permissions:
   contents: read
