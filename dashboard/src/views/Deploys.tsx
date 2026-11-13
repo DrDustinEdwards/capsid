@@ -116,7 +116,12 @@ export function Deploys() {
                         {ns === "all" ? (
                           "No deploys in this range."
                         ) : (
-                          <span className="cap-cluster" data-gap="3" role="status" data-filter-empty="">
+                          <span
+                            className="cap-cluster"
+                            data-gap="3"
+                            role="status"
+                            data-filter-empty=""
+                          >
                             No deploys for the namespace {ns} in this range.
                             <button type="button" className="cap-btn" onClick={() => setNs("all")}>
                               Show all

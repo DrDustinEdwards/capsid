@@ -71,7 +71,8 @@ export function Claims() {
   return (
     <div className="embedded">
       <form
-        className="cap-cluster" data-gap="3"
+        className="cap-cluster"
+        data-gap="3"
         role="search"
         aria-label="Filter claims"
         onSubmit={(e) => {
@@ -275,7 +276,8 @@ export function Claims() {
         </Panel>
       )}
       <form
-        className="cap-cluster" data-gap="3"
+        className="cap-cluster"
+        data-gap="3"
         aria-label="Open a job"
         onSubmit={(e) => {
           e.preventDefault();
