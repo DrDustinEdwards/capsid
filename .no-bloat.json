@@ -27,9 +27,7 @@
       "clones": 0,
       "lines": 0
     },
-    "legacy": {
-      "custom-text-decorations": 1
-    },
+    "legacy": {},
     "tests": {
       "files": 266,
       "cases": 2570
