@@ -5,6 +5,7 @@ import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { Snippet } from "capsomer/react/search-results";
 import "capsomer/search-results.css";
+import "capsomer/filter-bar.css";
 import { Link, useLocation, useSearch } from "../lib/router";
 import { routePath, useApp } from "../app/ctx";
 import { fetchLibrary } from "../lib/api";

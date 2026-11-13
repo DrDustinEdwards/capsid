@@ -13,6 +13,7 @@ import { useTwoStep } from "capsomer/react/confirm-dialog";
 import { Disclosure } from "capsomer/react/disclosure";
 import { Field } from "capsomer/react/field";
 import "capsomer/disclosure.css";
+import "capsomer/field.css";
 import { performAction, previewAction } from "../lib/api";
 import { type Answer } from "capsomer/react/data";
 import { ago } from "../lib/format";
