@@ -40,5 +40,21 @@ export default defineConfig({
     target: "es2022",
     assetsInlineLimit: 0,
     sourcemap: false,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            // The theme switch, keyboard shortcuts, tooltips, route hooks and the Portal's prefs load
+            // through the root and the shell on every page. Once the Portal reads through Capsomer's
+            // shared hooks (capsid #925), the automatic split makes them four small shared chunks,
+            // each compressed on its own; as one chunk the first load is about 1 KB gzip smaller.
+            {
+              name: "shell-shared",
+              test: /capsomer[\\/]dist[\\/]components[\\/](tooltip|shortcuts|theme-switch|route-hooks)[\\/]|src[\\/]lib[\\/]prefs\.ts$/,
+            },
+          ],
+        },
+      },
+    },
   },
 });
