@@ -1,7 +1,8 @@
 import { Banner } from "capsomer/react/banner";
 import { useUrlFilters } from "capsomer/react/route-hooks";
 import { useApp } from "../app/ctx";
-import { fetchActivity, useAnswer } from "../lib/api";
+import { fetchActivity } from "../lib/api";
+import { useAnswer } from "capsomer/react/data";
 import { actionWords } from "../lib/audit-words";
 import { ago } from "../lib/format";
 import { parse, utc } from "capsomer/behavior/time";

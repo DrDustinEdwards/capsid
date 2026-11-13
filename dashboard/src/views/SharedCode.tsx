@@ -1,7 +1,8 @@
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
-import { fetchSharedCode, useAnswer } from "../lib/api";
+import { fetchSharedCode } from "../lib/api";
+import { useAnswer } from "capsomer/react/data";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "../types";

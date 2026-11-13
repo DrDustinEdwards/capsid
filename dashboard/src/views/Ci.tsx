@@ -19,7 +19,8 @@ import {
 } from "../lib/pr-actions";
 import { NoSnapshot, PageHead } from "./shared";
 import type { OpsAwaitingSeat, PortalMergeUnits } from "../types";
-import { LIVE, fetchMergeUnits, useAnswer } from "../lib/api";
+import { LIVE, fetchMergeUnits } from "../lib/api";
+import { useAnswer } from "capsomer/react/data";
 
 function prLabel(url: string): string {
   const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);

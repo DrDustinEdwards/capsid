@@ -35,7 +35,8 @@ import {
 import { WAITING_KINDS, attentionItems, counts, hasSites, passStale } from "../lib/derive";
 import { ago } from "../lib/format";
 import { parse, serverNow, utc } from "capsomer/behavior/time";
-import { RAIL_PREF, THEME_PREF, toggleTheme, useSingleKeys } from "../lib/prefs";
+import { toggleTheme } from "capsomer/behavior/theme-switch";
+import { RAIL_PREF, THEME_PREF, useSingleKeys } from "../lib/prefs";
 import { register, setSheetOpener } from "capsomer/behavior/shortcuts";
 import { NavIcon } from "../ui/icons";
 import {
@@ -346,7 +347,7 @@ function PortalApp() {
     signOut();
   }, [feed, leaving, fail, signOut]);
 
-  const theme = useCallback(() => say(toggleTheme() === "dark" ? "Dark" : "Light"), [say]);
+  const theme = useCallback(() => say(toggleTheme(THEME_PREF) === "dark" ? "Dark" : "Light"), [say]);
 
   const railRef = useRef(railCollapsed);
   useEffect(() => {
