@@ -28,12 +28,12 @@ const NAMED = 3;
 export function Health() {
   const tab: HealthTab = tabOf(HEALTH_TABS, useTabParam()) ?? HEALTH_TABS[0].id;
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Health" />
       <HealthVerdict />
       <Overview />
       <PageTabs label="Health" path="/health" tabs={HEALTH_TABS} current={tab} />
-      <div className="embedded" id={tab} data-tab-panel={tab}>
+      <div className="cap-stack" id={tab} data-tab-panel={tab}>
         <TabPanel tab={tab} />
       </div>
     </div>

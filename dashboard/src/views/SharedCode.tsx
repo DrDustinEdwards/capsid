@@ -20,7 +20,7 @@ export function SharedCode() {
   const load = useAnswer<SharedCodeView>(["shared-code"], fetchSharedCode);
   const data = load.data;
   return (
-    <div className="embedded">
+    <div className="cap-stack">
       {load.loading ? (
         <div className="loading">
           <Spinner label="Reading the shared packages" />

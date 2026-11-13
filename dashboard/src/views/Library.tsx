@@ -3,6 +3,8 @@ import { type FormEvent, type ReactNode } from "react";
 import { FilterBar, withParams } from "capsomer/react/filter-bar";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import { Snippet } from "capsomer/react/search-results";
+import "capsomer/search-results.css";
 import { Link, useLocation, useSearch } from "../lib/router";
 import { routePath, useApp } from "../app/ctx";
 import { fetchLibrary, useAnswer } from "../lib/api";
@@ -59,16 +61,6 @@ function withJobLinks(text: string, back: string): ReactNode[] {
   return out;
 }
 
-/** FTS5's snippet, its matched words (between U+0002 and U+0003, which no document
- *  holds, so a bracket in the text is never taken for a match) in bold: no color needed,
- *  so it reads the same in both themes. */
-function Snippet({ text }: { text: string }) {
-  // oxlint-disable-next-line no-control-regex -- the delimiters are control characters on purpose
-  const parts = text.split(/\u0002([^\u0003]*)\u0003/g);
-  // split with one capture group: the odd entries are the matched words.
-  return <>{parts.map((p, i) => (i % 2 === 1 ? <strong key={i}>{p}</strong> : p))}</>;
-}
-
 export function Library() {
   const { now } = useApp();
   const search = useSearch();
@@ -91,7 +83,7 @@ export function Library() {
   };
   const data = load.data;
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Library" />
       {/* The address changed (back, a link): the field follows it, so the bar starts over. */}
       <FilterBar
@@ -234,7 +226,7 @@ function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" 
             <span className="cap-text" data-tone="dim">
               · {r.type} · {ago(parse(r.updated_at), now)}
             </span>
-            <div>
+            <div className="cap-search-snippet">
               <Snippet text={r.snippet} />
             </div>
           </li>

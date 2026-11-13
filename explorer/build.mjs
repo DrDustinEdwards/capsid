@@ -33,6 +33,7 @@ import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
 import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
 import { writeIntegrity } from "@dustinedwards/site-runtime/sri";
+import { parsePublicModel } from "capsomer/behavior/system-model";
 import { themeScript } from "capsomer/theme-server";
 import {
   CAPSOMER_ROOT,
@@ -46,7 +47,6 @@ import { buildSync } from "esbuild";
 
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PublicStatsSchema } from "../src/public-stats.ts";
-import { PublicModelSchema } from "../src/system-model.ts";
 import { INDEXNOW_KEY, ORIGIN, allPages, searchDocument } from "./src/pages.mjs";
 
 /** When security.txt lapses (RFC 9116 asks for under a year); renew it before then. */
@@ -175,7 +175,10 @@ export async function build({
     : undefined,
   today = new Date().toISOString().slice(0, 10),
 } = {}) {
-  const model = PublicModelSchema.parse(await read(modelSource));
+  const parsed = parsePublicModel(await read(modelSource));
+  if (!parsed.ok)
+    throw new Error(`${modelSource} is not a public model: ${parsed.problems.join("; ")}`);
+  const model = parsed.model;
   const stats = PublicStatsSchema.parse(await read(statsSource));
   const code = await readCode(codeSource);
 

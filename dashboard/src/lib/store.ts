@@ -1,5 +1,5 @@
 import type { OpsFeed } from "../types";
-import { bytes } from "./format";
+import { formatBytes } from "capsomer/behavior/format";
 
 // The D1 store against its cap (capsid/decisions.md 2026-09-30, "admin panels review
 // adopted", item 5): a warning from half, Foxhound's threshold.
@@ -18,7 +18,7 @@ export function storeAttention(feed: OpsFeed): { title: string; sub: string } | 
   const s = feed.live.store;
   if (!use?.warn || s.size_bytes === null) return null;
   return {
-    title: `The D1 store is at ${(use.fraction * 100).toFixed(0)}% of its ${bytes(s.cap_bytes)} cap`,
-    sub: `${bytes(s.size_bytes)} used`,
+    title: `The D1 store is at ${(use.fraction * 100).toFixed(0)}% of its ${formatBytes(s.cap_bytes)} cap`,
+    sub: `${formatBytes(s.size_bytes)} used`,
   };
 }

@@ -2,14 +2,14 @@ import { heatStrip, timeline, type TimelineEvent } from "enarratio";
 import { areaChart } from "enarratio/lite/area";
 import { barChart } from "enarratio/lite/bar";
 import { lineChart } from "enarratio/lite/line";
-import { ChartFrame } from "capsomer/react/chart-frame";
+import { ChartFrame, ChartPanel } from "capsomer/react/chart-frame";
 import { Panel } from "capsomer/react/panel";
-import type { ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, useAnswer } from "../lib/api";
 import { padRing } from "capsomer/behavior/uptime-strip";
 import { RING_SLOTS, cfNoData, cfOk, slotStart } from "../lib/derive";
-import { DAY, HOUR, MIN, SLOT_MS, fmtN, pct, shortId } from "../lib/format";
+import { DAY, HOUR, MIN, SLOT_MS, pct, shortId } from "../lib/format";
+import { shortCount } from "capsomer/behavior/format";
 import { parse, utc } from "capsomer/behavior/time";
 import { useTrends } from "../lib/trends";
 import type {
@@ -44,16 +44,6 @@ function Stale({ error }: { error: string | null }) {
       Not refreshed: {error}
     </p>
   ) : null;
-}
-
-// A chart that is a panel of its own: the panel's surface and address, with the chart's title
-// and source in Enarratio's figure rather than a second header.
-function ChartPanel({ id, children }: { id: string; children: ReactNode }) {
-  return (
-    <section className="cap-panel" id={id}>
-      <div className="cap-panel-body body">{children}</div>
-    </section>
-  );
 }
 
 // ---- 1. Minutes of Dustin per week ------------------------------------------------------
@@ -276,10 +266,11 @@ export function QueueChart() {
     source: { name: "D1 jobs, 14 days" },
   } as const;
   return (
-    <ChartPanel id="queue-trend">
-      <Stale error={error} />
-      <ChartFrame draw={(width, fit) => areaChart({ ...opts, width, ...fit })} />
-    </ChartPanel>
+    <ChartPanel
+      id="queue-trend"
+      stale={error}
+      draw={(width, fit) => areaChart({ ...opts, width, ...fit })}
+    />
   );
 }
 
@@ -388,22 +379,21 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
     source: { name: "Every check, summed per agent" },
   } as const;
   return (
-    <ChartPanel id="claim-agreement">
-      {/* Columns where they fit, at most 900 px wide; under NARROW px, bars across, one band per
-          agent, so a phone reads it without scrolling sideways (live chart check C12, 2026-11-03). */}
-      <ChartFrame
-        draw={(width) =>
-          width < NARROW
-            ? barChart({
-                ...opts,
-                width,
-                orientation: "horizontal",
-                height: 56 + agents * AGREEMENTS.length * 16,
-              })
-            : barChart({ ...opts, width: Math.min(900, width), height: 260 })
-        }
-      />
-    </ChartPanel>
+    // Columns where they fit, at most 900 px wide; under NARROW px, bars across, one band per
+    // agent, so a phone reads it without scrolling sideways (live chart check C12, 2026-11-03).
+    <ChartPanel
+      id="claim-agreement"
+      draw={(width) =>
+        width < NARROW
+          ? barChart({
+              ...opts,
+              width,
+              orientation: "horizontal",
+              height: 56 + agents * AGREEMENTS.length * 16,
+            })
+          : barChart({ ...opts, width: Math.min(900, width), height: 260 })
+      }
+    />
   );
 }
 
@@ -441,10 +431,11 @@ export function CostChart() {
     source: { name: "Job outcomes, telemetry cost, an estimate" },
   } as const;
   return (
-    <ChartPanel id="cost-trend">
-      <Stale error={error} />
-      <ChartFrame draw={(width, fit) => lineChart({ ...opts, width, ...fit })} />
-    </ChartPanel>
+    <ChartPanel
+      id="cost-trend"
+      stale={error}
+      draw={(width, fit) => lineChart({ ...opts, width, ...fit })}
+    />
   );
 }
 
@@ -502,13 +493,11 @@ export function MergesChart() {
     source: { name: "Audit log, weekly" },
   } as const;
   return (
-    <ChartPanel id="merge-trend">
-      <Stale error={error} />
-      <ChartFrame
-        className="merge-chart"
-        draw={(width, fit) => barChart({ ...opts, width, ...fit })}
-      />
-    </ChartPanel>
+    <ChartPanel
+      id="merge-trend"
+      stale={error}
+      draw={(width, fit) => barChart({ ...opts, width, ...fit })}
+    />
   );
 }
 
@@ -630,7 +619,7 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     })),
     height: 220,
     title,
-    subtitle: `${fmtN(tot.req)} requests and ${fmtN(tot.err)} errors (${pct(tot.rate)})`,
+    subtitle: `${shortCount(tot.req)} requests and ${shortCount(tot.err)} errors (${pct(tot.rate)})`,
     alt: `Error rate for ${site.name} over the last 24 hours: peak ${peak.toFixed(2)}% in an hour, ${pct(tot.rate)} overall, ${inWindow.length} ${inWindow.length === 1 ? "deploy" : "deploys"} in the window.`,
     caption: inWindow.length
       ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(parse(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.`

@@ -1,6 +1,6 @@
 import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
 import { parseSqlTime } from "@dustinedwards/site-runtime/time";
-import { median } from "./job-claims-read";
+import { median } from "capsomer/behavior/format";
 import { COMPLETE_MARKER } from "@dustinedwards/d1-dump";
 import { DUMP_RETENTION } from "./backup";
 import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
@@ -311,7 +311,7 @@ function deployStats(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([repo, t]) => {
       const decided = t.shipped + t.refused;
-      const restoreMedian = median(t.restores);
+      const restoreMedian = median(t.restores, { round: true });
       return {
         repo,
         deploys: decided + t.unverified,

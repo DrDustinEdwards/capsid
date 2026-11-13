@@ -57,9 +57,10 @@ export function Claims() {
   const checks = data ? byCheck(data.groups) : [];
 
   return (
-    <div className="embedded">
+    <div className="cap-stack">
       <form
-        className="toolbar"
+        className="cap-cluster"
+        data-gap="3"
         role="search"
         aria-label="Filter claims"
         onSubmit={(e) => {
@@ -263,7 +264,8 @@ export function Claims() {
         </Panel>
       )}
       <form
-        className="toolbar"
+        className="cap-cluster"
+        data-gap="3"
         aria-label="Open a job"
         onSubmit={(e) => {
           e.preventDefault();
@@ -393,7 +395,7 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
     );
   };
   return (
-    <div className="toolbar" role="group" aria-label="Export">
+    <div className="cap-cluster" data-gap="3" role="group" aria-label="Export">
       <span className="cap-text hint" data-tone="dim" data-size="small">
         Export as CSV:
       </span>

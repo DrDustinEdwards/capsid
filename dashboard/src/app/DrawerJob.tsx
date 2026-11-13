@@ -59,16 +59,14 @@ export function Head({
 
 function CopyBlock({ id, text, label }: { id: string; text: string; label: string }) {
   return (
-    <>
+    <div className="cap-stack" data-gap="3">
       <div className="cap-detail-cmd" id={id}>
         {text}
       </div>
-      <div className="toolbar mt8">
-        <CopyButton text={text} variant="default">
-          {label}
-        </CopyButton>
-      </div>
-    </>
+      <CopyButton text={text} variant="default">
+        {label}
+      </CopyButton>
+    </div>
   );
 }
 
@@ -96,7 +94,7 @@ function JobControls({ j }: { j: OpsJob }) {
     return (
       <div>
         <p className="section-title">Change it</p>
-        <div className="toolbar">
+        <div className="cap-cluster" data-gap="3">
           <button
             type="button"
             className="cap-btn"
@@ -182,7 +180,7 @@ function JobControls({ j }: { j: OpsJob }) {
     <div className="cap-stack" data-gap="4" data-job-controls="">
       <div>
         <p className="section-title">Change it</p>
-        <div className="toolbar">
+        <div className="cap-cluster" data-gap="3">
           <button
             type="button"
             className="cap-btn"
@@ -209,7 +207,7 @@ function JobControls({ j }: { j: OpsJob }) {
             <span className="chev" aria-hidden="true" />
             More actions
           </summary>
-          <div className="toolbar mt8">
+          <div className="cap-cluster" data-gap="3">
             {more.map((m) => (
               <button
                 key={m.label}

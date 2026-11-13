@@ -17,7 +17,8 @@ import {
   incidents,
   siteKey,
 } from "../lib/derive";
-import { age, agentLabel, ago, fmtN, hostOf, pct, shortId } from "../lib/format";
+import { age, agentLabel, ago, hostOf, pct, shortId } from "../lib/format";
+import { shortCount } from "capsomer/behavior/format";
 import { parse } from "capsomer/behavior/time";
 import { Icon, NoData, Pill, St } from "../ui/icons";
 import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
@@ -61,7 +62,7 @@ export function NsChips({ list }: { list: string[] }) {
   // A namespace from the address that this list does not carry still shows, pressed.
   if (!all.includes(ns)) all.push(ns);
   return (
-    <div className="toolbar" role="group" aria-label="Filter by namespace">
+    <div className="cap-cluster" data-gap="3" role="group" aria-label="Filter by namespace">
       {all.map((n) => (
         <button
           key={n}
@@ -144,10 +145,10 @@ function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
     <>
       <ErrorSpark
         values={cf.errors24.map((x) => x.errors)}
-        label={`Errors per hour for ${s.name}, last 24 hours: ${fmtN(t.err)} of ${fmtN(t.req)} requests`}
+        label={`Errors per hour for ${s.name}, last 24 hours: ${shortCount(t.err)} of ${shortCount(t.req)} requests`}
       />
       <div className={`src${hot ? " hot" : ""}`}>
-        {fmtN(t.err)} / {fmtN(t.req)} · {pct(t.rate)}
+        {shortCount(t.err)} / {shortCount(t.req)} · {pct(t.rate)}
       </div>
     </>
   );
@@ -207,12 +208,14 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
                   <span>{hostOf(s.origin)}</span>
                 </td>
                 <td data-label="Status">
-                  <Pill kind={p.kind}>{p.label}</Pill>
-                  <div className="src mt4">
-                    {s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}
+                  <div className="cap-stack" data-gap="2" data-align="start">
+                    <Pill kind={p.kind}>{p.label}</Pill>
+                    <div className="src">
+                      {s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}
+                    </div>
                   </div>
                 </td>
-                <td data-label="Uptime, 2-hour ticks" className="w30">
+                <td data-label="Uptime, 2-hour ticks" className="uptime-cell">
                   <UptimeTicks site={s} />
                   <UptimeFoot site={s} />
                 </td>
