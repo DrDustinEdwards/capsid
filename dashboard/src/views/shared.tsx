@@ -17,7 +17,8 @@ import {
   incidents,
   siteKey,
 } from "../lib/derive";
-import { age, agentLabel, ago, fmtN, hostOf, pct, shortId } from "../lib/format";
+import { age, agentLabel, ago, hostOf, pct, shortId } from "../lib/format";
+import { shortCount } from "capsomer/behavior/format";
 import { parse } from "capsomer/behavior/time";
 import { Icon, NoData, Pill, St } from "../ui/icons";
 import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
@@ -144,10 +145,10 @@ function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
     <>
       <ErrorSpark
         values={cf.errors24.map((x) => x.errors)}
-        label={`Errors per hour for ${s.name}, last 24 hours: ${fmtN(t.err)} of ${fmtN(t.req)} requests`}
+        label={`Errors per hour for ${s.name}, last 24 hours: ${shortCount(t.err)} of ${shortCount(t.req)} requests`}
       />
       <div className={`src${hot ? " hot" : ""}`}>
-        {fmtN(t.err)} / {fmtN(t.req)} · {pct(t.rate)}
+        {shortCount(t.err)} / {shortCount(t.req)} · {pct(t.rate)}
       </div>
     </>
   );

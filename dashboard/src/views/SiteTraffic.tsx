@@ -11,7 +11,8 @@ import {
   fetchWorkersBuilds,
   useAnswer,
 } from "../lib/api";
-import { ago, fmtN, pct, shortId } from "../lib/format";
+import { ago, pct, shortId } from "../lib/format";
+import { shortCount } from "capsomer/behavior/format";
 import { parse, utc } from "capsomer/behavior/time";
 import type {
   PortalBuildLog,
@@ -92,8 +93,8 @@ function SearchTable({
           {rows.map((r) => (
             <tr key={r.key}>
               <td className={label === "Pages" ? "cap-mono wrap" : "wrap"}>{r.key}</td>
-              <td className="cap-num">{fmtN(r.clicks)}</td>
-              <td className="cap-num">{fmtN(r.impressions)}</td>
+              <td className="cap-num">{shortCount(r.clicks)}</td>
+              <td className="cap-num">{shortCount(r.impressions)}</td>
               <td className="cap-num">{r.ctr == null ? "" : pct(r.ctr, 1)}</td>
               <td className="cap-num">{r.position == null ? "" : r.position.toFixed(1)}</td>
             </tr>
@@ -139,8 +140,8 @@ function Search({ ns }: { ns: string }) {
                     </p>
                     <Totals
                       items={[
-                        ["Clicks", fmtN(g.totals.clicks)],
-                        ["Impressions", fmtN(g.totals.impressions)],
+                        ["Clicks", shortCount(g.totals.clicks)],
+                        ["Impressions", shortCount(g.totals.impressions)],
                         ["CTR", g.totals.ctr == null ? "none" : pct(g.totals.ctr, 1)],
                         [
                           "Average position",
@@ -177,8 +178,8 @@ function Search({ ns }: { ns: string }) {
                     </p>
                     <Totals
                       items={[
-                        ["Clicks", fmtN(b.totals.clicks)],
-                        ["Impressions", fmtN(b.totals.impressions)],
+                        ["Clicks", shortCount(b.totals.clicks)],
+                        ["Impressions", shortCount(b.totals.impressions)],
                       ]}
                     />
                     {b.note && (
@@ -265,13 +266,13 @@ const VITALS: Array<{
 ];
 
 const vital = (x: number | null, unit: "ms" | "") =>
-  x == null ? "" : unit === "ms" ? `${fmtN(Math.round(x))} ms` : x.toFixed(3);
+  x == null ? "" : unit === "ms" ? `${shortCount(Math.round(x))} ms` : x.toFixed(3);
 
 function Vitals({ v }: { v: TrafficWebVitals }) {
   return (
     <>
       <p className="cap-text body" data-tone="dim">
-        {fmtN(v.page_views_measured)} page views measured by Cloudflare's browser insights.
+        {shortCount(v.page_views_measured)} page views measured by Cloudflare's browser insights.
       </p>
       <div className="cap-table-wrap">
         <table className="cap-table">
@@ -355,7 +356,7 @@ function Traffic({ ns }: { ns: string }) {
                             {real.map((p) => (
                               <tr key={p.path}>
                                 <td className="cap-mono wrap">{p.path}</td>
-                                <td className="cap-num">{fmtN(p.hits)}</td>
+                                <td className="cap-num">{shortCount(p.hits)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -402,7 +403,7 @@ function Traffic({ ns }: { ns: string }) {
                         key: "hits",
                         label: "Hits",
                         num: true,
-                        cell: (f) => fmtN(f.hits),
+                        cell: (f) => shortCount(f.hits),
                       },
                     ]}
                     rows={e.failures}
@@ -442,7 +443,7 @@ function Traffic({ ns }: { ns: string }) {
                         key: "hits",
                         label: "Hits",
                         num: true,
-                        cell: (r) => fmtN(r.hits),
+                        cell: (r) => shortCount(r.hits),
                       },
                       {
                         key: "answered",
@@ -450,7 +451,7 @@ function Traffic({ ns }: { ns: string }) {
                         cell: (r) =>
                           Object.entries(r.statuses)
                             .sort((x, y) => y[1] - x[1])
-                            .map(([status, n]) => `${status} × ${fmtN(n)}`)
+                            .map(([status, n]) => `${status} × ${shortCount(n)}`)
                             .join(", "),
                       },
                     ]}

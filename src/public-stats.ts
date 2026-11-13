@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { median } from "capsomer/behavior/format";
 import type { Env } from "./env";
-import { median } from "./job-claims-read";
 import { bounded } from "./limits";
 import { readSnapshot } from "./ops-snapshot";
 import { MINUTE_MS, DAY_MS } from "./time";
@@ -92,10 +92,9 @@ function rate(num: number, den: number): number | null {
   return den < FLOOR ? null : Math.round((num / den) * 1000) / 1000;
 }
 
-// Whole numbers: the values are fractional minutes, so an odd count is rounded too.
-function flooredMedian(values: number[]): number | null {
-  const m = values.length < FLOOR ? null : median(values);
-  return m === null ? null : Math.round(m);
+/** The median, or null under the privacy floor, rounded to whole units. */
+function floorMedian(values: number[]): number | null {
+  return values.length < FLOOR ? null : median(values, { round: true });
 }
 
 function verifiedFields(json: string): Record<string, unknown> {
@@ -179,7 +178,7 @@ export function summarize(rows: StatsRows, now: Date): PublicStats {
       failed_by_week: failedByWeek,
       open: openOf("queued") + openOf("claimed") + openOf("blocked"),
       blocked: openOf("blocked"),
-      median_duration_minutes_30d: flooredMedian(
+      median_duration_minutes_30d: floorMedian(
         outcomes30.map((o) => o.duration_minutes).filter((d): d is number => typeof d === "number"),
       ),
     },
@@ -192,7 +191,7 @@ export function summarize(rows: StatsRows, now: Date): PublicStats {
     },
     gates: {
       waits_30d: waits30.length,
-      median_wait_minutes_30d: flooredMedian(waits30.map((w) => w.waited_ms / MINUTE_MS)),
+      median_wait_minutes_30d: floorMedian(waits30.map((w) => w.waited_ms / MINUTE_MS)),
       share_ended_by_policy_30d: rate(
         waits30.filter((w) => w.actor_kind === "policy").length,
         waits30.length,

@@ -1,4 +1,5 @@
 import { classifyCommand } from "./gate-policy";
+import { median } from "capsomer/behavior/format";
 import type {
   ClaimsAggregate,
   ClaimsAgreement,
@@ -97,14 +98,6 @@ export function claimsFilterFrom(input: {
       until: until.value,
     },
   };
-}
-
-/** The median of a list of numbers, or null for an empty list (no wait is not a zero wait). */
-export function median(values: readonly number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
 /** One job with every claim, evaluation and touch recorded for it, or null when no
@@ -419,7 +412,7 @@ export async function readClaimsAggregate(
     const t = groups.get(key)!.touches;
     t.waits = list.length;
     t.waited_ms_total = list.reduce((sum, v) => sum + v, 0);
-    t.waited_ms_median = median(list);
+    t.waited_ms_median = median(list, { round: true });
   }
 
   const ordered = [...groups.values()].sort(
@@ -450,7 +443,7 @@ export async function readClaimsAggregate(
       ended_by: e.ended_by,
       waits: e.list.length,
       waited_ms_total: e.list.reduce((sum, v) => sum + v, 0),
-      waited_ms_median: median(e.list) as number,
+      waited_ms_median: median(e.list, { round: true }) as number,
     }))
     .sort(
       (a, b) =>

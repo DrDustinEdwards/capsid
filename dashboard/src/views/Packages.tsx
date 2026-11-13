@@ -2,7 +2,8 @@ import { Alert, Banner } from "capsomer/react/banner";
 import { Suspense, lazy, useState } from "react";
 import { useApp } from "../app/ctx";
 import { fetchPackageHistory, useAnswer } from "../lib/api";
-import { ago, fmtN } from "../lib/format";
+import { ago } from "../lib/format";
+import { shortCount } from "capsomer/behavior/format";
 import { parse } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "../types";
@@ -108,7 +109,7 @@ function DownloadsChart({ data }: { data: PortalPackageHistory }) {
     yLabel: `Downloads a ${per}`,
     height: 200,
     title: `${weekly ? "Weekly" : "Daily"} downloads of ${data.name}`,
-    alt: `${weekly ? "Weekly" : "Daily"} downloads of ${data.name}${data.formerly ? ` and its former name ${data.formerly}` : ""}, ${first} to ${last}: ${fmtN(total)} in all, at most ${fmtN(max)} in a ${per}.`,
+    alt: `${weekly ? "Weekly" : "Daily"} downloads of ${data.name}${data.formerly ? ` and its former name ${data.formerly}` : ""}, ${first} to ${last}: ${shortCount(total)} in all, at most ${shortCount(max)} in a ${per}.`,
     ...(weekly
       ? {
           caption:
@@ -147,7 +148,7 @@ function HistoryPanel({ name }: { name: string }) {
     <div className="cap-stack" data-gap="4" data-history={d.name}>
       <DownloadsChart data={d} />
       <p className="cap-text note" data-size="small" data-tone="dim">
-        {[...byName].map(([n, total]) => `${n}: ${fmtN(total)}`).join(" · ")} · read from npm{" "}
+        {[...byName].map(([n, total]) => `${n}: ${shortCount(total)}`).join(" · ")} · read from npm{" "}
         {d.fetched_at.slice(0, 16).replace("T", " ")} UTC, kept six hours
       </p>
       {d.notes.map((n) => (
@@ -243,8 +244,10 @@ function PackagePanel({
                 {() =>
                   snap.downloads.state === "ok" && (
                     <>
-                      <span className="cap-num">{fmtN(snap.downloads.last_week)}</span> in 7 days ·{" "}
-                      <span className="cap-num">{fmtN(snap.downloads.last_month)}</span> in 30 days
+                      <span className="cap-num">{shortCount(snap.downloads.last_week)}</span> in 7
+                      days ·{" "}
+                      <span className="cap-num">{shortCount(snap.downloads.last_month)}</span> in 30
+                      days
                       <span className="cap-text" data-tone="dim">
                         {" "}
                         {snap.downloads.through
@@ -256,7 +259,7 @@ function PackagePanel({
                           Per version, last 7 days only (npm keeps no per-version history):{" "}
                           {Object.entries(snap.downloads.by_version_last_week)
                             .sort((a, b) => b[1] - a[1])
-                            .map(([v, n]) => `${v} ${fmtN(n)}`)
+                            .map(([v, n]) => `${v} ${shortCount(n)}`)
                             .join(" · ")}
                         </div>
                       )}
@@ -271,9 +274,9 @@ function PackagePanel({
                 {() =>
                   snap.dependents.state === "ok" && (
                     <>
-                      <span className="cap-num">{fmtN(snap.dependents.total)}</span> packages depend
-                      on {snap.dependents.version}: {fmtN(snap.dependents.direct)} directly,{" "}
-                      {fmtN(snap.dependents.indirect)} through another package
+                      <span className="cap-num">{shortCount(snap.dependents.total)}</span> packages
+                      depend on {snap.dependents.version}: {shortCount(snap.dependents.direct)}{" "}
+                      directly, {shortCount(snap.dependents.indirect)} through another package
                     </>
                   )
                 }

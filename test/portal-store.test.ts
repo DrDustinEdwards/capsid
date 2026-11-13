@@ -10,7 +10,6 @@ import type { OpsFeed } from "../src/ops-types/feed.ts";
 // and a warning in Needs attention from half the cap.
 const { attentionItems } = await import("../dashboard/src/lib/derive.ts");
 const { storeUse } = await import("../dashboard/src/lib/store.ts");
-const { bytes } = await import("../dashboard/src/lib/format.ts");
 
 const SAMPLE = readFileSync(
   join(import.meta.dirname, "..", "dashboard", "dev", "sample-feed.json"),
@@ -54,11 +53,4 @@ test("a size that was not reported is no row and no fraction", () => {
   const { f, now } = feed(null);
   assert.equal(storeUse(f), null);
   assert.deepEqual(storeRows(f, now), []);
-});
-
-test("bytes reads in binary units, one decimal under a hundred", () => {
-  assert.deepEqual(
-    [bytes(512), bytes(2048), bytes(50_646_220), bytes(150 * 1024 * 1024), bytes(5 * 1024 ** 3)],
-    ["512 B", "2 KB", "48.3 MB", "150 MB", "5 GB"],
-  );
 });

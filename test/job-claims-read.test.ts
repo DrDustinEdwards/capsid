@@ -11,7 +11,6 @@ import {
   claimsFilterFrom,
   exportClaimsPage,
   gateClassOf,
-  median,
   readClaimsAggregate,
   readJobClaims,
 } from "../src/job-claims-read.ts";
@@ -86,14 +85,6 @@ test("a time that is not ISO is refused, not guessed at", () => {
 test("since at or after until is refused, since it can match nothing", () => {
   const parsed = claimsFilterFrom({ since: "2026-09-02", until: "2026-09-01" });
   assert.equal(parsed.ok, false);
-});
-
-test("median: the middle value, the rounded mean of the middle two, and null for nothing", () => {
-  assert.equal(median([30, 10, 20]), 20);
-  assert.equal(median([1, 2, 3, 4]), 3);
-  assert.equal(median([5]), 5);
-  // No wait measured is not a wait of zero.
-  assert.equal(median([]), null);
 });
 
 // the aggregate

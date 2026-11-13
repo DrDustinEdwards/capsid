@@ -7,8 +7,8 @@
 // A rate with no denominator is null, not zero: an agent that opened no pull
 // requests has no merge rate, and 0% would rank it below one that merged one in ten.
 
+import { median } from "capsomer/behavior/format";
 import { agentActor } from "./agents-schema";
-import { median } from "./job-claims-read";
 
 // What this module needs to know about a credential, and no more. Not
 // `AgentSummary` from status.ts: that module builds the summaries and then asks
@@ -121,7 +121,7 @@ export function recordFor(actor: string, rows: RecordRows): AgentRecord {
     pr_merge_rate: rate(prsMerged, prsOpenedForRate),
     ci_checked: ciChecked.length,
     ci_green_rate: rate(ciChecked.filter((o) => o.ci_green === 1).length, ciChecked.length),
-    median_duration_minutes: median(durations),
+    median_duration_minutes: median(durations, { round: true }),
   };
 }
 

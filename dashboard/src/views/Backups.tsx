@@ -2,7 +2,8 @@ import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { Fragment, Suspense } from "react";
 import { useApp } from "../app/ctx";
-import { ago, bytes } from "../lib/format";
+import { ago } from "../lib/format";
+import { formatBytes } from "capsomer/behavior/format";
 import { parse } from "capsomer/behavior/time";
 import { OFFACCOUNT_LATE, OFFACCOUNT_STALE, offaccountState } from "../lib/derive";
 import { storeUse } from "../lib/store";
@@ -95,7 +96,7 @@ export function Backups() {
                       if (!use || s.size_bytes === null) return <St kind="nodata">Not reported</St>;
                       return (
                         <>
-                          {bytes(s.size_bytes)} of {bytes(s.cap_bytes)} (
+                          {formatBytes(s.size_bytes)} of {formatBytes(s.cap_bytes)} (
                           {(use.fraction * 100).toFixed(use.fraction < 0.01 ? 2 : 0)}
                           %) {use.warn && <St kind="warn">over half the cap</St>}
                         </>

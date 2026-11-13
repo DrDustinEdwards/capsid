@@ -5,7 +5,8 @@ import { StatusMatrix } from "capsomer/react/status-matrix";
 import "capsomer/status-matrix.css";
 import { useApp } from "../app/ctx";
 import { fetchCompleteness, useAnswer } from "../lib/api";
-import { ago, fmtN } from "../lib/format";
+import { ago } from "../lib/format";
+import { shortCount } from "capsomer/behavior/format";
 import { parse } from "capsomer/behavior/time";
 import type {
   CompletenessArea,
@@ -86,10 +87,12 @@ export function Completeness() {
   return (
     <div className="embedded">
       <Alert tone={data.finished ? "neutral" : "warn"}>
-        <b>{data.finished ? "Finished." : "Not finished."}</b> {fmtN(count("complete"))} of{" "}
-        {fmtN(cells.length)} cells complete, {fmtN(count("partial"))} partial,{" "}
-        {fmtN(count("missing"))} missing
-        {count("unmeasured") ? `, ${fmtN(count("unmeasured"))} could not be measured` : ""}.{" "}
+        <b>{data.finished ? "Finished." : "Not finished."}</b> {shortCount(count("complete"))} of{" "}
+        {shortCount(cells.length)} cells complete, {shortCount(count("partial"))} partial,{" "}
+        {shortCount(count("missing"))} missing
+        {count("unmeasured")
+          ? `, ${shortCount(count("unmeasured"))} could not be measured`
+          : ""}.{" "}
         {data.finished
           ? `Every cell is complete and has passed ${CLEAN_DAYS} daily runs in a row.`
           : `Finished means every cell complete and clean for ${CLEAN_DAYS} daily runs.`}
@@ -148,7 +151,7 @@ function linesText(area: CompletenessArea, publicOnly: boolean): string {
   if (!area.lines) return "Lines not counted yet";
   if ("error" in area.lines) return `Lines not counted: ${area.lines.error}`;
   const { prs, added, removed } = area.lines;
-  return `${fmtN(prs)} ${prs === 1 ? "PR" : "PRs"}, +${fmtN(added)} −${fmtN(removed)} lines${publicOnly ? " (public repos only)" : ""}`;
+  return `${shortCount(prs)} ${prs === 1 ? "PR" : "PRs"}, +${shortCount(added)} −${shortCount(removed)} lines${publicOnly ? " (public repos only)" : ""}`;
 }
 
 function AreaPanel({

@@ -67,7 +67,6 @@
       "id": "gone",
       "name": "Gone",
       "short": "Gone",
-      "domain": "",
       "family": "plumbing",
       "ring": "used",
       "private": true
