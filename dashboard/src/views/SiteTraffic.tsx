@@ -19,7 +19,8 @@ import type {
   TrafficWebVitals,
   WebVital,
 } from "../types";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
+import { KIND_STATUS } from "../lib/derive";
 import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
 // Only Capsid's own page shows its 404 table, so the report and its stylesheets load with it.
@@ -304,7 +305,7 @@ function Vitals({ v }: { v: TrafficWebVitals }) {
                   <td>{m.name}</td>
                   <td className="cap-num">{vital(q?.p50 ?? null, m.unit)}</td>
                   <td className="cap-num">
-                    {vital(p75, m.unit)} <St kind={kind}>{word}</St>
+                    {vital(p75, m.unit)} <Status {...KIND_STATUS[kind]}>{word}</Status>
                   </td>
                   <td className="cap-num">{vital(q?.p90 ?? null, m.unit)}</td>
                 </tr>
@@ -594,7 +595,7 @@ export function SiteBuilds({ ns }: { ns: string }) {
                               {b.created_on ? ago(parse(b.created_on), now) : ""}
                             </td>
                             <td>
-                              <St kind={st.kind}>{st.label}</St>
+                              <Status {...KIND_STATUS[st.kind]}>{st.label}</Status>
                             </td>
                             <td className="cap-mono">{b.branch ?? ""}</td>
                             <td className="cap-mono">{b.commit ? shortId(b.commit, 7) : ""}</td>

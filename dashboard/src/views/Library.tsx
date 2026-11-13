@@ -12,7 +12,7 @@ import { useAnswer } from "capsomer/react/data";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import type { LibraryEntry, LibraryShelf, PortalLibrary } from "../types";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import { PageHead } from "./shared";
 
 // LIBRARY (capsid/decisions.md 2026-10-09, Portal review item 4; experience review answer
@@ -111,7 +111,7 @@ export function Library() {
         </div>
       ) : load.error ? (
         <p role="alert">
-          <St kind="crit">Could not read the library: {load.error}</St>
+          <Status tone="crit">Could not read the library: {load.error}</Status>
         </p>
       ) : !data ? null : data.kind === "document" ? (
         <DocumentView data={data} back={search ? `?${search}` : ""} now={now} />

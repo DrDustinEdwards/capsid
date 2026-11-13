@@ -10,7 +10,8 @@ import type {
   JobEvaluationRow,
   PortalClaimsJob,
 } from "../types";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
+import { KIND_STATUS } from "../lib/derive";
 import { Missing } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import "capsomer/summary-list.css";
@@ -114,7 +115,7 @@ function versions(c: JobClaimRow): string {
 }
 
 function Agreement({ a }: { a: ClaimsAgreement }) {
-  return <St kind={AGREEMENT_KIND[a]}>{a}</St>;
+  return <Status {...KIND_STATUS[AGREEMENT_KIND[a]]}>{a}</Status>;
 }
 
 export function AgreementCounts({ c }: { c: ClaimsAgreementCounts }) {

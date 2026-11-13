@@ -7,7 +7,7 @@ import { formatBytes } from "capsomer/behavior/format";
 import { parse } from "capsomer/behavior/time";
 import { OFFACCOUNT_LATE, OFFACCOUNT_STALE, offaccountState } from "../lib/derive";
 import { storeUse } from "../lib/store";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import { Time } from "capsomer/react/time";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
@@ -43,7 +43,7 @@ export function Backups() {
           <div className="body cap-stack" data-gap="4">
             {!h ? (
               <Alert tone="neutral">
-                <St kind="nodata">No data</St> Capsid health was not read on the last pass.
+                <Status tone="nodata">No data</Status> Capsid health was not read on the last pass.
               </Alert>
             ) : (
               <>
@@ -57,13 +57,13 @@ export function Backups() {
                         <Time at={h.backup.last_ok} format="exact" />
                       </>
                     ) : (
-                      <St kind="crit">None recorded</St>
+                      <Status tone="crit">None recorded</Status>
                     )}
                   </dd>
                   <dt>Age</dt>
                   <dd className="cap-num">
                     {h.backup.age_hours == null ? (
-                      <St kind="nodata">No data</St>
+                      <Status tone="nodata">No data</Status>
                     ) : (
                       `${h.backup.age_hours.toFixed(1)}h`
                     )}
@@ -71,14 +71,18 @@ export function Backups() {
                   <dt>State</dt>
                   <dd>
                     {h.backup.warning || !h.backup.last_ok ? (
-                      <St kind="crit">Stale</St>
+                      <Status tone="crit">Stale</Status>
                     ) : (
-                      <St kind="ok">Fresh</St>
+                      <Status tone="ok">Fresh</Status>
                     )}
                   </dd>
                   <dt>Health</dt>
                   <dd>
-                    {h.status === "ok" ? <St kind="ok">ok</St> : <St kind="warn">degraded</St>}{" "}
+                    {h.status === "ok" ? (
+                      <Status tone="ok">ok</Status>
+                    ) : (
+                      <Status tone="warn">degraded</Status>
+                    )}{" "}
                     <span className="cap-text cap-mono" data-tone="dim">
                       sha {h.sha.slice(0, 7)}
                       {h.dirty ? " (dirty)" : ""}
@@ -94,12 +98,13 @@ export function Backups() {
                     {(() => {
                       const use = storeUse(feed);
                       const s = feed.live.store;
-                      if (!use || s.size_bytes === null) return <St kind="nodata">Not reported</St>;
+                      if (!use || s.size_bytes === null)
+                        return <Status tone="nodata">Not reported</Status>;
                       return (
                         <>
                           {formatBytes(s.size_bytes)} of {formatBytes(s.cap_bytes)} (
                           {(use.fraction * 100).toFixed(use.fraction < 0.01 ? 2 : 0)}
-                          %) {use.warn && <St kind="warn">over half the cap</St>}
+                          %) {use.warn && <Status tone="warn">over half the cap</Status>}
                         </>
                       );
                     })()}
@@ -115,8 +120,8 @@ export function Backups() {
           <div className="body cap-stack" data-gap="4">
             {!o || !os ? (
               <Alert tone="neutral">
-                <St kind="nodata">No data</St> The Amazon copy's report was not read on the last
-                pass.
+                <Status tone="nodata">No data</Status> The Amazon copy's report was not read on the
+                last pass.
               </Alert>
             ) : (
               <>
@@ -134,13 +139,13 @@ export function Backups() {
                           <>
                             {ago(parse(s.newest), now)} <Time at={s.newest} format="exact" />{" "}
                             {now - parse(s.newest) >= OFFACCOUNT_STALE ? (
-                              <St kind="crit">stale</St>
+                              <Status tone="crit">stale</Status>
                             ) : now - parse(s.newest) >= OFFACCOUNT_LATE ? (
-                              <St kind="warn">late</St>
+                              <Status tone="warn">late</Status>
                             ) : null}
                           </>
                         ) : (
-                          <St kind="crit">No copy</St>
+                          <Status tone="crit">No copy</Status>
                         )}
                       </dd>
                     </Fragment>
@@ -152,7 +157,7 @@ export function Backups() {
                         {ago(parse(o.reported_at), now)} <Time at={o.reported_at} format="exact" />
                       </>
                     ) : (
-                      <St kind="crit">none yet</St>
+                      <Status tone="crit">none yet</Status>
                     )}
                   </dd>
                   <dt>Last copy run</dt>
@@ -160,11 +165,13 @@ export function Backups() {
                     {o.last_run ? (
                       <>
                         {o.last_run.conclusion === "success" ? (
-                          <St kind="ok">success</St>
+                          <Status tone="ok">success</Status>
                         ) : o.last_run.conclusion ? (
-                          <St kind="crit">{o.last_run.conclusion}</St>
+                          <Status tone="crit">{o.last_run.conclusion}</Status>
                         ) : (
-                          <St kind="run">running</St>
+                          <Status tone="info" running>
+                            running
+                          </Status>
                         )}{" "}
                         {o.last_run.url && (
                           <a href={o.last_run.url} target="_blank" rel="noopener noreferrer">
@@ -173,7 +180,7 @@ export function Backups() {
                         )}
                       </>
                     ) : (
-                      <St kind="nodata">none</St>
+                      <Status tone="nodata">none</Status>
                     )}
                   </dd>
                   <dt>Last passing drill</dt>
@@ -181,11 +188,13 @@ export function Backups() {
                     {o.last_drill ? (
                       <>
                         {o.last_drill.conclusion === "success" ? (
-                          <St kind="ok">success</St>
+                          <Status tone="ok">success</Status>
                         ) : o.last_drill.conclusion ? (
-                          <St kind="crit">{o.last_drill.conclusion}</St>
+                          <Status tone="crit">{o.last_drill.conclusion}</Status>
                         ) : (
-                          <St kind="run">running</St>
+                          <Status tone="info" running>
+                            running
+                          </Status>
                         )}{" "}
                         {o.last_drill.url && (
                           <a href={o.last_drill.url} target="_blank" rel="noopener noreferrer">
@@ -194,7 +203,7 @@ export function Backups() {
                         )}
                       </>
                     ) : (
-                      <St kind="nodata">none</St>
+                      <Status tone="nodata">none</Status>
                     )}
                   </dd>
                 </dl>
@@ -310,10 +319,10 @@ function Fresh({
   warning?: string;
   now: number;
 }) {
-  if (!at) return <St kind="crit">None</St>;
+  if (!at) return <Status tone="crit">None</Status>;
   return (
     <>
-      {ago(parse(at), now)} {warning ? <St kind="crit">stale</St> : null}
+      {ago(parse(at), now)} {warning ? <Status tone="crit">stale</Status> : null}
     </>
   );
 }
@@ -336,12 +345,12 @@ function SiteRow({ site, now, backUp }: { site: SiteBackupRow; now: number; back
             now={now}
           />
         ) : (
-          <St kind="nodata">{site.error ?? "Not read"}</St>
+          <Status tone="nodata">{site.error ?? "Not read"}</Status>
         )}
       </td>
       <td>
         {files.length === 0 ? (
-          <St kind="nodata">None reported</St>
+          <Status tone="nodata">None reported</Status>
         ) : (
           files.map(([name, f]) => (
             <div key={name}>
@@ -352,7 +361,11 @@ function SiteRow({ site, now, backUp }: { site: SiteBackupRow; now: number; back
         )}
       </td>
       <td className="cap-num">
-        {site.amazon?.newest ? ago(parse(site.amazon.newest), now) : <St kind="nodata">No copy</St>}
+        {site.amazon?.newest ? (
+          ago(parse(site.amazon.newest), now)
+        ) : (
+          <Status tone="nodata">No copy</Status>
+        )}
       </td>
       <td>
         <button type="button" className="cap-btn" onClick={backUp}>

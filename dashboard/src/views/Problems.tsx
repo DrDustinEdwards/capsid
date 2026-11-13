@@ -4,7 +4,7 @@ import { Link } from "../lib/router";
 import { useApp, isView, placePath } from "../app/ctx";
 import { attentionGroups, WAITING_KINDS, PROBLEM_ROWS, type AttentionRow } from "../lib/derive";
 import { ago } from "../lib/format";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 
 // ---- Problems (was Needs attention) ------------------------------------------------------
 
@@ -83,7 +83,7 @@ function ProblemRow({ row }: { row: AttentionRow }) {
       tabIndex={0}
     >
       <span className="kind">
-        <St kind={row.sev}>{row.kind}</St>
+        <Status tone={row.sev}>{row.kind}</Status>
       </span>
       <div className="what">
         <b>{row.title}</b>
@@ -106,7 +106,7 @@ function GroupRow({ row }: { row: AttentionRow }) {
     <>
       <div className={row.sev === "crit" ? "att-row grp sev-crit" : "att-row grp"}>
         <span className="kind">
-          <St kind={row.sev}>{row.kind}</St>
+          <Status tone={row.sev}>{row.kind}</Status>
         </span>
         <div className="what">
           <button
@@ -169,7 +169,7 @@ function Notices({ rows, count }: { rows: AttentionRow[]; count: number }) {
     <div className="notices">
       <div className="att-row grp notice-head">
         <span className="kind">
-          <St kind="nodata">Notices</St>
+          <Status tone="nodata">Notices</Status>
         </span>
         <div className="what">
           <button

@@ -3,10 +3,10 @@ import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
-import { agentState, driverOf } from "../lib/derive";
+import { KIND_STATUS, agentState, driverOf } from "../lib/derive";
 import { ago, pct } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import type { PortalNamespace, PortalNamespaces } from "../types";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
@@ -23,11 +23,11 @@ import { ProjectForm } from "./ProjectConfig";
 function Driver({ ns }: { ns: string }) {
   const { feed, now } = useApp();
   const d = driverOf(feed, ns);
-  if (!d) return <St kind="nodata">No driver</St>;
+  if (!d) return <Status tone="nodata">No driver</Status>;
   const st = agentState(d, now);
   return (
     <>
-      <St kind={st.kind}>{st.label}</St>
+      <Status {...KIND_STATUS[st.kind]}>{st.label}</Status>
       <div className="src">
         {d.revoked_at
           ? `revoked ${ago(parse(d.revoked_at), now)}`
@@ -43,11 +43,11 @@ function Driver({ ns }: { ns: string }) {
 function Report({ n }: { n: PortalNamespace }) {
   const { now } = useApp();
   const rep = n.latest_report;
-  if (!rep) return <St kind="nodata">No truth report</St>;
+  if (!rep) return <Status tone="nodata">No truth report</Status>;
   return (
     <>
       {rep.integrity == null ? (
-        <St kind="nodata">No integrity figure</St>
+        <Status tone="nodata">No integrity figure</Status>
       ) : (
         <span className="cap-num">{pct(rep.integrity, 0)}</span>
       )}
@@ -73,7 +73,7 @@ function Row({
           <b className="cap-mono">{n.namespace}</b>
           {n.breaker.open && (
             <>
-              <St kind="crit">Paused after repeated failures</St>
+              <Status tone="crit">Paused after repeated failures</Status>
               <div className="src wrap">
                 {n.breaker.failed} jobs failed since {n.breaker.since} UTC; it pauses at{" "}
                 {n.breaker.threshold}. No job is handed out until it is reset.
@@ -96,7 +96,7 @@ function Row({
             </div>
           ))
         ) : (
-          <St kind="nodata">None mapped</St>
+          <Status tone="nodata">None mapped</Status>
         )}
       </td>
       <td data-label="Driver">

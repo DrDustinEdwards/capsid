@@ -8,11 +8,11 @@ import { QUEUE_TABS, tabOf, useApp } from "../app/ctx";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { LIVE, fetchStale } from "../lib/api";
 import { useAnswer, type Load } from "capsomer/react/data";
-import { JOB } from "../lib/derive";
+import { KIND_STATUS, JOB } from "../lib/derive";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import type { OpsJob, PortalStale, StaleRule } from "../types";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
@@ -95,7 +95,7 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
               role="button"
               tabIndex={0}
             >
-              <St kind={k.kind}>{k.label}</St>
+              <Status {...KIND_STATUS[k.kind]}>{k.label}</Status>
               <div className="t">
                 <b>{j.title}</b>
                 <div className="why">{j.reason}</div>

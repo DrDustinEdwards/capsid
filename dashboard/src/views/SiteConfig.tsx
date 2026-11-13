@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useApp } from "../app/ctx";
 import { ago } from "../lib/format";
 import { parse, utc } from "capsomer/behavior/time";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import type { OpsSiteConfig } from "../types";
 import { ConfigForm, useConfigForm, type Editing } from "capsomer/react/config-form";
 import "capsomer/config-form.css";
@@ -269,7 +269,7 @@ export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void })
       <td data-label="Name">{s.name}</td>
       <td data-label="Origin">
         {s.origin === null ? (
-          <St kind="nodata">Serves no site</St>
+          <Status tone="nodata">Serves no site</Status>
         ) : (
           <>
             <span className="cap-mono">{s.origin}</span>

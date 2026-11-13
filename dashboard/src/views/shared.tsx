@@ -7,6 +7,7 @@ import { useLocation, useSearch } from "../lib/router";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
 import {
+  KIND_STATUS,
   JOB,
   PROBE,
   jobBadge,
@@ -20,7 +21,7 @@ import {
 import { age, agentLabel, ago, hostOf, pct, shortId } from "../lib/format";
 import { shortCount } from "capsomer/behavior/format";
 import { parse } from "capsomer/behavior/time";
-import { Icon, NoData, Pill, St } from "../ui/icons";
+import { Glyph, Pill, Status } from "capsomer/react/status";
 import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
 import { ChartSlot } from "../ui/ChartSlot";
 
@@ -104,7 +105,7 @@ export function FilterEmpty({
 
 export function NoSnapshot() {
   return (
-    <Empty kind="nothing-yet" title={<St kind="nodata">No data</St>}>
+    <Empty kind="nothing-yet" title={<Status tone="nodata">No data</Status>}>
       The watcher has not written its first pass yet. Sites, deploys, errors, backups and CI appear
       after it does.
     </Empty>
@@ -116,7 +117,12 @@ export function NoSnapshot() {
 function LiveDeployCell({ s }: { s: SiteSnapshot }) {
   const { now } = useApp();
   const cf = cfOk(s);
-  if (!cf) return <NoData brief reason={cfShort(s.cloudflare) ?? ""} />;
+  if (!cf)
+    return (
+      <Status tone="nodata" reason={cfShort(s.cloudflare) ?? ""} brief>
+        No data
+      </Status>
+    );
   const d = cf.deploys[0];
   if (!d)
     return (
@@ -137,8 +143,18 @@ function LiveDeployCell({ s }: { s: SiteSnapshot }) {
 
 function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
   const cf = cfOk(s);
-  if (!cf) return <NoData brief reason={cfShort(s.cloudflare) ?? ""} />;
-  if (!cf.errors24) return <NoData brief reason="the analytics read failed" />;
+  if (!cf)
+    return (
+      <Status tone="nodata" reason={cfShort(s.cloudflare) ?? ""} brief>
+        No data
+      </Status>
+    );
+  if (!cf.errors24)
+    return (
+      <Status tone="nodata" reason="the analytics read failed" brief>
+        No data
+      </Status>
+    );
   const t = errorTotals(cf.errors24);
   const hot = t.rate != null && t.rate > 0.01;
   return (
@@ -163,8 +179,13 @@ const BACKUP_LIMIT_HOURS = 26;
 function BackupCell({ s }: { s: SiteSnapshot }) {
   const { feed } = useApp();
   const backup = s.namespace === "capsid" ? feed.snapshot?.health?.backup : undefined;
-  if (!backup) return <NoData brief reason="not reported by the site" />;
-  if (backup.age_hours == null) return <St kind="crit">Never</St>;
+  if (!backup)
+    return (
+      <Status tone="nodata" reason="not reported by the site" brief>
+        No data
+      </Status>
+    );
+  if (backup.age_hours == null) return <Status tone="crit">Never</Status>;
   const age = backup.age_hours.toFixed(1);
   return (
     <Meter
@@ -209,7 +230,7 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
                 </td>
                 <td data-label="Status">
                   <div className="cap-stack" data-gap="2" data-align="start">
-                    <Pill kind={p.kind}>{p.label}</Pill>
+                    <Pill {...KIND_STATUS[p.kind]}>{p.label}</Pill>
                     <div className="src">
                       {s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}
                     </div>
@@ -391,7 +412,7 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                       tabIndex={0}
                       {...(j.question ? { "data-question": "" } : {})}
                     >
-                      <St kind={k.kind}>{k.label}</St>
+                      <Status {...KIND_STATUS[k.kind]}>{k.label}</Status>
                       <div className="t">
                         <b>{j.title}</b>
                         <div>{sub}</div>
@@ -439,7 +460,7 @@ export function IncidentFeed({ ns }: { ns?: string }) {
             tabIndex={it.ref ? 0 : undefined}
             title={it.ref ? undefined : `fingerprint ${it.fp}`}
           >
-            <Icon kind={kind} tone />
+            <Glyph name={kind} tone={kind} />
             <div className="t">
               <b>{it.title}</b>
               <div className="sub">

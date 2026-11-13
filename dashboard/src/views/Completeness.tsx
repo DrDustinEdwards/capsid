@@ -16,7 +16,8 @@ import type {
   CompletenessStatus,
   CompletenessView,
 } from "../types";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
+import { KIND_STATUS } from "../lib/derive";
 import "./Completeness.css";
 
 // COMPLETENESS: devkit's daily scoreboard (src/completeness.ts). Every area of the shared code
@@ -68,7 +69,7 @@ export function Completeness() {
   if (load.error) {
     return (
       <p role="alert">
-        <St kind="crit">Could not read the scoreboard: {load.error}</St>
+        <Status tone="crit">Could not read the scoreboard: {load.error}</Status>
       </p>
     );
   }
@@ -187,7 +188,7 @@ function AreaPanel({
           {area.verifier ? (
             <>verified by {area.verifier}</>
           ) : (
-            <St kind="nodata">no verifier yet</St>
+            <Status tone="nodata">no verifier yet</Status>
           )}
         </>
       }
@@ -201,11 +202,11 @@ function AreaPanel({
         <ul className="done-open" aria-label={`Not complete in ${area.name}`}>
           {groups(open).map(({ names, cell }) => (
             <li key={names.join("|")}>
-              <St kind={KIND[cell.status]}>
+              <Status {...KIND_STATUS[KIND[cell.status]]}>
                 {sites > 1 && names.length === sites && !names.includes("Package")
                   ? "Every site"
                   : names.join(", ")}
-              </St>{" "}
+              </Status>{" "}
               <span>{cell.reason}</span>
               {cell.clean_days !== null && cell.status === "partial" && (
                 <span className="cap-text" data-tone="dim">
@@ -236,7 +237,7 @@ function AreaPanel({
       )}
       {done.length > 0 && (
         <p className="done-complete">
-          <St kind="ok">Complete</St> {done.map((c) => c.name).join(", ")}
+          <Status tone="ok">Complete</Status> {done.map((c) => c.name).join(", ")}
         </p>
       )}
     </Panel>

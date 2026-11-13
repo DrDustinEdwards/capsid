@@ -5,7 +5,7 @@ import { Suspense, lazy, useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
-import { hasSites, type Kind } from "../lib/derive";
+import { hasSites } from "../lib/derive";
 import { age, agentLabel, ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import {
@@ -17,7 +17,7 @@ import {
   seatFor,
 } from "../lib/pr-actions";
 import type { InboxApp, InboxItem, OpsAwaitingSeat, OpsJob, PortalNamespace } from "../types";
-import { InboxMark, St } from "../ui/icons";
+import { Status, type GlyphName, type Tone } from "capsomer/react/status";
 import { Empty } from "capsomer/react/empty";
 import { indeterminate, useSelection, type Selection } from "capsomer/react/state-hooks";
 import { Panel } from "capsomer/react/panel";
@@ -35,15 +35,17 @@ import { Problems } from "./Problems";
 // charts last, folded away.
 
 // The inbox's kinds that are not decided on this page by their own control: they open
-// where they are fixed. Keyed by string, so an unknown kind still shows under its own name.
-const KIND: Record<string, { label: string; kind: Kind } | undefined> = {
-  "blocked-job": { label: "Blocked job", kind: "blocked" },
-  question: { label: "Question", kind: "blocked" },
-  pr: { label: "Pull request", kind: "blocked" },
-  report: { label: "Reported", kind: "blocked" },
-  proposal: { label: "Proposal", kind: "blocked" },
-  ci: { label: "CI failing", kind: "crit" },
-  "site-down": { label: "Site down", kind: "crit" },
+// where they are fixed. Keyed by string, so an unknown kind still shows under its own name and
+// its tone's mark. Each kind has its own mark (Dustin's review of 2026-10-11: every row had the
+// same pause icon); the color says who acts: warning for a person, critical for a machine fault.
+const KIND: Record<string, { label: string; tone: Tone; glyph?: GlyphName } | undefined> = {
+  "blocked-job": { label: "Blocked job", tone: "warn", glyph: "blocked" },
+  question: { label: "Question", tone: "warn", glyph: "question" },
+  pr: { label: "Pull request", tone: "warn", glyph: "pr" },
+  report: { label: "Reported", tone: "warn", glyph: "report" },
+  proposal: { label: "Proposal", tone: "warn", glyph: "proposal" },
+  ci: { label: "CI failing", tone: "crit", glyph: "crit" },
+  "site-down": { label: "Site down", tone: "crit", glyph: "site-down" },
 };
 
 // The digest strip loads after first paint, so the home's first screen is not held up by
@@ -350,9 +352,9 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
       data-job={item.job}
     >
       <div className="wmain">
-        <InboxMark kind={question ? "question" : "blocked-job"} tone="warn">
+        <Status tone="warn" glyph={question ? "question" : "blocked"}>
           {question ? "Question" : "Blocked"}
-        </InboxMark>
+        </Status>
         <b>{item.title}</b>
         {j?.waits_on && (
           <p className="wask">{question ? `Asks: ${asks(j)}` : `Waits on: ${j.waits_on}`}</p>
@@ -415,7 +417,7 @@ function StopGroup({ list, onReset }: { list: PortalNamespace[]; onReset: () => 
       {list.map((n) => (
         <li className="wrow" data-row="" key={n.namespace} data-stop={n.namespace}>
           <div className="wmain">
-            <St kind="crit">Paused</St>
+            <Status tone="crit">Paused</Status>
             <b>{n.namespace}</b>
             <Meta>
               {n.breaker.failed} jobs failed since {n.breaker.since} UTC. No job here starts until
@@ -455,14 +457,14 @@ function OtherGroup({ entries }: { entries: Entry[] }) {
       {entries.map(({ app, item }, i) => {
         const k = KIND[item.kind] ?? {
           label: item.kind,
-          kind: "blocked" as const,
+          tone: "warn" as const,
         };
         return (
           <li className="wrow" key={`${item.kind}|${item.title}|${i}`} data-kind={item.kind}>
             <div className="wmain">
-              <InboxMark kind={item.kind} tone={k.kind === "blocked" ? "warn" : k.kind}>
+              <Status tone={k.tone} glyph={k.glyph}>
                 {k.label}
-              </InboxMark>
+              </Status>
               {item.link ? (
                 <a className="wtitle" href={item.link} target="_blank" rel="noreferrer noopener">
                   {item.title}

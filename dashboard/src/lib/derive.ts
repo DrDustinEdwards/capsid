@@ -1,4 +1,4 @@
-import { outcomeStatus } from "capsomer/behavior/status";
+import { outcomeStatus, type GlyphName, type Tone } from "capsomer/behavior/status";
 import type {
   CiObservation,
   OpsAgent,
@@ -25,6 +25,21 @@ export type Kind =
   | "queued"
   | "blocked"
   | "done";
+
+// How each state draws as Capsomer's Status or Pill (status.md): done is the ok tone, run is
+// info and running, queued and unknown are muted with their own marks, blocked is warning with
+// its pause mark.
+export const KIND_STATUS: Record<Kind, { tone: Tone; running?: boolean; glyph?: GlyphName }> = {
+  ok: { tone: "ok" },
+  warn: { tone: "warn" },
+  crit: { tone: "crit" },
+  nodata: { tone: "nodata" },
+  unknown: { tone: "muted", glyph: "unknown" },
+  run: { tone: "info", running: true },
+  queued: { tone: "muted", glyph: "queued" },
+  blocked: { tone: "warn", glyph: "blocked" },
+  done: { tone: "ok" },
+};
 
 export const PROBE: Record<ProbeState, { kind: Kind; label: string }> = {
   ok: { kind: "ok", label: "Up" },

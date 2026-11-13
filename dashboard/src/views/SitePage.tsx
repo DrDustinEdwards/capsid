@@ -10,11 +10,11 @@ import { uptimeStrip } from "enarratio";
 import { SITE_TABS, parseRoute, tabOf, useApp, type SiteTab } from "../app/ctx";
 import { Link, useLocation } from "../lib/router";
 import { padRing, uptimeOf } from "capsomer/behavior/uptime-strip";
-import { PROBE, RING_SLOTS, cfNoData, cfOk, siteScripts } from "../lib/derive";
+import { KIND_STATUS, PROBE, RING_SLOTS, cfNoData, cfOk, siteScripts } from "../lib/derive";
 import { ago, hostOf, pct, shortId } from "../lib/format";
 import { parse, utc } from "capsomer/behavior/time";
 import type { OpsSiteConfig, SiteSnapshot } from "../types";
-import { NoData, Pill, St } from "../ui/icons";
+import { Pill, Status } from "capsomer/react/status";
 import { Time } from "capsomer/react/time";
 import { ChartSlot } from "../ui/ChartSlot";
 import { uptimeOptions } from "../ui/charts";
@@ -75,7 +75,11 @@ export function SitePage() {
         title={name}
         lead={
           <span className="site-lead">
-            {p ? <Pill kind={p.kind}>{p.label}</Pill> : <St kind="nodata">Not probed yet</St>}
+            {p ? (
+              <Pill {...KIND_STATUS[p.kind]}>{p.label}</Pill>
+            ) : (
+              <Status tone="nodata">Not probed yet</Status>
+            )}
             {origin ? (
               <AwayLink href={origin} newTab>
                 {hostOf(origin)}
@@ -215,7 +219,7 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
                 {s.health_path ? (
                   <span className="cap-mono">{s.health_path}</span>
                 ) : (
-                  <St kind="nodata">none</St>
+                  <Status tone="nodata">none</Status>
                 )}
               </dd>
               <dt>Reports sha</dt>
@@ -230,7 +234,13 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
               <dd>{s.platform === "vercel" ? "Vercel" : "Cloudflare"}</dd>
               <dt>Cloudflare script</dt>
               <dd className="cap-mono">
-                {cf ? cf.script : <NoData reason={cfNoData(s.cloudflare) ?? ""} />}
+                {cf ? (
+                  cf.script
+                ) : (
+                  <Status tone="nodata" reason={cfNoData(s.cloudflare) ?? ""}>
+                    No data
+                  </Status>
+                )}
               </dd>
             </dl>
           </div>
@@ -271,7 +281,9 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
         </div>
       ) : !cf ? (
         <div className="body">
-          <NoData reason={cfNoData(snap.cloudflare) ?? ""} />
+          <Status tone="nodata" reason={cfNoData(snap.cloudflare) ?? ""}>
+            No data
+          </Status>
         </div>
       ) : cf.deploys.length ? (
         <div className="cap-table-wrap">
@@ -364,7 +376,7 @@ function Setup({
               <dt>Origin</dt>
               <dd>
                 {row.origin === null ? (
-                  <St kind="nodata">Serves no site</St>
+                  <Status tone="nodata">Serves no site</Status>
                 ) : (
                   <span className="cap-mono">{row.origin}</span>
                 )}
@@ -405,7 +417,7 @@ function Setup({
                 {row.operator ? (
                   <span className="cap-mono">{row.operator.path}</span>
                 ) : row.operator_problem ? (
-                  <St kind="warn">{row.operator_problem}</St>
+                  <Status tone="warn">{row.operator_problem}</Status>
                 ) : (
                   none
                 )}

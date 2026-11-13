@@ -1,10 +1,10 @@
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { AGENT_TABS, tabOf, useApp } from "../app/ctx";
-import { agentState, archiveAgents, nsList, rosterAgents } from "../lib/derive";
+import { KIND_STATUS, agentState, archiveAgents, nsList, rosterAgents } from "../lib/derive";
 import { ago, pct } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
@@ -73,14 +73,14 @@ function Archive() {
                     <td data-label="Revoked">{ago(parse(a.revoked_at as string), now)}</td>
                     <td data-label="Archive">
                       {a.archived_at ? (
-                        <St kind="nodata">Archived {ago(parse(a.archived_at), now)}</St>
+                        <Status tone="nodata">Archived {ago(parse(a.archived_at), now)}</Status>
                       ) : (
-                        <St kind="queued">
+                        <Status tone="muted" glyph="queued">
                           Moves by{" "}
                           {new Date(
                             parse(a.revoked_at as string) + ARCHIVE_AFTER_MS,
                           ).toLocaleDateString()}
-                        </St>
+                        </Status>
                       )}
                     </td>
                     <td data-label="Done / failed / blocked" className="cap-num">
@@ -191,7 +191,7 @@ function Roster() {
                       </div>
                     </td>
                     <td data-label="Last seen">
-                      <St kind={st.kind}>{st.label}</St>
+                      <Status {...KIND_STATUS[st.kind]}>{st.label}</Status>
                       <div className="src">
                         {a.last_seen ? ago(parse(a.last_seen), now) : "never"}
                       </div>
