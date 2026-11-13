@@ -18,6 +18,7 @@ import {
 import type { InboxApp, InboxItem, OpsAwaitingSeat, OpsJob, PortalNamespace } from "../types";
 import { InboxMark, St } from "../ui/icons";
 import { Empty } from "capsomer/react/empty";
+import { indeterminate, useSelection, type Selection } from "capsomer/react/state-hooks";
 import { Panel } from "capsomer/react/panel";
 import { RowReply } from "capsomer/react/row-list";
 import "capsomer/row-list.css";
@@ -160,43 +161,14 @@ function Group({
   );
 }
 
-// The ticked keys of one group, kept to the rows still shown.
-function useTicks(keys: string[]): {
-  ticked: string[];
-  has: (k: string) => boolean;
-  flip: (k: string) => void;
-  all: (on: boolean) => void;
-} {
-  const [set, setSet] = useState<ReadonlySet<string>>(new Set());
-  const ticked = keys.filter((k) => set.has(k));
-  return {
-    ticked,
-    has: (k) => set.has(k),
-    flip: (k) =>
-      setSet((s) => (s.has(k) ? new Set([...s].filter((x) => x !== k)) : new Set([...s, k]))),
-    all: (on) => setSet(on ? new Set(keys) : new Set()),
-  };
-}
-
-function SelectAll({
-  label,
-  keys,
-  ticks,
-}: {
-  label: string;
-  keys: string[];
-  ticks: ReturnType<typeof useTicks>;
-}) {
-  const n = ticks.ticked.length;
+function SelectAll({ label, ticks }: { label: string; ticks: Selection }) {
   return (
     <label className="wselect">
       <input
         type="checkbox"
-        checked={n > 0 && n === keys.length}
-        ref={(el) => {
-          if (el) el.indeterminate = n > 0 && n < keys.length;
-        }}
-        onChange={(e) => ticks.all(e.target.checked)}
+        checked={ticks.all}
+        ref={indeterminate(ticks.some)}
+        onChange={(e) => ticks.setAll(e.target.checked)}
       />
       <span>{label}</span>
     </label>
@@ -232,7 +204,7 @@ function PrGroup({ entries }: { entries: Entry[] }) {
   const rows = entries.map((e) => ({ ...e, seat: seatFor(feed, e.item.link) }));
   const approvable = rows.flatMap((r) => (r.seat && canApprove(r.seat) ? [r.seat] : []));
   const keys = approvable.map(prAnchor);
-  const ticks = useTicks(keys);
+  const ticks = useSelection(keys);
   const chosen = approvable.filter((a) => ticks.has(prAnchor(a)));
   return (
     <Group
@@ -242,17 +214,14 @@ function PrGroup({ entries }: { entries: Entry[] }) {
       batch={
         approvable.length > 1 && (
           <div className="wbatch">
-            <SelectAll label="Select all" keys={keys} ticks={ticks} />
+            <SelectAll label="Select all" ticks={ticks} />
             {chosen.length > 0 && (
               <button
                 type="button"
                 className="cap-btn"
                 data-variant="primary"
                 onClick={() =>
-                  confirm({
-                    ...approveAllRequest(chosen),
-                    onDone: () => ticks.all(false),
-                  })
+                  confirm({ ...approveAllRequest(chosen), onDone: () => ticks.setAll(false) })
                 }
               >
                 Approve {chosen.length} selected
@@ -284,7 +253,7 @@ function PrRow({
   app: InboxApp;
   item: InboxItem;
   seat: OpsAwaitingSeat | undefined;
-  ticks: ReturnType<typeof useTicks> | null;
+  ticks: Selection | null;
 }) {
   const { now, confirm } = useApp();
   const name = seat ? `${seat.repo} #${seat.number}` : item.title;
@@ -295,7 +264,7 @@ function PrRow({
         <Tick
           label={`Select ${name}`}
           on={ticks.has(prAnchor(ok))}
-          flip={() => ticks.flip(prAnchor(ok))}
+          flip={() => ticks.toggle(prAnchor(ok))}
         />
       ) : ticks ? (
         <span className="wtick" />
