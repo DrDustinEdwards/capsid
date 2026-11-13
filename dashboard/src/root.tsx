@@ -149,7 +149,7 @@ export function ErrorBoundary({ error }: { error: unknown }) {
       error={error}
       home={base ? `${base}/` : "/"}
       homeLabel="Go to Needs you"
-      className="page"
+      className="cap-admin-page"
       dev={import.meta.env.DEV}
     />
   );

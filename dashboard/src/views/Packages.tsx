@@ -347,7 +347,7 @@ function PackagePanel({
 export function Packages() {
   const tab = tabOf(PACKAGE_TABS, useTabParam()) ?? PACKAGE_TABS[0].id;
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Packages" />
       <PageTabs label="Packages" path="/packages" tabs={PACKAGE_TABS} current={tab} />
       <div className="embedded" id={tab}>
@@ -374,7 +374,7 @@ function Published() {
   const rows = feed.live.packages;
   return (
     <>
-      <div className="toolbar">
+      <div className="cap-cluster" data-gap="3">
         <button
           type="button"
           className="cap-btn"

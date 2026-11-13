@@ -21,7 +21,7 @@ export function Incidents() {
   return (
     <div className="embedded">
       <NsChips list={all.map((x) => x.ns)} />
-      <div className="grid2">
+      <div className="cap-panes" data-gap="5">
         <Panel flush title="Findings" src="jobs posted by agent:watcher">
           {emptied ? (
             <FilterEmpty onShowAll={() => setNs("all")}>

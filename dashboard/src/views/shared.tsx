@@ -61,7 +61,7 @@ export function NsChips({ list }: { list: string[] }) {
   // A namespace from the address that this list does not carry still shows, pressed.
   if (!all.includes(ns)) all.push(ns);
   return (
-    <div className="toolbar" role="group" aria-label="Filter by namespace">
+    <div className="cap-cluster" data-gap="3" role="group" aria-label="Filter by namespace">
       {all.map((n) => (
         <button
           key={n}
@@ -207,12 +207,14 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
                   <span>{hostOf(s.origin)}</span>
                 </td>
                 <td data-label="Status">
-                  <Pill kind={p.kind}>{p.label}</Pill>
-                  <div className="src mt4">
-                    {s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}
+                  <div className="cap-stack" data-gap="2" data-align="start">
+                    <Pill kind={p.kind}>{p.label}</Pill>
+                    <div className="src">
+                      {s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}
+                    </div>
                   </div>
                 </td>
-                <td data-label="Uptime, 2-hour ticks" className="w30">
+                <td data-label="Uptime, 2-hour ticks" className="uptime-cell">
                   <UptimeTicks site={s} />
                   <UptimeFoot site={s} />
                 </td>

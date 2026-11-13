@@ -131,7 +131,7 @@ export function Queue() {
   const tab = tabOf(QUEUE_TABS, useTabParam()) ?? QUEUE_TABS[0].id;
   if (tab === "checks") {
     return (
-      <div className="page">
+      <div className="cap-admin-page">
         <PageHead title="Jobs" />
         <PageTabs label="Jobs" path="/queue" tabs={QUEUE_TABS} current={tab} />
         <Suspense fallback={null}>
@@ -160,11 +160,11 @@ function JobsTab() {
   const stale = useStale();
   const inPanel = new Set(stale.load.data?.rows.map((r) => r.id) ?? []);
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <AnchorBar />
       <PageHead title="Jobs" />
       <PageTabs label="Jobs" path="/queue" tabs={QUEUE_TABS} current="jobs" />
-      <div className="toolbar">
+      <div className="cap-cluster" data-gap="3">
         <NsChips list={nss} />
         <input
           className="search"
@@ -177,7 +177,7 @@ function JobsTab() {
         />
       </div>
       <StaleJobs load={stale.load} reread={stale.reread} />
-      <div className="grid2">
+      <div className="cap-panes" data-gap="5">
         <Panel
           flush
           title="All jobs"

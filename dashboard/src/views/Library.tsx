@@ -98,7 +98,7 @@ export function Library() {
   };
   const data = load.data;
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Library" />
       <form className="lib-search" role="search" onSubmit={submit}>
         <input

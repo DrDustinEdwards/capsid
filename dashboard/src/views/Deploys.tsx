@@ -31,7 +31,7 @@ export function Deploys() {
   const missing = (snap?.sites ?? []).filter((s) => !cfOk(s));
   return (
     <div className="embedded">
-      <div className="toolbar">
+      <div className="cap-cluster" data-gap="3">
         {RANGES.map((r) => (
           <button
             key={r}
@@ -43,7 +43,7 @@ export function Deploys() {
             {r}
           </button>
         ))}
-        <span className="cap-text ml6" data-tone="dim">
+        <span className="cap-text" data-tone="dim">
           range
         </span>
       </div>
@@ -116,7 +116,7 @@ export function Deploys() {
                         {ns === "all" ? (
                           "No deploys in this range."
                         ) : (
-                          <span className="toolbar" role="status" data-filter-empty="">
+                          <span className="cap-cluster" data-gap="3" role="status" data-filter-empty="">
                             No deploys for the namespace {ns} in this range.
                             <button type="button" className="cap-btn" onClick={() => setNs("all")}>
                               Show all

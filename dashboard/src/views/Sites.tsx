@@ -17,7 +17,7 @@ import { FilterEmpty, FleetTable, NoSnapshot, NsChips, PageHead, useNsFilter } f
 export function Sites() {
   const tab = tabOf(SITES_TABS, useTabParam()) ?? SITES_TABS[0].id;
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Sites" />
       <PageTabs label="Sites" path="/sites" tabs={SITES_TABS} current={tab} />
       {tab === "deploys" ? <Deploys /> : <AllSites />}
@@ -39,7 +39,7 @@ function AllSites() {
   const waiting = configured.filter((s) => s.origin !== null && !probed.has(s.namespace));
   return (
     <div className="embedded">
-      <div className="toolbar">
+      <div className="cap-cluster" data-gap="3">
         <button
           type="button"
           className="cap-btn"

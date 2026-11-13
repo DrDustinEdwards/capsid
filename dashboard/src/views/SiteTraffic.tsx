@@ -126,7 +126,7 @@ function Search({ ns }: { ns: string }) {
   const load = useAnswer<PortalSiteSearch>(["site-search", ns], () => fetchSiteSearch(ns));
   const d = load.data;
   return (
-    <div className="grid2">
+    <div className="cap-panes" data-gap="5">
       <Panel flush title="Google Search" src="Search Console, 28 days ending 3 days ago">
         <ReadState what="Search Console" loading={load.loading} error={load.error} hasData={!!d}>
           {d && (
@@ -326,7 +326,7 @@ function Traffic({ ns }: { ns: string }) {
   const d = load.data;
   const edge = `Cloudflare's edge, ${d?.days ?? 7} days, sampled`;
   return (
-    <div className="grid2">
+    <div className="cap-panes" data-gap="5">
       <Panel flush title="Missing pages" src={edge}>
         <ReadState what="the 404s" loading={load.loading} error={load.error} hasData={!!d}>
           {d && (

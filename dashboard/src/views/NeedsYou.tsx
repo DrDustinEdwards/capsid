@@ -57,7 +57,7 @@ const WaitingChart = trendChart("WaitingChart");
 export function NeedsYou() {
   const { feed } = useApp();
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Needs you" />
       <Waiting />
       <Problems sitesOn={hasSites(feed)} />

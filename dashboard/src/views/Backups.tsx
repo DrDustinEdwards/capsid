@@ -36,7 +36,7 @@ export function Backups() {
   const os = o ? offaccountState(o, now) : null;
   return (
     <div className="embedded">
-      <div className="grid2">
+      <div className="cap-panes" data-gap="5">
         <Panel flush title="Primary: Capsid D1" src="/health backup">
           <div className="body cap-stack" data-gap="4">
             {!h ? (

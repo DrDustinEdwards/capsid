@@ -115,7 +115,7 @@ export function PullRequests() {
   const { feed, now, confirm } = useApp();
   const live = feed.live;
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Pull requests" />
       <Panel
         flush
@@ -155,7 +155,7 @@ export function PullRequests() {
                 <p className="cap-muted prewrap">{live.merge_policy.reason}</p>
               </>
             )}
-            <div className="toolbar">
+            <div className="cap-cluster" data-gap="3">
               <button
                 type="button"
                 className="cap-btn"
@@ -451,7 +451,7 @@ function MergeUnits() {
                           : "")}
                     </td>
                     <td>
-                      <span className="toolbar">
+                      <span className="cap-cluster" data-gap="3">
                         {suspended.has(r.unit) && (
                           <button
                             type="button"

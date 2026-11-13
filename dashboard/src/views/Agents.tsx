@@ -18,7 +18,7 @@ const CostChart = trendChart("CostChart");
 export function Agents() {
   const tab = tabOf(AGENT_TABS, useTabParam()) ?? AGENT_TABS[0].id;
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Agents" />
       <PageTabs label="Agents" path="/agents" tabs={AGENT_TABS} current={tab} />
       {tab === "archive" ? <Archive /> : tab === "access" ? <Access /> : <Roster />}

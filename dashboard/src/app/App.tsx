@@ -639,7 +639,7 @@ function PortalApp() {
   let content: ReactNode;
   if (!feed) {
     content = (
-      <div className="page">
+      <div className="cap-admin-page">
         {error ? (
           <Banner tone="crit">Could not read the feed: {error}. It retries every minute.</Banner>
         ) : (
@@ -660,7 +660,7 @@ function PortalApp() {
         )}
         <Suspense
           fallback={
-            <div className="page">
+            <div className="cap-admin-page">
               <div className="loading" role="status">
                 <Spinner label="Loading..." />
               </div>

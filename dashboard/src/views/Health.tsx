@@ -28,7 +28,7 @@ const NAMED = 3;
 export function Health() {
   const tab: HealthTab = tabOf(HEALTH_TABS, useTabParam()) ?? HEALTH_TABS[0].id;
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Health" />
       <HealthVerdict />
       <Overview />

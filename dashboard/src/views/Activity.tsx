@@ -65,10 +65,10 @@ export function Activity() {
   ].sort();
 
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Activity" />
       <form
-        className="toolbar"
+        className="cap-cluster" data-gap="3"
         role="search"
         aria-label="Filter activity"
         onSubmit={(e) => {
