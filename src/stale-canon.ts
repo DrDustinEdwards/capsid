@@ -145,7 +145,7 @@ export function staleCanonDoc(
 }
 
 /** A D1 datetime ("2026-10-18 09:00:00", UTC) or an ISO string, as milliseconds. */
-export function instant(at: string): number {
+function instant(at: string): number {
   return parseSqlTime(at) ?? Number.NaN;
 }
 

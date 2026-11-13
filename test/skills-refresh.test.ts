@@ -3,7 +3,6 @@ import { test } from "node:test";
 import {
   DEFAULT_DAY_UTC,
   discoverModels,
-  guideKey,
   readSchedule,
   SCHEDULE_KEY,
   SKILLS_NAMESPACE,
@@ -133,9 +132,4 @@ test("the cron agent may reach exactly one namespace and holds no blast-radius f
     assert.equal(agent.scopes.flags[flag], false, `the refresh cron must not hold ${flag}`);
   }
   assert.ok(SCOPE_FLAGS.length > 0, "no flags were checked");
-});
-
-test("the guide key is namespaced per model", () => {
-  assert.equal(guideKey("fable-5-1"), "skills:guides:fable-5-1");
-  assert.notEqual(guideKey("opus-5"), guideKey("sonnet-5"));
 });

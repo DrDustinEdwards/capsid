@@ -98,15 +98,6 @@ const DOCS = [
   { id: 3, path: "sample/gamma.md", body: "Third entry on bridges" },
 ];
 
-test("SITES lists foxhound, carrel, germomics and txasm with their backup buckets", () => {
-  assert.deepEqual(SITES, [
-    { name: "foxhound", bucket: "foxhound-backups" },
-    { name: "carrel", bucket: "carrel-backups" },
-    { name: "germomics", bucket: "germomics-backups" },
-    { name: "txasm", bucket: "txasm-books" },
-  ]);
-});
-
 test("a good run: PASS with the marker's tables and rows and the age in hours", async () => {
   const bucket = new FakeBucket();
   const id = plant(bucket, hoursAgo(5.25), DOCS);

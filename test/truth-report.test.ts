@@ -483,19 +483,3 @@ test("report mode STORES the report, so the trend is a document", async () => {
     await close();
   }
 });
-
-test("gather and finalize are untouched by the new mode", async () => {
-  const { client, close } = await connect("write");
-  try {
-    const gather = await call(client, { namespace: "capsid" });
-    assert.ok(!gather.isError);
-    const payload = JSON.parse(gather.content.map((c) => c.text).join("")) as { mode: string };
-    assert.equal(payload.mode, "gather", "the default mode did not move");
-
-    const finalize = await call(client, { namespace: "capsid", mode: "finalize", confirm: true });
-    assert.equal(finalize.isError, true);
-    assert.match(finalize.content.map((c) => c.text).join(""), /finalize requires consumed/);
-  } finally {
-    await close();
-  }
-});

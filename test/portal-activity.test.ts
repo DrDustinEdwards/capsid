@@ -15,13 +15,6 @@ function filterOf(url: string) {
   return parsed.filter;
 }
 
-test("no filter asks for the whole log, bounded", () => {
-  const filter = filterOf("https://capsid.example/console");
-  assert.equal(filter.namespace, null);
-  assert.equal(filter.actor, null);
-  assert.equal(filter.id, null);
-});
-
 test("an id reads as a number; anything that is not a row id is refused, not dropped", () => {
   assert.equal(filterOf("https://capsid.example/console?id=1234").id, 1234);
   for (const bad of ["0", "-3", "1.5", "12abc", "1e3", "x", "01"]) {

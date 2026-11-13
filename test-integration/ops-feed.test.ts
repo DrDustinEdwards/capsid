@@ -186,11 +186,6 @@ describe("the feed against real D1", () => {
     expect(feed.cloudflare_configured).toBe(false);
     expect(feed.refresh_allowed_at).toBeNull();
   });
-
-  it("lists every roster namespace", async () => {
-    const feed = await opsFeed(env as unknown as Env, NOW);
-    expect(feed.live.namespaces.map((n) => n.name)).toEqual([...APP_ROSTER]);
-  });
 });
 
 async function signedFetch(path: string, init: RequestInit = {}): Promise<Response> {

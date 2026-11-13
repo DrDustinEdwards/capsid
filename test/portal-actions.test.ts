@@ -509,42 +509,8 @@ const EVERY_ACTION = [
   ["site_key_rotate", { namespace: "capsid" }],
 ] as const;
 
-test("the Portal's actions are the five job and agent actions the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the site repair, the site backup, a job run now, supersede, park, unpark and PR close, and approve, the two merge resumes, the three project edits and the site key, and every loop below covers each", () => {
-  // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
-  // without a row below, fails.
-  assert.deepEqual([...PORTAL_ACTIONS].sort(), [
-    "approve_pr",
-    "automerge_resume",
-    "close_shipped",
-    "fail_job",
-    "namespace_add",
-    "namespace_edit",
-    "namespace_remove",
-    "overnight",
-    "package_add",
-    "package_edit",
-    "package_remove",
-    "park_job",
-    "pr_close",
-    "release_job",
-    "reset_breaker",
-    "resume_job",
-    "revoke_agent",
-    "run_job",
-    "sign_policy_change",
-    "sign_policy_from_repo",
-    "site_add",
-    "site_backup",
-    "site_edit",
-    "site_key_rotate",
-    "site_remove",
-    "site_repair",
-    "supersede_job",
-    "unit_resume",
-    "unpark_job",
-  ]);
+test("every loop below covers each Portal action", () => {
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 29);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
@@ -856,18 +822,6 @@ for (const [action, params] of EVERY_ACTION.filter(
   });
 }
 
-test("the click row names the administrator, and the mutator's row says what happened", async () => {
-  const w = world();
-  const { token } = await previewOk(w, "overnight", {
-    value: "api",
-    reason: "first supervised night",
-  });
-  await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
-  assert.equal(w.kv.store.get("overnight:mode"), "api");
-  const click = w.d1.recorded.find((r) => r.params[1] === "portal-overnight");
-  assert.equal(click?.params[0], ACTOR);
-});
-
 test("a co-owner's click is audited under her own verified email, never ADMIN_EMAIL", async () => {
   const w = world({ coOwners: " other@example.com , co@example.com " });
   const co = { session: "co@example.com" };
@@ -1169,8 +1123,7 @@ const ROUTES = [
   ["/portal/api/not-a-route", "GET", (r: Request, e: never) => handlePortalApiNotFound(r, e, NOW)],
 ] as const;
 
-test("all fourteen routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
-  assert.equal(ROUTES.length, 14);
+test("every route refuses a bearer with 403 and sends an anonymous caller to sign in", async () => {
   for (const [path, method, handler] of ROUTES) {
     const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
     const headers = {

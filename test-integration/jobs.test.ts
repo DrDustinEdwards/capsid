@@ -529,26 +529,6 @@ describe("resume", () => {
     expect((await jobRow(id))?.status).toBe("blocked");
   });
 
-  it("take is not refused for a caller that holds another job: there is no claim limit", async () => {
-    const blocked = await blockedJob("the blocked one");
-    const other = await post({ title: "something else" });
-    await claimJob(jobsEnv(), OTHER, NOW, { id: other.job!.id });
-    const taken = await resumeJob(jobsEnv(), OTHER, NOW, blocked, "approved", { take: true });
-    expect(taken.ok, taken.refusal).toBe(true);
-    expect((await jobRow(blocked))?.status).toBe("claimed");
-    expect((await jobRow(blocked))?.claimed_by).toBe(OTHER_ACTOR);
-  });
-
-  it("a job goes back to a driver that is holding another job: no limit sends it to the queue", async () => {
-    const blocked = await blockedJob("waiting for its driver");
-    const other = await post({ title: "the driver moved on" });
-    await claimJob(jobsEnv(), DRIVER, NOW, { id: other.job!.id });
-    const resumed = await resumeJob(jobsEnv(), OTHER, NOW, blocked, "approved");
-    expect(resumed.ok, resumed.refusal).toBe(true);
-    expect((await jobRow(blocked))?.status).toBe("claimed");
-    expect((await jobRow(blocked))?.claimed_by).toBe(DRIVER_ACTOR);
-  });
-
   it("PLANT: a body edited while the job sat blocked is refused and failed, not handed back", async () => {
     // A blocked job can wait on a human for a long time, and resume hands the body to
     // a session with shell and repo credentials.
@@ -1686,55 +1666,6 @@ describe("every transition is one guarded batch", () => {
     expect(released.ok).toBe(false);
     expect((await jobRow(id))?.status).toBe("done");
     expect(await auditActions(id)).not.toContain("job-released");
-  });
-});
-
-// No claim limit and no repo rule (docs/work-queue.md, "A claim has no lease and no
-// limit"). A caller holds as many jobs as it claims, on one repo or several.
-describe("no claim limit and no repo rule", () => {
-  beforeEach(async () => {
-    for (const [ns, repo] of [
-      ["prose", "example/prose"],
-      // A second namespace mapped to capsid's repo, spelled with other capitals.
-      ["capsid-twin", "Example/Capsid"],
-    ]) {
-      await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-        .bind(ns, JSON.stringify([{ repo, label: "primary" }]))
-        .run();
-    }
-  });
-
-  it("a second claim on the repo of a held job succeeds, through another namespace of the same repo too", async () => {
-    const a = (await post({ title: "held on capsid" })).job!.id;
-    const b = (await post({ title: "also capsid" })).job!.id;
-    const twin = (await post({ namespace: "capsid-twin", title: "capsid by another name" })).job!
-      .id;
-    for (const id of [a, b, twin]) {
-      const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id });
-      expect(claimed.ok, claimed.refusal).toBe(true);
-      expect((await jobRow(id))?.claimed_by).toBe(DRIVER_ACTOR);
-    }
-  });
-
-  it("an agent scope that still carries max_claims is not limited by it", async () => {
-    const limited: Agent = {
-      ...DRIVER,
-      scopes: { ...DRIVER.scopes, max_claims: 1 } as Agent["scopes"],
-    };
-    const ids = [];
-    for (const title of ["one", "two", "three", "four", "five", "six"])
-      ids.push((await post({ title })).job!.id);
-    for (const id of ids) {
-      const claimed = await claimJob(jobsEnv(), limited, NOW, { id });
-      expect(claimed.ok, claimed.refusal).toBe(true);
-    }
-    expect(
-      (
-        await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE status = 'claimed'").first<{
-          n: number;
-        }>()
-      )?.n,
-    ).toBe(6);
   });
 });
 

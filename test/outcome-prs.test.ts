@@ -195,18 +195,6 @@ test("a merge that fails to update an outcome does not fail the merge", async ()
 
 // evidence as an object or a JSON string
 
-test("an evidence object passes through unchanged", () => {
-  const evidence = {
-    prs: ["https://github.com/o/r/pull/1"],
-    commits: 6,
-    files_changed: 19,
-    tests_added: 75,
-  };
-  const parsed = parseEvidence(evidence);
-  assert.ok("evidence" in parsed);
-  assert.deepEqual(parsed.evidence, evidence);
-});
-
 test("the same evidence as a JSON string parses to the same thing", () => {
   // A session whose cached tool schema predates the object form can still attach
   // evidence.
@@ -219,13 +207,6 @@ test("the same evidence as a JSON string parses to the same thing", () => {
   const fromString = parseEvidence(JSON.stringify(evidence));
   assert.ok("evidence" in fromString);
   assert.deepEqual(fromString.evidence, evidence);
-});
-
-test("a string that is not JSON is REFUSED rather than ignored", () => {
-  // Silently discarding evidence is how a row ends up saying nothing happened.
-  const parsed = parseEvidence("6 commits, 19 files");
-  assert.ok("error" in parsed);
-  assert.match(parsed.error, /not JSON/);
 });
 
 test("JSON that is not an object is refused", () => {

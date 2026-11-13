@@ -15,7 +15,7 @@ export const DOC_TYPE_LIST = [
   "prompt",
   "reference",
 ] as const;
-export const DOC_TYPES = new Set<string>(DOC_TYPE_LIST);
+const DOC_TYPES = new Set<string>(DOC_TYPE_LIST);
 
 // Editorial state only. Lint visibility is the archive/ prefix, not this column.
 export const DOC_STATUS_LIST = [
@@ -26,7 +26,7 @@ export const DOC_STATUS_LIST = [
   "superseded",
   "closed",
 ] as const;
-export const DOC_STATUSES = new Set<string>(DOC_STATUS_LIST);
+const DOC_STATUSES = new Set<string>(DOC_STATUS_LIST);
 
 export function validateDocType(type: string): string | null {
   if (DOC_TYPES.has(type)) return null;

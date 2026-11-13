@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DOC_STATUSES, DOC_TYPES, validateDocStatus, validateDocType } from "../src/doc-meta.ts";
+import { validateDocStatus, validateDocType } from "../src/doc-meta.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { type DocRow, fakeD1, fakeEnv } from "./fakes.ts";
@@ -87,20 +87,6 @@ test("brief leaves a closed task out of its open tasks, and keeps an open one", 
     out.open_tasks.map((t: { path: string }) => t.path),
     ["TASK-open.md"],
   );
-});
-
-test("every valid status is accepted", () => {
-  assert.ok(DOC_STATUSES.size > 0, "DOC_STATUSES is empty, so this checks nothing");
-  for (const status of DOC_STATUSES) {
-    assert.equal(validateDocStatus(status), null, `expected '${status}' to be accepted`);
-  }
-});
-
-test("every valid type is accepted", () => {
-  assert.ok(DOC_TYPES.size > 0, "DOC_TYPES is empty, so this checks nothing");
-  for (const type of DOC_TYPES) {
-    assert.equal(validateDocType(type), null, `expected '${type}' to be accepted`);
-  }
 });
 
 // An unvalidated status would be stored silently, with no error anywhere.

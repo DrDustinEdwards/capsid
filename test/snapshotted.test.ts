@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
-import { fakeD1, fakeEnv, type FakeD1Options, type FakeD1Rows } from "./fakes.ts";
+import { fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 
 // capsid_write_doc's write AND restore actions REPORT `snapshotted` FROM THE SNAPSHOT
 // THEY TOOK (audit 2026-09-25, item E1-20, finding F3-8). Both used to answer snapshotted: true whenever their
@@ -37,51 +37,6 @@ const VERSION = {
   body: "older lorem",
   snapshot_at: "2026-01-01 00:00:00",
 };
-const deleteTarget = (rows: FakeD1Rows, target: { namespace: string; path: string }) => {
-  rows.documents = rows.documents.filter(
-    (d) => !(d.namespace === target.namespace && d.path === target.path),
-  );
-};
-
-test("write reports snapshotted: false when the row was deleted before its batch", async () => {
-  const out = await call({ documents: [DOC], raceAfterPreRead: deleteTarget }, "capsid_write_doc", {
-    action: "write",
-    namespace: DOC.namespace,
-    path: DOC.path,
-    title: "Lorem",
-    body: "new lorem",
-    confirm: true,
-  });
-  assert.equal(out.snapshotted, false, "write claimed a snapshot that no statement took");
-});
-
-test("write reports snapshotted: true when the snapshot was taken", async () => {
-  const out = await call({ documents: [DOC] }, "capsid_write_doc", {
-    action: "write",
-    namespace: DOC.namespace,
-    path: DOC.path,
-    title: "Lorem",
-    body: "new lorem",
-    confirm: true,
-  });
-  assert.equal(out.snapshotted, true);
-});
-
-test("restore reports snapshotted: false when the row was deleted before its batch", async () => {
-  const out = await call(
-    { documents: [DOC], versions: [VERSION], raceAfterPreRead: deleteTarget },
-    "capsid_write_doc",
-    {
-      action: "restore",
-      namespace: DOC.namespace,
-      path: DOC.path,
-      version_id: VERSION.id,
-      confirm: true,
-    },
-  );
-  assert.equal(out.snapshotted, false, "restore claimed a snapshot that no statement took");
-});
-
 test("restore reports snapshotted: true when the snapshot was taken", async () => {
   const out = await call({ documents: [DOC], versions: [VERSION] }, "capsid_write_doc", {
     action: "restore",

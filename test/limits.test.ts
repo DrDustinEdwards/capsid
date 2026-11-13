@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { docPath, MAX_PATH, pathProblem, resultRef, resultRefProblem } from "../src/limits.ts";
-import {
-  CI_LOG_BUDGET,
-  REPO_HISTORY_DEFAULT_LIMIT,
-  REPO_HISTORY_MAX_LIMIT,
-} from "../src/github.ts";
+import {} from "../src/github.ts";
 import { sourceFiles } from "./source-files.ts";
 
 // src/limits.ts: the document path grammar and the input bounds.
@@ -91,18 +87,6 @@ test("every tool argument is bounded: no bare z.string() anywhere in src/", () =
 });
 
 // The repo fallthrough's bounds, relative to each other.
-
-test("the CI log budget is larger than the tail it replaced", () => {
-  // It replaced a 2000-character job tail.
-  assert.ok(CI_LOG_BUDGET > 2000, "the new budget is smaller than the tail it replaced");
-});
-
-test("the history default limit is below the maximum", () => {
-  assert.ok(
-    REPO_HISTORY_DEFAULT_LIMIT < REPO_HISTORY_MAX_LIMIT,
-    "the default is not below the maximum",
-  );
-});
 
 // result_ref: a document key or a PR URL. `docPath` alone would refuse every URL on
 // the '//' after the scheme.

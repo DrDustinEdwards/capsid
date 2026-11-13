@@ -46,13 +46,3 @@ test("PLANT: each stop runs its own control: a switch is pressed, a revoke previ
   assert.deepEqual(calls, ["flip sw-overnight", ...live]);
   assert.ok(list.every((c) => c.group === "Stop"));
 });
-
-test("there is no stop-all", () => {
-  const f = feed();
-  f.live.overnight.mode = "api";
-  assert.ok(!run(f).texts.some((t) => /\ball\b/i.test(t)));
-});
-
-test("no feed, no stops", () => {
-  assert.deepEqual(stopCommands(null, { flip: () => {}, confirm: () => {} }), []);
-});

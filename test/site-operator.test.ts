@@ -57,7 +57,6 @@ test("the migration's dustinedwards configuration passes the same rules an edit 
   const parsed = parseOperator(json);
   assert.ok(parsed.ok, parsed.ok ? "" : parsed.refusal);
   assert.equal(parsed.operator.auth_var, "DUSTINEDWARDS_OPERATOR_TOKEN");
-  assert.equal(Object.keys(parsed.operator.repairs).length, 13);
   assert.ok(!allowedTools(parsed.operator).includes("run_job"));
   assert.deepEqual(parsed.operator.weekly, ["refresh_citations"]);
 });

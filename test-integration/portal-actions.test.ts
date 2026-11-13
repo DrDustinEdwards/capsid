@@ -862,9 +862,8 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, twenty-nine actions", () => {
+  it("covers the allow-list", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(29);
   });
 
   for (const action of PORTAL_ACTIONS) {

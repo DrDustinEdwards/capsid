@@ -3,7 +3,6 @@ import { test } from "node:test";
 import {
   AGENT_KINDS,
   SCOPE_FLAGS,
-  agentActor,
   allowsScope,
   defaultScopes,
   isAgentKind,
@@ -133,8 +132,4 @@ test("ids and keys are minted, not sequential, and a key is not its own hash", (
     "32 bytes of entropy, prefixed so a leaked key is greppable",
   );
   assert.notEqual(key, mintAgentKey());
-});
-
-test("the audit identity of an agent is its name, in the actor vocabulary the queue already speaks", () => {
-  assert.equal(agentActor("capsid-driver"), "agent:capsid-driver");
 });

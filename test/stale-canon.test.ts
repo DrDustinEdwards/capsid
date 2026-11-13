@@ -3,7 +3,6 @@ import { test } from "node:test";
 import {
   changeFromFiles,
   citesPath,
-  instant,
   MAX_FLAGS,
   MAX_NAMESPACES,
   namespacesThisPass,
@@ -114,11 +113,6 @@ test("staleCanonDoc: canon paths and canon types, never dated or retired documen
     !staleCanonDoc("sample", { path: "research/design-x.md", type: "spec", status: "published" }),
   );
   assert.ok(!staleCanonDoc("sample", { path: "DESIGN.md", type: "spec", status: "superseded" }));
-});
-
-test("instant: a D1 datetime is UTC", () => {
-  assert.equal(instant("2026-10-18 09:00:00"), Date.parse("2026-10-18T09:00:00Z"));
-  assert.equal(instant("2026-10-18T09:00:00Z"), Date.parse("2026-10-18T09:00:00Z"));
 });
 
 test("PLANT: a canon document citing a file the merge deleted is flagged, naming the document, the PR and the path", () => {

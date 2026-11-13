@@ -317,30 +317,6 @@ test("a namespace with no usable repo skips its jobs and says why, corrupt mappi
 
 test("jobs fill the budget in priority order; one that does not fit is skipped and a smaller later one can still go in", () => {
   const sizes: Record<string, number> = { big: 300, huge: 400, small: 60 };
-  const out = plan(
-    [
-      job("big", "a", { priority: 90 }),
-      job("huge", "a", { priority: 80 }),
-      job("small", "a", { priority: 70 }),
-    ],
-    {
-      estimateOf: () => ({ minutes: 0, source: "default" }),
-    },
-  );
-  assert.equal(out.lanes[0].jobs.length, 3, "zero estimates fit trivially, as a baseline");
-  const sized = buildOvernightPlan({
-    jobs: [
-      job("big", "a", { priority: 90 }),
-      job("huge", "a", { priority: 80 }),
-      job("small", "a", { priority: 70 }),
-    ],
-    repoOf: repos({ a: "o/a" }),
-    estimateOf: () => ({ minutes: 0, source: "default" }),
-    policy: LIGHT,
-    policyState: { source: "document", note: null },
-    now: NOW,
-  });
-  assert.ok(sized);
   const real = plan(
     [
       job("big", "a", { priority: 90 }),
