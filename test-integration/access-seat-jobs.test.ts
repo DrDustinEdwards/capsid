@@ -4,6 +4,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
 import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents";
 import { blockJob, claimJob, postJob } from "../src/jobs";
+import { jobsEnv, seedCapsidNamespace } from "./jobs-fixture";
 
 // THE SEAT'S QUEUE ACTIONS AS access:<email>, through the real capsid_work_jobs tool,
 // against a real D1. Since the MCP login moved to Cloudflare Access (#185), the admin reaches the
@@ -12,16 +13,11 @@ import { blockJob, claimJob, postJob } from "../src/jobs";
 // "'access:...' is not a caller identity this queue can hold a claim for". Each seat
 // action is driven here as that identity.
 
-const SECRET = "test-root-secret";
 const ADMIN_EMAIL = "admin@example.com";
 const SEAT_ACTOR = `access:${ADMIN_EMAIL}`;
 const SEAT = adminAgentForEmail(ADMIN_EMAIL);
 const DRIVER = grantAgent("write", "agent:access-seat-driver");
 const NOW = new Date("2026-09-28T01:00:00.000Z");
-
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as never;
-}
 
 // One call to the capsid_work_jobs tool, as `agent`, through an MCP client on the real
 // server.
@@ -78,10 +74,7 @@ async function blockedByDriver(): Promise<string> {
 
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
-  // jobs post requires a registered namespace.
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-    .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
-    .run();
+  await seedCapsidNamespace();
 });
 
 const row = (id: string) =>

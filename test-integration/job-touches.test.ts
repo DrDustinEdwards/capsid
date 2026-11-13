@@ -10,10 +10,14 @@ import {
   resumeJob,
   supersedeJob,
 } from "../src/jobs";
-import { grantAgent, type Agent } from "../src/agents";
-import { defaultScopes } from "../src/agents-schema";
-import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
-import { signTaskBody } from "../src/signed-docs";
+import { grantAgent } from "../src/agents";
+import {
+  driverAgent,
+  jobsEnv,
+  seatAgent,
+  seedCapsidNamespace,
+  seedGatePolicy,
+} from "./jobs-fixture";
 
 // The human-touch log (migrations/0023, src/job-touches.ts) on a real D1: each
 // transition that a person or a policy makes writes its touch in the same guarded batch,
@@ -23,54 +27,8 @@ import { signTaskBody } from "../src/signed-docs";
 // job_touches is append-only, so it cannot be emptied between tests the way jobs is:
 // every read below is keyed on the job id, and every job is new.
 
-const SECRET = "test-root-secret";
 // The admin's Access login: a person, and the seat by its flags.
 const ADMIN = grantAgent("write", "access:admin@example.com");
-
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
-}
-
-function seat(): Agent {
-  const scopes = defaultScopes(["capsid"]);
-  scopes.grants = ["read", "write"];
-  scopes.flags.can_merge = true;
-  return {
-    id: "agent_aaaabbbbcccc",
-    name: "seat",
-    kind: "seat",
-    actor: "agent:seat",
-    scopes,
-    admin: false,
-    row: null,
-  };
-}
-
-function driver(): Agent {
-  const scopes = defaultScopes(["capsid"]);
-  scopes.grants = ["read", "write"];
-  return {
-    id: "agent_0123456789ab",
-    name: "capsid-driver",
-    kind: "driver",
-    actor: "agent:capsid-driver",
-    scopes,
-    admin: false,
-    row: null,
-  };
-}
-
-const POLICY = [
-  "# Pre-approved gates",
-  "",
-  "- version: 1",
-  "- enabled: true",
-  "",
-  "## Classes",
-  "",
-  ...GATE_CLASSES.map((c) => `- \`${c}\` a bounded command.`),
-  "",
-].join("\n");
 
 const at = (iso: string) => new Date(iso);
 const T0 = "2026-09-29T01:00:00.000Z";
@@ -91,14 +49,14 @@ async function post(): Promise<string> {
 
 async function claimed(): Promise<string> {
   const id = await post();
-  const c = await claimJob(jobsEnv(), driver(), at(T0), { id });
+  const c = await claimJob(jobsEnv(), driverAgent(), at(T0), { id });
   expect(c.ok, c.refusal).toBe(true);
   return id;
 }
 
 async function blocked(command = "git push -u origin feat/touch"): Promise<string> {
   const id = await claimed();
-  const b = await blockJob(jobsEnv(), driver(), at(GATE_AT), id, {
+  const b = await blockJob(jobsEnv(), driverAgent(), at(GATE_AT), id, {
     reason: "finished up to the push",
     command,
   });
@@ -127,14 +85,8 @@ async function touches(id: string): Promise<TouchRow[]> {
 
 beforeEach(async () => {
   await resetCapsidDb();
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-    .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
-    .run();
-  await env.DB.prepare(
-    "INSERT INTO documents (namespace, path, title, body, type, status) VALUES ('capsid', ?1, 'gates', ?2, 'procedural', 'published')",
-  )
-    .bind(GATE_POLICY_PATH, await signTaskBody(SECRET, POLICY))
-    .run();
+  await seedCapsidNamespace();
+  await seedGatePolicy();
 });
 
 describe("job_touches", () => {
@@ -142,7 +94,7 @@ describe("job_touches", () => {
     const id = await blocked();
     const resumed = await resumeJob(
       jobsEnv(),
-      seat(),
+      seatAgent(),
       at("2026-09-29T01:45:30.250Z"),
       id,
       "push approved",
@@ -189,7 +141,7 @@ describe("job_touches", () => {
     const id = await blocked("git push -u origin fix/touch && gh pr create --base master --fill");
     const resumed = await resumeJob(
       jobsEnv(),
-      driver(),
+      driverAgent(),
       at("2026-09-29T01:31:00.000Z"),
       id,
       "the gate policy covers a branch push",
@@ -213,7 +165,7 @@ describe("job_touches", () => {
     const id = await blocked();
     const resumed = await resumeJob(
       jobsEnv(),
-      seat(),
+      seatAgent(),
       at("2026-09-29T02:00:00.000Z"),
       id,
       "redo the test",
@@ -238,14 +190,14 @@ describe("job_touches", () => {
       (
         await resumeJob(
           jobsEnv(),
-          seat(),
+          seatAgent(),
           at("2026-09-29T02:00:00.000Z"),
           id,
           "first push approved",
         )
       ).ok,
     ).toBe(true);
-    const again = await blockJob(jobsEnv(), driver(), at("2026-09-29T03:00:00.000Z"), id, {
+    const again = await blockJob(jobsEnv(), driverAgent(), at("2026-09-29T03:00:00.000Z"), id, {
       reason: "the second push",
       command: "git push",
     });
@@ -254,7 +206,7 @@ describe("job_touches", () => {
       (
         await resumeJob(
           jobsEnv(),
-          seat(),
+          seatAgent(),
           at("2026-09-29T03:00:05.000Z"),
           id,
           "second push approved",
@@ -274,7 +226,7 @@ describe("job_touches", () => {
       (
         await resumeJob(
           jobsEnv(),
-          seat(),
+          seatAgent(),
           at("2026-09-29T02:00:00.000Z"),
           released,
           "push approved",
@@ -283,7 +235,7 @@ describe("job_touches", () => {
     ).toBe(true);
     const r = await releaseJob(
       jobsEnv(),
-      seat(),
+      seatAgent(),
       at("2026-09-29T04:00:00.000Z"),
       released,
       "the session ended",
@@ -316,7 +268,7 @@ describe("job_touches", () => {
     const failed = await blocked();
     const f = await adminFailJob(
       jobsEnv(),
-      seat(),
+      seatAgent(),
       at("2026-09-29T02:30:00.000Z"),
       failed,
       "withdrawn",
@@ -332,7 +284,7 @@ describe("job_touches", () => {
     const id = await blocked();
     const refused = await resumeJob(
       jobsEnv(),
-      driver(),
+      driverAgent(),
       at("2026-09-29T02:00:00.000Z"),
       id,
       "I approve myself",
@@ -365,7 +317,7 @@ describe("job_touches", () => {
     } as unknown as Parameters<typeof postJob>[0];
     const refused = await resumeJob(
       racing,
-      seat(),
+      seatAgent(),
       at("2026-09-29T02:00:00.000Z"),
       id,
       "push approved",

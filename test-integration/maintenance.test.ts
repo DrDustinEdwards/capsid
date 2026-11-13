@@ -25,11 +25,11 @@ import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance";
 import { gatherModelDriftItems } from "../src/model-drift";
 import type { SystemModel } from "../src/system-model";
 import { gatherRuleDocItems, RULE_DOC_CAP_BYTES } from "../src/rule-docs";
+import { jobsEnv } from "./jobs-fixture";
 
 // The daily maintenance pass against a real D1 (job_549550d73d4e). The rules are planted
 // one at a time beside a clean job each must leave alone.
 
-const SECRET = "test-root-secret";
 const ADMIN = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-10-08T12:00:00.000Z");
 const PR = "https://github.com/example-org/sample/pull/7";
@@ -82,10 +82,6 @@ const NO_RELEASES: ReleaseReaders = {
   tag: notCalled,
   release: notCalled,
 };
-
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
-}
 
 async function post(title: string, body = "do the thing"): Promise<string> {
   const posted = await postJob(jobsEnv(), ADMIN, NOW, { namespace: "sample", title, body });
@@ -417,9 +413,9 @@ describe("GET /portal/api/maintenance, through the Worker", () => {
     cache: string | null;
     body: PortalMaintenance;
   }> {
-    const SECRET = "integration-portal-maintenance-key";
+    const COOKIE_KEY = "integration-portal-maintenance-key";
     const session = (
-      await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())
+      await portalSessionCookie({ email: "admin@example.com" }, COOKIE_KEY, new Date())
     ).split(";")[0];
     const ctx = createExecutionContext();
     const request = new Request(`https://capsid.test${PORTAL_MAINTENANCE_PATH}`, {
@@ -428,7 +424,7 @@ describe("GET /portal/api/maintenance, through the Worker", () => {
     });
     const response = (await worker.fetch!(
       request as never,
-      { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET } as never,
+      { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: COOKIE_KEY } as never,
       ctx,
     )) as unknown as Response;
     await waitOnExecutionContext(ctx);

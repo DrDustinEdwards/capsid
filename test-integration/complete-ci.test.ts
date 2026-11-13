@@ -5,6 +5,7 @@ import { claimJob, completeJob, failAsCaller, postJob } from "../src/jobs";
 import { breakerState } from "../src/job-breaker";
 import { grantAgent } from "../src/agents";
 import { readJob } from "../src/jobs-transition";
+import { dropSampleToken, jobsEnv, seedSampleRepo } from "./jobs-fixture";
 
 // The CI gate on complete (src/complete-ci.ts) against real D1, with GitHub as a fetch stub.
 
@@ -14,13 +15,12 @@ const DRIVER = grantAgent("write", "agent:driver-aaaa");
 const SEAT = grantAgent("write", "access:seat@example.com");
 const NOW = new Date("2026-10-23T12:00:00.000Z");
 
-function jobsEnv() {
-  return {
-    ...env,
-    IMPROVE_SCORE_SECRET: "test-root-secret",
+// The GitHub App's id and key are set so its cached token is used; nothing here signs with them.
+function ciEnv() {
+  return jobsEnv({
     GITHUB_APP_CLIENT_ID: "Iv1.test",
     GITHUB_APP_PRIVATE_KEY: "unused: the token is cached",
-  } as unknown as Parameters<typeof postJob>[0];
+  });
 }
 
 type Check = { name: string; status: string; conclusion: string | null };
@@ -31,10 +31,7 @@ const github = new Map<number, { checks: Check[]; files: File[] }>();
 
 beforeEach(async () => {
   await resetCapsidDb();
-  await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-    .bind(NS, JSON.stringify([{ repo: "example/sample", label: "primary" }]))
-    .run();
-  await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
+  await seedSampleRepo();
   github.clear();
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const path = new URL(String(input)).pathname;
@@ -66,20 +63,20 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await env.APP_KV.delete("gh:token:v3:example/sample");
+  await dropSampleToken();
 });
 
 async function claimed(title: string, body = "do the thing") {
-  const posted = await postJob(jobsEnv(), SEAT, NOW, { namespace: NS, title, body } as Parameters<
+  const posted = await postJob(ciEnv(), SEAT, NOW, { namespace: NS, title, body } as Parameters<
     typeof postJob
   >[3]);
   const id = posted.job!.id;
-  expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
+  expect((await claimJob(ciEnv(), DRIVER, NOW, { id })).ok).toBe(true);
   return id;
 }
 
 const complete = (id: string, pr: number) =>
-  completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "done", result_ref: PR(pr) });
+  completeJob(ciEnv(), DRIVER, NOW, id, { result_summary: "done", result_ref: PR(pr) });
 const run = (conclusion: string | null, status = "completed"): Check => ({
   name: "checks",
   status,
@@ -155,7 +152,7 @@ it("the breaker leaves out a fail Capsid's refusal forced and one that states it
   expect(
     (
       await failAsCaller(
-        jobsEnv(),
+        ciEnv(),
         DRIVER,
         NOW,
         forced,
@@ -173,7 +170,7 @@ it("the breaker leaves out a fail Capsid's refusal forced and one that states it
   expect(
     (
       await failAsCaller(
-        jobsEnv(),
+        ciEnv(),
         DRIVER,
         NOW,
         partly,
@@ -183,9 +180,9 @@ it("the breaker leaves out a fail Capsid's refusal forced and one that states it
   ).toBe(true);
 
   const plain = await claimed("plain");
-  expect((await failAsCaller(jobsEnv(), DRIVER, NOW, plain, "REMAINING: 1")).ok).toBe(true);
+  expect((await failAsCaller(ciEnv(), DRIVER, NOW, plain, "REMAINING: 1")).ok).toBe(true);
 
-  expect((await breakerState(jobsEnv(), NS, new Date())).failed).toBe(1);
+  expect((await breakerState(ciEnv(), NS, new Date())).failed).toBe(1);
 });
 
 it("a job that asks for the test on the base needs its run to have passed", async () => {

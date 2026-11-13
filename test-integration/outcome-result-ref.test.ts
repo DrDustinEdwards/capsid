@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeJob, postJob, resumeJob } from "../src/jobs";
 import { grantAgent } from "../src/agents";
 import { reverifySweep } from "../src/outcome-prs";
+import { dropSampleToken, jobsEnv, seedSampleRepo } from "./jobs-fixture";
 
 // A pull request named only in result_ref is verified against GitHub, whoever completes
 // the job (job_d5262df1dc32). Before the fix, verification read evidence.prs and nothing
@@ -11,7 +12,6 @@ import { reverifySweep } from "../src/outcome-prs";
 // field false for a merged, green pull request. Real D1; GitHub is a fetch stub, the
 // way test-integration/job-outcomes.test.ts drives it.
 
-const SECRET = "test-root-secret";
 const NS = "sample";
 const PR = "https://github.com/example/sample/pull/3";
 const SHA = "a".repeat(40);
@@ -21,10 +21,6 @@ const SEAT_ACTOR = "access:seat@example.com";
 const SEAT = grantAgent("write", SEAT_ACTOR);
 const NOW = new Date("2026-10-05T12:00:00.000Z");
 const LATER = new Date("2026-10-05T13:00:00.000Z");
-
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
-}
 
 // What GitHub says about example/sample#3: merged, 2 commits, 3 files, one green run.
 function stubGitHub(): { calls: string[] } {
@@ -94,15 +90,12 @@ const VERIFIED = {
 
 beforeEach(async () => {
   await resetCapsidDb();
-  await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-    .bind(NS, JSON.stringify([{ repo: "example/sample", label: "primary" }]))
-    .run();
-  await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
+  await seedSampleRepo();
 });
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await env.APP_KV.delete("gh:token:v3:example/sample");
+  await dropSampleToken();
 });
 
 describe("a pull request named only in result_ref is verified", () => {

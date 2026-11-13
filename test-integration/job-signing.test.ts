@@ -1,71 +1,32 @@
 import { env } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
-import { blockJob, claimJob, jobsSummary, listJobs, postJob, resumeJob } from "../src/jobs";
+import { claimJob, jobsSummary, listJobs, resumeJob } from "../src/jobs";
 import { latestResumeNote } from "../src/jobs-mirror";
 import { grantAgent, type Agent } from "../src/agents";
-import { defaultScopes } from "../src/agents-schema";
+import {
+  blockedJob,
+  driverAgent,
+  jobsEnv,
+  seatAgent,
+  seedCapsidNamespace,
+  TEST_SECRET,
+} from "./jobs-fixture";
 
 // Signed resume notes and block commands (job_9e602b31888f item 4, OWASP ASI07), against
 // a real D1: the tampering these guard against is a changed row, so only real rows show it.
 
-const SECRET = "test-root-secret";
 const ADMIN = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-09-26T06:00:00.000Z");
 const LATER = new Date("2026-09-26T07:00:00.000Z");
 
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
-}
-
-function seatAgent(): Agent {
-  const scopes = defaultScopes(["capsid"]);
-  scopes.grants = ["read", "write"];
-  scopes.flags.can_merge = true;
-  return {
-    id: "agent_aaaabbbbcccc",
-    name: "seat",
-    kind: "seat",
-    actor: "agent:seat",
-    scopes,
-    admin: false,
-    row: null,
-  };
-}
-
-function driverAgent(actor = "agent:capsid-driver"): Agent {
-  const scopes = defaultScopes(["capsid"]);
-  scopes.grants = ["read", "write"];
-  return {
-    id: `agent_${actor.length}`,
-    name: actor.slice("agent:".length),
-    kind: "driver",
-    actor,
-    scopes,
-    admin: false,
-    row: null,
-  };
-}
-
 let n = 0;
-async function post(): Promise<string> {
-  const posted = await postJob(jobsEnv(), ADMIN, NOW, {
-    namespace: "capsid",
-    title: `job ${++n}`,
-    body: "do the thing",
-    gate_required: true,
+// A job `holder` blocked on its push, titled by the count.
+function blockedBy(holder: Agent): Promise<string> {
+  return blockedJob(ADMIN, holder, NOW, `job ${++n}`, {
+    reason: "waiting on the push",
+    command: "git push -u origin feat/x",
   });
-  expect(posted.ok, posted.refusal).toBe(true);
-  return posted.job!.id;
-}
-
-async function blockedBy(holder: Agent, command = "git push -u origin feat/x"): Promise<string> {
-  const id = await post();
-  expect((await claimJob(jobsEnv(), holder, NOW, { id })).ok).toBe(true);
-  expect(
-    (await blockJob(jobsEnv(), holder, NOW, id, { reason: "waiting on the push", command })).ok,
-  ).toBe(true);
-  return id;
 }
 
 // A blocked job resumed to the queue (it was blocked by a shared identity, so no
@@ -100,9 +61,7 @@ async function tamperNote(id: string, change: (p: Record<string, unknown>) => vo
 
 beforeEach(async () => {
   await resetCapsidDb();
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-    .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
-    .run();
+  await seedCapsidNamespace();
 });
 
 describe("resume notes", () => {
@@ -169,7 +128,7 @@ describe("block commands", () => {
   it("a block signs its summary, and improve_status reports the command verified", async () => {
     const id = await blockedBy(driverAgent());
     expect((await job(id)).summary_sig).toMatch(/^[0-9a-f]{64}$/);
-    const summary = await jobsSummary(env.DB, "capsid", LATER, SECRET);
+    const summary = await jobsSummary(env.DB, "capsid", LATER, TEST_SECRET);
     const row = summary.blocked_jobs.find((b) => b.id === id);
     expect(row?.command_signature).toBe("verified");
     expect(row?.waiting_on).toMatch(/git push -u origin feat\/x/);
@@ -184,7 +143,7 @@ describe("block commands", () => {
     await env.DB.prepare("UPDATE jobs SET result_summary = ?2 WHERE id = ?1")
       .bind(id, changed)
       .run();
-    const row = (await jobsSummary(env.DB, "capsid", LATER, SECRET)).blocked_jobs.find(
+    const row = (await jobsSummary(env.DB, "capsid", LATER, TEST_SECRET)).blocked_jobs.find(
       (b) => b.id === id,
     );
     expect(row?.command_signature).toBe("mismatch");
@@ -195,7 +154,7 @@ describe("block commands", () => {
   it("a block from before signing is legacy-unsigned, and shown", async () => {
     const id = await blockedBy(driverAgent());
     await env.DB.prepare("UPDATE jobs SET summary_sig = NULL WHERE id = ?1").bind(id).run();
-    const row = (await jobsSummary(env.DB, "capsid", LATER, SECRET)).blocked_jobs.find(
+    const row = (await jobsSummary(env.DB, "capsid", LATER, TEST_SECRET)).blocked_jobs.find(
       (b) => b.id === id,
     );
     expect(row?.command_signature).toBe("legacy-unsigned");
@@ -210,7 +169,7 @@ describe("block commands", () => {
     )
       .bind(a, b)
       .run();
-    const row = (await jobsSummary(env.DB, "capsid", LATER, SECRET)).blocked_jobs.find(
+    const row = (await jobsSummary(env.DB, "capsid", LATER, TEST_SECRET)).blocked_jobs.find(
       (x) => x.id === b,
     );
     expect(row?.command_signature).toBe("mismatch");

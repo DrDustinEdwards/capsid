@@ -3,64 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
 import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
-import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
-import { signTaskBody } from "../src/signed-docs";
+import { GATE_POLICY_PATH } from "../src/gate-policy";
+import { driverAgent, jobRow, jobsEnv, seatAgent, seedGatePolicy } from "./jobs-fixture";
 
 // The gate policy's resume path, against a real D1. Every job is posted, claimed and
 // blocked through the real queue, the policy document is a real signed row, and every
 // assertion reads the jobs and audit_log rows back. The classifier itself is tested
 // in test/gate-policy.test.ts, where it is pure.
 
-const SECRET = "test-improve-secret";
 const SEAT_POSTER = grantAgent("write", "github:DrDustinEdwards");
 const REPO = "DrDustinEdwards/capsid-mcp";
-
-const POLICY = [
-  "# Pre-approved gates",
-  "",
-  "- version: 1",
-  "- enabled: true",
-  "",
-  "## Classes",
-  "",
-  ...GATE_CLASSES.map((c) => `- \`${c}\` a bounded command.`),
-  "",
-].join("\n");
-
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
-}
-
-// The seat as it is minted: write, and can_merge, the flag no driver holds.
-function seatAgent(): Agent {
-  const scopes = defaultScopes(["capsid"]);
-  scopes.grants = ["read", "write"];
-  scopes.flags.can_merge = true;
-  return {
-    id: "agent_aaaabbbbcccc",
-    name: "seat",
-    kind: "seat",
-    actor: "agent:seat",
-    scopes,
-    admin: false,
-    row: null,
-  };
-}
-
-// A roster driver: one namespace, write, and not one flag.
-function driverAgent(actor = "agent:capsid-driver"): Agent {
-  const scopes = defaultScopes(["capsid"]);
-  scopes.grants = ["read", "write"];
-  return {
-    id: "agent_ddddeeeeffff",
-    name: actor.slice("agent:".length),
-    kind: "driver",
-    actor,
-    scopes,
-    admin: false,
-    row: null,
-  };
-}
 
 const at = (iso: string) => new Date(iso);
 let serial = 0;
@@ -87,12 +39,6 @@ async function blockedJob(command: string, claimant: Agent = driverAgent()): Pro
   });
   expect(blocked.ok, blocked.refusal).toBe(true);
   return id;
-}
-
-async function jobRow(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
-    .bind(id)
-    .first<Record<string, unknown>>();
 }
 
 // The mirror document write audits under the same action name, so this picks the job
@@ -125,11 +71,7 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%' OR path = ?1")
     .bind(GATE_POLICY_PATH)
     .run();
-  await env.DB.prepare(
-    "INSERT INTO documents (namespace, path, title, body, type, status) VALUES ('capsid', ?1, 'gates', ?2, 'procedural', 'published')",
-  )
-    .bind(GATE_POLICY_PATH, await signTaskBody(SECRET, POLICY))
-    .run();
+  await seedGatePolicy();
 });
 
 describe("the audit row of a policy resume", () => {

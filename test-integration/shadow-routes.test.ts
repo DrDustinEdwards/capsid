@@ -5,6 +5,7 @@ import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { postJob } from "../src/jobs";
 import { grantAgent } from "../src/agents";
 import { handleShadowJob, handleShadowResult } from "../src/shadow";
+import { jobsEnv } from "./jobs-fixture";
 
 // The shadow test's two routes (src/shadow.ts): only shadow-test.yml on a pull request in
 // the capsid namespace's repo reads the job that pull request names. GitHub's OIDC issuer
@@ -15,12 +16,6 @@ const REPO = "example/capsid";
 let key: CryptoKey;
 let jwk: object;
 let jobId = "";
-
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: "test-root-secret" } as unknown as Parameters<
-    typeof postJob
-  >[0];
-}
 
 beforeAll(async () => {
   const pair = await generateKeyPair("RS256");

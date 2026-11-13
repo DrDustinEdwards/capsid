@@ -39,6 +39,7 @@ import {
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/signed-docs";
 import { LIFTED_KEY, SUSPENDED_KEY } from "../src/merge-units";
 import { LIFTED_KEY as SAFETY_LIFTED_KEY, PAUSED_KEY } from "../src/merge-safety";
+import { seedCapsidNamespace, jobRow } from "./jobs-fixture";
 
 // The Portal's controls through the whole Worker against a real D1 and KV: every action
 // previewed, checked to have written nothing, then performed from its token, and the
@@ -211,12 +212,6 @@ async function parkedJob(title: string): Promise<string> {
   return id;
 }
 
-async function job(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
-    .bind(id)
-    .first<Record<string, unknown>>();
-}
-
 async function auditRows(): Promise<
   Array<{ id: number; actor: string; action: string; params: string }>
 > {
@@ -235,9 +230,7 @@ const KEYS = [
 
 beforeEach(async () => {
   await resetCapsidDb();
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-    .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
-    .run();
+  await seedCapsidNamespace();
   // A registered namespace with no site row, for site_add.
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind("sample", JSON.stringify([{ repo: "example/sample", label: "primary" }]))
@@ -334,7 +327,7 @@ const CASES: Record<string, Case> = {
       note: "Pushed at abc1234.\nConfirm the deploy, then complete.",
     }),
     after: async ({ id }) => {
-      const stored = await job(id);
+      const stored = await jobRow(id);
       expect(stored?.status).toBe("claimed");
       expect(stored?.claimed_by, "the claim goes back to the driver that blocked it").toBe(
         "agent:capsid-driver",
@@ -354,7 +347,7 @@ const CASES: Record<string, Case> = {
       reason: "no session is running",
     }),
     after: async ({ id }) => {
-      const stored = await job(id);
+      const stored = await jobRow(id);
       expect(stored?.status).toBe("queued");
       expect(stored?.claimed_by).toBeNull();
     },
@@ -367,7 +360,7 @@ const CASES: Record<string, Case> = {
       reason: "merged and live",
     }),
     after: async ({ id }) => {
-      const stored = await job(id);
+      const stored = await jobRow(id);
       expect(stored?.status).toBe("done");
       expect(stored?.result_summary).toMatch(
         /^Closed as shipped by access:admin@example\.com: merged and live/,
@@ -393,7 +386,7 @@ const CASES: Record<string, Case> = {
       reason: "a duplicate of the other one",
     }),
     after: async ({ id }) => {
-      const stored = await job(id);
+      const stored = await jobRow(id);
       expect(stored?.status).toBe("superseded");
       expect(stored?.result_summary).toBe("Superseded: a duplicate of the other one");
       const outcome = await env.DB.prepare(
@@ -410,7 +403,7 @@ const CASES: Record<string, Case> = {
       reason: "comes back when the design is ruled",
     }),
     after: async ({ id }) => {
-      const stored = await job(id);
+      const stored = await jobRow(id);
       expect(stored?.status).toBe("parked");
       expect(stored?.result_summary).toBe("comes back when the design is ruled");
     },
@@ -418,7 +411,7 @@ const CASES: Record<string, Case> = {
   unpark_job: {
     params: async () => ({ id: await parkedJob("a parked job") }),
     after: async ({ id }) => {
-      const stored = await job(id);
+      const stored = await jobRow(id);
       expect(stored?.status).toBe("queued");
       expect(stored?.result_summary).toBeNull();
     },
@@ -496,7 +489,7 @@ const CASES: Record<string, Case> = {
   },
   fail_job: {
     params: async () => ({ id: await blockedJob("a job to fail"), reason: "superseded" }),
-    after: async ({ id }) => expect((await job(id))?.status).toBe("failed"),
+    after: async ({ id }) => expect((await jobRow(id))?.status).toBe("failed"),
   },
   revoke_agent: {
     params: async () => {
@@ -879,7 +872,7 @@ describe("every action, previewed then performed through the Worker", () => {
       const params = await CASES[action].params();
       const auditBefore = await auditRows();
       const kvBefore = await Promise.all(KEYS.map((k) => env.APP_KV.get(k)));
-      const jobBefore = params.id ? await job(params.id) : null;
+      const jobBefore = params.id ? await jobRow(params.id) : null;
 
       const previewed = await call(PORTAL_PREVIEW_PATH, {
         method: "POST",
@@ -892,7 +885,8 @@ describe("every action, previewed then performed through the Worker", () => {
         await Promise.all(KEYS.map((k) => env.APP_KV.get(k))),
         "the preview wrote to KV",
       ).toEqual(kvBefore);
-      if (params.id) expect(await job(params.id), "the preview moved the job").toEqual(jobBefore);
+      if (params.id)
+        expect(await jobRow(params.id), "the preview moved the job").toEqual(jobBefore);
 
       const performed = await call(PORTAL_PERFORM_PATH, {
         method: "POST",
@@ -947,7 +941,7 @@ describe("parked jobs, the Tonight plan and the digest", () => {
     expect(
       (await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: undo.token } })).status,
     ).toBe(200);
-    expect((await job(id))?.status).toBe("queued");
+    expect((await jobRow(id))?.status).toBe("queued");
   });
 
   it("GET /portal/api/plan and /portal/api/digest serve the jobs tool's readers, over every namespace", async () => {
@@ -1081,7 +1075,7 @@ describe("the job actions against real D1", () => {
       body: { token: preview.token },
     });
     expect(performed.status, await performed.clone().text()).toBe(200);
-    expect((await job(id))?.status).toBe("queued");
+    expect((await jobRow(id))?.status).toBe("queued");
   });
 
   it("a second perform of the same token is refused as already used, and writes no click row; a fresh preview is refused by the transition", async () => {
@@ -1133,7 +1127,7 @@ describe("the job actions against real D1", () => {
       expect(await res.text()).toMatch(/reason|what you approved/i);
     }
     expect(await auditRows()).toEqual([]);
-    expect((await job(id))?.status).toBe("blocked");
+    expect((await jobRow(id))?.status).toBe("blocked");
   });
 
   it("resume REFUSES a job whose body was edited after it was signed, at perform, and the job stays blocked", async () => {
@@ -1152,7 +1146,7 @@ describe("the job actions against real D1", () => {
     const res = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/signature|does not match its body/i);
-    expect((await job(id))?.status).not.toBe("claimed");
+    expect((await jobRow(id))?.status).not.toBe("claimed");
     expect(
       (await auditRows()).some((r) => r.action === "portal-resume_job"),
       "a refused resume wrote a click row",
