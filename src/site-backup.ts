@@ -2,12 +2,12 @@ import type { Env } from "./env";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { backupFreshness } from "./health";
 import { OFFACCOUNT_REPORT_KEY, isOffaccountSite, offaccountSiteOf } from "./offaccount";
-import { readSiteConfig, readSiteRow } from "./ops-sites";
+import { readSiteConfig } from "./ops-sites";
 import type { SiteOperator } from "./ops-types/sites";
 import type { PortalBackups, SiteBackupRow, SiteBackupStatus } from "./ops-types/views";
 import { callOperator, tokenSet, type FetchLike, type OperatorCall } from "./site-operator";
 import { describeRuns } from "@dustinedwards/site-runtime/cron";
-import { runCapsidJob } from "./site-jobs";
+import { operatorRefusal, runCapsidJob } from "./site-jobs";
 import { takeLimit } from "./site-repair";
 import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";
@@ -139,19 +139,12 @@ function backupLine(call: OperatorCall): string {
 }
 
 /** Why backups cannot run on `namespace`, or null. Reads only, so the control's preview refuses what the run refuses. */
-export async function backupRefusal(env: Env, namespace: string): Promise<string | null> {
-  const row = await readSiteRow(env.DB, namespace);
-  if (!row?.origin) return `${namespace} is not a configured site.`;
-  if (!row.operator)
-    return (
-      row.operator_problem ??
-      `${namespace} has no operator API configured, so Capsid may call nothing on it.`
-    );
-  if (!row.operator.backup)
-    return `${namespace} does not set backup: true in its operator configuration.`;
-  if (!tokenSet(env, row.operator))
-    return `the Capsid Worker secret ${row.operator.auth_var} is not set, so nothing can be called on ${namespace}.`;
-  return null;
+export function backupRefusal(env: Env, namespace: string): Promise<string | null> {
+  return operatorRefusal(env, namespace, (operator) =>
+    operator.backup
+      ? null
+      : `${namespace} does not set backup: true in its operator configuration.`,
+  );
 }
 
 async function runOne(

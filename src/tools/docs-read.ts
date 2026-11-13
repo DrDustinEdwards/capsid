@@ -26,8 +26,19 @@ import { hybridSearch } from "../doc-index";
 import { DOC_STATUS_LIST, DOC_TYPE_LIST } from "../doc-meta";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
+
 // The document tools that only read: list, read, brief, history, backlinks, find
 // and search. defineDocOperations in ./docs registers them in the published order.
+
+/** A document as the start of a session reads it. */
+type StartDoc = {
+  namespace: string;
+  path: string;
+  title: string | null;
+  type: string | null;
+  body: string | null;
+  updated_at: string;
+};
 
 // Ask for one extra row so "exactly limit" is distinguishable from "there are more".
 function boundedRows<T>(rows: T[], limit: number, advice: string) {
@@ -145,14 +156,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
             "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND path = ?2",
           )
           .bind(ns, path)
-          .first<{
-            namespace: string;
-            path: string;
-            title: string | null;
-            type: string | null;
-            body: string | null;
-            updated_at: string;
-          }>();
+          .first<StartDoc>();
       const [conventions, core, portfolio] = await Promise.all([
         doc("capsid", "conventions.md"),
         doc(namespace, "core.md"),
@@ -177,27 +181,13 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
               "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND type = 'task' AND status != 'closed' AND path NOT LIKE 'archive/%' ORDER BY updated_at DESC",
             )
             .bind(namespace)
-            .all<{
-              namespace: string;
-              path: string;
-              title: string | null;
-              type: string | null;
-              body: string | null;
-              updated_at: string;
-            }>(),
+            .all<StartDoc>(),
           db
             .prepare(
               "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND type = 'episodic' AND path NOT LIKE 'archive/%' ORDER BY created_at DESC LIMIT 3",
             )
             .bind(namespace)
-            .all<{
-              namespace: string;
-              path: string;
-              title: string | null;
-              type: string | null;
-              body: string | null;
-              updated_at: string;
-            }>(),
+            .all<StartDoc>(),
           db
             .prepare(
               "SELECT type, to_ns, to_path FROM document_links WHERE from_ns = ?1 AND from_path = 'core.md' ORDER BY type, to_ns, to_path",

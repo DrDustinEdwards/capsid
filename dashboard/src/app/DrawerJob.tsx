@@ -2,11 +2,11 @@ import { Alert } from "capsomer/react/banner";
 import { AwayLink } from "capsomer/react/link";
 import type { ReactNode } from "react";
 import { CopyButton } from "capsomer/react/copy";
-import { jobBadge, resumeCall } from "../lib/derive";
+import { KIND_STATUS, jobBadge, resumeCall } from "../lib/derive";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import type { OpsJob, OpsAgent } from "../types";
-import { Pill, St } from "../ui/icons";
+import { Pill, Status } from "capsomer/react/status";
 import { Time } from "capsomer/react/time";
 import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
@@ -282,7 +282,7 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
         label={`Job · ${j.namespace}`}
         title={j.title}
         sub={j.id}
-        badge={<Pill kind={k.kind}>{k.label}</Pill>}
+        badge={<Pill {...KIND_STATUS[k.kind]}>{k.label}</Pill>}
         onClose={onClose}
       />
       <div className="cap-dialog-body cap-detail-body">
@@ -356,7 +356,7 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
           <dl className="cap-detail-record">
             <dt>Status</dt>
             <dd>
-              <St kind={k.kind}>{k.label}</St>{" "}
+              <Status {...KIND_STATUS[k.kind]}>{k.label}</Status>{" "}
               <span className="cap-text" data-tone="dim">
                 {jobMeta(j, now)}
               </span>

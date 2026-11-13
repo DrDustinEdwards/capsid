@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { grantAgent } from "../src/agents";
 import { postJob } from "../src/jobs";
 import { ACTIVITY_LIMIT, loadActivity } from "../src/portal-activity";
+import { seedCapsidNamespace } from "./jobs-fixture";
 
 // THE PORTAL'S RECENT ACTIVITY, read from a real audit_log. The node tests read the
 // statement's text for the LIMIT and the two filter clauses; these seed more rows than
@@ -73,9 +74,7 @@ describe("loadActivity against a real audit_log", () => {
 // document write does. The Activity read says which is which.
 describe("a job transition's two audit rows", () => {
   it("PLANT: are told apart, the job's row and its mirror document's", async () => {
-    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-      .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
-      .run();
+    await seedCapsidNamespace();
     const posted = await postJob(env as never, grantAgent("write", "github:sample"), new Date(), {
       namespace: "capsid",
       title: "a job whose post is read back from Activity",

@@ -11,6 +11,7 @@ import {
 } from "../src/merge-safety";
 import { readModelLearning } from "../src/model-learning";
 import { readUnitEvidence, SUSPENDED_KEY, unitsTick } from "../src/merge-units";
+import { seedCapsidNamespace } from "./jobs-fixture";
 
 // The safety meter against a real D1: revert tracking from the closed pull requests
 // GitHub lists (answered here), recorded once per revert; the counts and the pause from
@@ -30,9 +31,7 @@ beforeEach(async () => {
   await env.DB.prepare(
     "DELETE FROM audit_log WHERE action IN ('auto-merged', 'approved-merged', 'auto-merge-reverted', 'auto-merge-paused', 'job-pr-reverted')",
   ).run();
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('capsid', ?1)")
-    .bind(JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
-    .run();
+  await seedCapsidNamespace();
   for (const key of [PAUSED_KEY, REPORT_KEY, SUSPENDED_KEY, "merge-safety:lifted"])
     await env.APP_KV.delete(key);
   await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");

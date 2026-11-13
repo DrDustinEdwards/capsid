@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import type { OpsTask, OpsTaskRun, OpsTaskRunOutcome } from "./ops-types/feed";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
+import { withTimeout } from "@dustinedwards/site-runtime/time";
 import { MINUTE_MS, HOUR_MS, DAY_MS } from "./time";
 
 // The run ledger (migrations/0029_task_runs.sql). Every scheduled task goes through runTask,
@@ -231,17 +232,6 @@ export async function runTask<T>(
   const result = judge(value);
   if (result) await record(env, task, started, result.outcome, result.reason);
   return value;
-}
-
-/** The body's answer, or a rejection once `ms` pass first. The timer is cleared either way. */
-function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`timed out after ${ms} ms`)), ms);
-  });
-  return Promise.race([work, late]).finally(() => {
-    if (timer !== undefined) clearTimeout(timer);
-  });
 }
 
 interface TaskRunRow {

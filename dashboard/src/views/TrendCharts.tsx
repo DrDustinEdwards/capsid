@@ -23,7 +23,7 @@ import type {
   TrendCiRepo,
 } from "../types";
 import { errorTotals } from "../ui/charts";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import { formatMoney } from "@dustinedwards/site-runtime/money";
 
 // The Portal's charts drawn with Enarratio's primitives (docs/design/design-portal-evaluation.md
@@ -780,10 +780,10 @@ export function BackupSlots() {
         {b && <Stale error={error} />}
         {!b ? (
           loading ? null : (
-            <St kind="nodata">Not read: {error}</St>
+            <Status tone="nodata">Not read: {error}</Status>
           )
         ) : !b.slots ? (
-          <St kind="nodata">{b.error}</St>
+          <Status tone="nodata">{b.error}</Status>
         ) : (
           (
             [
@@ -846,7 +846,7 @@ export function CiHistory() {
         {ci && <Stale error={error} />}
         {!ci ? (
           loading ? null : (
-            <St kind="nodata">Not read: {error}</St>
+            <Status tone="nodata">Not read: {error}</Status>
           )
         ) : (
           <>
@@ -856,7 +856,7 @@ export function CiHistory() {
               if (!r.days.some((d) => d.state !== "none")) {
                 return (
                   <div className="slot-row slot-head" key={r.namespace} data-ci={r.namespace}>
-                    <b>{r.namespace}</b> <St kind="nodata">no run in 14 days</St>
+                    <b>{r.namespace}</b> <Status tone="nodata">no run in 14 days</Status>
                   </div>
                 );
               }
@@ -882,7 +882,7 @@ export function CiHistory() {
             })}
             {ci.not_read.map((n) => (
               <div className="slot-row slot-head" key={n.namespace}>
-                <b>{n.namespace}</b> <St kind="nodata">{`not read: ${n.error}`}</St>
+                <b>{n.namespace}</b> <Status tone="nodata">{`not read: ${n.error}`}</Status>
               </div>
             ))}
           </>

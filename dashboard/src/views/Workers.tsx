@@ -1,4 +1,5 @@
-import { Empty, Missing, Spinner } from "capsomer/react/empty";
+import { Empty, Missing } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchResources } from "../lib/api";
@@ -6,7 +7,7 @@ import { useAnswer } from "capsomer/react/data";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import type { ResourcesDoc } from "../types";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 
 // WORKERS: the secrets and data model (src/system-resources.ts), as the nightly build read it
 // from Cloudflare. One panel per Worker with its system, its secret and variable names (never
@@ -70,7 +71,7 @@ function WorkerPanel({ w }: { w: Worker }) {
             system <span className="cap-mono">{w.system}</span>
           </>
         ) : (
-          <St kind="warn">No system lists it</St>
+          <Status tone="warn">No system lists it</Status>
         )
       }
       footer={
@@ -82,7 +83,7 @@ function WorkerPanel({ w }: { w: Worker }) {
     >
       {w.error ? (
         <p className="shared-none">
-          <St kind="nodata">Could not read: {w.error}</St>
+          <Status tone="nodata">Could not read: {w.error}</Status>
         </p>
       ) : (
         <table className="cap-table workers-bindings">
@@ -113,7 +114,7 @@ const usedBy = (users: User[]) =>
       )}
     </span>
   ) : (
-    <St kind="warn">Bound by no Worker</St>
+    <Status tone="warn">Bound by no Worker</Status>
   );
 
 function StoresPanel({ doc }: { doc: ResourcesDoc }) {
@@ -161,7 +162,7 @@ function StoresPanel({ doc }: { doc: ResourcesDoc }) {
                   </details>
                 ) : (
                   <div>
-                    <St kind="nodata">{d.tables_error ?? "Tables not read"}</St>
+                    <Status tone="nodata">{d.tables_error ?? "Tables not read"}</Status>
                   </div>
                 )}
               </td>
@@ -210,7 +211,7 @@ function NotRead({ load }: { load: ReturnType<typeof useResources> }) {
   if (load.error && !doc) {
     return (
       <p role="alert">
-        <St kind="crit">Could not read the Workers: {load.error}</St>
+        <Status tone="crit">Could not read the Workers: {load.error}</Status>
       </p>
     );
   }
@@ -258,11 +259,11 @@ export function SiteWorkers({ scripts }: { scripts: ReadonlyArray<string> }) {
     <>
       {workers.length === 0 ? (
         <p className="shared-none">
-          <St kind="nodata">
+          <Status tone="nodata">
             {scripts.length
               ? `Cloudflare has no Worker named ${scripts.join(" or ")}.`
               : "No Worker script is known for this site: set one in its settings above."}
-          </St>
+          </Status>
         </p>
       ) : (
         workers.map((w) => <WorkerPanel key={w.script} w={w} />)
@@ -288,7 +289,7 @@ export function UnownedResources({ siteScripts }: { siteScripts: ReadonlyArray<s
     <div className="cap-stack">
       {doc.problems.map((p) => (
         <p key={p} className="shared-none">
-          <St kind="nodata">{p}</St>
+          <Status tone="nodata">{p}</Status>
         </p>
       ))}
       {rest.map((w) => (

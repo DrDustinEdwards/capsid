@@ -3,51 +3,15 @@ import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { adminFailJob, claimJob, failAsCaller, postJob, releaseJob } from "../src/jobs";
 import { grantAgent, type Agent } from "../src/agents";
-import { defaultScopes } from "../src/agents-schema";
+import { driverAgent, jobRow, jobsEnv, seatAgent, seedCapsidNamespace } from "./jobs-fixture";
 
 // The seat stepping in on a claimed job whose holder is gone: release it to the queue,
 // or fail it. Against a real D1, because both are one guarded batch keyed on the holder
 // the seat read, and every assertion reads the rows back.
 
-const SECRET = "test-root-secret";
 const POSTER = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-09-26T06:00:00.000Z");
 const LATER = new Date("2026-09-26T07:00:00.000Z");
-
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
-}
-
-// The seat as it is minted: write and can_merge, and not the admin.
-function seatAgent(): Agent {
-  const scopes = defaultScopes(["capsid"]);
-  scopes.grants = ["read", "write"];
-  scopes.flags.can_merge = true;
-  return {
-    id: "agent_aaaabbbbcccc",
-    name: "seat",
-    kind: "seat",
-    actor: "agent:seat",
-    scopes,
-    admin: false,
-    row: null,
-  };
-}
-
-// A roster driver: one namespace, write, and no flags.
-function driverAgent(actor = "agent:capsid-driver"): Agent {
-  const scopes = defaultScopes(["capsid"]);
-  scopes.grants = ["read", "write"];
-  return {
-    id: `agent_${actor.length}`,
-    name: actor.slice("agent:".length),
-    kind: "driver",
-    actor,
-    scopes,
-    admin: false,
-    row: null,
-  };
-}
 
 async function claimedJob(holder: Agent, title = "a job whose holder went away"): Promise<string> {
   const posted = await postJob(jobsEnv(), POSTER, NOW, {
@@ -59,12 +23,6 @@ async function claimedJob(holder: Agent, title = "a job whose holder went away")
   const claimed = await claimJob(jobsEnv(), holder, NOW, { id: posted.job!.id });
   expect(claimed.ok, claimed.refusal).toBe(true);
   return posted.job!.id;
-}
-
-async function row(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
-    .bind(id)
-    .first<Record<string, unknown>>();
 }
 
 async function audit(id: string, action: string) {
@@ -83,9 +41,7 @@ async function outcome(id: string) {
 
 beforeEach(async () => {
   await resetCapsidDb();
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-    .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
-    .run();
+  await seedCapsidNamespace();
 });
 
 describe("release", () => {
@@ -100,7 +56,7 @@ describe("release", () => {
     );
     expect(released.ok, released.refusal).toBe(true);
 
-    const r = await row(id);
+    const r = await jobRow(id);
     expect(r?.status).toBe("queued");
     expect(r?.claimed_by).toBeNull();
     const a = await audit(id, "job-released");
@@ -118,8 +74,8 @@ describe("release", () => {
     expect((await releaseJob(jobsEnv(), seatAgent(), LATER, id, "holder gone")).ok).toBe(true);
     const next = await claimJob(jobsEnv(), driverAgent("agent:capsid-driver-2"), LATER, { id });
     expect(next.ok, next.refusal).toBe(true);
-    expect((await row(id))?.claimed_by).toBe("agent:capsid-driver-2");
-    expect((await row(id))?.claimed_at).toBe(NOW.toISOString());
+    expect((await jobRow(id))?.claimed_by).toBe("agent:capsid-driver-2");
+    expect((await jobRow(id))?.claimed_at).toBe(NOW.toISOString());
   });
 
   it("a driver cannot release another driver's job", async () => {
@@ -133,14 +89,14 @@ describe("release", () => {
     );
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/seat/);
-    expect((await row(id))?.claimed_by).toBe("agent:capsid-driver");
+    expect((await jobRow(id))?.claimed_by).toBe("agent:capsid-driver");
   });
 
   it("the seat releases its own claim too, and only a claimed job is released", async () => {
     const seat = seatAgent();
     const own = await claimedJob(seat, "held by the seat");
     expect((await releaseJob(jobsEnv(), seat, LATER, own, "x")).ok).toBe(true);
-    expect((await row(own))?.status).toBe("queued");
+    expect((await jobRow(own))?.status).toBe("queued");
 
     const posted = await postJob(jobsEnv(), POSTER, NOW, {
       namespace: "capsid",
@@ -157,7 +113,7 @@ describe("release", () => {
     expect((await releaseJob(jobsEnv(), seatAgent(), LATER, id, "  ")).refusal).toMatch(
       /needs a reason/,
     );
-    expect((await row(id))?.status).toBe("claimed");
+    expect((await jobRow(id))?.status).toBe("claimed");
   });
 });
 
@@ -166,7 +122,7 @@ describe("the seat fails a job it does not hold", () => {
     const id = await claimedJob(driverAgent());
     const failed = await failAsCaller(jobsEnv(), seatAgent(), LATER, id, "the work was abandoned");
     expect(failed.ok, failed.refusal).toBe(true);
-    expect((await row(id))?.status).toBe("failed");
+    expect((await jobRow(id))?.status).toBe("failed");
     expect((await audit(id, "job-admin-fail"))?.actor).toBe("agent:seat");
     expect(await outcome(id)).toMatchObject({ agent: "agent:capsid-driver" });
   });
@@ -181,7 +137,7 @@ describe("the seat fails a job it does not hold", () => {
       "x",
     );
     expect(refused.ok).toBe(false);
-    expect((await row(id))?.status).toBe("claimed");
+    expect((await jobRow(id))?.status).toBe("claimed");
     expect(
       (await adminFailJob(jobsEnv(), driverAgent("agent:capsid-driver-2"), LATER, id, "x")).ok,
     ).toBe(false);

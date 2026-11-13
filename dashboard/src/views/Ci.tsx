@@ -3,11 +3,11 @@ import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense } from "react";
 import { useApp } from "../app/ctx";
-import { ciState, type Kind } from "../lib/derive";
+import { KIND_STATUS, ciState, type Kind } from "../lib/derive";
 import { checkWords } from "../../../src/check-words";
 import { age, ago } from "../lib/format";
 import { parse, utc } from "capsomer/behavior/time";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import { Panel } from "capsomer/react/panel";
 import { Empty } from "capsomer/react/empty";
 import {
@@ -63,7 +63,7 @@ export function DefaultBranches() {
                         <b>{c.namespace}</b>
                       </td>
                       <td>
-                        <St kind={st.kind}>{st.label}</St>
+                        <Status {...KIND_STATUS[st.kind]}>{st.label}</Status>
                       </td>
                       <td className="cap-mono">{c.latest ? c.latest.head_sha.slice(0, 7) : "-"}</td>
                       <td
@@ -145,13 +145,13 @@ export function PullRequests() {
           <div className="cap-stack" data-gap="4">
             {live.merge_policy.loads ? (
               <p>
-                <St kind="ok">Loads</St> version {live.merge_policy.version},{" "}
+                <Status tone="ok">Loads</Status> version {live.merge_policy.version},{" "}
                 {live.merge_policy.enabled ? "enabled" : "disabled"}.
               </p>
             ) : (
               <>
                 <p>
-                  <St kind="crit">Does not load</St> Nothing is auto-merged until it does.
+                  <Status tone="crit">Does not load</Status> Nothing is auto-merged until it does.
                 </p>
                 <p className="cap-muted prewrap">{live.merge_policy.reason}</p>
               </>
@@ -227,7 +227,7 @@ export function PullRequests() {
                       </td>
                       <td data-label="State">
                         {n.paused ? (
-                          <St kind="warn">Paused</St>
+                          <Status tone="warn">Paused</Status>
                         ) : (
                           <span className="cap-text" data-tone="dim">
                             running
@@ -309,11 +309,13 @@ export function PullRequests() {
                     </td>
                     <td data-label="State">
                       {p.merged === true ? (
-                        <St kind="ok">Merged</St>
+                        <Status tone="ok">Merged</Status>
                       ) : p.merged === false ? (
-                        <St kind="crit">Not merged</St>
+                        <Status tone="crit">Not merged</Status>
                       ) : (
-                        <St kind="run">Open</St>
+                        <Status tone="info" running>
+                          Open
+                        </Status>
                       )}
                     </td>
                     <td className="cap-num" data-label="Verified">
@@ -443,7 +445,7 @@ function MergeUnits() {
                   <tr key={r.unit}>
                     <td className="cap-mono nowrap">{r.unit}</td>
                     <td data-label="State">
-                      <St kind={st.kind}>{st.label}</St>
+                      <Status {...KIND_STATUS[st.kind]}>{st.label}</Status>
                     </td>
                     <td className="cap-muted" data-label="Why">
                       {r.why ||
@@ -516,9 +518,9 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
         <AwayLink className="wtitle" href={prUrl(a)} newTab>
           <span className="cap-mono">{name}</span>
         </AwayLink>
-        <span className="held">
-          <St kind="warn">{checkWords(a.failed)}</St>
-        </span>
+        <Status tone="warn" wrap>
+          {checkWords(a.failed)}
+        </Status>
         <span className="cap-muted">{a.why}</span>
         {a.visual && <VisualLook visual={a.visual} />}
         <span className="wmeta">

@@ -1,10 +1,10 @@
 import { Alert } from "capsomer/react/banner";
 import { useApp } from "../app/ctx";
-import { incidents, passStale, TASK_OUTCOME } from "../lib/derive";
+import { KIND_STATUS, incidents, passStale, TASK_OUTCOME } from "../lib/derive";
 import { ago, age } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import type { OpsTask } from "../types";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import { Time } from "capsomer/react/time";
 import { Panel } from "capsomer/react/panel";
 import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, useNsFilter } from "./shared";
@@ -43,7 +43,7 @@ export function Incidents() {
                   <dt>Finished</dt>
                   <dd>
                     {ago(parse(snap.pass_at), now)}{" "}
-                    {passStale(snap, now) && <St kind="warn">stale</St>}
+                    {passStale(snap, now) && <Status tone="warn">stale</Status>}
                   </dd>
                   <dt>Cadence</dt>
                   <dd className="cap-num">every {snap.cadence_min} min</dd>
@@ -52,7 +52,7 @@ export function Incidents() {
                   <dt>Site map</dt>
                   <dd>
                     {!snap.site_map ? (
-                      <St kind="nodata">Not read</St>
+                      <Status tone="nodata">Not read</Status>
                     ) : snap.site_map.unmapped.length || snap.site_map.unknown.length ? (
                       <span className="cap-mono">
                         {snap.site_map.unmapped.length
@@ -64,7 +64,7 @@ export function Incidents() {
                           : ""}
                       </span>
                     ) : (
-                      <St kind="ok">No drift</St>
+                      <Status tone="ok">No drift</Status>
                     )}
                   </dd>
                 </dl>
@@ -84,11 +84,11 @@ export function Incidents() {
                         <td className="cap-mono">{c.id}</td>
                         <td>
                           {c.state === "could-not-run" ? (
-                            <St kind="nodata">Could not run</St>
+                            <Status tone="nodata">Could not run</Status>
                           ) : c.state === "clear" ? (
-                            <St kind="ok">Clear</St>
+                            <Status tone="ok">Clear</Status>
                           ) : (
-                            <St kind="warn">Finding open</St>
+                            <Status tone="warn">Finding open</Status>
                           )}
                         </td>
                         <td className="cap-muted">{c.findings.join("; ")}</td>
@@ -124,7 +124,7 @@ export function ScheduledTasks() {
       {s.error !== null ? (
         <div className="body">
           <Alert tone="neutral">
-            <St kind="nodata">No data</St> The run ledger could not be read: {s.error}
+            <Status tone="nodata">No data</Status> The run ledger could not be read: {s.error}
           </Alert>
         </div>
       ) : (
@@ -154,19 +154,19 @@ export function ScheduledTasks() {
                     </td>
                     <td>
                       {t.flag === "failing" || t.flag === "quiet" ? (
-                        <St kind={t.id === "backup" ? "crit" : "warn"}>{FLAG[t.flag]}</St>
+                        <Status tone={t.id === "backup" ? "crit" : "warn"}>{FLAG[t.flag]}</Status>
                       ) : t.flag === "never" ? (
-                        <St kind="nodata">{FLAG.never}</St>
+                        <Status tone="nodata">{FLAG.never}</Status>
                       ) : (
-                        <St kind="ok">Running</St>
+                        <Status tone="ok">Running</Status>
                       )}
                     </td>
                     <td className="cap-num">
                       {last ? (
                         <>
-                          <St kind={TASK_OUTCOME[last.outcome].kind}>
+                          <Status {...KIND_STATUS[TASK_OUTCOME[last.outcome].kind]}>
                             {TASK_OUTCOME[last.outcome].label}
-                          </St>{" "}
+                          </Status>{" "}
                           {ago(parse(last.finished_at), now)}
                         </>
                       ) : (
@@ -185,9 +185,9 @@ export function ScheduledTasks() {
                           <ul className="plain">
                             {earlier.map((r) => (
                               <li key={r.started_at}>
-                                <St kind={TASK_OUTCOME[r.outcome].kind}>
+                                <Status {...KIND_STATUS[TASK_OUTCOME[r.outcome].kind]}>
                                   {TASK_OUTCOME[r.outcome].label}
-                                </St>{" "}
+                                </Status>{" "}
                                 {ago(parse(r.finished_at), now)}: {r.reason}
                               </li>
                             ))}

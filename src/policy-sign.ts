@@ -58,6 +58,16 @@ export interface PolicySignRefusal {
 
 const POLICY_SIGN_NAMESPACE = "capsid";
 
+/** The document a signing rewrites, as it stands before the write. */
+function readPriorDoc(
+  env: Env,
+  namespace: string,
+  path: string,
+): Promise<{ title: string | null; body: string | null } | null> {
+  return env.DB.prepare("SELECT title, body FROM documents WHERE namespace = ?1 AND path = ?2")
+    .bind(namespace, path)
+    .first<{ title: string | null; body: string | null }>();
+}
 export async function signPolicyDocument(
   env: Env,
   actor: string,
@@ -86,11 +96,7 @@ export async function signPolicyDocument(
     );
   }
 
-  const prior = await env.DB.prepare(
-    "SELECT title, body FROM documents WHERE namespace = ?1 AND path = ?2",
-  )
-    .bind(namespace, path)
-    .first<{ title: string | null; body: string | null }>();
+  const prior = await readPriorDoc(env, namespace, path);
   if (!prior) {
     return refuse(
       `no document at ${namespace}/${path}. Write the policy first, read it, then sign it.`,
@@ -284,11 +290,7 @@ export async function planPolicyChange(
     return refuse(
       `${unit} is not promoted to auto in version ${from}, so there is nothing to remove.`,
     );
-  const prior = await env.DB.prepare(
-    "SELECT title, body FROM documents WHERE namespace = ?1 AND path = ?2",
-  )
-    .bind(POLICY_SIGN_NAMESPACE, AUTO_MERGE_POLICY_PATH)
-    .first<{ title: string | null; body: string | null }>();
+  const prior = await readPriorDoc(env, POLICY_SIGN_NAMESPACE, AUTO_MERGE_POLICY_PATH);
   if (!prior?.body)
     return refuse(`no document at ${POLICY_SIGN_NAMESPACE}/${AUTO_MERGE_POLICY_PATH}.`);
   const body = editPolicy(splitSignedTask(prior.body).body, to, change, unit);
@@ -482,11 +484,7 @@ export async function planPolicyFromRepo(env: Env): Promise<RepoPolicyPlan> {
       `${REPO_POLICY_PATH} says version '${to}', not a whole number, so the version to type as confirm cannot be named.`,
     );
 
-  const prior = await env.DB.prepare(
-    "SELECT title, body FROM documents WHERE namespace = ?1 AND path = ?2",
-  )
-    .bind(POLICY_SIGN_NAMESPACE, AUTO_MERGE_POLICY_PATH)
-    .first<{ title: string | null; body: string | null }>();
+  const prior = await readPriorDoc(env, POLICY_SIGN_NAMESPACE, AUTO_MERGE_POLICY_PATH);
   if (!prior?.body) {
     return refuse(
       `no document at ${POLICY_SIGN_NAMESPACE}/${AUTO_MERGE_POLICY_PATH} to write over. Write it once with capsid_write_doc (allow_improve_paths), and this control keeps it in step with the repo.`,

@@ -8,6 +8,7 @@ import { blockJob, claimJob, postJob } from "../src/jobs";
 import { capsidStatus } from "../src/status";
 import type { Inbox } from "../src/inbox";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { jobsEnv } from "./jobs-fixture";
 
 // "What needs Dustin, per app" (job_84e901d8eb71), driven through the whole Worker with the
 // credentials a caller would present: GET /ops/inbox, and the same answer in improve_status.
@@ -17,15 +18,10 @@ const ORIGIN = "https://capsid.test";
 const DRIVER_KEY = "capsid_agent_" + "d".repeat(64);
 // A key on every namespace (the seat), which sees every app.
 const SEAT_KEY = "capsid_agent_" + "e".repeat(64);
-const SECRET = "test-root-secret";
 const ADMIN = grantAgent("write", "github:DrDustinEdwards");
 const DRIVER = grantAgent("write", "agent:driver-aaaa");
 const NOW = new Date("2026-10-08T12:00:00.000Z");
 const PR = "https://github.com/example-org/sample/pull/42";
-
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
-}
 
 async function inboxAs(bearer: string | null): Promise<Response> {
   return SELF.fetch(`${ORIGIN}/ops/inbox`, {

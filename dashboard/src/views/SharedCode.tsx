@@ -1,5 +1,6 @@
 import { AwayLink } from "capsomer/react/link";
-import { Empty, Spinner } from "capsomer/react/empty";
+import { Empty } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchSharedCode } from "../lib/api";
@@ -7,7 +8,8 @@ import { useAnswer } from "capsomer/react/data";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "../types";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
+import { KIND_STATUS } from "../lib/derive";
 
 // SHARED CODE (job_584b4e7f2824): how far the centralization has got. One panel per shared
 // package from configuration (shared_packages), each app that uses it with the tag it
@@ -28,7 +30,7 @@ export function SharedCode() {
         </div>
       ) : load.error ? (
         <p role="alert">
-          <St kind="crit">Could not read the shared packages: {load.error}</St>
+          <Status tone="crit">Could not read the shared packages: {load.error}</Status>
         </p>
       ) : !data || !data.configured ? (
         <Empty kind="nothing-yet" title="No shared package is configured.">
@@ -79,7 +81,7 @@ function ReleaseLine({ pkg }: { pkg: SharedCodePackage }) {
     return (
       <>
         {" · "}
-        <St kind="nodata">{pkg.manifest_error}</St>
+        <Status tone="nodata">{pkg.manifest_error}</Status>
       </>
     );
   }
@@ -91,7 +93,7 @@ function ReleaseLine({ pkg }: { pkg: SharedCodePackage }) {
       {pkg.untagged && (
         <>
           {" · "}
-          <St kind="warn">untagged</St>
+          <Status tone="warn">untagged</Status>
         </>
       )}
       {!pkg.private && (
@@ -102,7 +104,7 @@ function ReleaseLine({ pkg }: { pkg: SharedCodePackage }) {
               npm <span className="cap-mono">{pkg.npm_latest}</span>
             </>
           ) : (
-            <St kind="nodata">{pkg.npm_note ?? "npm not read"}</St>
+            <Status tone="nodata">{pkg.npm_note ?? "npm not read"}</Status>
           )}
         </>
       )}
@@ -138,7 +140,7 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
               newest <span className="cap-mono">{pkg.latest}</span>
             </>
           ) : (
-            <St kind="nodata">{pkg.tags_error ?? "No release tag"}</St>
+            <Status tone="nodata">{pkg.tags_error ?? "No release tag"}</Status>
           )}
           <ReleaseLine pkg={pkg} />
         </>
@@ -178,7 +180,7 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
                     )}
                   </td>
                   <td>
-                    <St kind={b.kind}>{b.text}</St>
+                    <Status {...KIND_STATUS[b.kind]}>{b.text}</Status>
                   </td>
                   <td className="c-where">
                     <span className="cap-mono">{u.where}</span>
@@ -197,9 +199,9 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
         <ul className="shared-local" aria-label={`Local copies ${pkg.name} replaces`}>
           {pkg.local_copies.map((l) => (
             <li key={`${l.namespace}:${l.path}`}>
-              <St kind={l.present === null ? "nodata" : l.present ? "warn" : "ok"}>
+              <Status tone={l.present === null ? "nodata" : l.present ? "warn" : "ok"}>
                 {l.present === null ? "Not read" : l.present ? "Still there" : "Removed"}
-              </St>{" "}
+              </Status>{" "}
               <span className="cap-mono">{l.path}</span>{" "}
               <span className="cap-text" data-tone="dim">
                 in {l.namespace}

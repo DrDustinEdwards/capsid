@@ -4,6 +4,7 @@ import { blockJob, claimJob, completeJob, failAsCaller, failJob, postJob } from 
 import { grantAgent } from "../src/agents";
 import { buildServer } from "../src/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
+import { dropSampleToken, jobRow, jobsEnv, seedSampleRepo } from "./jobs-fixture";
 
 // Claims apart from verified outcomes, against a real D1 (migrations/0023). What the
 // agent said lands in job_claims in the transition's own batch, before GitHub is read,
@@ -22,10 +23,6 @@ const PR = "https://github.com/example/sample/pull/3";
 const HEAD = "c".repeat(40);
 const NOW = new Date("2026-09-29T12:00:00.000Z");
 const LATER = new Date("2026-09-29T13:00:00.000Z");
-
-function jobsEnv() {
-  return { ...env } as unknown as Parameters<typeof postJob>[0];
-}
 
 async function claimed(title: string, actor = DRIVER) {
   const posted = await postJob(jobsEnv(), grantAgent("write", SEAT), NOW, {
@@ -54,12 +51,6 @@ async function evaluationsFor(id: string) {
       .bind(id)
       .all<Record<string, unknown>>()
   ).results;
-}
-
-async function jobRow(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
-    .bind(id)
-    .first<Record<string, unknown>>();
 }
 
 // GitHub, faked at fetch: the pull request is merged with five commits and eight files,
@@ -92,15 +83,12 @@ function fakeGitHub() {
 
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
-  await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-    .bind(NS, JSON.stringify([{ repo: "example/sample", label: "primary" }]))
-    .run();
-  await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
+  await seedSampleRepo();
 });
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await env.APP_KV.delete("gh:token:v3:example/sample");
+  await dropSampleToken();
 });
 
 describe("job_claims: what the agent said", () => {

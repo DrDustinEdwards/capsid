@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import { readDeployOutcomes } from "../src/deploy-outcomes";
+import { seedCapsidNamespace } from "./jobs-fixture";
 
 // The deploy-outcome reader against a real D1 with migrations/0038 applied, and GitHub
 // answered here: a rolled-back run is recorded once with where production went, its pull
@@ -20,9 +21,7 @@ beforeEach(async () => {
   gateName = "live gate";
   gateConclusion = "failure";
   await env.DB.prepare("DELETE FROM deploy_outcomes").run();
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('capsid', ?1)")
-    .bind(JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
-    .run();
+  await seedCapsidNamespace();
   await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);

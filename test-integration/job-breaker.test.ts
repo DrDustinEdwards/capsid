@@ -3,53 +3,19 @@ import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { claimJob, failAsCaller, postJob } from "../src/jobs";
 import { grantAgent, type Agent } from "../src/agents";
-import { defaultScopes } from "../src/agents-schema";
 import {
   BREAKER_THRESHOLD_KEY,
   breakerResetKey,
   breakerState,
   resetBreaker,
 } from "../src/job-breaker";
+import { driverAgent, jobsEnv, seatAgent } from "./jobs-fixture";
 
 // The queue's circuit breaker (job_9e602b31888f, OWASP ASI08), against a real D1: the
 // breaker is a count over audit_log, so what it counts is only true of the real rows.
 // audit_log.at is the database's own clock, so these run on the real time.
 
-const SECRET = "test-root-secret";
 const POSTER = grantAgent("write", "github:DrDustinEdwards");
-
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
-}
-
-function driverAgent(actor = "agent:capsid-driver", namespace = "capsid"): Agent {
-  const scopes = defaultScopes([namespace]);
-  scopes.grants = ["read", "write"];
-  return {
-    id: `agent_${actor.length}`,
-    name: actor.slice("agent:".length),
-    kind: "driver",
-    actor,
-    scopes,
-    admin: false,
-    row: null,
-  };
-}
-
-function seatAgent(): Agent {
-  const scopes = defaultScopes(["capsid"]);
-  scopes.grants = ["read", "write"];
-  scopes.flags.can_merge = true;
-  return {
-    id: "agent_aaaabbbbcccc",
-    name: "seat",
-    kind: "seat",
-    actor: "agent:seat",
-    scopes,
-    admin: false,
-    row: null,
-  };
-}
 
 let n = 0;
 async function post(namespace = "capsid"): Promise<string> {
@@ -122,7 +88,7 @@ describe("the queue's circuit breaker", () => {
   });
 
   it("is per namespace: another namespace's fails do not stop this one", async () => {
-    const other = driverAgent("agent:sample-driver", "sample");
+    const other = driverAgent("agent:sample-driver", { namespace: "sample" });
     for (let i = 0; i < 3; i++) await holderFails(other, "sample");
     await post("capsid");
     expect((await claimJob(jobsEnv(), driverAgent(), new Date(), { namespace: "capsid" })).ok).toBe(

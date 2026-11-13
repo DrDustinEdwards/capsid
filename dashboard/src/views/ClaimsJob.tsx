@@ -10,7 +10,8 @@ import type {
   JobEvaluationRow,
   PortalClaimsJob,
 } from "../types";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
+import { KIND_STATUS } from "../lib/derive";
 import { Missing } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import "capsomer/summary-list.css";
@@ -114,7 +115,7 @@ function versions(c: JobClaimRow): string {
 }
 
 function Agreement({ a }: { a: ClaimsAgreement }) {
-  return <St kind={AGREEMENT_KIND[a]}>{a}</St>;
+  return <Status {...KIND_STATUS[AGREEMENT_KIND[a]]}>{a}</Status>;
 }
 
 export function AgreementCounts({ c }: { c: ClaimsAgreementCounts }) {
@@ -132,33 +133,47 @@ export function AgreementCounts({ c }: { c: ClaimsAgreementCounts }) {
   );
 }
 
-function EvaluationRows({ rows }: { rows: JobEvaluationRow[] }) {
+function EvaluationTable({ rows, label }: { rows: JobEvaluationRow[]; label?: string }) {
   return (
-    <>
-      {rows.map((e) => (
-        <tr key={e.id} data-row="">
-          <td className="cap-mono" data-label="Check">
-            {e.name}
-          </td>
-          <td className="cap-mono wrap" data-label="Claimed">
-            {e.claimed ?? <Missing>not stated</Missing>}
-          </td>
-          <td className="cap-mono wrap" data-label="Verified">
-            {e.verified ?? <Missing>not checked</Missing>}
-          </td>
-          <td data-label="Agreement">
-            <Agreement a={e.agreement} />
-          </td>
-          <td className="cap-num" data-label="Score">
-            {e.score_label}
-            {e.score_value !== null ? ` (${e.score_value})` : ""}
-          </td>
-          <td className="cap-mono wrap" data-label="By">
-            {e.evaluator_id}
-          </td>
-        </tr>
-      ))}
-    </>
+    <div className="cap-table-wrap" data-reflow="wide">
+      <table className="cap-table" aria-label={label}>
+        <thead>
+          <tr>
+            <th>Check</th>
+            <th>Claimed</th>
+            <th>Verified</th>
+            <th>Agreement</th>
+            <th>Score</th>
+            <th>By</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((e) => (
+            <tr key={e.id} data-row="">
+              <td className="cap-mono" data-label="Check">
+                {e.name}
+              </td>
+              <td className="cap-mono wrap" data-label="Claimed">
+                {e.claimed ?? <Missing>not stated</Missing>}
+              </td>
+              <td className="cap-mono wrap" data-label="Verified">
+                {e.verified ?? <Missing>not checked</Missing>}
+              </td>
+              <td data-label="Agreement">
+                <Agreement a={e.agreement} />
+              </td>
+              <td className="cap-num" data-label="Score">
+                {e.score_label}
+                {e.score_value !== null ? ` (${e.score_value})` : ""}
+              </td>
+              <td className="cap-mono wrap" data-label="By">
+                {e.evaluator_id}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -227,23 +242,7 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
                   </dl>
                 </div>
                 {checks.length ? (
-                  <div className="cap-table-wrap" data-reflow="wide">
-                    <table className="cap-table">
-                      <thead>
-                        <tr>
-                          <th>Check</th>
-                          <th>Claimed</th>
-                          <th>Verified</th>
-                          <th>Agreement</th>
-                          <th>Score</th>
-                          <th>By</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <EvaluationRows rows={checks} />
-                      </tbody>
-                    </table>
-                  </div>
+                  <EvaluationTable rows={checks} />
                 ) : (
                   <div className="cap-text body" data-tone="dim">
                     {c.action === "block"
@@ -255,25 +254,7 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
             );
           })
         )}
-        {orphans.length > 0 && (
-          <div className="cap-table-wrap" data-reflow="wide">
-            <table className="cap-table" aria-label="Checks with no claim">
-              <thead>
-                <tr>
-                  <th>Check</th>
-                  <th>Claimed</th>
-                  <th>Verified</th>
-                  <th>Agreement</th>
-                  <th>Score</th>
-                  <th>By</th>
-                </tr>
-              </thead>
-              <tbody>
-                <EvaluationRows rows={orphans} />
-              </tbody>
-            </table>
-          </div>
-        )}
+        {orphans.length > 0 && <EvaluationTable rows={orphans} label="Checks with no claim" />}
       </Panel>
       <Panel
         flush

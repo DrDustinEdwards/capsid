@@ -3,13 +3,13 @@ import { resetCapsidDb } from "./reset-db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeAsCaller, completeJob, postJob, resumeJob } from "../src/jobs";
 import { grantAgent } from "../src/agents";
+import { dropSampleToken, jobRow, jobsEnv, seedSampleRepo } from "./jobs-fixture";
 
 // The seat completing a blocked job it does not hold (job_85b8ac3e0c7e), the way it can
 // already fail one. The job stays held by the driver that did the work, so the outcome
 // row credits that driver, where resume with take then complete credits the seat. Real
 // D1; GitHub is a fetch stub, as in test-integration/outcome-result-ref.test.ts.
 
-const SECRET = "test-root-secret";
 const NS = "sample";
 const PR = "https://github.com/example/sample/pull/3";
 const SHA = "a".repeat(40);
@@ -38,10 +38,6 @@ const VERIFIED = {
   files_changed: true,
   ci_green: true,
 };
-
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
-}
 
 function stubGitHub(extra?: (url: string) => Response | null) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -80,11 +76,6 @@ function stubGitHub(extra?: (url: string) => Response | null) {
   });
 }
 
-async function job(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
-    .bind(id)
-    .first<Record<string, unknown>>();
-}
 async function outcome(id: string) {
   return env.DB.prepare("SELECT * FROM job_outcomes WHERE job_id = ?1")
     .bind(id)
@@ -138,15 +129,12 @@ async function blocked(title: string, over: Record<string, unknown> = {}) {
 
 beforeEach(async () => {
   await resetCapsidDb();
-  await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-    .bind(NS, JSON.stringify([{ repo: "example/sample", label: "primary" }]))
-    .run();
-  await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
+  await seedSampleRepo();
 });
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await env.APP_KV.delete("gh:token:v3:example/sample");
+  await dropSampleToken();
 });
 
 describe("the seat completes a blocked job it does not hold", () => {
@@ -159,7 +147,7 @@ describe("the seat completes a blocked job it does not hold", () => {
     });
     expect(done.ok, done.refusal).toBe(true);
 
-    const row = await job(id);
+    const row = await jobRow(id);
     expect(row?.status).toBe("done");
     expect(row?.claimed_by).toBe(DRIVER_ACTOR);
 
@@ -287,7 +275,7 @@ describe("the seat completes a blocked job it does not hold", () => {
     expect(refusedHeld.ok).toBe(false);
     expect(refusedHeld.refusal).toMatch(/Its holder completes it, or the seat releases/);
     expect((await touches(held)).map((t) => t.kind)).toEqual([]);
-    expect((await job(held))?.status).toBe("claimed");
+    expect((await jobRow(held))?.status).toBe("claimed");
 
     const finished = await blocked("finished");
     expect(
@@ -323,7 +311,7 @@ describe("the seat completes a blocked job it does not hold", () => {
     });
     expect(empty.ok).toBe(false);
     expect(empty.refusal).toMatch(/result_summary/);
-    expect((await job(id))?.status).toBe("blocked");
+    expect((await jobRow(id))?.status).toBe("blocked");
     expect(await outcomeCount()).toBe(0);
   });
 
@@ -347,7 +335,7 @@ describe("the seat completes a blocked job it does not hold", () => {
     });
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/cannot complete .* outside|not in|scope|namespace/i);
-    expect((await job(id))?.status).toBe("blocked");
+    expect((await jobRow(id))?.status).toBe("blocked");
   });
 
   it("the holder completing its own claimed job is unchanged", async () => {

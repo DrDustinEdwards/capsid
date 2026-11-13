@@ -1,7 +1,7 @@
 import { Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { Suspense } from "react";
-import { Spinner } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
@@ -11,7 +11,7 @@ import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import { useSinceLastVisit } from "capsomer/react/state-hooks";
 import type { PortalDigest, PortalPlan } from "../types";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 
 // The Tonight plan on the Queue and the "since you last looked" strip on Needs you
 // (docs/design/design-portal-evaluation.md, DECIDE 3, ruled 2026-10-09). Each reads its
@@ -94,7 +94,15 @@ export function Tonight() {
                   role="button"
                   tabIndex={0}
                 >
-                  {j.gated ? <St kind="blocked">Gated</St> : <St kind="queued">Planned</St>}
+                  {j.gated ? (
+                    <Status tone="warn" glyph="blocked">
+                      Gated
+                    </Status>
+                  ) : (
+                    <Status tone="muted" glyph="queued">
+                      Planned
+                    </Status>
+                  )}
                   <div className="t">
                     <b>{j.title}</b>
                     <div>
@@ -128,7 +136,7 @@ export function Tonight() {
                   role="button"
                   tabIndex={0}
                 >
-                  <St kind="nodata">Skipped</St>
+                  <Status tone="nodata">Skipped</Status>
                   <div className="t">
                     <b>{j.title}</b>
                     <div className="why">{j.reason}</div>

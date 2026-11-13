@@ -3,37 +3,18 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
 import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
+import { driverAgent, jobsEnv, seedCapsidNamespace } from "./jobs-fixture";
 
 // required_scopes at the claim and the resume, on the real path. test/jobs-agents.test.ts
 // drives `missingForJob` directly, which stays green if the `if (missing)` block is
 // dropped. Integration, because "the job stays queued" is a claim about what a real
 // keyed UPDATE did.
 
-const SECRET = "test-root-secret";
 const SEAT = "github:DrDustinEdwards";
 const NOW = new Date("2026-09-13T12:00:00.000Z");
 
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
-}
-
 // A driver as the roster mints one: its own namespace, write, and no flags. The legacy
 // write key holds every flag, so it cannot plant this.
-function driver(namespace = "capsid"): Agent {
-  const name = `${namespace}-driver`;
-  const scopes = defaultScopes([namespace]);
-  scopes.grants = ["read", "write"];
-  return {
-    id: "agent_0123456789ab",
-    name,
-    kind: "driver",
-    actor: `agent:${name}`,
-    scopes,
-    admin: false,
-    row: null,
-  };
-}
-
 // A minted seat: can_merge and nothing else. A plain resume is the seat's act, so the
 // resume checks below are planted with it rather than with a driver.
 function mintedSeat(namespace = "capsid"): Agent {
@@ -77,17 +58,14 @@ describe("required_scopes on the real queue transitions", () => {
   beforeEach(async () => {
     await env.DB.prepare("DELETE FROM jobs").run();
     await env.DB.prepare("DELETE FROM job_outcomes").run();
-    // jobs post requires a registered namespace.
-    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-      .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
-      .run();
+    await seedCapsidNamespace();
   });
 
   it("PLANT: a job naming a flag is not handed to a driver without it, and STAYS QUEUED", async () => {
     const posted = await post({ required_scopes: { flags: ["can_merge"] } });
     const id = posted.job!.id;
 
-    const refused = await claimJob(jobsEnv(), driver(), NOW, { namespace: "capsid" });
+    const refused = await claimJob(jobsEnv(), driverAgent(), NOW, { namespace: "capsid" });
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/can_merge/);
     // Not failed, not claimed by a driver that cannot do it: queued, for a driver that can do it.
@@ -144,7 +122,12 @@ describe("required_scopes on the real queue transitions", () => {
   it("PLANT: a job scoped to another namespace is not claimed by this namespace's driver", async () => {
     // The other axis missingForJob compares, on the same real path.
     const posted = await post({ required_scopes: { flags: ["can_merge"] } });
-    const refused = await claimJob(jobsEnv(), driver("foxhound"), NOW, { namespace: "capsid" });
+    const refused = await claimJob(
+      jobsEnv(),
+      driverAgent("agent:foxhound-driver", { namespace: "foxhound" }),
+      NOW,
+      { namespace: "capsid" },
+    );
     expect(refused.ok).toBe(false);
     expect(await statusOf(posted.job!.id)).toBe("queued");
   });
@@ -157,10 +140,7 @@ describe("a corrupt job requirement fails closed at the claim", () => {
   beforeEach(async () => {
     await env.DB.prepare("DELETE FROM jobs").run();
     await env.DB.prepare("DELETE FROM job_outcomes").run();
-    // jobs post requires a registered namespace.
-    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-      .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
-      .run();
+    await seedCapsidNamespace();
   });
 
   for (const [field, value] of [

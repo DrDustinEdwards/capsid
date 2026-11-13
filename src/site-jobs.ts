@@ -5,6 +5,7 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { withAuditKey } from "./audit-key";
 import { backupTaskResult, runBackup } from "./backup";
 import { readSiteRow } from "./ops-sites";
+import type { SiteOperator } from "./ops-types/sites";
 import { callOperator, tokenSet, type FetchLike } from "./site-operator";
 import { takeLimit } from "./site-repair";
 import { auditStatement } from "./store-guards";
@@ -127,6 +128,17 @@ export async function jobRefusal(
     return isCapsidJob(name)
       ? null
       : `Capsid's jobs that run now are ${CAPSID_JOBS.join(", ")}; '${name}' is not one.`;
+  return operatorRefusal(env, namespace);
+}
+
+/** Why nothing can be called on `namespace`'s operator API, or null: it is not a configured
+ *  site, has no operator API, `also` refuses (a caller's own condition on the operator), or
+ *  the operator's secret is not set. Reads only. */
+export async function operatorRefusal(
+  env: Env,
+  namespace: string,
+  also?: (operator: SiteOperator) => string | null,
+): Promise<string | null> {
   const row = await readSiteRow(env.DB, namespace);
   if (!row?.origin) return `${namespace} is not a configured site.`;
   if (!row.operator)
@@ -134,6 +146,8 @@ export async function jobRefusal(
       row.operator_problem ??
       `${namespace} has no operator API configured, so Capsid may call nothing on it.`
     );
+  const own = also?.(row.operator);
+  if (own) return own;
   if (!tokenSet(env, row.operator))
     return `the Capsid Worker secret ${row.operator.auth_var} is not set, so nothing can be called on ${namespace}.`;
   return null;

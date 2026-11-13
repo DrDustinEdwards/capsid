@@ -12,15 +12,15 @@
     }
   ],
   "baseline": {
-    "measured_at": "7a7e90a",
+    "measured_at": "514785a",
     "knip (Worker)": {},
     "knip (dashboard)": {
       "exports": 5
     },
     "jscpd": {
-      "clones": 221,
-      "lines": 2052,
-      "percentage": 1.35,
+      "clones": 181,
+      "lines": 1553,
+      "percentage": 1.02,
       "unread": 5
     },
     "shared copies": {
@@ -33,9 +33,9 @@
       "cases": 2569
     },
     "comments": {
-      "lines": 16364,
-      "code": 136557,
-      "percentage": 10.7
+      "lines": 16385,
+      "code": 135834,
+      "percentage": 10.76
     }
   }
 }

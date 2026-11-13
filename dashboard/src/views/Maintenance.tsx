@@ -1,7 +1,8 @@
 import { Banner } from "capsomer/react/banner";
 import { AwayLink } from "capsomer/react/link";
 import { useState } from "react";
-import { Empty, Spinner } from "capsomer/react/empty";
+import { Empty } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
 import { useApp } from "../app/ctx";
@@ -11,7 +12,8 @@ import type { Kind } from "../lib/derive";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import type { MaintenanceRule, OpsMaintenanceItem, PortalMaintenance } from "../types";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
+import { KIND_STATUS } from "../lib/derive";
 
 // The Maintenance list on the Overview (job_549550d73d4e): what the daily maintenance pass
 // found, from GET /portal/api/maintenance, the list capsid_read_status action status serves. The seat reads
@@ -132,7 +134,7 @@ function Row({ item, opens }: { item: OpsMaintenanceItem; opens: boolean }) {
       data-rule={item.rule}
       {...target}
     >
-      <St kind={rule.kind}>{rule.label}</St>
+      <Status {...KIND_STATUS[rule.kind]}>{rule.label}</Status>
       <div className="t">
         <div className="why">{item.line}</div>
         {item.pr && (

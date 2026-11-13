@@ -65,9 +65,11 @@ interface Reading {
   error: string | null;
 }
 
-const clip = (s: string) => (s.length > TEXT_MAX ? `${s.slice(0, TEXT_MAX - 1)}…` : s);
+export const clip = (s: string) => (s.length > TEXT_MAX ? `${s.slice(0, TEXT_MAX - 1)}…` : s);
 
-async function readHealth(fetchImpl: FetchLike, url: string): Promise<Reading> {
+/** A site's health route, read once: its status and JSON body, or why it could not be read.
+ *  The watcher and the Portal's convergence view (src/site-convergence.ts) both read it here. */
+export async function readHealth(fetchImpl: FetchLike, url: string): Promise<Reading> {
   try {
     const res = await fetchImpl(url, {
       headers: { "user-agent": "capsid-watcher", "cache-control": "no-cache" },

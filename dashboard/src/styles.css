@@ -71,62 +71,6 @@ main {
   text-wrap: balance;
 }
 
-/* status vocabulary: shape + text + color */
-.st {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  font-size: var(--fs-detail);
-  white-space: nowrap;
-}
-.st svg {
-  flex: none;
-}
-.st.ok {
-  color: var(--ok);
-}
-.st.warn {
-  color: var(--warn);
-}
-.st.crit {
-  color: var(--crit);
-}
-.st.nodata {
-  color: var(--nodata);
-}
-.st.unknown {
-  color: var(--muted);
-}
-.st.run {
-  color: var(--info);
-}
-.st.queued {
-  color: var(--muted);
-}
-.st.blocked {
-  color: var(--warn);
-}
-.tone-ok {
-  color: var(--ok);
-}
-.tone-warn {
-  color: var(--warn);
-}
-.tone-crit {
-  color: var(--crit);
-}
-.tone-nodata {
-  color: var(--nodata);
-}
-/* A hold reason is a phrase, so it wraps in its own column rather than squeezing the rest. */
-.held .st {
-  white-space: normal;
-  align-items: flex-start;
-}
-.held .st svg {
-  margin-top: 2px;
-}
 .prcards .wrow + .wrow {
   border-top: 1px solid var(--line);
 }
@@ -501,7 +445,7 @@ table.workers-stores td {
 table.workers-stores details {
   margin-top: 2px;
 }
-table.workers-stores .st {
+table.workers-stores .cap-status {
   white-space: normal;
 }
 @media (max-width: 820px) {
@@ -526,9 +470,9 @@ table.workers-stores .st {
     display: none;
   }
   .shared-users td,
-  .shared-users .st,
+  .shared-users .cap-status,
   .cap-panel-src,
-  .cap-panel-src .st {
+  .cap-panel-src .cap-status {
     white-space: normal;
     overflow-wrap: anywhere;
   }
@@ -794,14 +738,6 @@ dialog {
 .fleet .cap-uptime-strip {
   display: block;
 }
-.nodata-cell {
-  display: grid;
-  gap: 2px;
-}
-.nodata-cell .src {
-  white-space: normal;
-  max-width: 22ch;
-}
 .src.wrap,
 td.wrap {
   white-space: normal;
@@ -865,9 +801,12 @@ main .sev-crit[data-row]:focus-visible {
   .att-row {
     grid-template-columns: 14px minmax(0, 1fr) auto;
   }
-  .att-row .kind .st {
+  .att-row .kind .cap-status {
     font-size: 0;
     gap: 0;
+  }
+  .att-row .kind .cap-status-glyph {
+    font-size: var(--fs-detail);
   }
   .att-row .what b,
   .rowlink {
@@ -876,7 +815,7 @@ main .sev-crit[data-row]:focus-visible {
   .qrow {
     grid-template-columns: minmax(0, 1fr) auto;
   }
-  .qrow .st {
+  .qrow .cap-status {
     grid-column: 1 / -1;
   }
   .search {

@@ -8,19 +8,15 @@ import { outcomeStatement } from "../src/job-outcomes";
 import { grantAgent } from "../src/agents";
 import { buildServer } from "../src/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
+import { jobRow, jobsEnv, seedCapsidNamespace } from "./jobs-fixture";
 
 // Jobs as evidence, against a real D1 (migrations/0011). Every property below is a
 // property of the database: "exactly one outcome row per job" is a PRIMARY KEY, and
 // a bar checked at the claim is a refusal a real UPDATE either did or did not perform.
 
-const SECRET = "test-root-secret";
 const SEAT = "github:DrDustinEdwards";
 const DRIVER_ACTOR = "agent:driver-aaaa";
 const DRIVER = grantAgent("write", DRIVER_ACTOR);
-
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
-}
 
 const at = (iso: string) => new Date(iso);
 const NOW = at("2026-09-10T12:00:00.000Z");
@@ -32,12 +28,6 @@ async function post(over: Record<string, unknown> = {}) {
     body: "do the thing",
     ...over,
   } as Parameters<typeof postJob>[3]);
-}
-
-async function jobRow(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
-    .bind(id)
-    .first<Record<string, unknown>>();
 }
 
 async function outcomeRow(id: string) {
@@ -106,10 +96,7 @@ async function seedAgent(name: string) {
 
 beforeEach(async () => {
   await resetCapsidDb();
-  // jobs post requires a registered namespace.
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-    .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
-    .run();
+  await seedCapsidNamespace();
 });
 
 describe("job outcomes", () => {

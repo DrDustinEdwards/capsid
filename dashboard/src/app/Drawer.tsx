@@ -9,15 +9,16 @@ import {
   type ReactNode,
 } from "react";
 import { Dialog } from "capsomer/react/dialog";
-import { Missing as NoValue, Spinner } from "capsomer/react/empty";
+import { Missing as NoValue } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { useApp, type DrawerType } from "./ctx";
 import { fetchActivity } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
 import { actionWords } from "../lib/audit-words";
-import { JOB } from "../lib/derive";
+import { KIND_STATUS, JOB } from "../lib/derive";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
-import { Pill, St } from "../ui/icons";
+import { Pill, Status } from "capsomer/react/status";
 import { Time } from "capsomer/react/time";
 import { agentState, nsList } from "../lib/derive";
 import { AgentControls, Head, JobBody } from "./DrawerJob";
@@ -194,7 +195,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
         label={`Agent · ${a.kind}`}
         title={a.name}
         sub={`agent:${a.name}`}
-        badge={<Pill kind={st.kind}>{st.label}</Pill>}
+        badge={<Pill {...KIND_STATUS[st.kind]}>{st.label}</Pill>}
         onClose={onClose}
       />
       <div className="cap-dialog-body cap-detail-body">
@@ -252,7 +253,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
           {mine.length ? (
             mine.map((j) => (
               <div className="qrow" key={j.id} data-open={`job:${j.id}`} role="button" tabIndex={0}>
-                <St kind={JOB[j.status].kind}>{JOB[j.status].label}</St>
+                <Status {...KIND_STATUS[JOB[j.status].kind]}>{JOB[j.status].label}</Status>
                 <div className="t">
                   <b>{j.title}</b>
                 </div>

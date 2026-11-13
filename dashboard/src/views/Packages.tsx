@@ -6,7 +6,7 @@ import { useAnswer } from "capsomer/react/data";
 import { ago } from "../lib/format";
 import { shortCount } from "capsomer/behavior/format";
 import { parse } from "capsomer/behavior/time";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "../types";
 import { ChartFrame } from "capsomer/react/chart-frame";
 import { Panel } from "capsomer/react/panel";
@@ -45,7 +45,7 @@ function Part({
       {part.reason}
     </span>
   ) : (
-    <St kind="nodata">Could not read: {part.reason}</St>
+    <Status tone="nodata">Could not read: {part.reason}</Status>
   );
 }
 

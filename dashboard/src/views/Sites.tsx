@@ -8,10 +8,11 @@ import { Uptime90 } from "./Uptime90";
 import { Deploys } from "./Deploys";
 import { useEditor } from "capsomer/react/config-form";
 import { Suspense, lazy } from "react";
-import { Missing, Spinner } from "capsomer/react/empty";
+import { Missing } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { parse, utc } from "capsomer/behavior/time";
 import { ago } from "../lib/format";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import { FilterEmpty, FleetTable, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
 
 // The add and edit form loads only when it opens, with its fields' stylesheets (as on SitePage).
@@ -135,7 +136,7 @@ function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
       <td data-label="Name">{s.name}</td>
       <td data-label="Origin">
         {s.origin === null ? (
-          <St kind="nodata">Serves no site</St>
+          <Status tone="nodata">Serves no site</Status>
         ) : (
           <>
             <span className="cap-mono">{s.origin}</span>

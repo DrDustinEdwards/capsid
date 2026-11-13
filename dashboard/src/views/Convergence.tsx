@@ -1,5 +1,6 @@
 import { Alert, Banner } from "capsomer/react/banner";
-import { Empty, Spinner } from "capsomer/react/empty";
+import { Empty } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
 import { useApp } from "../app/ctx";
@@ -8,7 +9,7 @@ import { useAnswer, type Load } from "capsomer/react/data";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import type { ConvergenceCheck, ConvergenceSite, PortalConvergence } from "../types";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
 
@@ -113,11 +114,11 @@ function SitePanel({
             <dt>Health</dt>
             <dd>
               {!site.health || site.health.error ? (
-                <St kind="nodata">{site.health?.error ?? "Not read"}</St>
+                <Status tone="nodata">{site.health?.error ?? "Not read"}</Status>
               ) : site.health.ok ? (
-                <St kind="ok">Converged</St>
+                <Status tone="ok">Converged</Status>
               ) : (
-                <St kind="warn">{`${failing} ${failing === 1 ? "check" : "checks"} failing (HTTP ${site.health.http_status ?? "?"})`}</St>
+                <Status tone="warn">{`${failing} ${failing === 1 ? "check" : "checks"} failing (HTTP ${site.health.http_status ?? "?"})`}</Status>
               )}
             </dd>
             {op.weekly.length > 0 && (
@@ -151,7 +152,7 @@ function SitePanel({
           <h3 className="conv-h">Operator sync_status</h3>
           {site.status.error ? (
             <Alert tone="neutral">
-              <St kind="nodata">Not read</St> {site.status.error}
+              <Status tone="nodata">Not read</Status> {site.status.error}
             </Alert>
           ) : (
             <dl className="cap-detail-record">
@@ -170,11 +171,11 @@ function SitePanel({
               <li key={`${r.at}|${i}`}>
                 <span className="cap-mono">{r.tool}</span>{" "}
                 {r.converged === true ? (
-                  <St kind="ok">converged</St>
+                  <Status tone="ok">converged</Status>
                 ) : r.converged === false ? (
-                  <St kind="warn">did not converge</St>
+                  <Status tone="warn">did not converge</Status>
                 ) : (
-                  <St kind="nodata">{r.error ? "failed" : "no verdict"}</St>
+                  <Status tone="nodata">{r.error ? "failed" : "no verdict"}</Status>
                 )}{" "}
                 <span className="cap-text" data-tone="dim">
                   {ago(parse(r.at), now)} by {r.actor}
@@ -231,7 +232,7 @@ function Checks({
                   </div>
                 )}
               </td>
-              <td>{c.ok ? <St kind="ok">ok</St> : <St kind="warn">drifted</St>}</td>
+              <td>{c.ok ? <Status tone="ok">ok</Status> : <Status tone="warn">drifted</Status>}</td>
               <td className="cap-num">
                 {c.expected === null ? "" : `${c.present ?? "?"} of ${c.expected}`}
               </td>
@@ -289,7 +290,7 @@ function Secrets({ secrets }: { secrets: NonNullable<ConvergenceSite["secrets"]>
       ) : null}
       {secrets.state !== "ok" ? (
         <Alert tone="neutral">
-          <St kind="nodata">Not read</St> {secrets.reason}
+          <Status tone="nodata">Not read</Status> {secrets.reason}
         </Alert>
       ) : secrets.rows.length === 0 ? (
         <Empty kind="all-clear" title="The Worker has no secrets." />
@@ -298,7 +299,7 @@ function Secrets({ secrets }: { secrets: NonNullable<ConvergenceSite["secrets"]>
           {secrets.rows.map((r) => (
             <li key={r.name}>
               <span className="cap-mono">{r.name}</span>{" "}
-              {r.set ? <St kind="ok">set</St> : <St kind="crit">not set</St>}
+              {r.set ? <Status tone="ok">set</Status> : <Status tone="crit">not set</Status>}
               {!r.expected && (
                 <span className="cap-text" data-tone="dim">
                   {" "}

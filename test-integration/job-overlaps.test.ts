@@ -4,21 +4,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, commandFromSummary, completeJob, postJob } from "../src/jobs";
 import { grantAgent } from "../src/agents";
 import { OTHER_PRS_READ } from "../src/job-overlaps";
+import { dropSampleToken, jobsEnv, seedSampleRepo } from "./jobs-fixture";
 
 // Overlap warnings (Track A D1) against real D1, with GitHub as a fetch stub: block and
 // complete name a pull request, the Worker reads the files of every other open pull request
 // in the repo, and a shared file becomes one line in the summary the seat reads.
 
-const SECRET = "test-root-secret";
 const NS = "sample";
 const PR = (n: number) => `https://github.com/example/sample/pull/${n}`;
 const DRIVER = grantAgent("write", "agent:driver-aaaa");
 const SEAT = grantAgent("write", "access:seat@example.com");
 const NOW = new Date("2026-10-07T12:00:00.000Z");
-
-function jobsEnv() {
-  return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
-}
 
 // files: pull request number -> the files GitHub lists (a string, or [new, old] for a rename).
 // open: the numbers GitHub lists as open. failing: pull requests whose file list returns 502.
@@ -69,15 +65,12 @@ async function claimed(title: string) {
 
 beforeEach(async () => {
   await resetCapsidDb();
-  await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-    .bind(NS, JSON.stringify([{ repo: "example/sample", label: "primary" }]))
-    .run();
-  await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
+  await seedSampleRepo();
 });
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await env.APP_KV.delete("gh:token:v3:example/sample");
+  await dropSampleToken();
 });
 
 describe("overlap warnings on block and complete", () => {

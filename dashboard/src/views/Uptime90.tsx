@@ -1,6 +1,6 @@
 import { useApp } from "../app/ctx";
 import { pct } from "../lib/format";
-import { St } from "../ui/icons";
+import { Status } from "capsomer/react/status";
 import { Panel } from "capsomer/react/panel";
 import { uptimeStrip, type UptimeSlot } from "enarratio";
 import { markup } from "capsomer/behavior/trusted-html";
@@ -25,7 +25,7 @@ export function Uptime90({ ns }: { ns: string }) {
   if (u === null) {
     return (
       <Panel title={title} src={src}>
-        <St kind="nodata">No data</St> The daily counts could not be read.
+        <Status tone="nodata">No data</Status> The daily counts could not be read.
       </Panel>
     );
   }
@@ -73,7 +73,7 @@ export function Uptime90({ ns }: { ns: string }) {
                     </td>
                     <td>
                       {share === null ? (
-                        <St kind="nodata">No data</St>
+                        <Status tone="nodata">No data</Status>
                       ) : (
                         <span className="cap-uptime-line">
                           <span
@@ -89,7 +89,9 @@ export function Uptime90({ ns }: { ns: string }) {
                             )}
                           />
                           <span className="cap-uptime-pct">
-                            <St kind={share >= u.target ? "ok" : "warn"}>{pct(share, 2)}</St>
+                            <Status tone={share >= u.target ? "ok" : "warn"}>
+                              {pct(share, 2)}
+                            </Status>
                           </span>
                         </span>
                       )}
