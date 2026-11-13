@@ -13,7 +13,9 @@ import {
   type LoaderFunctionArgs,
 } from "react-router";
 // The network's faces, self-hosted (CSP font-src 'self'): one variable file each, every weight.
-import "capsomer/fonts.css";
+import "capsomer/fonts-inter.css";
+import "capsomer/fonts-martian-mono.css";
+import "capsomer/fonts-jost.css";
 import monoFontUrl from "capsomer/fonts/martian-mono-latin-wght-normal.woff2?url";
 import uiFontUrl from "capsomer/fonts/inter-latin-wght-normal.woff2?url";
 // Capsomer: its layer order and tokens first, then its element defaults (base.css, which carries

@@ -9,7 +9,6 @@ import { St } from "../ui/icons";
 import type { PortalNamespace, PortalNamespaces } from "../types";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
-import "capsomer/button.css";
 import { PageHead } from "./shared";
 import { useEditor } from "capsomer/react/config-form";
 import { ProjectForm } from "./ProjectConfig";

@@ -12,10 +12,7 @@ import {
 import { useTwoStep } from "capsomer/react/confirm-dialog";
 import { Disclosure } from "capsomer/react/disclosure";
 import { Field } from "capsomer/react/field";
-import "capsomer/banner.css";
-import "capsomer/button.css";
 import "capsomer/disclosure.css";
-import "capsomer/field.css";
 import { performAction, previewAction, type Answer } from "../lib/api";
 import { ago } from "../lib/format";
 import { parse, utc } from "capsomer/behavior/time";
