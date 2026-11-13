@@ -35,6 +35,7 @@ import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
 import { writeIntegrity } from "@dustinedwards/site-runtime/sri";
 import { parsePublicModel } from "capsomer/behavior/system-model";
+import { inlineCss } from "capsomer/build";
 import { themeScript } from "capsomer/theme-server";
 import { buildSync, transformSync } from "esbuild";
 
@@ -93,23 +94,6 @@ function contentHash(/** @type {string} */ dir) {
 
 /** A stylesheet minified by esbuild, which keeps its layers and cascade order. @param {string} css */
 const minifyCss = (css) => transformSync(css, { loader: "css", minify: true }).code;
-
-/**
- * Capsomer's CSS as one file: each import inlined, a layered one inside its layer.
- * @param {string} file
- * @returns {string}
- */
-function inlineCss(file) {
-  const text = readFileSync(file, "utf8");
-  return text.replace(
-    /@import\s+"([^"]+)"(?:\s+layer\(([^)]+)\))?\s*;/g,
-    (_m, /** @type {string} */ rel, /** @type {string | undefined} */ layer) => {
-      // A bare specifier ("enarratio/base.css", which capsomer/enarratio.css imports) resolves as a bundler would.
-      const inner = inlineCss(/^[./]/.test(rel) ? join(dirname(file), rel) : require.resolve(rel));
-      return layer ? `@layer ${layer} {\n${inner}\n}` : inner;
-    },
-  );
-}
 
 /**
  * The code document, or null while Capsid has not built one yet: its route answers 503 until the
