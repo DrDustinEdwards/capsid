@@ -52,6 +52,13 @@ export default defineConfig({
               name: "shell-shared",
               test: /capsomer[\\/]dist[\\/]components[\\/](tooltip|shortcuts|theme-switch|route-hooks)[\\/]|src[\\/]lib[\\/]prefs\.ts$/,
             },
+            // The Portal's api, derive and format modules and Capsomer's data, status and format modules are read by
+            // nearly every view; left to the automatic split they become several small shared chunks, each compressed
+            // on its own. As one chunk the first load is smaller.
+            {
+              name: "portal-core",
+              test: /capsomer[\\/]dist[\\/]components[\\/](data|status|format)[\\/]|src[\\/]lib[\\/](api|derive|format)\.ts$/,
+            },
           ],
         },
       },
