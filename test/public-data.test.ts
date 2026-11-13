@@ -12,7 +12,7 @@ import {
   type PublicBuildReaders,
 } from "../src/public-data.ts";
 import { PublicStatsSchema, type StatsRows } from "../src/public-stats.ts";
-import { PublicModelSchema } from "../src/system-model.ts";
+import { PublicModelSchema } from "capsomer/behavior/system-model";
 import { fakeEnv, fakeKv, fakeRateLimiter } from "./fakes.ts";
 
 // The daily build and the route that serves it (docs/public-data.md). The filter itself

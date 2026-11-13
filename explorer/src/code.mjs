@@ -6,7 +6,8 @@
 //
 // Every status is Capsomer's: a glyph whose shape carries it, a word, and the tone's color
 // (components/status). A number nobody measured is "No data" with its reason, never a zero.
-import { graphSvg } from "./graph.mjs";
+import { graphSvg } from "capsomer/behavior/graph";
+import { glyphHtml, statusHtml } from "capsomer/behavior/status";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { layout, pageHead, readingBox, scroller, systemPath } from "./pages.mjs";
 
@@ -26,13 +27,6 @@ const CRAP_CRIT = 30;
 const SCORE_OK = 80;
 const SCORE_WATCH = 60;
 
-const GLYPH = {
-  crit: '<path fill="currentColor" fill-rule="evenodd" d="M5 1h6l4 4v6l-4 4H5l-4-4V5zM7.2 4h1.6v5H7.2zM7.2 10.4h1.6V12H7.2z"/>',
-  warn: '<path fill="currentColor" fill-rule="evenodd" d="M8 1.2 15.4 14H.6zM7.3 6h1.4v4H7.3zM7.3 11h1.4v1.4H7.3z"/>',
-  ok: '<path fill="currentColor" fill-rule="evenodd" d="M8 1a7 7 0 1 0 0 14A7 7 0 1 0 8 1zM3.9 9l3 3 5.2-5.6-1.4-1.4-3.8 4.2-1.6-1.6z"/>',
-  nodata:
-    '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5 8h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
-};
 const WORD = { crit: "Critical", warn: "Watch", ok: "Ok" };
 
 /**
@@ -41,10 +35,9 @@ const WORD = { crit: "Critical", warn: "Watch", ok: "Ok" };
  * @param {"crit" | "warn" | "ok" | "nodata"} tone @param {string} value @param {string} [reason]
  */
 function status(tone, value, reason) {
-  const glyph = `<svg class="cap-status-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${GLYPH[tone]}</svg>`;
   if (tone === "nodata")
-    return `<span class="cap-status" data-tone="nodata" title="${escapeHtml(reason ?? "")}">${glyph}No data<span class="cap-sr-only">: ${escapeHtml(reason ?? "")}</span></span>`;
-  return `<span class="cap-status" data-tone="${tone}">${glyph}${WORD[tone]}<span class="code-num">${escapeHtml(value)}</span></span>`;
+    return statusHtml("nodata", "No data", { brief: true, reason: reason ?? "" });
+  return `<span class="cap-status" data-tone="${tone}">${glyphHtml(tone)}${WORD[tone]}<span class="code-num">${escapeHtml(value)}</span></span>`;
 }
 
 /** @param {number | null} crap @returns {"crit" | "warn" | "ok" | "nodata"} */
@@ -236,7 +229,7 @@ export function codePage(s, maps, asOf) {
               label: folderName(folder),
               href: `#${folderId(folder)}`,
               lines: boxLines(map, mods),
-              cycle: mods.some((/** @type {any} */ m) => m.cycle),
+              ring: mods.some((/** @type {any} */ m) => m.cycle),
             })),
             wires: map.modules.flatMap((/** @type {any} */ m) =>
               m.imports.map((/** @type {string} */ to) => ({
@@ -259,7 +252,7 @@ export function codePage(s, maps, asOf) {
               label: baseName(m.path),
               href: blobUrl(map, m.path),
               lines: boxLines(map, [m]),
-              cycle: !!m.cycle,
+              ring: !!m.cycle,
             })),
             wires: mods.flatMap((m) =>
               m.imports.map((/** @type {string} */ to) => ({ from: m.path, to })),

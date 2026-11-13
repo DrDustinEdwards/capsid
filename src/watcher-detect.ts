@@ -1,4 +1,5 @@
 import { type HealthReport, BACKUP_STALE_HOURS } from "./health";
+import { median } from "capsomer/behavior/format";
 import type { ServerErrors, SiteCloudflare } from "./ops-types/sites";
 import type { OpsSnapshot, SiteProbe } from "./ops-snapshot";
 import type { SiteMapDrift } from "./ops-sites";
@@ -347,12 +348,6 @@ export interface OffaccountReport {
   sites: Record<string, OffaccountSiteReport>;
 }
 
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
 export interface WorkflowRun {
   name?: string;
   status?: string;
@@ -436,7 +431,7 @@ export function offaccountFindings(
     // The newest copy against the median of the ones before it.
     const before = line.recent_bytes.slice(1);
     if (line.bytes !== null && before.length >= OFFACCOUNT_SIZE_MIN_HISTORY) {
-      const mid = median(before);
+      const mid = median(before) as number;
       const ratio = mid > 0 ? line.bytes / mid : Number.POSITIVE_INFINITY;
       if (ratio < OFFACCOUNT_SIZE_LOW || ratio > OFFACCOUNT_SIZE_HIGH) {
         out.push(

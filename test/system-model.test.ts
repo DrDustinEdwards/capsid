@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { PublicModelSchema } from "capsomer/behavior/system-model";
 import { z } from "zod";
 import {
-  PublicModelSchema,
   SystemModelSchema,
   parseSystemModel,
   toPublic,
