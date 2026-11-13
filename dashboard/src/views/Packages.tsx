@@ -298,10 +298,7 @@ function PackagePanel({
                 {() =>
                   snap.github.state === "ok" && (
                     <>
-                      <AwayLink
-                        href={`https://github.com/${snap.github.repo}`}
-                        newTab
-                      >
+                      <AwayLink href={`https://github.com/${snap.github.repo}`} newTab>
                         <span className="cap-mono">{snap.github.repo}</span>
                       </AwayLink>{" "}
                       · <span className="cap-num">{snap.github.stars}</span> stars ·{" "}
