@@ -1,7 +1,8 @@
 import { Suspense, lazy } from "react";
 import { Switch } from "capsomer/react/switch";
 import { ThemeSwitch } from "capsomer/react/theme-switch";
-import { THEME_PREF, setSingleKeys, useSingleKeys } from "../lib/prefs";
+import { setSingleKeys } from "capsomer/behavior/shortcuts";
+import { THEME_PREF, useSingleKeys } from "../lib/prefs";
 import { Panel } from "capsomer/react/panel";
 // The lazy Automation section's segmented control: loaded with the route, so that section
 // brings no stylesheet of its own to wait for before it hydrates.

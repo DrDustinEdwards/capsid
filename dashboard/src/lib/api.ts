@@ -75,8 +75,7 @@ export const POLL_MS = 60_000;
 
 // Capsomer's data layer (capsomer/react/data) holds what a request came to (Answer), the session
 // test, the reads and posts, the signed-out flag and the Answer query hook. This file keeps the
-// Portal's own routes, the feed and its words. The re-exports are for the views that import them here.
-export { useAnswer, type Answer, type Load } from "capsomer/react/data";
+// Portal's own routes, the feed and its words.
 
 async function asFeed(res: Response): Promise<OpsFeed> {
   const type = res.headers.get("content-type") ?? "";

@@ -1,7 +1,8 @@
 import { Alert, Banner } from "capsomer/react/banner";
 import { Suspense, lazy, useState } from "react";
 import { useApp } from "../app/ctx";
-import { fetchPackageHistory, useAnswer } from "../lib/api";
+import { fetchPackageHistory } from "../lib/api";
+import { useAnswer } from "capsomer/react/data";
 import { ago } from "../lib/format";
 import { shortCount } from "capsomer/behavior/format";
 import { parse } from "capsomer/behavior/time";

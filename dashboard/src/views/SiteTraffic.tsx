@@ -4,13 +4,8 @@ import "capsomer/log-view.css";
 import { Panel } from "capsomer/react/panel";
 import { ReadState, SourceState, type SourceResult } from "capsomer/react/read-state";
 import { useApp } from "../app/ctx";
-import {
-  fetchBuildLog,
-  fetchSiteSearch,
-  fetchSiteTraffic,
-  fetchWorkersBuilds,
-  useAnswer,
-} from "../lib/api";
+import { fetchBuildLog, fetchSiteSearch, fetchSiteTraffic, fetchWorkersBuilds } from "../lib/api";
+import { useAnswer } from "capsomer/react/data";
 import { ago, pct, shortId } from "../lib/format";
 import { shortCount } from "capsomer/behavior/format";
 import { parse, utc } from "capsomer/behavior/time";

@@ -1,4 +1,5 @@
-import { LIVE, fetchTrends, useAnswer, type Load } from "./api";
+import { LIVE, fetchTrends } from "./api";
+import { useAnswer, type Load } from "capsomer/react/data";
 import type { PortalTrends } from "../types";
 
 // GET /portal/api/trends, shared and kept for ten minutes: Health draws several charts from

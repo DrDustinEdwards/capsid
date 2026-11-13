@@ -11,7 +11,8 @@ import {
 import { Dialog } from "capsomer/react/dialog";
 import { Missing as NoValue, Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
-import { fetchActivity, useAnswer } from "../lib/api";
+import { fetchActivity } from "../lib/api";
+import { useAnswer } from "capsomer/react/data";
 import { actionWords } from "../lib/audit-words";
 import { JOB } from "../lib/derive";
 import { ago } from "../lib/format";

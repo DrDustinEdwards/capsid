@@ -1,7 +1,8 @@
 import { Banner } from "capsomer/react/banner";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
-import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
+import { LIVE, fetchNamespaces } from "../lib/api";
+import { useAnswer } from "capsomer/react/data";
 import { agentState, driverOf } from "../lib/derive";
 import { ago, pct } from "../lib/format";
 import { parse } from "capsomer/behavior/time";

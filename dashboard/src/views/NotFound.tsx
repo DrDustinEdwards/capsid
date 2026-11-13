@@ -3,7 +3,8 @@ import "capsomer/row-list.css";
 import "capsomer/time.css";
 import "capsomer/not-found-report.css";
 import { NotFoundReport } from "capsomer/react/not-found-report";
-import { fetchNotFound, useAnswer } from "../lib/api";
+import { fetchNotFound } from "../lib/api";
+import { useAnswer } from "capsomer/react/data";
 import type { PortalNotFound } from "../types";
 
 // Capsid's own missing pages over 30 days (area 8, N4), from page_404_daily through GET
