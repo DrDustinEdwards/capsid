@@ -1,7 +1,5 @@
 import { Banner } from "capsomer/react/banner";
-import { type FormEvent } from "react";
-import { FilterBar, isFiltered, withParams } from "capsomer/react/filter-bar";
-import { Link, useLocation, useSearch } from "../lib/router";
+import { useUrlFilters } from "capsomer/react/route-hooks";
 import { useApp } from "../app/ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
@@ -24,27 +22,15 @@ const TARGET_LABEL: Record<"job" | "document", string> = {
 
 export function Activity() {
   const { feed, now: appNow } = useApp();
-  const search = useSearch();
-  const [, navigate] = useLocation();
-  const params = new URLSearchParams(search);
-  const namespace = params.get("namespace") ?? "";
-  const actor = params.get("actor") ?? "";
+  // The filter lives in the address (capsomer/react/route-hooks): the fields follow it (back, a link)
+  // and apply on submit, replacing the history entry.
+  const filters = useUrlFilters(["namespace", "actor"] as const);
+  const { namespace, actor } = filters.applied;
+  const { namespace: nsInput, actor: actorInput } = filters.input;
 
   const load = useAnswer<PortalActivity>(["activity", namespace, actor], () =>
     fetchActivity({ namespace, actor }),
   );
-
-  const apply = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    navigate(
-      withParams("/activity", {
-        namespace: form.get("namespace") as string,
-        actor: form.get("actor") as string,
-      }),
-      { replace: true },
-    );
-  };
 
   const data = load.data;
   // The rows were just read from the server, so none is later than the read itself.
@@ -62,19 +48,24 @@ export function Activity() {
   return (
     <div className="page">
       <PageHead title="Activity" />
-      {/* The address changed (back, a link): the fields follow it, so the bar starts over. */}
-      <FilterBar
-        key={`${namespace}\u0000${actor}`}
-        label="Filter activity"
-        onSubmit={apply}
-        clearLabel="Clear"
-        clearHref={isFiltered({ namespace, actor }, ["namespace", "actor"]) ? "/activity" : null}
-        renderLink={(props) => <Link {...props} />}
+      <form
+        className="toolbar"
+        role="search"
+        aria-label="Filter activity"
+        onSubmit={(e) => {
+          e.preventDefault();
+          filters.apply();
+        }}
       >
         <label className="cap-sr-only" htmlFor="actNs">
           Project
         </label>
-        <select id="actNs" className="search" name="namespace" defaultValue={namespace}>
+        <select
+          id="actNs"
+          className="search"
+          value={nsInput}
+          onChange={(e) => filters.setInput({ namespace: e.target.value })}
+        >
           <option value="">All projects</option>
           {names.map((n) => (
             <option key={n} value={n}>
@@ -87,7 +78,12 @@ export function Activity() {
         </label>
         {/* A picker, not a box to type an id into from memory (the UX audit's m7): every
             agent on the roster, and every actor in the rows read. */}
-        <select id="actActor" className="search" name="actor" defaultValue={actor}>
+        <select
+          id="actActor"
+          className="search"
+          value={actorInput}
+          onChange={(e) => filters.setInput({ actor: e.target.value })}
+        >
           <option value="">Anyone</option>
           {actors.map((a) => (
             <option key={a} value={a}>
@@ -95,7 +91,19 @@ export function Activity() {
             </option>
           ))}
         </select>
-      </FilterBar>
+        <button type="submit" className="cap-btn">
+          Apply
+        </button>
+        {(namespace || actor) && (
+          <button
+            type="button"
+            className="cap-btn"
+            onClick={() => filters.apply({ namespace: "", actor: "" })}
+          >
+            Clear
+          </button>
+        )}
+      </form>
       {load.error && (
         <Banner tone="crit">
           Could not read the activity: {load.error}

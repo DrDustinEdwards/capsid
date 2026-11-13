@@ -1,10 +1,9 @@
 import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { FILTER_KEYS } from "../lib/keys";
-import { Suspense, useState, type FormEvent } from "react";
-import { FilterBar, isFiltered, withParams } from "capsomer/react/filter-bar";
+import { Suspense } from "react";
 import { Missing, Spinner } from "capsomer/react/empty";
-import { Link, useLocation, useSearch } from "../lib/router";
+import { useUrlFilters } from "capsomer/react/route-hooks";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, fetchClaimsJob, useAnswer } from "../lib/api";
 import { age, ago } from "../lib/format";
@@ -23,29 +22,27 @@ const AgreementChart = trendChart("AgreementChart");
 type FilterKey = (typeof FILTER_KEYS)[number];
 type Filter = Record<FilterKey, string>;
 
+// Checks is Jobs' tab (/queue), so the tab stays in the address beside the filter.
+const PARAMS = [...FILTER_KEYS, "job"] as const;
+const CHECKS_TAB = { tab: "checks" };
+
 // The filters and the open job live in the address (?namespace=&agent=&since=&until=&job=),
 // so a view can be reloaded or shared. The inputs apply on submit.
 export function Claims() {
   const { feed, now } = useApp();
-  const search = useSearch();
-  const [, navigate] = useLocation();
-  const params = new URLSearchParams(search);
+  const filters = useUrlFilters(PARAMS, { fixed: CHECKS_TAB });
+  const { job } = filters.applied;
   const filter: Filter = {
-    namespace: params.get("namespace") ?? "",
-    agent: params.get("agent") ?? "",
-    since: params.get("since") ?? "",
-    until: params.get("until") ?? "",
+    namespace: filters.applied.namespace,
+    agent: filters.applied.agent,
+    since: filters.applied.since,
+    until: filters.applied.until,
   };
-  const job = params.get("job") ?? "";
-  const [jobInput, setJobInput] = useState(job);
+  const input = filters.input;
+  const jobInput = filters.input.job;
   const key = FILTER_KEYS.map((k) => filter[k]).join("\u0000");
-
-  // The address changed: the job field follows it. Adjusted while rendering, not in an effect.
-  const [seen, setSeen] = useState({ key, job });
-  if (seen.key !== key || seen.job !== job) {
-    setSeen({ key, job });
-    setJobInput(job);
-  }
+  // The filter form applies the fields with the open job; the job form, the job with the filter.
+  const go = (next: Filter, nextJob: string) => filters.apply({ ...next, job: nextJob });
 
   const agg = useAnswer<PortalClaimsAggregate>(["claims", key], () => fetchClaimsAggregate(filter));
   const detail = useAnswer<PortalClaimsJob>(["claims", "job", job], () => fetchClaimsJob(job), {
@@ -53,39 +50,32 @@ export function Claims() {
     enabled: job !== "",
   });
 
-  const go = (next: Filter, nextJob: string) => {
-    // Checks is Jobs' tab, so the tab stays in the address beside the filter.
-    navigate(withParams("/queue", { tab: "checks", ...next, job: nextJob }), { replace: true });
-  };
-  const apply = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const next = { ...filter };
-    for (const k of FILTER_KEYS) next[k] = String(form.get(k) ?? "");
-    go(next, job);
-  };
-
   const data = agg.data;
   const names = feed.live.namespaces.map((n) => n.name);
   if (filter.namespace && !names.includes(filter.namespace)) names.push(filter.namespace);
-  const filtered = isFiltered(filter, FILTER_KEYS);
+  const filtered = FILTER_KEYS.some((k) => filter[k]);
   const checks = data ? byCheck(data.groups) : [];
 
   return (
     <div className="embedded">
-      {/* The address changed (back, a link): the fields follow it, so the bar starts over. */}
-      <FilterBar
-        key={key}
-        label="Filter claims"
-        onSubmit={apply}
-        clearLabel="Clear"
-        clearHref={filtered ? withParams("/queue", { tab: "checks", job }) : null}
-        renderLink={(props) => <Link {...props} />}
+      <form
+        className="toolbar"
+        role="search"
+        aria-label="Filter claims"
+        onSubmit={(e) => {
+          e.preventDefault();
+          go(input, job);
+        }}
       >
         <label className="cap-sr-only" htmlFor="clNs">
           Project
         </label>
-        <select id="clNs" className="search" name="namespace" defaultValue={filter.namespace}>
+        <select
+          id="clNs"
+          className="search"
+          value={input.namespace}
+          onChange={(e) => filters.setInput({ namespace: e.target.value })}
+        >
           <option value="">All projects</option>
           {names.map((n) => (
             <option key={n} value={n}>
@@ -100,9 +90,9 @@ export function Claims() {
           id="clAgent"
           className="search"
           type="search"
-          name="agent"
           placeholder="Agent, e.g. agent:sample-driver"
-          defaultValue={filter.agent}
+          value={input.agent}
+          onChange={(e) => filters.setInput({ agent: e.target.value })}
         />
         <label className="cap-sr-only" htmlFor="clSince">
           Since
@@ -111,9 +101,9 @@ export function Claims() {
           id="clSince"
           className="search"
           type="date"
-          name="since"
           title="Since (inclusive)"
-          defaultValue={filter.since}
+          value={input.since}
+          onChange={(e) => filters.setInput({ since: e.target.value })}
         />
         <label className="cap-sr-only" htmlFor="clUntil">
           Before
@@ -122,11 +112,23 @@ export function Claims() {
           id="clUntil"
           className="search"
           type="date"
-          name="until"
           title="Before (exclusive)"
-          defaultValue={filter.until}
+          value={input.until}
+          onChange={(e) => filters.setInput({ until: e.target.value })}
         />
-      </FilterBar>
+        <button type="submit" className="cap-btn">
+          Apply
+        </button>
+        {filtered && (
+          <button
+            type="button"
+            className="cap-btn"
+            onClick={() => go({ namespace: "", agent: "", since: "", until: "" }, job)}
+          >
+            Clear
+          </button>
+        )}
+      </form>
       {agg.error && (
         <Banner tone="crit">
           Could not read the claims: {agg.error}
@@ -278,7 +280,7 @@ export function Claims() {
           list="clJobs"
           placeholder="Job id, e.g. job_0123456789ab"
           value={jobInput}
-          onChange={(e) => setJobInput(e.target.value)}
+          onChange={(e) => filters.setInput({ job: e.target.value })}
         />
         <datalist id="clJobs">
           {feed.live.jobs.map((j) => (

@@ -1,14 +1,13 @@
-import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   SignedOut,
-  answerOf,
   createFlag,
-  createQueryClient as createClient,
+  createQueryClient as capsomerQueryClient,
+  getAnswer,
+  postAnswer,
   sessionEnded,
-  useAnswer,
   useFlag,
   type Answer,
-  type Load,
 } from "capsomer/react/data";
 import { useCallback, useEffect } from "react";
 import { BASE } from "./base";
@@ -74,6 +73,11 @@ const PUSH_URL = `${BASE}/api/push`;
 export const APP_URL = `${BASE}/`;
 export const POLL_MS = 60_000;
 
+// Capsomer's data layer (capsomer/react/data) holds what a request came to (Answer), the session
+// test, the reads and posts, the signed-out flag and the Answer query hook. This file keeps the
+// Portal's own routes, the feed and its words. The re-exports are for the views that import them here.
+export { useAnswer, type Answer, type Load } from "capsomer/react/data";
+
 async function asFeed(res: Response): Promise<OpsFeed> {
   const type = res.headers.get("content-type") ?? "";
   if (!type.includes("json"))
@@ -81,31 +85,25 @@ async function asFeed(res: Response): Promise<OpsFeed> {
   return (await res.json()) as OpsFeed;
 }
 
-// The session ended: a read throws SignedOut so every query stops the same way, and this flag
-// keeps it for the app to show the signed-out page. A feed that answers again (a sign-in in
-// another tab) clears it.
-const signedOutFlag = createFlag();
-const setSignedOut = (next: boolean): void => signedOutFlag.set(next);
-const useSignedOut = (): boolean => useFlag(signedOutFlag);
+// The session ended: kept here for the app to show the signed-out page. A feed that answers again
+// (a sign-in in another tab) clears it.
+const signedOut = createFlag();
 
 // No retries: a failed read says why at once and the next feed or Read again tries anew.
 // Reads go again only when asked (a key, a feed or a button), never on focus, except
 // the feed itself. One client per page load in the browser and one per request on the
 // server (root.tsx, server/prefetch.ts), so no request shares a cache with another
-// (TanStack Query, Advanced Server Rendering).
+// (TanStack Query, Advanced Server Rendering). staleTime above 0: a read the server made for
+// this page is fresh on hydration; the feed's minute poll, Read again and every action's
+// invalidation read again whatever the age.
 export function createQueryClient(): QueryClient {
-  // staleTime above 0, as TanStack Query's SSR guide says: a read the server made for this page
-  // is fresh on hydration, so the page shows it and does not read it again at once. The feed's
-  // minute poll, Read again and every action's invalidation read again whatever the age.
-  return createClient({
+  return capsomerQueryClient({
     staleTime: 60_000,
     retries: 0,
     refetchOnFocus: false,
-    onError: (e) => e instanceof SignedOut && setSignedOut(true),
+    onError: (e) => e instanceof SignedOut && signedOut.set(true),
   });
 }
-
-export { useAnswer, type Answer, type Load };
 
 // The feed is read only by the page itself (on load, the minute poll and a return to
 // the tab), never by a click, so it is marked background: the Worker's idle hour
@@ -143,10 +141,10 @@ export function useOpsFeed() {
     staleTime: 5000,
     refetchOnWindowFocus: true,
   });
-  const signedOut = useSignedOut();
+  const isSignedOut = useFlag(signedOut);
   const generated = q.data?.live.generated;
   useEffect(() => {
-    if (q.dataUpdatedAt) setSignedOut(false);
+    if (q.dataUpdatedAt) signedOut.set(false);
   }, [q.dataUpdatedAt]);
   useEffect(() => {
     if (generated)
@@ -159,11 +157,11 @@ export function useOpsFeed() {
     (feed: OpsFeed) => queryClient.setQueryData(FEED_KEY, feed),
     [queryClient],
   );
-  const signOut = useCallback(() => setSignedOut(true), []);
+  const signOut = useCallback(() => signedOut.set(true), []);
   return {
     feed: q.data ?? null,
     error: q.error && !(q.error instanceof SignedOut) ? q.error.message : null,
-    signedOut,
+    signedOut: isSignedOut,
     nextPollAt: Math.max(q.dataUpdatedAt, q.errorUpdatedAt) + POLL_MS,
     accept,
     signOut,
@@ -218,58 +216,16 @@ export async function requestRefresh(): Promise<RefreshResult> {
 
 // ---- Portal controls, namespaces and activity ----------------------------------------------
 
-// How long a control waits for the Worker before it says so. A request with no answer
-// would otherwise leave the dialog busy, with every button disabled and nothing said.
-const ACTION_TIMEOUT_MS = 20_000;
+// Capsid's words for an action with no answer in time: Activity says whether it went through.
+const noAnswer = (seconds: number) =>
+  `no answer within ${seconds} seconds. Check Activity to see whether anything changed before trying again.`;
 
-async function post<T>(
-  url: string,
-  csrf: string,
-  body: unknown,
-  timeoutMs = ACTION_TIMEOUT_MS,
-): Promise<Answer<T>> {
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      credentials: "same-origin",
-      redirect: "manual",
-      cache: "no-store",
-      headers: {
-        "X-Capsid-CSRF": csrf,
-        "Content-Type": "application/json",
-        accept: "application/json",
-      },
-      body: JSON.stringify(body),
-      signal: abort.signal,
-    });
-    return await answerOf<T>(res, false);
-  } catch (e) {
-    if (abort.signal.aborted) {
-      return {
-        kind: "error",
-        message: `no answer within ${Math.round(timeoutMs / 1000)} seconds. Check Activity to see whether anything changed before trying again.`,
-      };
-    }
-    return { kind: "error", message: e instanceof Error ? e.message : String(e) };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function get<T>(url: string): Promise<Answer<T>> {
-  try {
-    const res = await fetch(url, {
-      credentials: "same-origin",
-      redirect: "manual",
-      cache: "no-store",
-      headers: { accept: "application/json" },
-    });
-    return await answerOf<T>(res, true);
-  } catch (e) {
-    return { kind: "error", message: e instanceof Error ? e.message : String(e) };
-  }
+// A Portal action: the CSRF header on every post, and Capsomer's 20 s wait with Capsid's words.
+function post<T>(url: string, csrf: string, body: unknown): Promise<Answer<T>> {
+  return postAnswer<T>(url, body, {
+    headers: { "X-Capsid-CSRF": csrf },
+    timeoutMessage: noAnswer,
+  });
 }
 
 // POST /portal/api/actions/preview: writes nothing; answers what will change and a token.
@@ -298,7 +254,7 @@ export async function runAction(
 }
 
 export function fetchNamespaces(): Promise<Answer<PortalNamespaces>> {
-  return get<PortalNamespaces>(NAMESPACES_URL);
+  return getAnswer<PortalNamespaces>(NAMESPACES_URL);
 }
 
 // GET /portal/api/activity: the newest audit rows, filtered; or, with id, that one row
@@ -313,7 +269,7 @@ export function fetchActivity(filter: {
   if (filter.namespace) qs.set("namespace", filter.namespace);
   if (filter.actor) qs.set("actor", filter.actor);
   const s = qs.toString();
-  return get<PortalActivity>(s ? `${ACTIVITY_URL}?${s}` : ACTIVITY_URL);
+  return getAnswer<PortalActivity>(s ? `${ACTIVITY_URL}?${s}` : ACTIVITY_URL);
 }
 
 export interface ClaimsQuery {
@@ -329,13 +285,13 @@ export function fetchClaimsAggregate(filter: ClaimsQuery): Promise<Answer<Portal
   for (const key of ["namespace", "agent", "since", "until"] as const)
     if (filter[key]) qs.set(key, filter[key]);
   const s = qs.toString();
-  return get<PortalClaimsAggregate>(s ? `${CLAIMS_URL}?${s}` : CLAIMS_URL);
+  return getAnswer<PortalClaimsAggregate>(s ? `${CLAIMS_URL}?${s}` : CLAIMS_URL);
 }
 
 // GET /portal/api/packages/history?name=: one configured package's daily downloads,
 // joined to its former name's, and its weekly GitHub numbers. Fetched when asked for.
 export function fetchPackageHistory(name: string): Promise<Answer<PortalPackageHistory>> {
-  return get<PortalPackageHistory>(
+  return getAnswer<PortalPackageHistory>(
     `${PACKAGE_HISTORY_URL}?${new URLSearchParams({ name }).toString()}`,
   );
 }
@@ -343,30 +299,30 @@ export function fetchPackageHistory(name: string): Promise<Answer<PortalPackageH
 // GET /portal/api/shared-code: each shared package's newest tag, what each app pins, and
 // the local copies left (src/shared-code.ts), cached by the Worker for an hour.
 export function fetchSharedCode(): Promise<Answer<SharedCodeView>> {
-  return get<SharedCodeView>(SHARED_CODE_URL);
+  return getAnswer<SharedCodeView>(SHARED_CODE_URL);
 }
 
 // GET /portal/api/not-found: Capsid's own missing pages over 30 days (page_404_daily).
 export function fetchNotFound(): Promise<Answer<PortalNotFound>> {
-  return get<PortalNotFound>(NOT_FOUND_URL);
+  return getAnswer<PortalNotFound>(NOT_FOUND_URL);
 }
 
 // GET /portal/api/resources: the secrets and data model the nightly build read from
 // Cloudflare (src/system-resources.ts): names, never values.
 export function fetchResources(): Promise<Answer<ResourcesDoc>> {
-  return get<ResourcesDoc>(RESOURCES_URL);
+  return getAnswer<ResourcesDoc>(RESOURCES_URL);
 }
 
 // GET /portal/api/completeness: devkit's daily scoreboard (src/completeness.ts), cached by the
 // Worker for ten minutes.
 export function fetchCompleteness(): Promise<Answer<CompletenessView>> {
-  return get<CompletenessView>(COMPLETENESS_URL);
+  return getAnswer<CompletenessView>(COMPLETENESS_URL);
 }
 
 // GET /portal/api/push: the key a browser subscribes with and the devices with phone
 // alerts on. POST turns this browser on, a device off, or sends a test (src/push.ts).
 export function fetchPush(): Promise<Answer<PortalPush>> {
-  return get<PortalPush>(PUSH_URL);
+  return getAnswer<PortalPush>(PUSH_URL);
 }
 
 export type PushOp =
@@ -384,19 +340,19 @@ export function fetchLibrary(
   args: { q: string } | { ns: string; path: string } | null,
 ): Promise<Answer<PortalLibrary>> {
   const qs = args ? `?${new URLSearchParams(args).toString()}` : "";
-  return get<PortalLibrary>(`${LIBRARY_URL}${qs}`);
+  return getAnswer<PortalLibrary>(`${LIBRARY_URL}${qs}`);
 }
 
 // GET /portal/api/stale: the jobs that look stuck, each with the rule it met and why,
 // from the reader behind jobs list stale: true.
 export function fetchStale(): Promise<Answer<PortalStale>> {
-  return get<PortalStale>(STALE_URL);
+  return getAnswer<PortalStale>(STALE_URL);
 }
 
 // GET /portal/api/merge-units: the suspended merge units and the units tick's proposals
 // (src/portal-merge-units.ts), for the Pull requests page's Merge units panel.
 export function fetchMergeUnits(): Promise<Answer<PortalMergeUnits>> {
-  return get<PortalMergeUnits>(MERGE_UNITS_URL);
+  return getAnswer<PortalMergeUnits>(MERGE_UNITS_URL);
 }
 
 // The site page's reads (src/portal-site.ts), each live for one namespace. Every source in
@@ -405,7 +361,7 @@ export function fetchMergeUnits(): Promise<Answer<PortalMergeUnits>> {
 // GET /portal/api/site-search?namespace=: Search Console and Bing Webmaster, the 28 days
 // ending 3 days ago.
 export function fetchSiteSearch(namespace: string): Promise<Answer<PortalSiteSearch>> {
-  return get<PortalSiteSearch>(
+  return getAnswer<PortalSiteSearch>(
     `${SITE_SEARCH_URL}?${new URLSearchParams({ namespace }).toString()}`,
   );
 }
@@ -420,7 +376,7 @@ export function fetchSiteTraffic(
     namespace,
     ...(days === undefined ? {} : { days: String(days) }),
   });
-  return get<PortalSiteTraffic>(`${SITE_TRAFFIC_URL}?${q.toString()}`);
+  return getAnswer<PortalSiteTraffic>(`${SITE_TRAFFIC_URL}?${q.toString()}`);
 }
 
 // GET /portal/api/workers-builds?namespace=&limit=: the Workers Builds of the Worker the
@@ -433,51 +389,51 @@ export function fetchWorkersBuilds(
     namespace,
     ...(limit === undefined ? {} : { limit: String(limit) }),
   });
-  return get<PortalWorkersBuilds>(`${WORKERS_BUILDS_URL}?${q.toString()}`);
+  return getAnswer<PortalWorkersBuilds>(`${WORKERS_BUILDS_URL}?${q.toString()}`);
 }
 
 // GET /portal/api/build-log?build=<uuid>: one build's log, its last 500 lines.
 export function fetchBuildLog(build: string): Promise<Answer<PortalBuildLog>> {
-  return get<PortalBuildLog>(`${BUILD_LOG_URL}?${new URLSearchParams({ build }).toString()}`);
+  return getAnswer<PortalBuildLog>(`${BUILD_LOG_URL}?${new URLSearchParams({ build }).toString()}`);
 }
 
 // GET /portal/api/trends: the series behind the charts the feed does not carry (minutes
 // per week, the queue, merges, backup slots, CI by day), from src/trends.ts. Read-only.
 export function fetchTrends(): Promise<Answer<PortalTrends>> {
-  return get<PortalTrends>(TRENDS_URL);
+  return getAnswer<PortalTrends>(TRENDS_URL);
 }
 
 // GET /portal/api/plan: the overnight plan over every namespace, the reader behind jobs
 // list view plan.
 export function fetchPlan(): Promise<Answer<PortalPlan>> {
-  return get<PortalPlan>(PLAN_URL);
+  return getAnswer<PortalPlan>(PLAN_URL);
 }
 
 // GET /portal/api/digest?since=: what finished, blocked and is ready since then, the
 // reader behind jobs list view digest.
 export function fetchDigest(since: string): Promise<Answer<PortalDigest>> {
-  return get<PortalDigest>(`${DIGEST_URL}?since=${encodeURIComponent(since)}`);
+  return getAnswer<PortalDigest>(`${DIGEST_URL}?since=${encodeURIComponent(since)}`);
 }
 
 // GET /portal/api/maintenance: the daily maintenance pass's last list and what it read.
 export function fetchMaintenance(): Promise<Answer<PortalMaintenance>> {
-  return get<PortalMaintenance>(MAINTENANCE_URL);
+  return getAnswer<PortalMaintenance>(MAINTENANCE_URL);
 }
 
 // GET /portal/api/convergence: each site that opted into its operator API, read live.
 export function fetchConvergence(): Promise<Answer<PortalConvergence>> {
-  return get<PortalConvergence>(CONVERGENCE_URL);
+  return getAnswer<PortalConvergence>(CONVERGENCE_URL);
 }
 
 // GET /portal/api/backups: every site's backup_status read live, beside its Amazon copy.
 export function fetchBackups(): Promise<Answer<PortalBackups>> {
-  return get<PortalBackups>(BACKUPS_URL);
+  return getAnswer<PortalBackups>(BACKUPS_URL);
 }
 
 // GET /portal/api/claims?job=<id>: one job's claims, evaluations and touches. A job
 // that does not exist is a refusal with status 404.
 export function fetchClaimsJob(id: string): Promise<Answer<PortalClaimsJob>> {
-  return get<PortalClaimsJob>(`${CLAIMS_URL}?${new URLSearchParams({ job: id }).toString()}`);
+  return getAnswer<PortalClaimsJob>(`${CLAIMS_URL}?${new URLSearchParams({ job: id }).toString()}`);
 }
 
 // POST /portal/api/sign-out: the Worker expires the Portal's cookies and answers 204.
@@ -496,11 +452,8 @@ export async function signOutRequest(
       body: "{}",
     });
     if (res.status === 204 || sessionEnded(res, false)) return { kind: "ok" };
-    const r = await answerOf<unknown>(res, false);
-    return {
-      kind: "error",
-      message: "message" in r ? r.message : `The server answered ${res.status}`,
-    };
+    const text = (await res.text().catch(() => "")).trim();
+    return { kind: "error", message: text || `The server answered ${res.status} with no text` };
   } catch (e) {
     return { kind: "error", message: e instanceof Error ? e.message : String(e) };
   }

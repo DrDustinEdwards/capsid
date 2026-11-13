@@ -1,7 +1,7 @@
 import { Banner } from "capsomer/react/banner";
 import { AwayLink } from "capsomer/react/link";
 import { trendChart } from "./charts";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
@@ -9,7 +9,7 @@ import { useApp } from "../app/ctx";
 import { LIVE, fetchDigest, fetchPlan, useAnswer } from "../lib/api";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
-import { readPref, writePref } from "../lib/prefs";
+import { useSinceLastVisit } from "capsomer/react/state-hooks";
 import type { PortalDigest, PortalPlan } from "../types";
 import { St } from "../ui/icons";
 
@@ -171,16 +171,9 @@ export function digestSince(now: number): string {
 
 export function SinceLastLooked() {
   const { now } = useApp();
-  // The server renders the last 24 hours (server/prefetch.ts reads the same digest); this
-  // browser's own last look is read after hydration, once, and the next visit reports from now.
-  const [since, setSince] = useState(() => digestSince(now));
-  useEffect(() => {
-    const saved = readPref(LAST_LOOKED_PREF);
-    const at = saved ? Date.parse(saved) : NaN;
-    if (!Number.isNaN(at)) setSince(new Date(at).toISOString());
-    writePref(LAST_LOOKED_PREF, new Date(now).toISOString());
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- once after hydration: the last look is in localStorage, which the server cannot read, and a later `now` must not rewrite it
-  }, []);
+  // The server renders the last 24 hours (server/prefetch.ts reads the same digest, digestSince);
+  // this browser's own last look is read after hydration, once, and the next visit reports from now.
+  const since = useSinceLastVisit(LAST_LOOKED_PREF, now, DAY);
   const load = useAnswer<PortalDigest>([LIVE, "digest", since], () => fetchDigest(since));
   const d = load.data;
   const merged = d?.pull_requests_merged ?? 0;
