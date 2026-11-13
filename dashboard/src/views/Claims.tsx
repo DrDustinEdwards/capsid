@@ -2,7 +2,7 @@ import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { FILTER_KEYS } from "../lib/keys";
 import { Suspense, useState, type FormEvent } from "react";
-import { FilterBar, hasFilters, withParams } from "capsomer/react/filter-bar";
+import { FilterBar, isFiltered, withParams } from "capsomer/react/filter-bar";
 import { Missing, Spinner } from "capsomer/react/empty";
 import { Link, useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
@@ -68,7 +68,7 @@ export function Claims() {
   const data = agg.data;
   const names = feed.live.namespaces.map((n) => n.name);
   if (filter.namespace && !names.includes(filter.namespace)) names.push(filter.namespace);
-  const filtered = hasFilters(filter, FILTER_KEYS);
+  const filtered = isFiltered(filter, FILTER_KEYS);
   const checks = data ? byCheck(data.groups) : [];
 
   return (

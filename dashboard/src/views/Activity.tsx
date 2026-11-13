@@ -1,6 +1,6 @@
 import { Banner } from "capsomer/react/banner";
 import { type FormEvent } from "react";
-import { FilterBar, hasFilters, withParams } from "capsomer/react/filter-bar";
+import { FilterBar, isFiltered, withParams } from "capsomer/react/filter-bar";
 import { Link, useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
@@ -68,7 +68,7 @@ export function Activity() {
         label="Filter activity"
         onSubmit={apply}
         clearLabel="Clear"
-        clearHref={hasFilters({ namespace, actor }, ["namespace", "actor"]) ? "/activity" : null}
+        clearHref={isFiltered({ namespace, actor }, ["namespace", "actor"]) ? "/activity" : null}
         renderLink={(props) => <Link {...props} />}
       >
         <label className="cap-sr-only" htmlFor="actNs">
