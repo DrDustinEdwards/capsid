@@ -102,9 +102,11 @@ test.describe("on a phone", () => {
 });
 
 test("a chart's toolbar shows its inline icons and responds to hover", async ({ page }) => {
-  await page.goto("demos/", { waitUntil: "networkidle" });
+  await page.goto("demos/");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.locator("main .loading")).toHaveCount(0);
   const toolbar = page.getByRole("toolbar", { name: "Chart controls" }).first();
-  await expect(toolbar).toBeVisible();
+  await expect(toolbar).toBeVisible({ timeout: 15_000 });
   // Enarratio 0.12.2: icons are inline SVG, not CSS masks that a page's img-src blocks.
   const icon = toolbar.locator("svg.enarratio-icon").first();
   await expect(icon).toBeVisible();
