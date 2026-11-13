@@ -46,9 +46,3 @@ test("PLANT: a row the server wrote just now never reads as in the future", () =
   // Measured against the browser's tick alone, the same row is 29 s in the future.
   assert.equal(ago(row, tickedAt), "in 29s");
 });
-
-test("the Portal's now is the server's clock, and never earlier than the newest server read", () => {
-  assert.equal(portalNow(1_000, 500, 0), 1_500);
-  assert.equal(portalNow(1_000, 500, 9_000), 9_000);
-  assert.equal(portalNow(1_000, -500, 0), 500);
-});

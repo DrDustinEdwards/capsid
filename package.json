@@ -40,7 +40,7 @@
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.155.0",
     "@modelcontextprotocol/server": "2.4.0",
     "agents": "0.33.0",
-    "capsomer": "github:DrDustinEdwards/capsomer#v0.143.0",
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.145.0",
     "jose": "6.2.15",
     "tldts": "7.4.19",
     "yaml": "2.9.1",

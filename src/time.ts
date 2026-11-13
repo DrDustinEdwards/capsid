@@ -1,3 +1,5 @@
+import { parseSqlTime } from "@dustinedwards/site-runtime/time";
+
 // Time units in milliseconds, one spelling for the whole Worker.
 export const MINUTE_MS = 60_000;
 export const HOUR_MS = 60 * MINUTE_MS;
@@ -17,4 +19,10 @@ export function isoWeek(d: Date): string {
   const yearStart = Date.UTC(t.getUTCFullYear(), 0, 1);
   const week = Math.ceil(((t.getTime() - yearStart) / DAY_MS + 1) / 7);
   return `${t.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+/** A stored time as milliseconds, or NaN when unreadable. D1 writes "YYYY-MM-DD HH:MM:SS"
+ *  (UTC, no zone); GitHub and the Worker write ISO. */
+export function timeMs(at: string | null | undefined): number {
+  return parseSqlTime(at) ?? Number.NaN;
 }

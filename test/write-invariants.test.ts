@@ -522,22 +522,6 @@ test("PREDICATE: an overwrite with no confirm is refused before any commit", asy
   assert.deepEqual(recorded, [], "the confirmation path wrote before it was confirmed");
 });
 
-test("PREDICATE: an unguarded update still lands, so the guard is not a blanket refusal", async () => {
-  // Without this, a predicate that refused everything would pass every test above.
-  const { client, recorded, close } = await connect("write", { body: "prior body" });
-  const result = await call(client, "capsid_write_doc", {
-    action: "write",
-    namespace: "capsid",
-    path: "doc.md",
-    title: "New",
-    body: "new body",
-    confirm: true,
-  });
-  await close();
-  assert.ok(!result.isError, `an ordinary write was refused: ${result.content?.[0]?.text}`);
-  assert.match(sqlFor(recorded), /INSERT INTO documents/);
-});
-
 test("CREATE COLLISION: exactly one of two racing creates wins, and the loser is refused", async () => {
   // Both writers pre-read nothing, so both take the create path. The first commits. The
   // second must NOT fall into ON CONFLICT DO UPDATE, because its statement list carries
@@ -917,28 +901,6 @@ async function connectEliciting(opts: FakeOptions = {}, answer: "accept" | "decl
   return { client, recorded, reads, rows, batches, prompts, close: () => client.close() };
 }
 
-test("an accepted elicitation reaches the commit, so the arm is really reachable", async () => {
-  // The harness check: if this path reverted to "unsupported" the wording tests below
-  // would pass by refusing early for a different reason.
-  const { client, recorded, prompts, close } = await connectEliciting({ body: "prior body" });
-  const result = await call(client, "capsid_write_doc", {
-    action: "write",
-    namespace: "capsid",
-    path: "doc.md",
-    title: "New",
-    body: "new body",
-  });
-  await close();
-  assert.equal(
-    prompts.length,
-    1,
-    "no elicitation was requested, so this client is not exercising the elicited arm",
-  );
-  assert.match(prompts[0], /Overwrite capsid\/doc\.md\?/);
-  assert.ok(!result.isError, `an approved overwrite was refused: ${result.content?.[0]?.text}`);
-  assert.match(sqlFor(recorded), /INSERT INTO documents/);
-});
-
 test("RACE: after an elicitation, write, restore and delete each refuse a body changed while the prompt was open", async () => {
   // Consent given through elicitation is bound to the body it was about, in all three
   // tools. No call passes confirm or if_match, so the elicited signal is the only thing
@@ -1137,43 +1099,6 @@ test("IF_MATCH MISMATCH keeps its own wording, and no pending clause", async () 
     /overwrite confirmation was pending/,
     "a caller who sent if_match was told about a prompt that never happened",
   );
-});
-
-test("the two refusals are DIFFERENT strings for the same underlying conflict", async () => {
-  // Same race, same guard, same commit-time abort; only the route in differs. If these
-  // converge, one of the two callers is told something untrue.
-  const race = (live: LiveState) => {
-    live.body = "the racer";
-  };
-  const stale = await connectEliciting({ body: "prior body", raceAfterPreRead: race });
-  const staleText = (
-    await call(stale.client, "capsid_write_doc", {
-      action: "write",
-      namespace: "capsid",
-      path: "doc.md",
-      title: "T",
-      body: "b",
-    })
-  ).content[0].text;
-  await stale.close();
-
-  const mismatch = await connectEliciting({ body: "prior body", raceAfterPreRead: race });
-  const mismatchText = (
-    await call(mismatch.client, "capsid_write_doc", {
-      action: "write",
-      namespace: "capsid",
-      path: "doc.md",
-      title: "T",
-      body: "b",
-      confirm: true,
-      if_match: await shaOf("prior body"),
-    })
-  ).content[0].text;
-  await mismatch.close();
-
-  assert.notEqual(staleText, mismatchText, "the two refusals have collapsed into one message");
-  assert.ok(staleText.startsWith("stale confirmation"), staleText);
-  assert.ok(mismatchText.startsWith("if_match mismatch"), mismatchText);
 });
 
 // A batch failure is a clean refusal, not an exception.

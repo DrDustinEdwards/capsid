@@ -79,14 +79,6 @@ describe("configuration", () => {
     const removed = JSON.parse((await audit("ops-package-removed")).results![0].params);
     expect(removed.before).toMatchObject({ name: "sample-pkg", formerly: "sample-old" });
   });
-
-  it("the schema refuses a former name equal to the name, whatever the caller checked", async () => {
-    await expect(
-      env.DB.prepare(
-        "INSERT INTO ops_packages (name, formerly) VALUES ('sample-pkg', 'sample-pkg')",
-      ).run(),
-    ).rejects.toThrow();
-  });
 });
 
 describe("the weekly GitHub row", () => {

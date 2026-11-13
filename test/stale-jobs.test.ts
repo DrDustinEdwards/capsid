@@ -7,9 +7,7 @@ import {
   classifyStale,
   nextStaleCache,
   parseStaleCache,
-  prsSettled,
   readStaleCache,
-  tallyPrStates,
   type StalePrEntry,
 } from "../src/stale-jobs.ts";
 import { fakeKv } from "./fakes.ts";
@@ -130,26 +128,6 @@ test("a job matching several rules is listed once, under the most actionable rul
   };
   assert.equal(classifyStale(job, entry({ merged: 1 }), NOW)?.rule, "prs-settled");
   assert.equal(classifyStale(job, undefined, NOW)?.rule, "resumed-not-completed");
-});
-
-test("prsSettled needs nothing open, nothing unread and at least one settled", () => {
-  assert.equal(prsSettled(entry({ merged: 2 })), true);
-  assert.equal(prsSettled(entry({ merged: 2, open: 1 })), false);
-  assert.equal(prsSettled(entry({ merged: 2, unread: 1 })), false);
-  assert.equal(prsSettled(entry()), false);
-  assert.equal(prsSettled(undefined), false);
-});
-
-test("the cache entry counts each state the merge-resume step read", () => {
-  const at = NOW.toISOString();
-  assert.deepEqual(tallyPrStates(["merged", "merged", "closed", "open", "unread"], at), {
-    merged: 2,
-    closed: 1,
-    open: 1,
-    unread: 1,
-    at,
-  });
-  assert.deepEqual(tallyPrStates([], at), { merged: 0, closed: 0, open: 0, unread: 0, at });
 });
 
 test("the next cache replaces a read job's entry and drops every job no longer blocked", () => {

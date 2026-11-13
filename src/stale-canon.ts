@@ -1,4 +1,3 @@
-import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import type { Env } from "./env";
 import { isCanonPath } from "./canon";
 import { ghFetch, resolveRepo } from "./github/client";
@@ -6,7 +5,7 @@ import { readPrFiles, type PrFileRow } from "./github/pr-files";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { externalFence } from "./provenance";
 import type { Finding } from "./watcher-detect";
-import { DAY_MS } from "./time";
+import { DAY_MS, timeMs } from "./time";
 
 // STALE CANON AFTER A MERGE (Capsid improvement list, item 23: Foxhound's ROUTES.md and
 // DESIGN.md still said the admin reused the app shell after a pull request changed it).
@@ -144,11 +143,6 @@ export function staleCanonDoc(
   return isCanonPath(namespace, doc.path) || (doc.type !== null && CANON_TYPES.has(doc.type));
 }
 
-/** A D1 datetime ("2026-10-18 09:00:00", UTC) or an ISO string, as milliseconds. */
-export function instant(at: string): number {
-  return parseSqlTime(at) ?? Number.NaN;
-}
-
 export interface Edge {
   from_path: string;
   type: string;
@@ -180,19 +174,19 @@ export function staleCanonFlags(
   docs: readonly CanonDoc[],
   edges: readonly Edge[],
 ): StaleFlag[] {
-  const ordered = [...merges].sort((a, b) => instant(a.merged_at) - instant(b.merged_at));
+  const ordered = [...merges].sort((a, b) => timeMs(a.merged_at) - timeMs(b.merged_at));
   const edgesFrom = new Map<string, Set<string>>();
   for (const e of edges)
     edgesFrom.set(e.from_path, (edgesFrom.get(e.from_path) ?? new Set()).add(e.to_path));
   const flags: StaleFlag[] = [];
   ordered.forEach((pr, i) => {
-    const merged = instant(pr.merged_at);
+    const merged = timeMs(pr.merged_at);
     if (Number.isNaN(merged)) return;
     // A path a later merge added back, or modified, exists again.
     const later = new Set(ordered.slice(i + 1).flatMap((p) => [...p.added, ...p.changed]));
     for (const doc of docs) {
       if (!staleCanonDoc(namespace, doc)) continue;
-      const written = instant(doc.updated_at);
+      const written = timeMs(doc.updated_at);
       // Written since the merge, or a stamp that does not parse: not judged stale.
       if (Number.isNaN(written) || written >= merged) continue;
       const linked = edgesFrom.get(doc.path) ?? new Set<string>();
@@ -309,7 +303,7 @@ export function parseMemory(raw: string | null): { memory: MergeMemory } | { pro
 export function pruneMemory(memory: MergeMemory, now: Date): MergeMemory {
   const out: MergeMemory = {};
   for (const [ns, entry] of Object.entries(memory)) {
-    const prs = entry.prs.filter((p) => now.getTime() - instant(p.merged_at) <= RETAIN_MS);
+    const prs = entry.prs.filter((p) => now.getTime() - timeMs(p.merged_at) <= RETAIN_MS);
     if (prs.length > 0) out[ns] = { repo: entry.repo, prs };
   }
   return out;
@@ -332,8 +326,8 @@ export function newMerges(
   return listed
     .filter((p) => p.merged_at !== null && !known.has(p.number))
     .filter((p) => p.base?.ref !== undefined && p.base.ref === p.base.repo?.default_branch)
-    .filter((p) => now.getTime() - instant(p.merged_at!) <= RETAIN_MS)
-    .sort((a, b) => instant(a.merged_at!) - instant(b.merged_at!));
+    .filter((p) => now.getTime() - timeMs(p.merged_at!) <= RETAIN_MS)
+    .sort((a, b) => timeMs(a.merged_at!) - timeMs(b.merged_at!));
 }
 
 /** The namespaces this pass reads, from a list read with one row past the cap, and the
@@ -416,7 +410,7 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
       unread.push(`${namespace} (${errorMessage(err)})`);
     }
   }
-  pending.sort((a, b) => instant(a.pull.merged_at!) - instant(b.pull.merged_at!));
+  pending.sort((a, b) => timeMs(a.pull.merged_at!) - timeMs(b.pull.merged_at!));
   let read = 0;
   for (const p of pending.slice(0, MAX_PR_READS_PER_PASS)) {
     try {

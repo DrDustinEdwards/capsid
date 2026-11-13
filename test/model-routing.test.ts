@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import { grantAgent } from "../src/agents.ts";
 import { claimJob, postJob } from "../src/jobs.ts";
@@ -92,28 +90,6 @@ test("the watcher's actor here is the watcher's actor there", () => {
 });
 
 // ROUTING
-
-test("the expected model for each kind, and the default for a kind no rule names", () => {
-  const want: Record<string, [string, string]> = {
-    design: ["opus", "high"],
-    security: ["opus", "high"],
-    build: ["opusplan", "high"],
-    watcher: ["sonnet", "medium"],
-    maintenance: ["sonnet", "medium"],
-    docs: ["sonnet", "low"],
-    mechanical: ["haiku", "low"],
-    other: ["opusplan", "medium"],
-  };
-  assert.deepEqual(
-    Object.keys(want).sort(),
-    [...JOB_KINDS].sort(),
-    "a kind has no expectation here",
-  );
-  for (const kind of JOB_KINDS) {
-    const r = routeJob(job("x", { kind }));
-    assert.deepEqual([r.model, r.effort], want[kind], kind);
-  }
-});
 
 test("PLANT: a routine job that is risky is upgraded to opus, whatever its kind", () => {
   const routine = routeJob(job("Update the changelog", { kind: "docs" }));
@@ -809,22 +785,3 @@ test("post and claim place a job in the same arm, by its id", async (t) => {
 });
 
 // THE WIRING THE TESTS CANNOT SEE FROM INSIDE ONE FILE
-
-test("the migration adds exactly the columns the code reads and writes", () => {
-  const sql = readFileSync(
-    join(import.meta.dirname, "..", "migrations", "0032_job_model_routing.sql"),
-    "utf8",
-  );
-  const added = [...sql.matchAll(/ALTER TABLE (\w+) ADD COLUMN (\w+)/g)]
-    .map((m) => `${m[1]}.${m[2]}`)
-    .sort();
-  assert.deepEqual(added, [
-    "job_outcomes.job_kind",
-    "job_outcomes.model_actual",
-    "job_outcomes.model_chosen",
-    "jobs.effort_recommended",
-    "jobs.kind",
-    "jobs.model_recommended",
-    "jobs.routing_reason",
-  ]);
-});

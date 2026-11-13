@@ -6,7 +6,7 @@ import { ghFetch, resolveRepo } from "./github/client";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import type { OpsMergeSafety, OpsMergeSafetyRow } from "./ops-types/feed";
 import { auditStatement } from "./store-guards";
-import { timeMs } from "./trends";
+import { timeMs } from "./time";
 import { passDue } from "./watcher";
 import { DAY_MS } from "./time";
 import { toSqlTime } from "@dustinedwards/site-runtime/time";

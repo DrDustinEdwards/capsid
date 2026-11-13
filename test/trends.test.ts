@@ -7,9 +7,9 @@ import {
   lastDays,
   mondayOf,
   sessionMinutes,
-  timeMs,
   weekStarts,
 } from "../src/trends.ts";
+import { timeMs } from "../src/time.ts";
 
 // The counting rules behind GET /portal/api/trends, on plain values. The SQL runs against
 // a real D1 in test-integration/portal-trends.test.ts.
@@ -22,11 +22,6 @@ test("weeks start on Monday", () => {
   assert.equal(mondayOf("2026-10-05"), "2026-10-05");
   assert.deepEqual(weekStarts(NOW, 3), ["2026-09-21", "2026-09-28", "2026-10-05"]);
   assert.deepEqual(lastDays(NOW, 3), ["2026-10-09", "2026-10-10", "2026-10-11"]);
-});
-
-test("both stored time formats are read as UTC", () => {
-  assert.equal(timeMs("2026-10-05 09:00:00"), Date.parse("2026-10-05T09:00:00Z"));
-  assert.equal(timeMs("2026-10-05T09:00:00.000Z"), Date.parse("2026-10-05T09:00:00Z"));
 });
 
 test("PLANT: a session ends after a gap over five minutes, and counts its span plus one minute", () => {

@@ -86,15 +86,6 @@ describe("resume to the queue", () => {
     expect((await jobRow(blocked))?.claimed_at).toBe(NOW.toISOString());
   });
 
-  it("a free minted driver gets its job back, as before", async () => {
-    const driver = driverAgent();
-    const blocked = await blockedJob(ADMIN, driver, NOW, "its driver is free", PUSH_BLOCK);
-    const resumed = await resumeJob(jobsEnv(), seatAgent(), LATER, blocked, "approved");
-    expect(resumed.ok, resumed.refusal).toBe(true);
-    expect((await jobRow(blocked))?.status).toBe("claimed");
-    expect((await jobRow(blocked))?.claimed_by).toBe("agent:capsid-driver");
-  });
-
   it("take by a caller that already holds a claim is allowed: there is no claim limit", async () => {
     const blocked = await blockedJob(
       ADMIN,

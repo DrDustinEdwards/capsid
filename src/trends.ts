@@ -1,5 +1,4 @@
 import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
-import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import { median } from "capsomer/behavior/format";
 import { COMPLETE_MARKER } from "@dustinedwards/d1-dump";
 import { DUMP_RETENTION } from "./backup";
@@ -19,7 +18,7 @@ import type {
   TrendQueueDay,
   PortalTrends,
 } from "./ops-types/views";
-import { MINUTE_MS, DAY_MS, isoWeek, utcDay } from "./time";
+import { MINUTE_MS, DAY_MS, isoWeek, timeMs, utcDay } from "./time";
 
 // The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3,
 // ruled 2026-10-09: DECIDE 5, the trends route, and DECIDE 6, all eleven visuals). The feed
@@ -68,12 +67,6 @@ export function weekStarts(now: Date, weeks: number): string[] {
 export function lastDays(now: Date, days: number): string[] {
   const today = Date.parse(`${utcDay(new Date(now.getTime()))}T00:00:00Z`);
   return Array.from({ length: days }, (_, i) => utcDay(new Date(today - (days - 1 - i) * DAY_MS)));
-}
-
-/** An audit or touch time to milliseconds. Both "YYYY-MM-DD HH:MM:SS" (SQLite's
- *  datetime('now'), no zone) and ISO are written; both are UTC. */
-export function timeMs(at: string): number {
-  return parseSqlTime(at) ?? Number.NaN;
 }
 
 /** Minutes and sessions per week from activity times: a session ends after a gap over

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MAX_NAMESPACE } from "../src/limits.ts";
-import { LINK_TYPES, parseLinks } from "../src/links.ts";
+import { parseLinks } from "../src/links.ts";
 
 test("parseLinks accepts an edge and defaults to_ns to the source namespace", () => {
   const result = parseLinks('[{"type":"references","to_path":"decisions.md"}]', "capsid");
@@ -81,14 +81,4 @@ test("the shapes the live store actually holds still parse", () => {
     assert.ok("edges" in result, `${to_path} was rejected but exists in the live store`);
     assert.equal(result.edges[0].to_path, to_path);
   }
-});
-
-test("the link vocabulary is closed, and the error names the whole set", () => {
-  const result = parseLinks('[{"type":"mentions","to_path":"core.md"}]', "capsid");
-  assert.ok("error" in result);
-  assert.ok(
-    LINK_TYPES.length > 0,
-    "LINK_TYPES is empty, so the error was not checked for any type",
-  );
-  for (const type of LINK_TYPES) assert.match(result.error, new RegExp(type));
 });

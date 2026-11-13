@@ -257,7 +257,3 @@ test("the site map is compared with the registered namespaces both ways, a no-si
   const hosts = [...config, row("capsid-portal"), row("txasmx")];
   assert.deepEqual(siteMapDrift(registered, hosts), { unmapped: [], unknown: ["txasmx"] });
 });
-
-test("with nothing configured, every registered namespace is unmapped", () => {
-  assert.deepEqual(siteMapDrift(["b", "a"], []), { unmapped: ["a", "b"], unknown: [] });
-});

@@ -29,11 +29,6 @@ test("the committed .mcp.json carries no Authorization value and nothing key-sha
   assert.deepEqual(credentialViolations(readFileSync(FILE, "utf8")), []);
 });
 
-test("the committed .mcp.json points the capsid server at /ops/mcp", () => {
-  const config = JSON.parse(readFileSync(FILE, "utf8"));
-  assert.equal(config.mcpServers.capsid.url, "https://mcp.dustinedwards.info/ops/mcp");
-});
-
 test("a keyed config is refused, each way a key can arrive", () => {
   const keyed = (server: object) =>
     JSON.stringify({

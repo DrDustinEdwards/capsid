@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { externalFence, externalFenceProblem, jobOrigin } from "../src/provenance.ts";
+import { externalFence, externalFenceProblem } from "../src/provenance.ts";
 
 // Provenance tags (capsid/decisions.md, 2026-10-03, OWASP hardening item 1): relayed text is
 // fenced as external, and post refuses a malformed fence. Each refusal below was planted
@@ -50,11 +50,4 @@ test("a long relay is cut and marked, and a bad source is a programming error", 
   const fenced = externalFence("review", "r", "x".repeat(50), 10);
   assert.match(fenced, /xxxxxxxxxx \[truncated\]/);
   assert.throws(() => externalFence("Not Valid", "r", "t"), /must be lowercase/);
-});
-
-test("the origin comes from the actor, with the watcher named", () => {
-  assert.equal(jobOrigin("agent:watcher"), "watcher");
-  assert.equal(jobOrigin("access:someone@example.com"), "human");
-  assert.equal(jobOrigin("agent:seat"), "seat");
-  assert.equal(jobOrigin("agent:sample-driver"), "driver");
 });

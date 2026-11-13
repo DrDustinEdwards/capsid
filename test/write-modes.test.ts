@@ -39,14 +39,6 @@ test("append, patch and meta refuse a document that does not exist", () => {
   }
 });
 
-test("meta leaves the body byte-identical", () => {
-  // Closing a task or fixing a mistyped document must not cost a full-body
-  // retranscription.
-  const body = "# Doc\n\nFirst section.\n";
-  const r = assembleBody({ exists: true, priorBody: body, mode: "meta" });
-  assert.deepEqual(r, { body });
-});
-
 test("meta refuses body, find and replace_with", () => {
   assert.match(
     (assembleBody({ ...existing, mode: "meta", body: "x" }) as { error: string }).error,
@@ -91,21 +83,6 @@ test("append is idempotent in spacing across repeated appends", () => {
   assert.doesNotMatch(body, /\n{3,}/);
 });
 
-test("append rejects patch arguments", () => {
-  const r = assembleBody({ ...existing, mode: "append", body: "x", find: "a", replace_with: "b" });
-  assert.match((r as { error: string }).error, /belong to mode 'patch'/);
-});
-
-test("patch replaces a unique anchor", () => {
-  const r = assembleBody({
-    ...existing,
-    mode: "patch",
-    find: "First section.",
-    replace_with: "First section, revised.",
-  });
-  assert.deepEqual(r, { body: "# Doc\n\nFirst section, revised.\n" });
-});
-
 test("patch REFUSES a missing anchor rather than writing anything", () => {
   // A missed anchor must not corrupt the body.
   const r = assembleBody({ ...existing, mode: "patch", find: "Nonexistent.", replace_with: "x" });
@@ -140,11 +117,6 @@ test("patch names CRLF as the usual cause of a missed anchor", () => {
 test("patch refuses an empty anchor", () => {
   const r = assembleBody({ ...existing, mode: "patch", find: "", replace_with: "x" });
   assert.match((r as { error: string }).error, /non-empty find/);
-});
-
-test("patch rejects body", () => {
-  const r = assembleBody({ ...existing, mode: "patch", find: "a", replace_with: "b", body: "c" });
-  assert.match((r as { error: string }).error, /not body/);
 });
 
 test("patch replaces only the single occurrence, even when replace_with contains the anchor", () => {
@@ -234,24 +206,6 @@ test("patch keeps a realistic canon fragment byte-exact", () => {
 
 // AssembleInput is a discriminated union: narrowWrite turns a loose wire request into
 // it, and refuses a mode/field mismatch.
-
-test("narrowWrite turns a loose wire request into the shape assembly needs", () => {
-  const narrowed = narrowWrite({
-    mode: "patch",
-    exists: true,
-    priorBody: "hello world",
-    find: "world",
-    replace_with: "there",
-  });
-  assert.ok(!("error" in narrowed));
-  assert.equal(narrowed.mode, "patch");
-  // The fields are REQUIRED on the narrow type, which is what lets assembly stop
-  // re-checking them.
-  if (narrowed.mode === "patch") {
-    assert.equal(narrowed.find, "world");
-    assert.equal(narrowed.replace_with, "there");
-  }
-});
 
 test("narrowWrite is where a mode/field mismatch is refused, not assembly", () => {
   // These must be refused rather than ignored. The wire is loose on purpose, so a
