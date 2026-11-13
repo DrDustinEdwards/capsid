@@ -1,14 +1,14 @@
 // The explorer's one script. Every page is complete without it: the maps are cards and lists, every step is a page, every tool and module has an address, and the tables
-// are plain tables. This makes them move: Capsomer's system map (copied from capsomer at build),
+// are plain tables. This makes them move: Capsomer's system map,
 // its tabs, Enarratio's chart tooltips, the flow players, the front page's panel and tour, the filters
 // and sorting, and search.
-import { controller } from "./capsomer/system-map/system-map.js";
-import { enhance as enhanceTabs } from "./capsomer/tabs/tabs.js";
+import { controller } from "capsomer/behavior/system-map";
+import { enhance as enhanceTabs } from "capsomer/behavior/tabs";
 // Every chart in Capsomer's frame: drawn again at its column's width where the server wrote a spec, and enhanced.
 import "capsomer/behavior/chart-enhance";
-import { enhance as enhanceHeader } from "./capsomer/site-header/site-header.js";
-import { enhance as enhanceTheme, toggleTheme } from "./capsomer/theme-switch/theme-switch.js";
-import { enhance as enhanceMeters } from "./capsomer/meter/meter.js";
+import { enhance as enhanceHeader } from "capsomer/behavior/site-header";
+import { enhance as enhanceTheme, toggleTheme } from "capsomer/behavior/theme-switch";
+import { enhance as enhanceMeters } from "capsomer/behavior/meter";
 import { trustedHtml } from "capsomer/behavior/trusted-html";
 import { startPage } from "@dustinedwards/site-runtime/page-client";
 

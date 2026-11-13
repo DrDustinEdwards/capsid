@@ -108,7 +108,7 @@ test("PLANT: nothing is rendered, read or fetched for a caller the Portal gate r
   assert.deepEqual(reads.asked, [], "a page read the API before the gate admitted anyone");
 });
 
-test("a signed-in administrator gets the page rendered with its reads, uncached, its CSP carrying the page's nonce", async () => {
+test("a signed-in administrator gets the page rendered with its reads, uncached and untransformed, its CSP carrying the page's nonce", async () => {
   const reads = fakeApi();
   // As index.ts serves it: through the header layer.
   const res = withSecurityHeaders(
@@ -122,7 +122,7 @@ test("a signed-in administrator gets the page rendered with its reads, uncached,
     /data-path="\/queue"/,
     "the page is named as the browser names it, without /portal",
   );
-  assert.equal(res.headers.get("Cache-Control"), "no-store");
+  assert.equal(res.headers.get("Cache-Control"), "private, no-store, no-transform");
   const nonce = /<script nonce="([^"]+)"/.exec(html)?.[1];
   assert.ok(nonce, "the page's script carries a nonce");
   assert.ok(

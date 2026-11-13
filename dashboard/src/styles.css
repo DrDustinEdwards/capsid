@@ -619,6 +619,7 @@ table.workers-stores .st {
   margin-right: 8px;
   white-space: nowrap;
 }
+/* legacy-scan:keep the current section's marker bar, a tab-style active indicator the guide's rubric drops */
 .anchors a {
   border-bottom: 2px solid transparent;
   color: var(--muted);

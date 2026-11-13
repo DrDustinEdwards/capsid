@@ -66,7 +66,7 @@ interface Row {
 // model_actual is the session's own report, so it never moves an outcome into another
 // model's cell; an outcome whose session reports a different model is left out, since
 // its work was not shown to be done on the chosen one. opusplan runs as Opus and Sonnet.
-function sameModel(r: Row): boolean {
+function onChosenModel(r: Row): boolean {
   const actual = modelAlias(r.model_actual);
   if (actual === null || r.model === null) return true;
   return r.model === "opusplan"
@@ -94,7 +94,7 @@ export async function readModelLearning(db: D1Database, now: Date): Promise<Mode
   const rows = results ?? [];
   const truncated = rows.length > LEARNING_ROWS_MAX;
   const read = truncated ? rows.slice(0, LEARNING_ROWS_MAX) : rows;
-  const facts: OutcomeFact[] = read.filter(sameModel).map((r) => ({
+  const facts: OutcomeFact[] = read.filter(onChosenModel).map((r) => ({
     kind: r.kind,
     model: r.model,
     prs_merged: r.prs_merged,
