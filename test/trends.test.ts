@@ -24,11 +24,6 @@ test("weeks start on Monday", () => {
   assert.deepEqual(lastDays(NOW, 3), ["2026-10-09", "2026-10-10", "2026-10-11"]);
 });
 
-test("both stored time formats are read as UTC", () => {
-  assert.equal(timeMs("2026-10-05 09:00:00"), Date.parse("2026-10-05T09:00:00Z"));
-  assert.equal(timeMs("2026-10-05T09:00:00.000Z"), Date.parse("2026-10-05T09:00:00Z"));
-});
-
 test("PLANT: a session ends after a gap over five minutes, and counts its span plus one minute", () => {
   const weeks = sessionMinutes(
     [

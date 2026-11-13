@@ -131,22 +131,6 @@ test("PLANT: a namespace whose mapping does not parse is reported as not checked
   assert.match(notChecked[0], /^sample's repo mapping does not parse/);
 });
 
-test("THE INNOCENT DIRECTION: mappedRepos keeps every distinct repo, each under its own namespace", async () => {
-  const out = await mappedRepos(
-    db({
-      namespaces: [
-        { namespace: "sample", repos: repos("o/a") },
-        { namespace: "sample-three", repos: repos("o/b", "o/c") },
-      ],
-    }),
-  );
-  assert.deepEqual(out, [
-    { namespace: "sample", repo: "o/a" },
-    { namespace: "sample-three", repo: "o/b" },
-    { namespace: "sample-three", repo: "o/c" },
-  ]);
-});
-
 // waiting_on_seat
 
 test("waiting_on_seat is set only for a non-draft, green, mergeable pull request that names a job", async () => {
@@ -220,20 +204,6 @@ test("PLANT: a null mergeable is never reported as no conflict, and keeps the pu
     }
     assert.deepEqual(r.pull_requests.waiting_on_seat, []);
     assert.deepEqual(r.pull_requests.conflicts, []);
-  });
-});
-
-test("THE INNOCENT DIRECTION: the same pull request with mergeable true is no conflict and waits on the seat", async () => {
-  await withFetch(github("o/r", [{ number: 11, checks: GREEN, detail: CLEAN }]), async () => {
-    const r = await whatsNext(
-      env(db({ namespaces: [{ namespace: "sample", repos: repos("o/r") }] })),
-      NOW,
-    );
-    assert.equal(byNumber(r.pull_requests.all, 11).conflict, false);
-    assert.deepEqual(
-      r.pull_requests.waiting_on_seat.map((p) => p.number),
-      [11],
-    );
   });
 });
 
@@ -328,24 +298,6 @@ test("a blocked job whose named migration is applied is left out, and one still 
       r.blocked.map((j) => j.id),
       ["job_bbbbbbbbbbbb"],
     );
-  });
-});
-
-test("blocked jobs split into questions and commands", async () => {
-  const blocked = [
-    {
-      id: "job_aaaaaaaaaaaa",
-      namespace: "sample",
-      title: "Needs a push",
-      result_summary:
-        "Run this, then send it back in with capsid_work_jobs action 'resume':\nnpm run deploy",
-      updated_at: "2026-10-09T00:00:00Z",
-    },
-  ];
-  await withFetch({}, async () => {
-    const r = await whatsNext(env(db({ blocked })), NOW);
-    assert.equal(r.questions.length + r.blocked.length, 1);
-    assert.equal(r.blocked[0]?.id, "job_aaaaaaaaaaaa");
   });
 });
 

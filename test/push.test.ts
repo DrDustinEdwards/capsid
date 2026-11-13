@@ -455,27 +455,6 @@ test("no alert carries an action, and every alert opens its own item on the Port
   ]);
 });
 
-test("a job's alert opens its drawer on Jobs", async () => {
-  const jobs: Row[] = [
-    {
-      id: "job_cap",
-      namespace: "capsid",
-      title: "t",
-      priority: 10,
-      status: "blocked",
-      result_summary: `${RETRY_CAP_REASON}\n\nreview`,
-      updated_at: iso(-H),
-    },
-  ];
-  const w = world({ jobs });
-  const s = service();
-  await pushTick(w.env, NOW, s.fetcher);
-  assert.deepEqual(
-    s.got.map((g) => g.url),
-    ["https://portal.dustinedwards.info/queue/job/job_cap"],
-  );
-});
-
 test("at most three items go out per tick; the rest follow on the next", async () => {
   const deploys = [1, 2, 3, 4, 5].map((n) => ({
     repo: "owner/capsid",

@@ -1,13 +1,7 @@
 import { nsName, pathProblem } from "./limits";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-export const LINK_TYPES = [
-  "governs",
-  "references",
-  "supersedes",
-  "replaces",
-  "depends-on",
-] as const;
+const LINK_TYPES = ["governs", "references", "supersedes", "replaces", "depends-on"] as const;
 type LinkType = (typeof LINK_TYPES)[number];
 
 const isLinkType = (value: unknown): value is LinkType =>

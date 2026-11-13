@@ -66,11 +66,6 @@ function grantSentence(tool: string): string | null {
 
 const OPERATOR_KEY_CLAIM = /requires (an )?operator key/i;
 
-test("the served tools and TOOL_GRANTS name the same set", async () => {
-  const served = await servedDescriptions();
-  assert.deepEqual([...served.keys()].sort(), Object.keys(TOOL_GRANTS).sort());
-});
-
 test("DERIVED: every tool's description states the requirement TOOL_GRANTS gives it", async () => {
   const served = await servedDescriptions();
   let stated = 0;

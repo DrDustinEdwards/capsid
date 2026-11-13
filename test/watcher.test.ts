@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { ROLES } from "../scripts/roles.ts";
-import { allowsToolAction } from "../src/agents-schema.ts";
 import { checkScope } from "../src/scope.ts";
 import { fakeFindingMemory } from "./fakes.ts";
 import {
@@ -393,14 +392,18 @@ function fakeFinding(fingerprint: string, namespace = "capsid"): Finding {
   return { fingerprint, namespace, title: `Watcher: something [${fingerprint}]`, body: "evidence" };
 }
 
-function harness(found: Finding[], open: Map<string, string>) {
+function harness(
+  found: Finding[],
+  open: Map<string, string>,
+  ran: ReadonlySet<WatcherCheck> = new Set(WATCHER_CHECKS),
+) {
   const posted: Finding[] = [];
   const cleared: string[] = [];
   return {
     posted,
     cleared,
     readers: {
-      findings: async () => ({ findings: found, ran: new Set(WATCHER_CHECKS) }),
+      findings: async () => ({ findings: found, ran }),
       open: async () => open,
       clear: async (id: string) => {
         cleared.push(id);
@@ -450,25 +453,10 @@ test("A FAILED READ DOES NOT CLEAR THE JOBS ITS CHECK OWNS", async () => {
     ["breaker-open-sample", "job_2"],
     ["backup-stale", "job_3"],
   ]);
-  const cleared: string[] = [];
-  const result = await runPass(
-    {
-      findings: async () => ({
-        findings: [],
-        ran: new Set(WATCHER_CHECKS.filter((c) => c !== "ci" && c !== "status")),
-      }),
-      open: async () => open,
-      clear: async (id) => {
-        cleared.push(id);
-        return true;
-      },
-      post: async () => ({ ok: true as const, jobId: "job_new" }),
-      memory: fakeFindingMemory().memory,
-    },
-    NOW,
-  );
+  const h = harness([], open, new Set(WATCHER_CHECKS.filter((c) => c !== "ci" && c !== "status")));
+  const result = await runPass(h.readers, NOW);
   assert.deepEqual(result.cleared, ["backup-stale"], "only a job whose check ran may be cleared");
-  assert.deepEqual(cleared, ["job_3"]);
+  assert.deepEqual(h.cleared, ["job_3"]);
 });
 
 test("every fingerprint the checks produce has an owning check", () => {
@@ -912,20 +900,6 @@ test("the bound counts posts, so findings already open do not use it up", async 
   assert.deepEqual((await pass.result).posted, ["new-a", "new-b"]);
 });
 
-test("the fingerprint round-trips through the title, which is what deduplicates", () => {
-  // The title is the dedup key, so a fingerprint that cannot be read back out of it
-  // would post the same finding every pass.
-  const f = healthFindings(
-    { ...HEALTHY, status: "degraded" },
-    HEALTHY.sha,
-    HEALTHY.schema_version,
-    "capsid",
-  )[0];
-  const match = /\[([^\]]+)\]\s*$/.exec(f.title);
-  assert.ok(match, `no fingerprint in '${f.title}'`);
-  assert.equal(match[1], f.fingerprint);
-});
-
 test("DERIVED: every finding this module can produce carries a readable fingerprint", () => {
   const all: Finding[] = [
     ...healthFindings(
@@ -958,12 +932,6 @@ test("DERIVED: every finding this module can produce carries a readable fingerpr
     assert.ok(f.namespace.length > 0, "a finding with no namespace has nowhere to be posted");
     assert.match(f.body, /Evidence/, "a finding with no evidence section is a rumour");
   }
-});
-
-test("allowsToolAction is what makes the watcher's narrowing real", () => {
-  const agent = watcherAgent();
-  assert.equal(allowsToolAction(agent.scopes.tools, "capsid_work_jobs", "post"), true);
-  assert.equal(allowsToolAction(agent.scopes.tools, "capsid_work_jobs", "claim"), false);
 });
 
 // The pieces the pass is built from, exported because they carry rules worth

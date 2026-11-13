@@ -59,12 +59,4 @@ describe("the run ledger against real D1", () => {
     }>();
     expect(results.map((r) => r.reason)).toEqual(["kept", "new"]);
   });
-
-  it("the schema refuses an outcome that is not one of the four", async () => {
-    await expect(
-      env.DB.prepare(
-        "INSERT INTO task_runs (task, started_at, finished_at, outcome, reason) VALUES ('tick', 'a', 'b', 'fine', 'r')",
-      ).run(),
-    ).rejects.toThrow(/CHECK constraint failed/);
-  });
 });

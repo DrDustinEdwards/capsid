@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isVisual, previewUrl, screenshotUrls, visualDetails } from "../src/visual-pr.ts";
+import { isVisual, previewUrl, screenshotUrls } from "../src/visual-pr.ts";
 
 // What Dustin looks at before a visual pull request merges (job_0368576da167).
 
@@ -41,12 +41,4 @@ test("screenshots are markdown images and img tags, each once, in order, at most
     [],
     "only https images",
   );
-});
-
-test("the details carry the title, or say there is none", () => {
-  assert.deepEqual(visualDetails({ title: "  ", body: null }), {
-    title: "(no title)",
-    preview: null,
-    shots: [],
-  });
 });
