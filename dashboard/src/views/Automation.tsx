@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useApp } from "../app/ctx";
 import { ReasonForm, SwitchWithReason } from "capsomer/react/switch-reason";
+import "capsomer/field.css";
+import "capsomer/switch.css";
+import "capsomer/switch-reason.css";
 import { useApplySwitch } from "../ui/applySwitch";
 import { Panel } from "capsomer/react/panel";
 

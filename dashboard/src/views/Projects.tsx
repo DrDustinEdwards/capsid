@@ -12,7 +12,10 @@ import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
 import { PageHead } from "./shared";
 import { useEditor } from "capsomer/react/config-form";
-import { ProjectForm } from "./ProjectConfig";
+import { Suspense, lazy } from "react";
+
+// The add and edit form loads only when it opens, with its fields' stylesheets.
+const ProjectForm = lazy(() => import("./ProjectConfig").then((m) => ({ default: m.ProjectForm })));
 
 // PROJECTS (the Portal audit's new map, 2026-11-06; out of Settings): each project's driver,
 // its jobs and the integrity of its latest truth report. A project paused after repeated
@@ -165,7 +168,11 @@ function Roster() {
           Add project
         </button>
       </div>
-      {ed.editing && <ProjectForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />}
+      {ed.editing && (
+        <Suspense fallback={<Spinner />}>
+          <ProjectForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />
+        </Suspense>
+      )}
       {load.error && (
         <Banner tone="crit">
           Could not read the projects: {load.error}

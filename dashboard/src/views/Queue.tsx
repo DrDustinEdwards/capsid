@@ -1,5 +1,6 @@
 import { Banner } from "capsomer/react/banner";
 import { AnchorBar } from "capsomer/react/anchor-bar";
+import "capsomer/anchor-bar.css";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy } from "react";

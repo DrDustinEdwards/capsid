@@ -7,8 +7,15 @@ import { Panel } from "capsomer/react/panel";
 import { Uptime90 } from "./Uptime90";
 import { Deploys } from "./Deploys";
 import { useEditor } from "capsomer/react/config-form";
-import { SiteForm, SiteRow } from "./SiteConfig";
+import { Suspense, lazy } from "react";
+import { Missing, Spinner } from "capsomer/react/empty";
+import { parse, utc } from "capsomer/behavior/time";
+import { ago } from "../lib/format";
+import { St } from "../ui/icons";
 import { FilterEmpty, FleetTable, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
+
+// The add and edit form loads only when it opens, with its fields' stylesheets (as on SitePage).
+const SiteForm = lazy(() => import("./SiteConfig").then((m) => ({ default: m.SiteForm })));
 
 // SITES (the Portal audit's new map, 2026-11-06): every site in one table, its status, uptime,
 // live deploy, errors and backup age, with Add site; then each site's uptime by month. A row
@@ -51,7 +58,11 @@ function AllSites() {
         </button>
         {snap && <NsChips list={snap.sites.map((s) => s.namespace)} />}
       </div>
-      {ed.editing && <SiteForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />}
+      {ed.editing && (
+        <Suspense fallback={<Spinner />}>
+          <SiteForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />
+        </Suspense>
+      )}
       {!configured.some((s) => s.origin !== null) ? (
         <Banner tone="neutral">
           No site is configured, so the watcher probes nothing. Add a site to start.
@@ -108,5 +119,62 @@ function AllSites() {
         </Panel>
       )}
     </div>
+  );
+}
+
+// One recorded site in the table, with Edit.
+function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
+  const { now } = useApp();
+  const at = parse(s.updated_at);
+  const none = <Missing />;
+  return (
+    <tr data-row="">
+      <td>
+        <b className="cap-mono">{s.namespace}</b>
+      </td>
+      <td data-label="Name">{s.name}</td>
+      <td data-label="Origin">
+        {s.origin === null ? (
+          <St kind="nodata">Serves no site</St>
+        ) : (
+          <>
+            <span className="cap-mono">{s.origin}</span>
+            {s.self_probe && <div className="src">probed in-process</div>}
+          </>
+        )}
+      </td>
+      <td data-label="Health path" className="cap-mono">
+        {s.origin === null
+          ? none
+          : (s.health_path ?? (
+              <span className="cap-text" data-tone="dim">
+                none, root probed
+              </span>
+            ))}
+      </td>
+      <td data-label="Platform">
+        {s.platform === "vercel" ? "Vercel" : s.platform === "cloudflare" ? "Cloudflare" : none}
+      </td>
+      <td data-label="Worker script" className="cap-mono">
+        {s.script ?? none}
+      </td>
+      <td data-label="Revision">
+        <span className="cap-num">{s.revision}</span>
+        <div className="src" title={Number.isNaN(at) ? s.updated_at : utc(at)}>
+          {Number.isNaN(at) ? `updated ${s.updated_at}` : `updated ${ago(at, now)}`}
+        </div>
+      </td>
+      <td className="ctl">
+        {/* Edit only: Remove is in the form's Danger area (UX audit M9). */}
+        <button
+          type="button"
+          className="cap-btn"
+          aria-label={`Edit ${s.namespace}`}
+          onClick={onEdit}
+        >
+          Edit
+        </button>
+      </td>
+    </tr>
   );
 }
