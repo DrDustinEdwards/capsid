@@ -244,8 +244,10 @@ function PackagePanel({
                 {() =>
                   snap.downloads.state === "ok" && (
                     <>
-                      <span className="cap-num">{shortCount(snap.downloads.last_week)}</span> in 7 days ·{" "}
-                      <span className="cap-num">{shortCount(snap.downloads.last_month)}</span> in 30 days
+                      <span className="cap-num">{shortCount(snap.downloads.last_week)}</span> in 7
+                      days ·{" "}
+                      <span className="cap-num">{shortCount(snap.downloads.last_month)}</span> in 30
+                      days
                       <span className="cap-text" data-tone="dim">
                         {" "}
                         {snap.downloads.through
@@ -272,9 +274,9 @@ function PackagePanel({
                 {() =>
                   snap.dependents.state === "ok" && (
                     <>
-                      <span className="cap-num">{shortCount(snap.dependents.total)}</span> packages depend
-                      on {snap.dependents.version}: {shortCount(snap.dependents.direct)} directly,{" "}
-                      {shortCount(snap.dependents.indirect)} through another package
+                      <span className="cap-num">{shortCount(snap.dependents.total)}</span> packages
+                      depend on {snap.dependents.version}: {shortCount(snap.dependents.direct)}{" "}
+                      directly, {shortCount(snap.dependents.indirect)} through another package
                     </>
                   )
                 }
