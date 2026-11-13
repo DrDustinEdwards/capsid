@@ -68,18 +68,18 @@ function Row({
   return (
     <tr data-row="">
       <td>
-        <b className="cap-mono">{n.namespace}</b>
-        {n.breaker.open && (
-          <>
-            <div className="mt4">
+        <div className="cap-stack" data-gap="2" data-align="start">
+          <b className="cap-mono">{n.namespace}</b>
+          {n.breaker.open && (
+            <>
               <St kind="crit">Paused after repeated failures</St>
-            </div>
-            <div className="src wrap">
-              {n.breaker.failed} jobs failed since {n.breaker.since} UTC; it pauses at{" "}
-              {n.breaker.threshold}. No job is handed out until it is reset.
-            </div>
-          </>
-        )}
+              <div className="src wrap">
+                {n.breaker.failed} jobs failed since {n.breaker.since} UTC; it pauses at{" "}
+                {n.breaker.threshold}. No job is handed out until it is reset.
+              </div>
+            </>
+          )}
+        </div>
       </td>
       <td data-label="Repos">
         {n.repos.length ? (
@@ -111,7 +111,7 @@ function Row({
         <Report n={n} />
       </td>
       <td className="ctl">
-        <div className="toolbar col">
+        <div className="cap-stack" data-gap="3" data-align="end">
           <button
             type="button"
             className="cap-btn"
@@ -153,7 +153,7 @@ function Roster() {
   const ed = useEditor<PortalNamespace>(read);
   return (
     <>
-      <div className="toolbar">
+      <div className="cap-cluster" data-gap="3">
         <button
           type="button"
           className="cap-btn"
@@ -232,7 +232,7 @@ function Roster() {
 
 export function Projects() {
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Projects" />
       <Roster />
     </div>

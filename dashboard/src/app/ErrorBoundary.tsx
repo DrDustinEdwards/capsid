@@ -24,7 +24,7 @@ export class ErrorBoundary extends Component<
     // A part of a page (a lazy chart whose chunk did not load) shows its own small message.
     if (this.props.fallback !== undefined) return this.props.fallback;
     return (
-      <div className="page">
+      <div className="cap-admin-page">
         <Banner tone="crit">
           <b>The dashboard failed to render.</b> {e.message}. <a href={APP_URL}>Reload</a>
         </Banner>

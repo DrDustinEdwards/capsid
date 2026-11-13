@@ -19,7 +19,7 @@ const PhoneAlerts = lazy(() => import("./PhoneAlerts").then((m) => ({ default: m
 
 export function Settings() {
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Settings" />
       <Suspense fallback={null}>
         <Automation />

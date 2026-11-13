@@ -115,7 +115,7 @@ export function PullRequests() {
   const { feed, now, confirm } = useApp();
   const live = feed.live;
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead title="Pull requests" />
       <Panel
         flush
@@ -136,7 +136,7 @@ export function PullRequests() {
       </Panel>
       {/* Auto-merge, one section: whether the signed policy loads, then the safety meter.
           A pause alert opens it (src/push.ts, /prs#auto-merge). */}
-      <div className="embedded" id="auto-merge">
+      <div className="cap-stack" id="auto-merge">
         {/* The signed auto-merge policy (src/auto-merge-policy.ts): whether the Worker loads it,
             and the control that writes it from docs/policy/auto-merge.md and signs it
             (sign_policy_from_repo). The version is typed in the dialog. */}
@@ -155,7 +155,7 @@ export function PullRequests() {
                 <p className="cap-muted prewrap">{live.merge_policy.reason}</p>
               </>
             )}
-            <div className="toolbar">
+            <div className="cap-cluster" data-gap="3">
               <button
                 type="button"
                 className="cap-btn"
@@ -451,7 +451,7 @@ function MergeUnits() {
                           : "")}
                     </td>
                     <td>
-                      <span className="toolbar">
+                      <span className="cap-cluster" data-gap="3">
                         {suspended.has(r.unit) && (
                           <button
                             type="button"

@@ -85,7 +85,7 @@ export function Completeness() {
   );
   const count = (s: CompletenessStatus) => cells.filter((c) => c.status === s).length;
   return (
-    <div className="embedded">
+    <div className="cap-stack">
       <Alert tone={data.finished ? "neutral" : "warn"}>
         <b>{data.finished ? "Finished." : "Not finished."}</b> {shortCount(count("complete"))} of{" "}
         {shortCount(cells.length)} cells complete, {shortCount(count("partial"))} partial,{" "}

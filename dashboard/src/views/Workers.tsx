@@ -277,14 +277,14 @@ export function UnownedResources({ siteScripts }: { siteScripts: ReadonlyArray<s
   const doc = load.data;
   if (!doc || !doc.read_at)
     return (
-      <div className="embedded">
+      <div className="cap-stack">
         <NotRead load={load} />
       </div>
     );
   const owned = new Set(ownedScripts(doc, siteScripts));
   const rest = doc.workers.filter((w) => !owned.has(w.script));
   return (
-    <div className="embedded">
+    <div className="cap-stack">
       {doc.problems.map((p) => (
         <p key={p} className="shared-none">
           <St kind="nodata">{p}</St>

@@ -122,7 +122,7 @@ function SitePanel({
             {op.weekly.length > 0 && (
               <>
                 <dt>Weekly</dt>
-                <dd className="row-gap">
+                <dd className="cap-cluster" data-gap="3">
                   {op.weekly.map((tool) => (
                     <span key={tool}>
                       <span className="cap-mono">{tool}</span>{" "}
@@ -244,7 +244,7 @@ function Checks({
                     <span className="cap-mono">{c.repair}</span> not allowed
                   </span>
                 ) : (
-                  <span className="row-gap">
+                  <span className="cap-cluster" data-gap="3">
                     <span className="cap-mono">{c.repair}</span>
                     <button
                       type="button"

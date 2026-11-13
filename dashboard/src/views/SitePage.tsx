@@ -50,7 +50,7 @@ export function SitePage() {
   const name = row?.name ?? snap?.name ?? ns;
   if (!row && !snap) {
     return (
-      <div className="page">
+      <div className="cap-admin-page">
         <PageHead title={name} />
         <Empty
           kind="no-match"
@@ -69,7 +69,7 @@ export function SitePage() {
   const origin = row?.origin ?? snap?.origin ?? null;
   const p = snap ? PROBE[snap.state] : null;
   return (
-    <div className="page">
+    <div className="cap-admin-page">
       <PageHead
         title={name}
         lead={
@@ -96,7 +96,7 @@ export function SitePage() {
         tabs={SITE_TABS}
         current={tab}
       />
-      <div className="embedded" id={tab} data-tab-panel={tab}>
+      <div className="cap-stack" id={tab} data-tab-panel={tab}>
         {tab === "overview" ? (
           <Overview ns={ns} snap={snap} />
         ) : tab === "deploys" ? (
@@ -185,7 +185,7 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
           {detail}
         </Banner>
       )}
-      <div className="grid2">
+      <div className="cap-panes" data-even data-gap="5">
         <Panel flush title="Probe" src={`watcher pass · checked ${ago(parse(s.checked_at), now)}`}>
           <div className="body">
             <dl className="cap-detail-record">
@@ -438,7 +438,7 @@ function Setup({
           id="operator-key"
           src="the key Carrel and the admin tools call the site's operator API with"
         >
-          <div className="toolbar">
+          <div className="cap-cluster" data-gap="3">
             <button
               type="button"
               className="cap-btn"
