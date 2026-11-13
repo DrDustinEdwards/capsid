@@ -4,6 +4,7 @@ import type { Env } from "./env";
 import { PORTAL_PATH, portalGate } from "./portal-auth";
 import { isPortalHost } from "./portal-host";
 import { textResponse as text } from "@dustinedwards/site-runtime/http";
+import { compressUntransformed, PRIVATE_PAGE_HEADERS } from "@dustinedwards/site-runtime/edge-cache";
 
 // Capsid Portal (capsid/research/design-ops-console.md, moved from /console/app/ by
 // capsid/research/design-portal-unify.md): React Router pages rendered here, on the server, with
@@ -63,17 +64,24 @@ export async function serveFile(
   });
 }
 
-/** The response a page leaves with: never cached, and its policy carrying the page's nonce. */
-export function pageHeaders(response: Response, csp: { policy: string }): Response {
+/** The response a page leaves with: never cached, and its policy carrying the page's nonce. A Portal page is private
+ *  (site-runtime PRIVATE_PAGE_HEADERS: no-transform, so no Web Analytics beacon, and compressed here, since the edge
+ *  then does not); the public demo is counted. */
+export function pageHeaders(
+  response: Response,
+  csp: { policy: string },
+  request?: Request,
+): Response {
   const headers = new Headers(response.headers);
-  headers.set("Cache-Control", "no-store");
+  headers.set("Cache-Control", request ? PRIVATE_PAGE_HEADERS["Cache-Control"] : "no-store");
   // Referrer-Policy, X-Frame-Options and the rest come from withSecurityHeaders (src/security-headers.ts).
   headers.set("Content-Security-Policy", csp.policy);
-  return new Response(response.body, {
+  const page = new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
     headers,
   });
+  return request ? compressUntransformed(page, request) : page;
 }
 
 /** On the Portal host, a hashed build file, served to anyone (the demo's pages load the same
@@ -135,7 +143,7 @@ export async function handlePortalApp(
     return response;
   };
   const csp = dashboardCsp();
-  const out = pageHeaders(await render(page, read, csp.nonce), csp);
+  const out = pageHeaders(await render(page, read, csp.nonce), csp, request);
   for (const cookie of cookies) out.headers.append("Set-Cookie", cookie);
   return out;
 }
