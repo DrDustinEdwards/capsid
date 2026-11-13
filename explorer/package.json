@@ -13,7 +13,7 @@
   "dependencies": {
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.50.0",
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.138.0",
-    "capsomer": "github:DrDustinEdwards/capsomer#v0.123.0",
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.124.0",
     "enarratio": "^0.12.2"
   },
   "devDependencies": {
@@ -26,7 +26,8 @@
     "lighthouse": "13.5.0",
     "lightningcss": "1.33.0",
     "mdast-util-gfm": "3.1.0",
-    "mdast-util-to-markdown": "2.2.0"
+    "mdast-util-to-markdown": "2.2.0",
+    "rolldown": "1.2.15"
   },
   "overrides": {
     "capsomer": {

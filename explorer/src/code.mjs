@@ -6,7 +6,7 @@
 //
 // Every status is Capsomer's: a glyph whose shape carries it, a word, and the tone's color
 // (components/status). A number nobody measured is "No data" with its reason, never a zero.
-import { graphSvg } from "./graph.mjs";
+import { graphSvg } from "capsomer/behavior/graph";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { layout, pageHead, readingBox, scroller, systemPath } from "./pages.mjs";
 
@@ -236,7 +236,7 @@ export function codePage(s, maps, asOf) {
               label: folderName(folder),
               href: `#${folderId(folder)}`,
               lines: boxLines(map, mods),
-              cycle: mods.some((/** @type {any} */ m) => m.cycle),
+              ring: mods.some((/** @type {any} */ m) => m.cycle),
             })),
             wires: map.modules.flatMap((/** @type {any} */ m) =>
               m.imports.map((/** @type {string} */ to) => ({
@@ -259,7 +259,7 @@ export function codePage(s, maps, asOf) {
               label: baseName(m.path),
               href: blobUrl(map, m.path),
               lines: boxLines(map, [m]),
-              cycle: !!m.cycle,
+              ring: !!m.cycle,
             })),
             wires: mods.flatMap((m) =>
               m.imports.map((/** @type {string} */ to) => ({ from: m.path, to })),

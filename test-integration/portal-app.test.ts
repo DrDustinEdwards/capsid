@@ -79,7 +79,7 @@ describe("the Portal's pages and files", () => {
     expect(html, "the page's read reached the real feed route, behind the same gate").toContain(
       'data-read="200"',
     );
-    expect(page.headers.get("Cache-Control")).toBe("no-store");
+    expect(page.headers.get("Cache-Control")).toBe("private, no-store, no-transform");
     expect(page.headers.get("Content-Type") ?? "").toContain("text/html");
     const nonce = /<script nonce="([^"]+)"/.exec(html)?.[1];
     expect(nonce).toBeTruthy();

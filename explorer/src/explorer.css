@@ -1341,15 +1341,6 @@ th[aria-sort="ascending"] .sort::after {
   }
 }
 
-/* The code drawing's sub-line, and the system each drawing is about. */
-.code-graph-sub {
-  fill: var(--muted) !important;
-  font-size: 12px;
-}
-.code-graph-box[data-tone="nodata"] > rect:not(.code-graph-ring) {
-  stroke: var(--line-strong);
-}
-
 /* Positioned, so the screen-reader words inside a wide table (each status's word) are clipped with
    it too; left to the page, they stood out past the table's edge and the page scrolled sideways. */
 .scroller {
@@ -1480,89 +1471,6 @@ th[aria-sort="ascending"] .sort::after {
 }
 .nowrap {
   white-space: nowrap;
-}
-
-/* The code level's drawing (src/graph.mjs): boxes on the surface, each edged in its worst
-   status's color, with the status's glyph and number; a module in a cycle in a dashed ring. */
-.code-graph {
-  margin: var(--space-5) 0;
-}
-.code-graph figcaption {
-  margin-block-end: var(--space-3);
-  color: var(--muted);
-}
-.code-graph-svg {
-  display: block;
-  max-inline-size: 100%;
-  block-size: auto;
-  margin-inline: auto;
-  font: 13px / 1 var(--ui);
-}
-.code-graph-wire {
-  fill: none;
-  stroke: var(--line-strong);
-  stroke-width: 1.25;
-  opacity: 0.8;
-}
-.code-graph-head {
-  fill: var(--line-strong);
-}
-.code-graph-box rect {
-  fill: var(--surface);
-  stroke: var(--line-strong);
-  stroke-width: 1.5;
-}
-.code-graph-box[data-tone="crit"] > rect:not(.code-graph-ring) {
-  stroke: var(--crit);
-  stroke-width: 2.5;
-}
-.code-graph-box[data-tone="warn"] > rect:not(.code-graph-ring) {
-  stroke: var(--warn);
-  stroke-width: 2;
-}
-.code-graph-box[data-tone="ok"] > rect:not(.code-graph-ring) {
-  stroke: var(--ok);
-}
-.code-graph-box .code-graph-ring {
-  fill: none;
-  stroke: var(--crit);
-  stroke-dasharray: 5 4;
-  stroke-width: 1.5;
-}
-.code-graph text {
-  fill: var(--text);
-}
-.code-graph-name {
-  font-weight: 600;
-}
-.code-graph-cycle {
-  fill: var(--crit);
-  font-size: 12px;
-  font-weight: 600;
-}
-.code-graph-status[data-tone="crit"] {
-  color: var(--crit);
-}
-.code-graph-status[data-tone="warn"] {
-  color: var(--warn);
-}
-.code-graph-status[data-tone="ok"] {
-  color: var(--ok);
-}
-.code-graph-status[data-tone="nodata"] {
-  color: var(--nodata);
-}
-.code-graph-status text {
-  fill: currentColor;
-  font-weight: 600;
-}
-@media (max-width: 40rem) {
-  .code-graph-svg {
-    max-inline-size: none;
-  }
-}
-.code-graph a:hover rect:not(.code-graph-ring) {
-  fill: var(--sel);
 }
 
 /* The NASA Graphics Standards Manual (NHB 1430.2, Danne & Blackburn, 1976), from its own pages:
