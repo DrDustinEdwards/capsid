@@ -7,9 +7,9 @@ import {
   lastDays,
   mondayOf,
   sessionMinutes,
-  timeMs,
   weekStarts,
 } from "../src/trends.ts";
+import { timeMs } from "../src/time.ts";
 
 // The counting rules behind GET /portal/api/trends, on plain values. The SQL runs against
 // a real D1 in test-integration/portal-trends.test.ts.
