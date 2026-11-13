@@ -21,12 +21,19 @@ import "capsomer/fonts-jost.css";
 import monoFontUrl from "capsomer/fonts/martian-mono-latin-wght-normal.woff2?url";
 import uiFontUrl from "capsomer/fonts/inter-latin-wght-normal.woff2?url";
 // Capsomer: its layer order and tokens first, then its element defaults (base.css, which carries
-// the utility classes), then its components (all in the cap.* layers, so the app's unlayered
-// styles win), then the app's styles. Every stylesheet the shell or most pages need is here; a
+// the utility classes), its layout classes and text roles, then its components (all in the cap.*
+// layers, so the app's unlayered styles win), then the app's styles. Every stylesheet the shell or most pages need is here; a
 // component that only some pages draw (a form field, a switch, the anchor bar, the filter bar)
 // brings its stylesheet with the view that draws it, so the other pages never load it.
 import "capsomer/tokens.css";
 import "capsomer/base.css";
+// Only the parts of layout.css and text.css the Portal draws (the stack, cluster and panes, and the text roles), inside
+// its 43 KB CSS budget. A class whose stylesheet is not imported fails devkit-css-vars (.css-vars.json, "classes").
+import "capsomer/layout-gap.css";
+import "capsomer/layout-stack.css";
+import "capsomer/layout-cluster.css";
+import "capsomer/layout-panes.css";
+import "capsomer/text-role.css";
 import "capsomer/family-teal.css";
 import "capsomer/site-capsid-portal.css";
 import "capsomer/status.css";

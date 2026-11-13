@@ -8,6 +8,7 @@ import { Panel } from "capsomer/react/panel";
 // brings no stylesheet of its own to wait for before it hydrates.
 import "capsomer/segmented.css";
 import "capsomer/switch.css";
+import "./Settings.css";
 import { PageHead } from "./shared";
 
 // SETTINGS: your preferences only (the Portal audit's new map, 2026-11-06). The overnight run

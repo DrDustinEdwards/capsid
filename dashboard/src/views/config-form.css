@@ -1,0 +1,15 @@
+/* The Portal's config forms (SiteConfig.tsx, ProjectConfig.tsx), loaded with them rather than with the shell: a
+   check or a full-width field takes the form's whole row. */
+.cap-config-form .check {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  font-size: var(--fs-detail);
+}
+.cap-config-form :is(.full, .cap-danger) {
+  grid-column: 1 / -1;
+}
+.cap-config-form .cap-danger .check {
+  grid-column: auto;
+}

@@ -5,6 +5,7 @@ import { useApp, isView, placePath } from "../app/ctx";
 import { attentionGroups, WAITING_KINDS, PROBLEM_ROWS, type AttentionRow } from "../lib/derive";
 import { ago } from "../lib/format";
 import { Status } from "capsomer/react/status";
+import "./Problems.css";
 
 // ---- Problems (was Needs attention) ------------------------------------------------------
 

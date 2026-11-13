@@ -25,6 +25,7 @@ import type {
 import { errorTotals } from "../ui/charts";
 import { Status } from "capsomer/react/status";
 import { formatMoney } from "@dustinedwards/site-runtime/money";
+import "./TrendCharts.css";
 
 // The Portal's charts drawn with Enarratio's primitives (docs/design/design-portal-evaluation.md
 // section 3; ruled 2026-10-09, DECIDE 6 and 7): 1 minutes of Dustin per week (Needs you),
