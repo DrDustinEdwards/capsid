@@ -40,5 +40,21 @@ export default defineConfig({
     target: "es2022",
     assetsInlineLimit: 0,
     sourcemap: false,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            // The theme switch, keyboard shortcuts, tooltips, route hooks and the Portal's prefs are
+            // loaded by the root and the shell on every page. Left to the automatic split they come
+            // out as four small shared chunks, each compressed on its own; as one chunk the first
+            // load is about 1 KB gzip smaller (.size-budget.json).
+            {
+              name: "shell-shared",
+              test: /capsomer[\\/]dist[\\/]components[\\/](tooltip|shortcuts|theme-switch|route-hooks)[\\/]|src[\\/]lib[\\/]prefs\.ts$/,
+            },
+          ],
+        },
+      },
+    },
   },
 });
