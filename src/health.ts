@@ -14,6 +14,7 @@ import { auditLogCheck } from "@dustinedwards/site-runtime/audit-log";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
 import { DEFAULT_CADENCE_MINUTES } from "./watcher";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 export const BACKUP_LAST_OK_KEY = "backup:last-ok";
 // Daily cron is 24h; 26h is that plus a 2h grace so one slow run does not warn.
 export const BACKUP_STALE_HOURS = 26;
@@ -28,7 +29,7 @@ export async function backupFreshness(
     return {
       last_ok: null,
       age_hours: null,
-      warning: `backup freshness unreadable: ${(err instanceof Error ? err.message : String(err)).slice(0, 80)}`,
+      warning: `backup freshness unreadable: ${errorMessage(err).slice(0, 80)}`,
     };
   }
   if (!lastOk) return { last_ok: null, age_hours: null, warning: "no successful backup recorded" };
@@ -55,7 +56,7 @@ export async function backupFreshness(
 }
 
 function probeError(err: unknown): string {
-  return `error: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`;
+  return `error: ${errorMessage(err).slice(0, 120)}`;
 }
 
 // The two bindings beside the store. Each probe reads a key that need not exist: a
@@ -103,7 +104,7 @@ export async function healthReport(env: Env): Promise<HealthReport> {
     const one = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
     d1 = one?.ok === 1 ? "ok" : `unexpected: ${JSON.stringify(one)}`;
   } catch (err) {
-    d1 = `error: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`;
+    d1 = `error: ${errorMessage(err).slice(0, 120)}`;
   }
   if (d1 === "ok") fts = await probeFts(env.DB);
 

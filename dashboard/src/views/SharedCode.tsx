@@ -2,7 +2,8 @@ import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchSharedCode, useAnswer } from "../lib/api";
-import { ago, ms } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "../types";
 import { St } from "../ui/icons";
 
@@ -39,7 +40,7 @@ export function SharedCode() {
           ))}
           {/* What was read, at the foot: a view's heading stands alone (design D13). */}
           <p className="faint shared-read">
-            Read {ago(ms(data.generated), now)} from {data.apps_read}{" "}
+            Read {ago(parse(data.generated), now)} from {data.apps_read}{" "}
             {data.apps_read === 1 ? "app" : "apps"}
             {data.apps_failed.length
               ? `; ${data.apps_failed.length} could not be read: ${data.apps_failed.map((a) => `${a.namespace} (${a.error})`).join("; ")}`
@@ -52,10 +53,16 @@ export function SharedCode() {
   );
 }
 
-function behindText(u: SharedCodeApp): { kind: "ok" | "warn" | "nodata"; text: string } {
+function behindText(u: SharedCodeApp): {
+  kind: "ok" | "warn" | "nodata";
+  text: string;
+} {
   if (u.behind === null) return { kind: "nodata", text: u.pinned ? "Not a release" : "Unpinned" };
   if (u.behind === 0) return { kind: "ok", text: "Current" };
-  return { kind: "warn", text: `${u.behind} ${u.behind === 1 ? "release" : "releases"} behind` };
+  return {
+    kind: "warn",
+    text: `${u.behind} ${u.behind === 1 ? "release" : "releases"} behind`,
+  };
 }
 
 // The release line (Capsid improvement list, item 13): the version in the repo's
@@ -137,8 +144,8 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
       footer={<span className="faint">{summary}</span>}
     >
       {pkg.users.length ? (
-        <table className="brief shared-users">
-          <caption className="sr-only">Apps that use {pkg.name}</caption>
+        <table className="cap-table shared-users">
+          <caption className="cap-sr-only">Apps that use {pkg.name}</caption>
           <thead>
             <tr>
               <th>App</th>

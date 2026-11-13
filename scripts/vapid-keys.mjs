@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Makes the VAPID key that signs phone alerts (src/web-push.ts) and puts it on the Worker
+// Makes the VAPID key that signs phone alerts (site-runtime ./web-push) and puts it on the Worker
 // as the secret VAPID_PRIVATE_KEY, without printing it (CLAUDE.md, public repo rule: never
 // print a token). Run once by the seat, from the repo root with wrangler signed in:
 //

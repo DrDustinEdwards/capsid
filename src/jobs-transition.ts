@@ -8,7 +8,7 @@ import type { JobListRow } from "./jobs-claim";
 import type { OverlapReport } from "./job-overlaps";
 import type { JobVersion } from "./jobs-edit";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
 // What every job transition shares: the result shape, the refusal, the row read, the
 // guarded batch every transition commits through, and the checks more than one of
@@ -209,7 +209,7 @@ export async function correctionsForWork(
     logEvent(
       "CORRECTIONS_READ_FAILED",
       {
-        message: `CORRECTIONS_READ_FAILED ${namespace}/${title}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `CORRECTIONS_READ_FAILED ${namespace}/${title}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );

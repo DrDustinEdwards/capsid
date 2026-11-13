@@ -1,11 +1,15 @@
+import { Alert } from "capsomer/react/banner";
 import { useApp } from "../app/ctx";
 import { incidents, passStale, TASK_OUTCOME } from "../lib/derive";
-import { ago, age, ms } from "../lib/format";
+import { ago, age } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import type { OpsTask } from "../types";
 import { St } from "../ui/icons";
-import { When } from "../ui/When";
+import { Time } from "capsomer/react/time";
 import { Panel } from "capsomer/react/panel";
 import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, useNsFilter } from "./shared";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 
 // Health's Problems tab: the watcher's findings and its last pass.
 export function Incidents() {
@@ -30,15 +34,15 @@ export function Incidents() {
         <Panel
           flush
           title="Last watcher pass"
-          src={snap ? <When t={ms(snap.pass_at)} /> : "none yet"}
+          src={snap ? <Time at={snap.pass_at} format="exact" /> : "none yet"}
         >
           {snap ? (
             <>
               <div className="body">
-                <dl className="kv">
+                <dl className="cap-detail-record">
                   <dt>Finished</dt>
                   <dd>
-                    {ago(ms(snap.pass_at), now)}{" "}
+                    {ago(parse(snap.pass_at), now)}{" "}
                     {passStale(snap, now) && <St kind="warn">stale</St>}
                   </dd>
                   <dt>Cadence</dt>
@@ -65,8 +69,8 @@ export function Incidents() {
                   </dd>
                 </dl>
               </div>
-              <div className="scroll-x">
-                <table className="list">
+              <div className="cap-table-wrap">
+                <table className="cap-table">
                   <thead>
                     <tr>
                       <th>Check</th>
@@ -119,13 +123,13 @@ export function ScheduledTasks() {
     <Panel flush title="Scheduled tasks" src="run ledger" id="scheduled">
       {s.error !== null ? (
         <div className="body">
-          <div className="callout">
+          <Alert tone="neutral">
             <St kind="nodata">No data</St> The run ledger could not be read: {s.error}
-          </div>
+          </Alert>
         </div>
       ) : (
-        <div className="scroll-x">
-          <table className="list">
+        <div className="cap-table-wrap">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th>Task</th>
@@ -163,7 +167,7 @@ export function ScheduledTasks() {
                           <St kind={TASK_OUTCOME[last.outcome].kind}>
                             {TASK_OUTCOME[last.outcome].label}
                           </St>{" "}
-                          {ago(ms(last.finished_at), now)}
+                          {ago(parse(last.finished_at), now)}
                         </>
                       ) : (
                         <span className="faint">none recorded</span>
@@ -180,7 +184,7 @@ export function ScheduledTasks() {
                                 <St kind={TASK_OUTCOME[r.outcome].kind}>
                                   {TASK_OUTCOME[r.outcome].label}
                                 </St>{" "}
-                                {ago(ms(r.finished_at), now)}: {r.reason}
+                                {ago(parse(r.finished_at), now)}: {r.reason}
                               </li>
                             ))}
                           </ul>

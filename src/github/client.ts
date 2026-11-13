@@ -1,23 +1,19 @@
 // GitHub App repo access for Capsid's repo fallthrough.
 //
-// Mints short-lived installation tokens from the App private key (RS256 JWT via Web
-// Crypto) and caches them in APP_KV for ~55 minutes. Resolves the target repo per
+// Mints short-lived installation tokens from the App private key (RS256 JWT, site-runtime/jwt) and caches them in APP_KV for ~55 minutes. Resolves the target repo per
 // namespace from the D1 namespaces table, then reads and writes over the GitHub
 // REST API. No PAT, no clone.
 
 import { repoPathProblem } from "../limits";
 // RepoEnv, not Env: this module must not be able to name the credentials it omits.
 import type { RepoEnv as Env } from "../env";
-import { logEvent } from "@dustinedwards/site-runtime/log";
-import { base64url } from "@dustinedwards/site-runtime/encoding";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
+import { githubAppJwt } from "@dustinedwards/site-runtime/jwt";
+import { GITHUB_API, githubHeaders, installationToken } from "@dustinedwards/site-runtime/github";
 import { callSignal } from "../call-signal";
 
-const GH = "https://api.github.com";
-const GH_HEADERS: Record<string, string> = {
-  Accept: "application/vnd.github+json",
-  "X-GitHub-Api-Version": "2022-11-28",
-  "User-Agent": "capsid",
-};
+const GH = GITHUB_API;
+const GH_HEADERS = githubHeaders(null, "capsid");
 
 const TOKEN_TTL_SECONDS = 3300; // installation tokens live 60 min; refresh a little early
 const INSTALL_TTL_SECONDS = 86400; // installation id is stable
@@ -39,45 +35,9 @@ export interface RepoRef {
   full: string;
 }
 
-let cachedKey: { pem: string; key: CryptoKey } | null = null;
-
-async function importPrivateKey(pem: string): Promise<CryptoKey> {
-  if (cachedKey && cachedKey.pem === pem) return cachedKey.key;
-  const body = pem
-    .replace(/-----BEGIN [^-]+-----/, "")
-    .replace(/-----END [^-]+-----/, "")
-    .replace(/\s+/g, "");
-  const der = Uint8Array.from(atob(body), (c) => c.charCodeAt(0));
-  const key = await crypto.subtle.importKey(
-    "pkcs8",
-    der,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  cachedKey = { pem, key };
-  return key;
-}
-
 async function createAppJwt(env: Env): Promise<string> {
-  if (!env.GITHUB_APP_CLIENT_ID || !env.GITHUB_APP_PRIVATE_KEY) {
-    throw new Error(
-      "GitHub App not configured: set GITHUB_APP_CLIENT_ID and GITHUB_APP_PRIVATE_KEY",
-    );
-  }
-  const now = Math.floor(Date.now() / 1000);
-  const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const payload = base64url(
-    JSON.stringify({ iss: env.GITHUB_APP_CLIENT_ID, iat: now - 60, exp: now + 540 }),
-  );
-  const signingInput = `${header}.${payload}`;
-  const key = await importPrivateKey(env.GITHUB_APP_PRIVATE_KEY);
-  const signature = await crypto.subtle.sign(
-    "RSASSA-PKCS1-v1_5",
-    key,
-    new TextEncoder().encode(signingInput),
-  );
-  return `${signingInput}.${base64url(new Uint8Array(signature))}`;
+  const { appId, privateKey } = appCredentials(env);
+  return githubAppJwt(appId, privateKey);
 }
 
 async function appFetch(env: Env, path: string, init?: RequestInit): Promise<Response> {
@@ -93,45 +53,38 @@ async function appFetch(env: Env, path: string, init?: RequestInit): Promise<Res
   });
 }
 
-async function getInstallationId(env: Env, owner: string, repo: string): Promise<string> {
-  const cached = await env.APP_KV.get(installKey(owner));
-  if (cached) return cached;
-  const resp = await appFetch(env, `/repos/${owner}/${repo}/installation`);
-  if (!resp.ok) {
-    // A bad JWT answers 401; a valid one with no installation covering the repo
-    // answers 404. So a 404 means the credentials are fine and the App is not
-    // installed on that repo.
+function appCredentials(env: Env): { appId: string; privateKey: string } {
+  if (!env.GITHUB_APP_CLIENT_ID || !env.GITHUB_APP_PRIVATE_KEY) {
     throw new Error(
-      `could not resolve GitHub App installation for ${owner}/${repo} (${resp.status}): ${await resp.text()}` +
-        (resp.status === 404
-          ? " (404 means the App is not installed on this repo; the credentials are fine)"
-          : ""),
+      "GitHub App not configured: set GITHUB_APP_CLIENT_ID and GITHUB_APP_PRIVATE_KEY",
     );
   }
-  const data = (await resp.json()) as { id: number };
-  const id = String(data.id);
-  await env.APP_KV.put(installKey(owner), id, { expirationTtl: INSTALL_TTL_SECONDS });
-  return id;
+  return { appId: env.GITHUB_APP_CLIENT_ID, privateKey: env.GITHUB_APP_PRIVATE_KEY };
 }
 
 async function getInstallationToken(env: Env, owner: string, repo: string): Promise<string> {
   const cacheKey = tokenKey(owner, repo);
   const cached = await env.APP_KV.get(cacheKey);
   if (cached) return cached;
-  const installationId = await getInstallationId(env, owner, repo);
-  // Scoped to the one repo asked about. An access_tokens POST with no body mints a
-  // token for every repo the installation covers, and that token then sits in APP_KV.
-  // With `repositories` it holds exactly the repo the caller resolved.
-  const resp = await appFetch(env, `/app/installations/${installationId}/access_tokens`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ repositories: [repo] }),
+  const knownId = await env.APP_KV.get(installKey(owner));
+  // Scoped to the one repo asked about. A token minted with no `repositories` covers every
+  // repo the installation does, and that token would then sit in APP_KV.
+  const minted = await installationToken({
+    ...appCredentials(env),
+    userAgent: "capsid",
+    owner,
+    repo,
+    installationId: knownId ?? undefined,
+    repositories: [repo],
+    fetcher: (input, init) =>
+      fetch(input, { ...init, signal: init?.signal ?? callSignal(GH_TIMEOUT_MS) }),
   });
-  if (!resp.ok)
-    throw new Error(`installation token request failed (${resp.status}): ${await resp.text()}`);
-  const data = (await resp.json()) as { token: string };
-  await env.APP_KV.put(cacheKey, data.token, { expirationTtl: TOKEN_TTL_SECONDS });
-  return data.token;
+  if (!knownId)
+    await env.APP_KV.put(installKey(owner), minted.installationId, {
+      expirationTtl: INSTALL_TTL_SECONDS,
+    });
+  await env.APP_KV.put(cacheKey, minted.token, { expirationTtl: TOKEN_TTL_SECONDS });
+  return minted.token;
 }
 
 // What the App can see, for the watcher's unmapped-repo check (src/unmapped-repos.ts).
@@ -169,16 +122,13 @@ export async function listInstalledRepos(
 
   const repos: InstalledRepo[] = [];
   for (const id of installations) {
-    const minted = await appFetch(env, `/app/installations/${id}/access_tokens`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ permissions: { metadata: "read" } }),
+    const { token } = await installationToken({
+      ...appCredentials(env),
+      userAgent: "capsid",
+      installationId: id,
+      permissions: { metadata: "read" },
+      fetcher: (input, init) => fetch(input, { ...init, signal: callSignal(GH_TIMEOUT_MS) }),
     });
-    if (!minted.ok)
-      throw new Error(
-        `could not mint a metadata-only token for installation ${id} (${minted.status})`,
-      );
-    const { token } = (await minted.json()) as { token: string };
     let total = Infinity;
     const seen: InstalledRepo[] = [];
     for (let page = 1; seen.length < total; page++) {
@@ -328,7 +278,7 @@ export async function invalidateRepoReads(env: Env, owner: string, repo: string)
     logEvent(
       "GH_CACHE_INVALIDATION_FAILED",
       {
-        message: `GH_CACHE_INVALIDATION_FAILED ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `GH_CACHE_INVALIDATION_FAILED ${owner}/${repo}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );
@@ -364,7 +314,7 @@ export function parseReposList(reposJson: string): { list: RepoEntry[] } | { err
   try {
     parsed = JSON.parse(reposJson);
   } catch (err) {
-    return { error: `invalid repos JSON: ${err instanceof Error ? err.message : String(err)}` };
+    return { error: `invalid repos JSON: ${errorMessage(err)}` };
   }
   if (!Array.isArray(parsed) || parsed.length === 0) {
     return { error: "repos must be a non-empty JSON array of { repo, label } entries" };
@@ -393,29 +343,6 @@ export function requireSinglePrimary(list: RepoEntry[]): string | null {
     : `repos must have exactly one entry labeled "primary" (found ${primaries})`;
 }
 
-// https://github.com/<owner>/<repo>/pull/<number>, as GitHub returns it and a driver
-// pastes it. The one spelling for every site that reads one (the CI gate, the evidence
-// verifier and the prose scan in outcome-prs.ts): separate spellings
-// with different character classes let the gate accept owner/repo strings the
-// verifier refused. The owner and repo are what the URL says, not what the namespace
-// maps: a caller resolves them through resolveRepo before reaching GitHub.
-export const PR_URL_SOURCE = String.raw`https:\/\/github\.com\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)\/pull\/(\d+)`;
-const PR_URL_EXACT = new RegExp(`^${PR_URL_SOURCE}(?:[/?#].*)?$`);
-
-export interface PrUrl {
-  owner: string;
-  repo: string;
-  number: number;
-}
-
-// Anchored at both ends: a reference that merely mentions a pull request is not one.
-export function parsePrUrl(ref: string | null | undefined): PrUrl | null {
-  if (!ref) return null;
-  const match = PR_URL_EXACT.exec(ref.trim());
-  if (!match) return null;
-  return { owner: match[1], repo: match[2], number: Number(match[3]) };
-}
-
 // Resolve a namespace to one of its mapped repos. `selector` is the optional `repo`
 // tool argument: a label from the namespace's repos array ("primary", "legacy") or a
 // full "owner/name" that MUST appear in that array. The namespace mapping is the
@@ -439,7 +366,7 @@ export async function resolveRepo(
     list = JSON.parse(row.repos || "[]");
   } catch (err) {
     throw new Error(
-      `namespace ${namespace} has a CORRUPT repos mapping: the stored value is not valid JSON (${err instanceof Error ? err.message : String(err)}). Nothing was resolved. Repair it with capsid_admin_manage_namespaces action update.`,
+      `namespace ${namespace} has a CORRUPT repos mapping: the stored value is not valid JSON (${errorMessage(err)}). Nothing was resolved. Repair it with capsid_admin_manage_namespaces action update.`,
     );
   }
   if (!Array.isArray(list)) {

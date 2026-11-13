@@ -1,0 +1,15 @@
+{
+  "bindings": [
+    {
+      "binding": "AUDIT_BUCKET",
+      "rule": "no-delete",
+      "passed_to": {
+        "src/health.ts:r2Check": "site-runtime's r2Check only calls bucket.head on a probe key.",
+        "src/site-jobs.ts:exportAuditLog": "site-runtime's exportAuditLog only calls bucket.put; its retention deletes copied D1 rows, never bucket objects."
+      }
+    }
+  ],
+  "sources": ["src"],
+  "min_sources": 200,
+  "minimum_checks": 8
+}

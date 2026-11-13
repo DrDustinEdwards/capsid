@@ -25,7 +25,7 @@ import {
   type OpsSnapshot,
   type SiteProbe,
 } from "./ops-snapshot";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import type { Finding } from "./watcher-detect";
 import {
   type WatcherCheck,
@@ -482,7 +482,7 @@ export async function watcherTick(
       logEvent(
         "WATCHER_PACKAGE_WEEKS_FAILED",
         {
-          message: `WATCHER_PACKAGE_WEEKS_FAILED: ${err instanceof Error ? err.message : String(err)}`,
+          message: `WATCHER_PACKAGE_WEEKS_FAILED: ${errorMessage(err)}`,
         },
         { level: "error" },
       );
@@ -502,7 +502,7 @@ export async function watcherTick(
     logEvent(
       "WATCHER_AGENTS_ARCHIVE_FAILED",
       {
-        message: `WATCHER_AGENTS_ARCHIVE_FAILED: ${err instanceof Error ? err.message : String(err)}`,
+        message: `WATCHER_AGENTS_ARCHIVE_FAILED: ${errorMessage(err)}`,
       },
       { level: "error" },
     );

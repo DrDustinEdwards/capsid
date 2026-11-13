@@ -193,7 +193,7 @@ describe("the trends series", () => {
     };
     const ok = await get("?weeks=4");
     expect(ok.status, await ok.clone().text()).toBe(200);
-    expect(ok.headers.get("Cache-Control")).toBe("no-store");
+    expect(ok.headers.get("Cache-Control")).toBe("private, no-store");
     const body = (await ok.json()) as PortalTrends;
     expect(body.weeks).toBe(4);
     expect(body.minutes.weeks).toHaveLength(4);

@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { HealthReport } from "./health";
-import { healthOf, parseHealth } from "./health-format";
+import { healthOf, parseHealth } from "@dustinedwards/site-runtime/health-read";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { healthUrl, type OpsSite } from "./ops-sites";
 import type {
@@ -14,7 +14,7 @@ import type {
   SiteProbe,
   SiteSnapshot,
 } from "./ops-types/sites";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { MINUTE_MS } from "./time";
 import { callSignal } from "./call-signal";
 
@@ -164,7 +164,7 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
       status: null,
       latency_ms: null,
       body: null,
-      error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+      error: errorMessage(err).slice(0, 160),
     };
   }
 }
@@ -173,7 +173,7 @@ const is2xx = (status: number | null): boolean => status !== null && status >= 2
 
 /** One site. The health route when it has one, and the root as well when that route
  *  fails, so a broken health route on a site that is up reads as degraded, not down. The
- *  body is read whatever the code (src/health-format.ts): fail is read as a failed route,
+ *  body is read whatever the code (site-runtime ./health-read): fail is read as a failed route,
  *  and warn, `ok: false` or a backup warning under a 2xx is degraded, with the reason. */
 export async function probeSite(
   site: OpsSite,
@@ -366,7 +366,7 @@ export async function readSnapshot(env: Pick<Env, "APP_KV">): Promise<OpsSnapsho
     logEvent(
       "OPS_SNAPSHOT_UNREADABLE",
       {
-        message: `OPS_SNAPSHOT_UNREADABLE ${err instanceof Error ? err.message : String(err)}; starting the rings again`,
+        message: `OPS_SNAPSHOT_UNREADABLE ${errorMessage(err)}; starting the rings again`,
       },
       { level: "error" },
     );

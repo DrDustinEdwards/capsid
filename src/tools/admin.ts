@@ -13,6 +13,7 @@ import { readSiteBackups } from "../site-backup";
 import { whatsNext } from "../whats-next";
 import { fail, ok, type ToolCtx } from "./docs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The operations Capsid Admin added: what needs the seat, Workers Builds, and a site's key. Each is served on the admin
 // server only (src/tools/surface.ts), and each tool is admin only in TOOL_GRANTS.
 
@@ -20,7 +21,7 @@ const run = async (fn: () => Promise<unknown>) => {
   try {
     return ok(await fn());
   } catch (err) {
-    return fail(err instanceof Error ? err.message : String(err));
+    return fail(errorMessage(err));
   }
 };
 

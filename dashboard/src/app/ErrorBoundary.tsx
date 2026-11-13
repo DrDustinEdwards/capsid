@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { Component, type ReactNode } from "react";
 import { APP_URL } from "../lib/api";
 
@@ -24,9 +25,9 @@ export class ErrorBoundary extends Component<
     if (this.props.fallback !== undefined) return this.props.fallback;
     return (
       <div className="page">
-        <div className="callout crit" role="alert">
+        <Banner tone="crit">
           <b>The dashboard failed to render.</b> {e.message}. <a href={APP_URL}>Reload</a>
-        </div>
+        </Banner>
       </div>
     );
   }

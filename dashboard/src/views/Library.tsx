@@ -5,7 +5,8 @@ import { Panel } from "capsomer/react/panel";
 import { Link, useLocation, useSearch } from "../lib/router";
 import { routePath, useApp } from "../app/ctx";
 import { fetchLibrary, useAnswer } from "../lib/api";
-import { ago, ms } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import type { LibraryEntry, LibraryShelf, PortalLibrary } from "../types";
 import { St } from "../ui/icons";
 import { PageHead } from "./shared";
@@ -110,11 +111,11 @@ export function Library() {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
         />
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Search
         </button>
         {(q || doc) && (
-          <Link href={routePath("library")} className="btn">
+          <Link href={routePath("library")} className="cap-btn">
             All shelves
           </Link>
         )}
@@ -158,7 +159,7 @@ function EntryRow({ row, now }: { row: LibraryEntry; now: number }) {
           {row.namespace}/{row.path}
         </span>
       </td>
-      <td className="c-when">{ago(ms(row.updated_at), now)}</td>
+      <td className="c-when">{ago(parse(row.updated_at), now)}</td>
     </tr>
   );
 }
@@ -188,8 +189,8 @@ function Shelf({
       }
     >
       {rows.length ? (
-        <table className="brief lib-table">
-          <caption className="sr-only">{title}</caption>
+        <table className="cap-table lib-table">
+          <caption className="cap-sr-only">{title}</caption>
           <thead>
             <tr>
               <th>Title</th>
@@ -237,7 +238,7 @@ function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" 
               {r.namespace}/{r.path}
             </span>{" "}
             <span className="faint">
-              · {r.type} · {ago(ms(r.updated_at), now)}
+              · {r.type} · {ago(parse(r.updated_at), now)}
             </span>
             <div>
               <Snippet text={r.snippet} />
@@ -260,8 +261,18 @@ function DocumentView({
 }) {
   const d = data.doc;
   const edges = [
-    ...data.outgoing.map((e) => ({ dir: "to", type: e.type, ns: e.to_ns, path: e.to_path })),
-    ...data.incoming.map((e) => ({ dir: "from", type: e.type, ns: e.from_ns, path: e.from_path })),
+    ...data.outgoing.map((e) => ({
+      dir: "to",
+      type: e.type,
+      ns: e.to_ns,
+      path: e.to_path,
+    })),
+    ...data.incoming.map((e) => ({
+      dir: "from",
+      type: e.type,
+      ns: e.from_ns,
+      path: e.from_path,
+    })),
   ];
   return (
     <Panel
@@ -275,7 +286,7 @@ function DocumentView({
             {d.namespace}/{d.path}
           </span>
           {" · "}
-          {d.type} · {d.status} · updated {ago(ms(d.updated_at), now)}
+          {d.type} · {d.status} · updated {ago(parse(d.updated_at), now)}
         </>
       }
     >

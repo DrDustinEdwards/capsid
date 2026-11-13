@@ -7,7 +7,8 @@
 // Every status is Capsomer's: a glyph whose shape carries it, a word, and the tone's color
 // (components/status). A number nobody measured is "No data" with its reason, never a zero.
 import { graphSvg } from "./graph.mjs";
-import { escapeHtml, layout, pageHead, readingBox, scroller, systemPath } from "./pages.mjs";
+import { escapeHtml } from "@dustinedwards/site-runtime/html";
+import { layout, pageHead, readingBox, scroller, systemPath } from "./pages.mjs";
 
 /** The most modules a folder's drawing shows. */
 const MAX_DRAWN = 40;

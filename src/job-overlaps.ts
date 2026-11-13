@@ -1,7 +1,9 @@
 import type { Env } from "./env";
-import { PR_URL_SOURCE, parsePrUrl, resolveRepo } from "./github/client";
+import { PR_URL_SOURCE, parsePrUrl } from "@dustinedwards/site-runtime/github";
+import { resolveRepo } from "./github/client";
 import { readAllPages, readPrFiles } from "./github/pr-files";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // Overlap warnings (Track A D1, capsid/research/design-track-a.md section 1). When block or
 // complete names a pull request, say which other open pull requests in the same repo change
 // the same files, from the file lists GitHub reports. Stacked and parallel pull requests that
@@ -92,7 +94,7 @@ export async function checkOverlaps(
 
     return await compare(env, repo.owner, repo.repo, numbers);
   } catch (err) {
-    return { overlaps: [], problem: err instanceof Error ? err.message : String(err) };
+    return { overlaps: [], problem: errorMessage(err) };
   }
 }
 

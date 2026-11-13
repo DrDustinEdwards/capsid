@@ -1,24 +1,19 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { FILTER_KEYS } from "../lib/keys";
 import { Suspense, useState } from "react";
-import { Spinner } from "capsomer/react/empty";
+import { Missing, Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, fetchClaimsJob, useAnswer } from "../lib/api";
-import { age, ago, ms } from "../lib/format";
-import { download, toCsv } from "../lib/csv";
+import { age, ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
+import { toCsv } from "@dustinedwards/site-runtime/csv";
+import { downloadCsv } from "@dustinedwards/site-runtime/csv-client";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../types";
 import { Panel } from "capsomer/react/panel";
-import {
-  byCheck,
-  None,
-  AgreementCounts,
-  totals,
-  counts,
-  wait,
-  JobDetail,
-  AGREEMENTS,
-} from "./ClaimsJob";
+import { ReadAgain } from "capsomer/react/read-state";
+import { byCheck, AgreementCounts, totals, counts, wait, JobDetail, AGREEMENTS } from "./ClaimsJob";
 
 // Chart 5, claim against verified per agent, is Enarratio's grouped bar chart, in the same
 // lazy chunk as the Portal's other charts.
@@ -84,7 +79,7 @@ export function Claims() {
           go(input, job);
         }}
       >
-        <label className="sr-only" htmlFor="clNs">
+        <label className="cap-sr-only" htmlFor="clNs">
           Project
         </label>
         <select
@@ -100,7 +95,7 @@ export function Claims() {
             </option>
           ))}
         </select>
-        <label className="sr-only" htmlFor="clAgent">
+        <label className="cap-sr-only" htmlFor="clAgent">
           Agent
         </label>
         <input
@@ -111,7 +106,7 @@ export function Claims() {
           value={input.agent}
           onChange={(e) => setInput({ ...input, agent: e.target.value })}
         />
-        <label className="sr-only" htmlFor="clSince">
+        <label className="cap-sr-only" htmlFor="clSince">
           Since
         </label>
         <input
@@ -122,7 +117,7 @@ export function Claims() {
           value={input.since}
           onChange={(e) => setInput({ ...input, since: e.target.value })}
         />
-        <label className="sr-only" htmlFor="clUntil">
+        <label className="cap-sr-only" htmlFor="clUntil">
           Before
         </label>
         <input
@@ -133,13 +128,13 @@ export function Claims() {
           value={input.until}
           onChange={(e) => setInput({ ...input, until: e.target.value })}
         />
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Apply
         </button>
         {filtered && (
           <button
             type="button"
-            className="btn"
+            className="cap-btn"
             onClick={() => go({ namespace: "", agent: "", since: "", until: "" }, job)}
           >
             Clear
@@ -147,16 +142,16 @@ export function Claims() {
         )}
       </form>
       {agg.error && (
-        <div className="callout crit" role="alert">
+        <Banner tone="crit">
           Could not read the claims: {agg.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+          {data ? `. Showing the read from ${ago(parse(data.generated), now)}.` : ""}
+        </Banner>
       )}
       {data && data.truncated.length > 0 && (
-        <div className="callout warn" role="status">
+        <Banner tone="warn">
           This read hit its bound on: {data.truncated.join(", ")}. Narrow the filter, or read every
           row through the claims tool's export.
-        </div>
+        </Banner>
       )}
       {data && <ClaimsExport data={data} />}
       <Panel
@@ -164,20 +159,15 @@ export function Claims() {
         title="By agent"
         count={data?.groups.length}
         src={
-          <>
-            {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-            <button
-              type="button"
-              className="btn"
-              disabled={agg.loading}
-              onClick={() => {
-                agg.reread();
-                if (job) detail.reread();
-              }}
-            >
-              {agg.loading ? "Reading..." : "Read again"}
-            </button>
-          </>
+          <ReadAgain
+            at={data ? parse(data.generated) : undefined}
+            now={now}
+            reading={agg.loading}
+            onRead={() => {
+              agg.reread();
+              if (job) detail.reread();
+            }}
+          />
         }
       >
         {!data && agg.loading ? (
@@ -185,8 +175,8 @@ export function Claims() {
             <Spinner label="Reading the claims..." />
           </div>
         ) : data && data.groups.length ? (
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>Agent</th>
@@ -202,7 +192,7 @@ export function Claims() {
                 {data.groups.map((g) => (
                   <tr key={`${g.agent ?? ""}\u0000${g.namespace}`} data-row="">
                     <td className="mono wrap" data-label="Agent">
-                      {g.agent ?? <None what="no claim yet" />}
+                      {g.agent ?? <Missing>no claim yet</Missing>}
                     </td>
                     <td className="mono" data-label="Project">
                       {g.namespace}
@@ -220,7 +210,7 @@ export function Claims() {
                       {g.touches.count ? (
                         `${g.touches.count}: ${counts(g.touches.by_kind)}`
                       ) : (
-                        <None />
+                        <Missing />
                       )}
                       {g.touches.count > 0 && (
                         <div className="src">{counts(g.touches.by_actor_kind)}</div>
@@ -254,8 +244,8 @@ export function Claims() {
       )}
       {checks.length > 0 && (
         <Panel flush title="By check" count={checks.length} src="every agent above, summed">
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>Check</th>
@@ -290,7 +280,7 @@ export function Claims() {
           go(filter, jobInput);
         }}
       >
-        <label className="sr-only" htmlFor="clJob">
+        <label className="cap-sr-only" htmlFor="clJob">
           Job id
         </label>
         <input
@@ -309,11 +299,11 @@ export function Claims() {
             </option>
           ))}
         </datalist>
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Open job
         </button>
         {job && (
-          <button type="button" className="btn" onClick={() => go(filter, "")}>
+          <button type="button" className="cap-btn" onClick={() => go(filter, "")}>
             Close job
           </button>
         )}
@@ -324,9 +314,9 @@ export function Claims() {
         </div>
       )}
       {detail.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read job {job}: {detail.error}
-        </div>
+        </Alert>
       )}
       {detail.data && <JobDetail data={detail.data} now={now} />}
     </div>
@@ -341,7 +331,7 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
   const cut = data.truncated.length ? "-partial" : "";
   const checks = [...new Set(data.groups.flatMap((g) => Object.keys(g.evaluations)))].sort();
   const agents = () =>
-    download(
+    downloadCsv(
       `claims-by-agent-${stamp}${cut}.csv`,
       toCsv(
         [
@@ -377,7 +367,7 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
       ),
     );
   const waits = () =>
-    download(
+    downloadCsv(
       `claims-waits-${stamp}${cut}.csv`,
       toCsv(
         ["namespace", "gate_class", "ended_by", "waits", "waited_ms_total", "waited_ms_median"],
@@ -401,7 +391,7 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
       "tokens_cache_read",
       "tokens_cache_creation",
     ] as const;
-    download(
+    downloadCsv(
       `claims-usage-${stamp}${cut}.csv`,
       toCsv(
         ["namespace", "source", ...cols],
@@ -415,13 +405,13 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
   return (
     <div className="toolbar" role="group" aria-label="Export">
       <span className="faint small">Export as CSV:</span>
-      <button type="button" className="btn" onClick={agents}>
+      <button type="button" className="cap-btn" onClick={agents}>
         By agent
       </button>
-      <button type="button" className="btn" onClick={waits}>
+      <button type="button" className="cap-btn" onClick={waits}>
         Waits
       </button>
-      <button type="button" className="btn" onClick={usage}>
+      <button type="button" className="cap-btn" onClick={usage}>
         Usage
       </button>
     </div>

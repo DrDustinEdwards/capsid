@@ -1,10 +1,12 @@
+import { Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
-import { Suspense, lazy, useId, useState, type ReactNode } from "react";
+import { Suspense, lazy, useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
 import { hasSites, type Kind } from "../lib/derive";
-import { age, agentLabel, ago, ms } from "../lib/format";
+import { age, agentLabel, ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import {
   approveAllRequest,
   approveRequest,
@@ -17,6 +19,8 @@ import type { InboxApp, InboxItem, OpsAwaitingSeat, OpsJob, PortalNamespace } fr
 import { InboxMark, St } from "../ui/icons";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import { RowReply } from "capsomer/react/row-list";
+import "capsomer/row-list.css";
 import { PageHead } from "./shared";
 import { Problems } from "./Problems";
 
@@ -72,7 +76,11 @@ type Entry = { app: InboxApp; item: InboxItem };
 
 // Queues stopped by the circuit breaker (src/job-breaker.ts), from the roster read
 // (GET /portal/api/namespaces), read again with each feed so a reset drops its row.
-function useStops(): { stops: PortalNamespace[]; error: string | null; reread: () => void } {
+function useStops(): {
+  stops: PortalNamespace[];
+  error: string | null;
+  reread: () => void;
+} {
   const load = useAnswer([LIVE, "namespaces"], fetchNamespaces);
   return {
     stops: load.data?.namespaces.filter((n) => n.breaker.open) ?? [],
@@ -97,18 +105,14 @@ function Waiting() {
       title="Waiting for you"
       id="waiting"
       count={total}
-      src={`read ${ago(ms(inbox.generated), now)}`}
+      src={`read ${ago(parse(inbox.generated), now)}`}
       footer={
         quiet.length > 0 ? (
           <span className="faint">Nothing waiting: {quiet.map((a) => a.name).join(", ")}</span>
         ) : undefined
       }
     >
-      {error && (
-        <div className="callout warn" role="status">
-          Stopped queues could not be read: {error}
-        </div>
-      )}
+      {error && <Banner tone="warn">Stopped queues could not be read: {error}</Banner>}
       {total === 0 ? (
         <Empty kind="all-clear" title="Nothing needs you." />
       ) : (
@@ -198,7 +202,7 @@ function Tick({ label, on, flip }: { label: string; on: boolean; flip: () => voi
   return (
     <label className="wtick">
       <input type="checkbox" checked={on} onChange={flip} />
-      <span className="sr-only">{label}</span>
+      <span className="cap-sr-only">{label}</span>
     </label>
   );
 }
@@ -237,9 +241,13 @@ function PrGroup({ entries }: { entries: Entry[] }) {
             {chosen.length > 0 && (
               <button
                 type="button"
-                className="btn primary"
+                className="cap-btn"
+                data-variant="primary"
                 onClick={() =>
-                  confirm({ ...approveAllRequest(chosen), onDone: () => ticks.all(false) })
+                  confirm({
+                    ...approveAllRequest(chosen),
+                    onDone: () => ticks.all(false),
+                  })
                 }
               >
                 Approve {chosen.length} selected
@@ -290,7 +298,7 @@ function PrRow({
       <div className="wmain">
         <b>{item.title}</b>
         <Meta>
-          {app.name} · waiting {age(ms(item.since), now)}
+          {app.name} · waiting {age(parse(item.since), now)}
           {seat?.why ? ` · ${seat.why}` : ""}
         </Meta>
         {item.link && <GitHub href={item.link} />}
@@ -299,7 +307,8 @@ function PrRow({
         {ok && (
           <button
             type="button"
-            className="btn primary"
+            className="cap-btn"
+            data-variant="primary"
             aria-label={`Approve ${name}`}
             onClick={() => confirm(approveRequest(ok))}
           >
@@ -309,7 +318,7 @@ function PrRow({
         {seat && (
           <button
             type="button"
-            className="btn"
+            className="cap-btn"
             aria-label={`Close ${name}`}
             onClick={() => confirm(closeRequest(seat))}
           >
@@ -348,22 +357,14 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
   const question = j ? j.question === true : item.kind === "question";
   const verb = question ? "Answer" : "Resume";
   const [replying, setReplying] = useState(false);
-  const [reply, setReply] = useState("");
-  const [hint, setHint] = useState<string | null>(null);
-  const id = useId();
-  const box = `${id}-reply`;
   const blocked = j?.status === "blocked";
-  const send = () => {
-    const text = reply.trim();
-    if (!text)
-      return setHint(question ? "Type your answer first." : "Say what you did or approved first.");
+  const send = (text: string) => {
     if (!j) return;
-    setHint(null);
     confirm({
       action: "resume_job",
       params: { id: j.id, reason: text },
       title: `${question ? "Answer" : "Resume job"}: ${j.title}`,
-      onDone: () => (setReplying(false), setReply("")),
+      onDone: () => setReplying(false),
     });
   };
   return (
@@ -382,65 +383,40 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
           <p className="wask">{question ? `Asks: ${asks(j)}` : `Waits on: ${j.waits_on}`}</p>
         )}
         <Meta>
-          {app.name} · waiting {age(ms(item.since), now)}
+          {app.name} · waiting {age(parse(item.since), now)}
           {j?.claimed_by ? ` · ${agentLabel(j.claimed_by)}` : ""}
         </Meta>
         <span className="wlinks">
           {j && (
-            <button type="button" className="linkbtn wlink" onClick={() => open(`job:${j.id}`)}>
+            <button
+              type="button"
+              className="cap-link-btn wlink"
+              onClick={() => open(`job:${j.id}`)}
+            >
               More about this job
             </button>
           )}
           {item.link && <GitHub href={item.link} />}
         </span>
         {replying && (
-          <form
-            className="wreply"
-            id={box}
-            onSubmit={(e) => {
-              e.preventDefault();
-              send();
-            }}
-          >
-            <label htmlFor={`${box}-text`}>
-              {question
+          <RowReply
+            label={
+              question
                 ? "Your answer, sent to its driver"
-                : "What you did or approved, sent to its driver"}
-            </label>
-            <textarea
-              id={`${box}-text`}
-              rows={3}
-              value={reply}
-              autoFocus
-              aria-invalid={hint ? true : undefined}
-              aria-describedby={hint ? `${box}-hint` : undefined}
-              onChange={(e) => (setReply(e.target.value), setHint(null))}
-            />
-            {hint && (
-              <span className="err" id={`${box}-hint`} role="alert">
-                {hint}
-              </span>
-            )}
-            <div className="toolbar">
-              <button type="submit" className="btn primary">
-                Send
-              </button>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => (setReplying(false), setHint(null))}
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+                : "What you did or approved, sent to its driver"
+            }
+            emptyHint={question ? "Type your answer first." : "Say what you did or approved first."}
+            onSend={send}
+            onCancel={() => setReplying(false)}
+          />
         )}
       </div>
       <div className="wact">
         {blocked && !replying && (
           <button
             type="button"
-            className="btn primary"
+            className="cap-btn"
+            data-variant="primary"
             aria-label={`${verb} ${item.title}`}
             onClick={() => setReplying(true)}
           >
@@ -472,7 +448,8 @@ function StopGroup({ list, onReset }: { list: PortalNamespace[]; onReset: () => 
           <div className="wact">
             <button
               type="button"
-              className="btn primary"
+              className="cap-btn"
+              data-variant="primary"
               aria-label={`Reset ${n.namespace}`}
               onClick={() =>
                 confirm({
@@ -499,7 +476,10 @@ function OtherGroup({ entries }: { entries: Entry[] }) {
   return (
     <Group id="w-other" title="Also waiting" count={entries.length}>
       {entries.map(({ app, item }, i) => {
-        const k = KIND[item.kind] ?? { label: item.kind, kind: "blocked" as const };
+        const k = KIND[item.kind] ?? {
+          label: item.kind,
+          kind: "blocked" as const,
+        };
         return (
           <li className="wrow" key={`${item.kind}|${item.title}|${i}`} data-kind={item.kind}>
             <div className="wmain">
@@ -514,7 +494,7 @@ function OtherGroup({ entries }: { entries: Entry[] }) {
                 <b>{item.title}</b>
               )}
               <Meta>
-                {app.name} · {ago(ms(item.since), now)}
+                {app.name} · {ago(parse(item.since), now)}
               </Meta>
             </div>
           </li>
@@ -566,7 +546,7 @@ function WeeklyDigest() {
                 <li className="wrow" key={f.fingerprint} title={f.evidence.join("\n")}>
                   <span className="wmain">
                     <b>{f.headline}</b>
-                    <span className="wmeta">since {ago(ms(f.first_seen), now)}</span>
+                    <span className="wmeta">since {ago(parse(f.first_seen), now)}</span>
                   </span>
                 </li>
               ))}

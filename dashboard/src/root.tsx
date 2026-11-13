@@ -26,6 +26,7 @@ import "capsomer/family-teal.css";
 import "capsomer/site-capsid-portal.css";
 import "capsomer/status.css";
 import "capsomer/panel.css";
+import "capsomer/read-state.css";
 import "capsomer/empty.css";
 import "capsomer/error-page.css";
 import "capsomer/skeleton.css";
@@ -37,6 +38,8 @@ import "capsomer/theme-switch.css";
 import "capsomer/tabs.css";
 import "capsomer/banner.css";
 import "capsomer/button.css";
+import "capsomer/copy.css";
+import "capsomer/icons.css";
 import "capsomer/field.css";
 import "capsomer/repeater-field.css";
 import "capsomer/switch.css";
@@ -44,6 +47,9 @@ import "capsomer/switch-reason.css";
 import "capsomer/meter.css";
 import "capsomer/chart-frame.css";
 import "capsomer/uptime-strip.css";
+import "capsomer/chips.css";
+import "capsomer/message.css";
+import "capsomer/table.css";
 // The whole chart stylesheet: Enarratio's base, the token mapping, gridlines, series inks and
 // the color pairs (capsomer CHANGELOG 0.56.0).
 import "capsomer/enarratio.css";
@@ -52,6 +58,7 @@ import { createQueryClient } from "./lib/api";
 import { THEME_PREF } from "./lib/prefs";
 import { pageBase } from "./lib/router";
 import { nonceFor } from "./server/prefetch";
+import { markup } from "capsomer/behavior/trusted-html";
 
 export function loader({ context }: LoaderFunctionArgs) {
   return { nonce: nonceFor(context) };
@@ -70,11 +77,12 @@ export function Layout({ children }: { children: ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="text-scale" content="scale" />
         <meta name="color-scheme" content="light dark" />
         <meta name="robots" content="noindex" />
         <meta name="theme-color" content="#01585c" />
         {/* The static no-flash theme line, set before first paint. */}
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: NO_FLASH }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={markup(NO_FLASH)} />
         <link rel="icon" href="/favicon.ico" sizes="48x48" />
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

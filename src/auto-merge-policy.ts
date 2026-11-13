@@ -1,3 +1,4 @@
+import { PR_URL_SOURCE } from "@dustinedwards/site-runtime/github";
 import type { Env } from "./env";
 import { onRoster } from "./roster";
 import { isMoneyPath } from "./scope";
@@ -607,7 +608,7 @@ const HANDED_ON_STATUSES = ["blocked", "done"];
 
 // A PR URL as the job records hold it, compared case-insensitively. The match ends at
 // the PR number, so pull/23 never matches pull/234.
-const PR_URL = /https:\/\/github\.com\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\/pull\/\d+/g;
+const PR_URL = new RegExp(PR_URL_SOURCE, "g");
 
 function normalizedPrUrls(text: string | null): string[] {
   return [...(text ?? "").matchAll(PR_URL)].map((m) => m[0].toLowerCase());

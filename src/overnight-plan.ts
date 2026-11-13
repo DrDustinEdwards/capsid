@@ -10,8 +10,9 @@ import type {
   UsageSource,
   UsageTotals,
 } from "./ops-types/views";
+import { PR_URL_SOURCE } from "@dustinedwards/site-runtime/github";
 import { resolveRepo } from "./github/client";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 
 // THE OVERNIGHT PLAN AND THE MORNING DIGEST (capsid/research/design-automation-for-speed.md,
@@ -281,7 +282,7 @@ export async function readOvernightPlan(
     } catch (err) {
       // Said in the skip reason, not swallowed: an unmapped namespace and a corrupt
       // mapping have different fixes.
-      const problem = err instanceof Error ? err.message : String(err);
+      const problem = errorMessage(err);
       logEvent(
         "OVERNIGHT_PLAN",
         { message: `OVERNIGHT_PLAN no repo for ${ns}: ${problem}` },
@@ -380,7 +381,7 @@ interface ReportedRow extends UsageTotals {
   job_id: string;
 }
 
-const PR_URL = /https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/\d+/g;
+const PR_URL = new RegExp(PR_URL_SOURCE, "g");
 
 export const pullRequestsIn = (text: string | null): string[] => [
   ...new Set(text?.match(PR_URL) ?? []),

@@ -1,10 +1,16 @@
 import { useState } from "react";
 import { useApp } from "../app/ctx";
-import { ago, msSql, utc } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse, utc } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 import type { OpsSiteConfig } from "../types";
-import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
-import { Danger } from "./shared";
+import { ConfigForm, useConfigForm, type Editing } from "capsomer/react/config-form";
+import "capsomer/config-form.css";
+import { Field } from "capsomer/react/field";
+import { DangerZone } from "capsomer/react/danger-zone";
+import "capsomer/danger-zone.css";
+import "capsomer/select.css";
+import { Missing } from "capsomer/react/empty";
 
 // The site configuration (live.sites, the ops_sites table): one row per namespace. A row
 // with an origin is a site the watcher probes; a row with no origin records that the
@@ -66,9 +72,13 @@ function paramsOf(d: Draft): Record<string, string> {
   return p;
 }
 
-export type Editing = { kind: "add" } | { kind: "edit"; row: OpsSiteConfig };
-
-export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () => void }) {
+export function SiteForm({
+  editing,
+  onClose,
+}: {
+  editing: Editing<OpsSiteConfig>;
+  onClose: () => void;
+}) {
   const { feed, confirm } = useApp();
   const { f, first } = useConfigForm();
   const [d, setD] = useState<Draft>(editing.kind === "edit" ? draftOf(editing.row) : BLANK);
@@ -90,7 +100,12 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
     const params = paramsOf(d);
     const ns = params.namespace ?? d.namespace;
     if (editing.kind === "add")
-      return confirm({ action: "site_add", params, title: `Add ${ns}`, onDone: onClose });
+      return confirm({
+        action: "site_add",
+        params,
+        title: `Add ${ns}`,
+        onDone: onClose,
+      });
     confirm({
       action: "site_edit",
       params: {
@@ -114,10 +129,11 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
       onClose={onClose}
       danger={
         !adding && (
-          <Danger note="The watcher stops probing it. Its history stays.">
+          <DangerZone note="The watcher stops probing it. Its history stays.">
             <button
               type="button"
-              className="btn danger"
+              className="cap-btn"
+              data-variant="danger"
               aria-label={`Remove ${editing.row.namespace}`}
               onClick={() =>
                 confirm({
@@ -133,50 +149,40 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
             >
               Remove
             </button>
-          </Danger>
+          </DangerZone>
         )
       }
     >
-      <Field
-        id={f("ns")}
-        label="Project"
-        note="A registered project (its namespace). One row each."
-      >
-        {adding ? (
-          <>
-            <input
-              ref={first}
-              id={f("ns")}
-              aria-describedby={`${f("ns")}-note`}
-              className="field mono"
-              list={f("nslist")}
-              value={d.namespace}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => set({ namespace: e.target.value })}
-            />
-            <datalist id={f("nslist")}>
-              {free.map((n) => (
-                <option key={n} value={n} />
-              ))}
-            </datalist>
-          </>
-        ) : (
-          <input
-            id={f("ns")}
-            aria-describedby={`${f("ns")}-note`}
-            className="field mono"
-            value={d.namespace}
-            readOnly
-          />
-        )}
+      <Field label="Project" help="A registered project (its namespace). One row each.">
+        {(control) =>
+          adding ? (
+            <>
+              <input
+                ref={first}
+                {...control}
+                className="cap-input mono"
+                list={f("nslist")}
+                value={d.namespace}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => set({ namespace: e.target.value })}
+              />
+              <datalist id={f("nslist")}>
+                {free.map((n) => (
+                  <option key={n} value={n} />
+                ))}
+              </datalist>
+            </>
+          ) : (
+            <input {...control} className="cap-input mono" value={d.namespace} readOnly />
+          )
+        }
       </Field>
-      <Field id={f("name")} label="Name" note="Shown in the Portal. Blank uses the namespace.">
+      <Field label="Name" help="Shown in the Portal. Blank uses the namespace.">
         <input
           ref={adding ? undefined : first}
           id={f("name")}
-          aria-describedby={`${f("name")}-note`}
-          className="field"
+          className="cap-input"
           value={d.name}
           autoComplete="off"
           onChange={(e) => set({ name: e.target.value })}
@@ -190,11 +196,10 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
         />{" "}
         Serves no site. The watcher probes nothing for this namespace.
       </label>
-      <Field id={f("origin")} label="Origin" note="https:// and a hostname only.">
+      <Field label="Origin" help="https:// and a hostname only.">
         <input
           id={f("origin")}
-          aria-describedby={`${f("origin")}-note`}
-          className="field mono"
+          className="cap-input mono"
           value={d.noSite ? "" : d.origin}
           disabled={d.noSite}
           placeholder="https://example.com"
@@ -204,14 +209,12 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
         />
       </Field>
       <Field
-        id={f("health")}
         label="Health path"
-        note="Starts with /. Blank probes the root, which shows liveness only."
+        help="Starts with /. Blank probes the root, which shows liveness only."
       >
         <input
           id={f("health")}
-          aria-describedby={`${f("health")}-note`}
-          className="field mono"
+          className="cap-input mono"
           value={d.noSite ? "" : d.health_path}
           disabled={d.noSite}
           placeholder="/health"
@@ -220,27 +223,29 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
           onChange={(e) => set({ health_path: e.target.value })}
         />
       </Field>
-      <Field id={f("platform")} label="Platform">
-        <select
-          id={f("platform")}
-          className="field"
-          value={d.platform}
-          disabled={d.noSite}
-          onChange={(e) => set({ platform: e.target.value as Platform })}
-        >
-          <option value="cloudflare">Cloudflare</option>
-          <option value="vercel">Vercel</option>
-        </select>
+      <Field label="Platform">
+        {(control) => (
+          <div className="cap-select-wrap">
+            <select
+              {...control}
+              className="cap-select"
+              value={d.platform}
+              disabled={d.noSite}
+              onChange={(e) => set({ platform: e.target.value as Platform })}
+            >
+              <option value="cloudflare">Cloudflare</option>
+              <option value="vercel">Vercel</option>
+            </select>
+          </div>
+        )}
       </Field>
       <Field
-        id={f("script")}
         label="Worker script"
-        note="Cloudflare only. Blank finds it from the account's custom domains."
+        help="Cloudflare only. Blank finds it from the account's custom domains."
       >
         <input
           id={f("script")}
-          aria-describedby={`${f("script")}-note`}
-          className="field mono"
+          className="cap-input mono"
           value={d.noSite || d.platform !== "cloudflare" ? "" : d.script}
           disabled={d.noSite || d.platform !== "cloudflare"}
           autoComplete="off"
@@ -254,8 +259,8 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
 
 export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
   const { now } = useApp();
-  const at = msSql(s.updated_at);
-  const none = <span className="faint">none</span>;
+  const at = parse(s.updated_at);
+  const none = <Missing />;
   return (
     <tr data-row="">
       <td>
@@ -291,7 +296,12 @@ export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void })
       </td>
       <td className="ctl">
         {/* Edit only: Remove is in the form's Danger area (UX audit M9). */}
-        <button type="button" className="btn" aria-label={`Edit ${s.namespace}`} onClick={onEdit}>
+        <button
+          type="button"
+          className="cap-btn"
+          aria-label={`Edit ${s.namespace}`}
+          onClick={onEdit}
+        >
           Edit
         </button>
       </td>

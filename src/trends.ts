@@ -1,10 +1,13 @@
+import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
+import { parseSqlTime } from "@dustinedwards/site-runtime/time";
+import { median } from "./job-claims-read";
 import { COMPLETE_MARKER } from "@dustinedwards/d1-dump";
 import { DUMP_RETENTION } from "./backup";
 import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
 import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { APP_ROSTER } from "./roster";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 import type {
   TrendBackupSlot,
   TrendCiDay,
@@ -16,7 +19,7 @@ import type {
   TrendQueueDay,
   PortalTrends,
 } from "./ops-types/views";
-import { MINUTE_MS, DAY_MS } from "./time";
+import { MINUTE_MS, DAY_MS, isoWeek, utcDay } from "./time";
 
 // The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3,
 // ruled 2026-10-09: DECIDE 5, the trends route, and DECIDE 6, all eleven visuals). The feed
@@ -46,49 +49,31 @@ const CI_CACHE_KEY = "portal:trends-ci:v1";
 const CI_CACHE_SECONDS = 60 * 60;
 const BACKUP_PREFIX = "backups/json/";
 
-const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-
 /** The Monday (UTC) of the week a day falls in, as YYYY-MM-DD. */
 export function mondayOf(day: string): string {
   const t = Date.parse(`${day}T00:00:00Z`);
   const dow = (new Date(t).getUTCDay() + 6) % 7;
-  return dayOf(t - dow * DAY_MS);
-}
-
-/** The ISO 8601 week label of a Monday, as "2026-W41". */
-export function isoWeek(monday: string): string {
-  const t = Date.parse(`${monday}T00:00:00Z`);
-  // The ISO year is the year of the week's Thursday.
-  const thursday = new Date(t + 3 * DAY_MS);
-  const year = thursday.getUTCFullYear();
-  const jan4 = Date.UTC(year, 0, 4);
-  const week1 = jan4 - ((new Date(jan4).getUTCDay() + 6) % 7) * DAY_MS;
-  const n = Math.round((t - week1) / (7 * DAY_MS)) + 1;
-  return `${year}-W${String(n).padStart(2, "0")}`;
+  return utcDay(new Date(t - dow * DAY_MS));
 }
 
 /** The Mondays of the last `weeks` weeks, oldest first, ending with this week's. */
 export function weekStarts(now: Date, weeks: number): string[] {
-  const thisMonday = Date.parse(`${mondayOf(dayOf(now.getTime()))}T00:00:00Z`);
-  return Array.from({ length: weeks }, (_, i) => dayOf(thisMonday - (weeks - 1 - i) * 7 * DAY_MS));
+  const thisMonday = Date.parse(`${mondayOf(utcDay(new Date(now.getTime())))}T00:00:00Z`);
+  return Array.from({ length: weeks }, (_, i) =>
+    utcDay(new Date(thisMonday - (weeks - 1 - i) * 7 * DAY_MS)),
+  );
 }
 
 /** The last `days` days, oldest first, ending today. */
 export function lastDays(now: Date, days: number): string[] {
-  const today = Date.parse(`${dayOf(now.getTime())}T00:00:00Z`);
-  return Array.from({ length: days }, (_, i) => dayOf(today - (days - 1 - i) * DAY_MS));
+  const today = Date.parse(`${utcDay(new Date(now.getTime()))}T00:00:00Z`);
+  return Array.from({ length: days }, (_, i) => utcDay(new Date(today - (days - 1 - i) * DAY_MS)));
 }
 
 /** An audit or touch time to milliseconds. Both "YYYY-MM-DD HH:MM:SS" (SQLite's
  *  datetime('now'), no zone) and ISO are written; both are UTC. */
 export function timeMs(at: string): number {
-  return Date.parse(
-    at.includes("T")
-      ? /[zZ]|[+-]\d\d:?\d\d$/.test(at)
-        ? at
-        : `${at}Z`
-      : `${at.replace(" ", "T")}Z`,
-  );
+  return parseSqlTime(at) ?? Number.NaN;
 }
 
 /** Minutes and sessions per week from activity times: a session ends after a gap over
@@ -106,7 +91,7 @@ export function sessionMinutes(
     let end = start;
     while (i + 1 < sorted.length && sorted[i + 1]! - end <= SESSION_GAP_MS) end = sorted[++i]!;
     i++;
-    const week = out.get(mondayOf(dayOf(start)));
+    const week = out.get(mondayOf(utcDay(new Date(start))));
     if (!week) continue;
     week.sessions += 1;
     week.minutes += (end - start) / MINUTE_MS + 1;
@@ -163,7 +148,7 @@ async function readMinutes(
   }
   return {
     weeks: mondays.map((m) => ({
-      week: isoWeek(m),
+      week: isoWeek(new Date(`${m}T00:00:00Z`)),
       start: m,
       minutes: minutes.get(m)!.minutes,
       sessions: minutes.get(m)!.sessions,
@@ -253,7 +238,14 @@ async function readMerges(
   const weeks = new Map<string, TrendMergeWeek>(
     mondays.map((m) => [
       m,
-      { week: isoWeek(m), start: m, auto: 0, approved: 0, seat: 0, closed: 0 },
+      {
+        week: isoWeek(new Date(`${m}T00:00:00Z`)),
+        start: m,
+        auto: 0,
+        approved: 0,
+        seat: 0,
+        closed: 0,
+      },
     ]),
   );
   for (const r of rows.results) {
@@ -319,14 +311,7 @@ function deployStats(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([repo, t]) => {
       const decided = t.shipped + t.refused;
-      const sorted = [...t.restores].sort((a, b) => a - b);
-      const mid = sorted.length >> 1;
-      const median =
-        sorted.length === 0
-          ? null
-          : sorted.length % 2
-            ? sorted[mid]!
-            : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
+      const restoreMedian = median(t.restores);
       return {
         repo,
         deploys: decided + t.unverified,
@@ -336,7 +321,7 @@ function deployStats(
         rolled_back: t.rolled_back,
         unverified: t.unverified,
         change_failure_rate: decided ? Math.round((t.refused / decided) * 1000) / 1000 : null,
-        restore_median_seconds: median,
+        restore_median_seconds: restoreMedian,
       };
     });
 }
@@ -367,7 +352,7 @@ export function costWeeks(
   return mondays.map((m) => {
     const w = weeks.get(m)!;
     return {
-      week: isoWeek(m),
+      week: isoWeek(new Date(`${m}T00:00:00Z`)),
       start: m,
       usd: w.jobs ? Math.round(w.usd * 100) / 100 : null,
       jobs: w.jobs,
@@ -430,7 +415,7 @@ async function readBackups(env: Env, now: Date): Promise<PortalTrends["backups"]
     return {
       slots: null,
       runs: null,
-      error: `The backup bucket could not be listed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `The backup bucket could not be listed: ${errorMessage(err)}`,
     };
   }
 }
@@ -487,29 +472,32 @@ async function readCiRepo(env: Env, namespace: string, days: string[]): Promise<
 
 async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
   const days = lastDays(now, TRENDS_CI_DAYS);
-  try {
-    const cached = await env.APP_KV.get(CI_CACHE_KEY);
-    if (cached) {
-      const parsed = JSON.parse(cached) as PortalTrends["ci"];
-      if (
-        parsed.repos.every(
-          (r) =>
-            r.days.length === days.length &&
-            r.days[r.days.length - 1]?.day === days[days.length - 1],
-        )
-      )
-        return parsed;
-    }
-  } catch (err) {
-    // An unreadable cache entry is read again from GitHub below.
-    logEvent(
-      "TRENDS_CI_CACHE_UNREADABLE",
-      {
-        message: `TRENDS_CI_CACHE_UNREADABLE ${CI_CACHE_KEY}: ${err instanceof Error ? err.message : String(err)}`,
-      },
-      { level: "warn" },
-    );
-  }
+  // A kept read is served only while it covers the same days; only a full read is kept, so a
+  // GitHub outage is retried on the next look, not for an hour.
+  return kvCached(
+    env.APP_KV,
+    CI_CACHE_KEY,
+    {
+      ttl: CI_CACHE_SECONDS,
+      valid: (kept) => coversDays(kept, days),
+      keep: (out) => out.not_read.length === 0,
+    },
+    () => readCiFresh(env, now, days),
+  );
+}
+
+function coversDays(kept: unknown, days: string[]): boolean {
+  const repos = (kept as Partial<PortalTrends["ci"]> | null)?.repos;
+  return (
+    Array.isArray(repos) &&
+    repos.every(
+      (r) =>
+        r.days.length === days.length && r.days[r.days.length - 1]?.day === days[days.length - 1],
+    )
+  );
+}
+
+async function readCiFresh(env: Env, now: Date, days: string[]): Promise<PortalTrends["ci"]> {
   const repos: TrendCiRepo[] = [];
   const notRead: Array<{ namespace: string; error: string }> = [];
   const settled = await Promise.allSettled(
@@ -520,26 +508,10 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
     else
       notRead.push({
         namespace: APP_ROSTER[i]!,
-        error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+        error: errorMessage(r.reason),
       });
   });
-  const out: PortalTrends["ci"] = { read_at: now.toISOString(), repos, not_read: notRead };
-  // Only a full read is kept, so a GitHub outage is retried on the next look, not for an hour.
-  // A failed cache write costs only the next look a fresh read, so it does not fail this one.
-  if (!notRead.length) {
-    try {
-      await env.APP_KV.put(CI_CACHE_KEY, JSON.stringify(out), { expirationTtl: CI_CACHE_SECONDS });
-    } catch (err) {
-      logEvent(
-        "TRENDS_CI_CACHE_WRITE_FAILED",
-        {
-          message: `TRENDS_CI_CACHE_WRITE_FAILED ${CI_CACHE_KEY}: ${err instanceof Error ? err.message : String(err)}`,
-        },
-        { level: "warn" },
-      );
-    }
-  }
-  return out;
+  return { read_at: now.toISOString(), repos, not_read: notRead };
 }
 
 /** Every series, for `weeks` weeks of the weekly ones. */

@@ -1,17 +1,16 @@
+import { Banner } from "capsomer/react/banner";
 import { useState } from "react";
-import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
-import { ago, ms, utc } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse, utc } from "capsomer/behavior/time";
 import type { PortalActivity } from "../types";
+import { Missing, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import { ReadAgain } from "capsomer/react/read-state";
 import { PageHead } from "./shared";
-
-function None() {
-  return <span className="faint">none</span>;
-}
 
 // The filters live in the address (?namespace=&actor=), so a filtered view can be
 // reloaded or shared. The inputs apply on submit, not on each keystroke.
@@ -54,7 +53,7 @@ export function Activity() {
 
   const data = load.data;
   // The rows were just read from the server, so none is later than the read itself.
-  const now = data ? Math.max(appNow, ms(data.generated)) : appNow;
+  const now = data ? Math.max(appNow, parse(data.generated)) : appNow;
   const names = feed.live.namespaces.map((n) => n.name);
   if (namespace && !names.includes(namespace)) names.push(namespace);
   const actors = [
@@ -77,7 +76,7 @@ export function Activity() {
           apply(nsInput, actorInput);
         }}
       >
-        <label className="sr-only" htmlFor="actNs">
+        <label className="cap-sr-only" htmlFor="actNs">
           Project
         </label>
         <select
@@ -93,7 +92,7 @@ export function Activity() {
             </option>
           ))}
         </select>
-        <label className="sr-only" htmlFor="actActor">
+        <label className="cap-sr-only" htmlFor="actActor">
           Who
         </label>
         {/* A picker, not a box to type an id into from memory (the UX audit's m7): every
@@ -111,20 +110,20 @@ export function Activity() {
             </option>
           ))}
         </select>
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Apply
         </button>
         {(namespace || actor) && (
-          <button type="button" className="btn" onClick={() => apply("", "")}>
+          <button type="button" className="cap-btn" onClick={() => apply("", "")}>
             Clear
           </button>
         )}
       </form>
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Banner tone="crit">
           Could not read the activity: {load.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+          {data ? `. Showing the read from ${ago(parse(data.generated), now)}.` : ""}
+        </Banner>
       )}
       <Panel
         flush
@@ -132,12 +131,13 @@ export function Activity() {
         count={data?.rows.length}
         src={
           <>
-            {data
-              ? `newest first, at most ${data.limit} rows · read ${ago(ms(data.generated), now)} · `
-              : ""}
-            <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
-              {load.loading ? "Reading..." : "Read again"}
-            </button>
+            {data ? `newest first, at most ${data.limit} rows · ` : ""}
+            <ReadAgain
+              at={data ? parse(data.generated) : undefined}
+              now={now}
+              reading={load.loading}
+              onRead={load.reread}
+            />
           </>
         }
       >
@@ -146,8 +146,8 @@ export function Activity() {
             <Spinner label="Reading the activity..." />
           </div>
         ) : data && data.rows.length ? (
-          <div className="scroll-x">
-            <table className="list">
+          <div className="cap-table-wrap">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>When</th>
@@ -166,22 +166,22 @@ export function Activity() {
                     data-open={`audit:${r.id}`}
                     tabIndex={0}
                   >
-                    <td className="num" title={utc(ms(r.at))}>
-                      {ago(ms(r.at), now)}
+                    <td className="num" title={utc(parse(r.at))}>
+                      {ago(parse(r.at), now)}
                     </td>
                     <td className="mono">
-                      {r.actor ?? <None />}
+                      {r.actor ?? <Missing />}
                       {r.client && <div className="src">via {r.client}</div>}
                     </td>
                     <td>
                       {actionWords(r.action) ?? (
-                        <span className="mono">{r.action ?? <None />}</span>
+                        <span className="mono">{r.action ?? <Missing />}</span>
                       )}
                       {r.target && <span className="faint"> {TARGET_LABEL[r.target]}</span>}
                       {actionWords(r.action) && <div className="src mono">{r.action}</div>}
                     </td>
-                    <td className="mono">{r.namespace ?? <None />}</td>
-                    <td className="mono wrap">{r.path ?? <None />}</td>
+                    <td className="mono">{r.namespace ?? <Missing />}</td>
+                    <td className="mono wrap">{r.path ?? <Missing />}</td>
                   </tr>
                 ))}
               </tbody>

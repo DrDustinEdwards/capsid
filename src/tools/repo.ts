@@ -51,7 +51,7 @@ import { repoGuards } from "./repo-guards";
 
 import { HeadMovedError } from "../github/refs";
 import { reverifyPr } from "../outcome-prs";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { chatApprovalRefusal, MAX_APPROVAL_LINK, recordChatApproval } from "../chat-approval";
 
 // The pull request's canonical URL, for a managePr result that did not carry one.
@@ -283,7 +283,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
               logEvent(
                 "OUTCOME_REVERIFY_FAILED",
                 {
-                  message: `OUTCOME_REVERIFY_FAILED pr ${number}: ${err instanceof Error ? err.message : String(err)}`,
+                  message: `OUTCOME_REVERIFY_FAILED pr ${number}: ${errorMessage(err)}`,
                 },
                 { level: "error" },
               );
@@ -524,7 +524,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       try {
         return ok(await siteCheck(env, namespace, { page, probe }));
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );
@@ -579,7 +579,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       try {
         return ok(await searchConsole(env, namespace, args));
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );
@@ -624,7 +624,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       try {
         return ok(await bingWebmaster(env, namespace, args));
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );
@@ -660,7 +660,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       try {
         return ok(await siteTraffic(env, namespace, args));
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );
@@ -694,7 +694,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       try {
         return ok(await siteAudit(env, namespace, args));
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );

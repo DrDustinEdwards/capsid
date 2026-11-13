@@ -7,6 +7,7 @@ import { signPolicyDocument } from "../policy-sign";
 import { resetBreaker } from "../job-breaker";
 import { fail, ok, type ToolCtx } from "./docs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The two operations behind capsid_read_status (status) and capsid_admin_manage_switches
 // (the admin's switches). Both tools keep the improve loop's names, under which agents'
 // tools lists grant them, though the loop itself was removed (Dustin, 2026-10-19).
@@ -61,7 +62,7 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
         const reset = await resetBreaker(env, ctx.actor, new Date(), { namespace, threshold });
         return reset.ok ? ok(reset) : fail(reset.error);
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );
@@ -86,7 +87,7 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
           }),
         );
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );

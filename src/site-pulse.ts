@@ -3,8 +3,8 @@ import { healthReport } from "./health";
 import { probeSite } from "./ops-snapshot";
 import { readSiteConfig, sitesFrom } from "./ops-sites";
 import type { SiteProbe } from "./ops-types/sites";
-import { DAY_MS } from "./time";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { DAY_MS, utcDay } from "./time";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
 // THE FIVE-MINUTE PULSE (area 8, 2026-10-30). The watcher probes the sites half-hourly
 // for the Portal's rings and findings, and until this nothing told Dustin when a site went
@@ -86,7 +86,7 @@ function degradedChecks(reason: string): string[] {
  *  sent record in src/push.ts turns these into once per outage and once a day. */
 export function pulseAlerts(state: PulseState, now: Date): SiteAlert[] {
   const out: SiteAlert[] = [];
-  const day = now.toISOString().slice(0, 10);
+  const day = utcDay(now);
   for (const [namespace, s] of Object.entries(state)) {
     if (s.down_since) {
       out.push({
@@ -151,7 +151,7 @@ export async function sitePulseTick(
   const next: PulseState = {};
   const changed: string[] = [];
   const counts: D1PreparedStatement[] = [];
-  const day = now.toISOString().slice(0, 10);
+  const day = utcDay(now);
   for (const site of sites) {
     const probe = await probeSite(site, fetchImpl, now, self);
     counts.push(uptimeCount(env.DB, site.namespace, day, probe.state !== "down"));
@@ -169,7 +169,7 @@ export async function sitePulseTick(
     logEvent(
       "SITE_PULSE_UPTIME_UNWRITTEN",
       {
-        message: `SITE_PULSE_UPTIME_UNWRITTEN ${err instanceof Error ? err.message : String(err)}`,
+        message: `SITE_PULSE_UPTIME_UNWRITTEN ${errorMessage(err)}`,
       },
       { level: "error" },
     );

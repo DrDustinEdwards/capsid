@@ -10,7 +10,8 @@ import { progressRing } from "enarratio";
 import { areaChart, barChart, lineChart } from "enarratio/lite";
 
 import { weekEnds, weekLabels } from "./home.mjs";
-import { escapeHtml, layout, minutes, pageHead, percent, readingBox, scroller } from "./pages.mjs";
+import { escapeHtml } from "@dustinedwards/site-runtime/html";
+import { layout, minutes, pageHead, percent, readingBox, scroller } from "./pages.mjs";
 
 /** Where every number on the page comes from: the public stats document (docs/public-data.md). */
 const source = {

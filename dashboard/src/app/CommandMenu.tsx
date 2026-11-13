@@ -6,7 +6,8 @@ import type { OpsFeed } from "../types";
 import type { ViewDef, ViewId } from "./ctx";
 import { stopCommands, type StopActions } from "../lib/stops";
 import { JOB, PROBE, hasSites, siteKey } from "../lib/derive";
-import { ago, hostOf, ms } from "../lib/format";
+import { ago, hostOf } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 
 export interface Actions extends StopActions {
   go: (v: ViewId) => void;
@@ -54,7 +55,7 @@ function commands(
       id: `agent-${g.name}`,
       group: "Agent",
       label: g.name,
-      hint: g.last_seen ? ago(ms(g.last_seen), now) : "never seen",
+      hint: g.last_seen ? ago(parse(g.last_seen), now) : "never seen",
       run: () => a.open(`agent:${g.name}`),
     });
   out.push(...stopCommands(feed, a));

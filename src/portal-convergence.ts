@@ -1,3 +1,4 @@
+import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import type { Env } from "./env";
 import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalConvergence } from "./ops-types/views";
@@ -27,7 +28,5 @@ export async function handlePortalConvergence(
     generated: now.toISOString(),
     sites: await readConvergence(env, fetchImpl, now),
   };
-  return new Response(JSON.stringify(body), {
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
+  return jsonResponse(body);
 }

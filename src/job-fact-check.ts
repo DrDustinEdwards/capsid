@@ -3,6 +3,8 @@ import { encodePath, ghFetch } from "./github/client";
 import { npmVersions, readPackageConfig, type FetchLike } from "./ops-packages";
 import { heading, proseOnly } from "./job-body-check";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { parsePrUrl, PR_URL_SOURCE } from "@dustinedwards/site-runtime/github";
 // The third job body check (src/job-body-check.ts): a body that states a pull request is
 // merged, a version is tagged or a package version is published is checked against GitHub
 // and npm at post and edit, and refused when what Capsid reads says otherwise. The case:
@@ -45,7 +47,8 @@ const NOT_DONE =
 const SKIPPED_PARTS = heading("DONE WHEN|OUT OF SCOPE");
 const OTHER_PARTS = heading("GOAL|DO|DECIDED|RULES");
 
-const PR_ITEM = String.raw`(?:https:\/\/github\.com\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\/pull\/\d+|#\d+)(?![\w/])`;
+// A pull request is site-runtime's URL pattern or a bare #N; its groups sit inside each list's own group 1.
+const PR_ITEM = String.raw`(?:${PR_URL_SOURCE}|#\d+)(?![\w/])`;
 const PR_LIST = String.raw`${PR_ITEM}(?:(?:\s*,\s*(?:and\s+)?|\s+and\s+|\s*&\s*)${PR_ITEM})*`;
 const PR_NOUN = String.raw`(?:(?:PRs?|pull\s+requests?)\s+)?`;
 // The verb's state, required except at the start of a sentence ("- #12 merged").
@@ -133,9 +136,9 @@ export function factClaims(body: string): FactClaim[] {
         for (const pattern of MERGED) {
           for (const m of text.matchAll(pattern)) {
             for (const item of m[1].match(new RegExp(PR_ITEM, "g")) ?? []) {
-              const url = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(item);
-              const repo = url ? url[1] : null;
-              const number = Number(url ? url[2] : item.slice(1));
+              const url = parsePrUrl(item);
+              const repo = url ? `${url.owner}/${url.repo}` : null;
+              const number = url ? url.number : Number(item.slice(1));
               add(`merged:${repo ?? ""}#${number}`, {
                 kind: "merged",
                 line: index + 1,
@@ -377,7 +380,7 @@ export async function checkBodyFacts(
             ? await tagged(claim)
             : await published(claim);
     } catch (err) {
-      verdict = { state: "unchecked", reason: err instanceof Error ? err.message : String(err) };
+      verdict = { state: "unchecked", reason: errorMessage(err) };
     }
     const where = `line ${claim.line}, "${claim.said}"`;
     if (verdict.state === "false") falses.push(`${where}: ${verdict.read}`);
@@ -400,7 +403,7 @@ export async function checkBodyFacts(
 
 // ---- The live readers ----------------------------------------------------------------------
 
-const reason = (err: unknown) => (err instanceof Error ? err.message : String(err)).slice(0, 160);
+const reason = (err: unknown) => errorMessage(err).slice(0, 160);
 
 /** The readers post and edit use: the namespace's mapping in D1, the Portal's package rows,
  *  GitHub through the App, and npm's registry. */

@@ -4,6 +4,7 @@ import { OPS_SNAPSHOT_KEY, readSnapshot, RING_SLOTS, ringReading } from "../ops-
 import { bounded, nsName } from "../limits";
 import { fail, ok, type ToolCtx } from "./docs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // An ISO time, as the other tools bound a timestamp argument.
 const MAX_AT = 40;
 
@@ -73,7 +74,7 @@ export function defineOpsSnapshotOperations(server: McpServer, ctx: ToolCtx): vo
         if (typeof reading === "string") return fail(`ops_snapshot: ${reading}`);
         return ok({ pass_at: snapshot.pass_at, ...reading });
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );

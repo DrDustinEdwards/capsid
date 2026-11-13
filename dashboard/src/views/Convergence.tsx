@@ -1,10 +1,15 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import { ReadAgain } from "capsomer/react/read-state";
 import { useApp } from "../app/ctx";
 import { fetchConvergence, useAnswer, type Load } from "../lib/api";
-import { ago, ms } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import type { ConvergenceCheck, ConvergenceSite, PortalConvergence } from "../types";
 import { St } from "../ui/icons";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 
 // The convergence view in Sites (job_09e5f6cbf782): for each site that opted into Capsid
 // calling its operator API, GET /portal/api/convergence reads, live, what the site's
@@ -13,7 +18,10 @@ import { St } from "../ui/icons";
 // every control, the allowlist enforced in the Worker. Nothing on this panel is a value
 // of a secret; the Worker never sends one.
 
-function useConvergence(): { load: Load<PortalConvergence>; reread: () => void } {
+function useConvergence(): {
+  load: Load<PortalConvergence>;
+  reread: () => void;
+} {
   const load = useAnswer(["convergence"], fetchConvergence);
   return { load, reread: load.reread };
 }
@@ -35,9 +43,7 @@ export function Convergence({ ns }: { ns: string }) {
     return (
       <Panel flush title="Site sync" id="convergence" section="Site sync">
         {load.error ? (
-          <div className="callout crit" role="alert">
-            Could not read site sync: {load.error}
-          </div>
+          <Banner tone="crit">Could not read site sync: {load.error}</Banner>
         ) : (
           <div className="loading" role="status">
             <Spinner label="Reading each site's operator API..." />
@@ -49,10 +55,10 @@ export function Convergence({ ns }: { ns: string }) {
   return (
     <>
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Banner tone="crit">
           Could not read site sync again: {load.error}. Showing the read from{" "}
           {data.generated.slice(11, 16)} UTC.
-        </div>
+        </Banner>
       )}
       {sites.map((s) => (
         <SitePanel key={s.namespace} site={s} loading={load.loading} reread={reread} />
@@ -86,25 +92,18 @@ function SitePanel({
       title="Operator API"
       id={`convergence-${site.namespace}`}
       section="Operator API"
-      src={
-        <>
-          {`read ${ago(ms(site.read_at), now)} · `}
-          <button type="button" className="btn" disabled={loading} onClick={reread}>
-            {loading ? "Reading..." : "Read again"}
-          </button>
-        </>
-      }
+      src={<ReadAgain at={parse(site.read_at)} now={now} reading={loading} onRead={reread} />}
     >
       <div className="body stack-gap" data-convergence={site.namespace}>
-        {site.problem && <div className="callout warn">{site.problem}</div>}
+        {site.problem && <Alert tone="warn">{site.problem}</Alert>}
         {op && !op.secret_set && (
-          <div className="callout warn">
+          <Alert tone="warn">
             The Capsid Worker secret <span className="mono">{op.auth_var}</span> is not set, so
             Capsid calls nothing on this site. The seat sets it with wrangler secret put.
-          </div>
+          </Alert>
         )}
         {op && (
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>Operator API</dt>
             <dd className="mono">
               {site.origin}
@@ -129,7 +128,7 @@ function SitePanel({
                       <span className="mono">{tool}</span>{" "}
                       <button
                         type="button"
-                        className="btn"
+                        className="cap-btn"
                         disabled={!op.secret_set}
                         onClick={() => run(tool)}
                       >
@@ -150,11 +149,11 @@ function SitePanel({
         <div className="body stack-gap">
           <h3 className="conv-h">Operator sync_status</h3>
           {site.status.error ? (
-            <div className="callout">
+            <Alert tone="neutral">
               <St kind="nodata">Not read</St> {site.status.error}
-            </div>
+            </Alert>
           ) : (
-            <dl className="kv">
+            <dl className="cap-detail-record">
               {site.status.fields.map((f) => (
                 <FieldRow key={f.key} k={f.key} v={f.value} />
               ))}
@@ -177,7 +176,7 @@ function SitePanel({
                   <St kind="nodata">{r.error ? "failed" : "no verdict"}</St>
                 )}{" "}
                 <span className="faint">
-                  {ago(ms(r.at), now)} by {r.actor}
+                  {ago(parse(r.at), now)} by {r.actor}
                   {r.via ? ` (${r.via})` : ""}
                   {r.error ? `: ${r.error}` : ""}
                 </span>
@@ -210,8 +209,8 @@ function Checks({
 }) {
   const sorted = [...checks].sort((a, b) => Number(a.ok) - Number(b.ok));
   return (
-    <div className="scroll-x">
-      <table className="list">
+    <div className="cap-table-wrap">
+      <table className="cap-table">
         <thead>
           <tr>
             <th>Check</th>
@@ -243,7 +242,7 @@ function Checks({
                     <span className="mono">{c.repair}</span>
                     <button
                       type="button"
-                      className="btn"
+                      className="cap-btn"
                       disabled={!canRun}
                       onClick={() => run(c.repair as string)}
                     >
@@ -278,9 +277,9 @@ function Secrets({ secrets }: { secrets: NonNullable<ConvergenceSite["secrets"]>
     <div className="body stack-gap">
       {secrets.script ? <p className="faint mono">{secrets.script}</p> : null}
       {secrets.state !== "ok" ? (
-        <div className="callout">
+        <Alert tone="neutral">
           <St kind="nodata">Not read</St> {secrets.reason}
-        </div>
+        </Alert>
       ) : secrets.rows.length === 0 ? (
         <Empty kind="all-clear" title="The Worker has no secrets." />
       ) : (

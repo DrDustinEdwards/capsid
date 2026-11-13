@@ -1,4 +1,4 @@
-import { hmacHex } from "./auth";
+import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import type { Env } from "./env";
 import {
@@ -15,7 +15,7 @@ import {
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { MINUTE_MS } from "./time";
 import { textResponse } from "@dustinedwards/site-runtime/http";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
 // The signed endpoints that are not MCP: the backup credential mint and the Amazon copy's report, and
 // the bench's three (src/bench.ts). Each is HMAC over timestamp and body, refused
@@ -80,7 +80,7 @@ export async function claimJti(
     return {
       ok: false,
       status: 503,
-      refusal: `could not verify replay status (${err instanceof Error ? err.message : String(err)}); refusing the request`,
+      refusal: `could not verify replay status (${errorMessage(err)}); refusing the request`,
     };
   }
 }
@@ -91,7 +91,7 @@ export async function claimJti(
 // rotation is a one-character change. scripts/derive-backup-key.mjs computes the same
 // value to set the repo secret.
 export async function deriveBackupCredentialKey(rootSecret: string): Promise<string> {
-  return hmacHex(rootSecret, "capsid-backup-credential:v1");
+  return hmacSha256Hex(rootSecret, "capsid-backup-credential:v1");
 }
 
 // Timestamp and body joined by a dot. The timestamp is inside the signature, or an
@@ -129,7 +129,7 @@ async function verifyHmac(
     };
   }
   const key = await opts.deriveKey(env.IMPROVE_SCORE_SECRET);
-  const expected = await hmacHex(key, signaturePayload(signed.timestamp, signed.body));
+  const expected = await hmacSha256Hex(key, signaturePayload(signed.timestamp, signed.body));
   if (!(await safeEqual(signed.signature.trim().toLowerCase(), expected))) {
     return { ok: false, status: 401, refusal: opts.badSig };
   }

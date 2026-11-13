@@ -12,6 +12,7 @@ import { familyFooterHtml } from "capsomer/behavior/family-footer";
 import { letterheadHtml } from "capsomer/behavior/site-header";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { defineHead, headHtml } from "@drdustinedwards/site-helpers/head";
+import { sectionOf } from "@drdustinedwards/site-helpers/site-map";
 import { iconLinks } from "@drdustinedwards/site-helpers/icons";
 import { jsonLd } from "@drdustinedwards/site-helpers/schema";
 import { accessibilityStatement } from "@drdustinedwards/site-helpers/accessibility";
@@ -48,9 +49,6 @@ const VERB = {
   serves: ["serves", "is served by"],
 };
 
-// The family's one escaper (site-runtime ./html), for any value; code.mjs and graph.mjs take it from here.
-export { escapeHtml };
-
 /** @param {string} id */
 export const systemPath = (id) => `/s/${id}/`;
 /** @param {string} id */
@@ -78,13 +76,20 @@ const NAMES = Object.fromEntries(NAV);
 /** The pages that list a kind of thing, written as CollectionPage. */
 const LISTS = ["/systems/", "/flows/", "/tools/", "/code/"];
 
-/** The section a path belongs to, for the bar's aria-current. @param {string} path */
-function sectionOf(path) {
-  if (path === "/") return "/";
-  if (/^\/s\/[^/]+\/code\//.test(path)) return "/code/";
-  if (path.startsWith("/s/")) return "/systems/";
-  return NAV.find(([href]) => href !== "/" && path.startsWith(href))?.[0] ?? "";
-}
+/** The bar's sections by the paths under them, for Prelum's sectionOf; the last, with no root, is none. */
+const NAV_SECTIONS = [
+  ...NAV.map(([href, heading]) => ({
+    id: href,
+    heading,
+    to: href,
+    roots: href === "/" ? ["/"] : href === "/systems/" ? ["/systems", "/s"] : [href.slice(0, -1)],
+  })),
+  { id: "", heading: "", to: null, roots: [] },
+];
+
+/** The section a path belongs to, for the bar's aria-current: a system's code page is under Code. @param {string} path */
+const navSection = (path) =>
+  /^\/s\/[^/]+\/code\//.test(path) ? "/code/" : sectionOf(path, NAV_SECTIONS);
 
 /**
  * The card every page shares (src/og-card.png): a travel poster in the manner of JPL's Visions of
@@ -134,7 +139,7 @@ export function layout({
   fullTitle,
   parent,
 }) {
-  const here = sectionOf(path);
+  const here = navSection(path);
   const missing = path === "/404";
   // Every page is served at its slash, so the canonical and the trail keep it (Prelum's own trail drops it).
   const section = here && here !== "/" && here !== path ? [[here, NAMES[here]]] : [];
@@ -212,7 +217,7 @@ const SECTIONS = [...NAV, ["/search/", "Search"]].map(([href, label], i) => ({
 export const sectionAt = (href) => SECTIONS.find((section) => section.href === href);
 
 /** The section a page is numbered in: search is a section of its own here. @param {string} path */
-const sectionFor = (path) => sectionAt(path === "/search/" ? path : sectionOf(path));
+const sectionFor = (path) => sectionAt(path === "/search/" ? path : navSection(path));
 
 /**
  * A page's head, Capsomer's running head: its section's number and name over the manual's rule (a

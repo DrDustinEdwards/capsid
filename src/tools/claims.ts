@@ -11,6 +11,7 @@ import {
 import { bounded, nsName } from "../limits";
 import { fail, ok, type ToolCtx } from "./docs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 const CLAIMS_ACTIONS = ["job", "aggregate", "export"] as const;
 const MAX_JOB_ID = 64;
 
@@ -99,7 +100,7 @@ export function defineClaimsOperations(server: McpServer, ctx: ToolCtx): void {
         }
         return fail(`unknown claims action '${String(action)}'.`);
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );

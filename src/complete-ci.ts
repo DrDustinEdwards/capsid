@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { ciVerdict } from "./auto-merge-policy";
-import { parsePrUrl, resolveRepo } from "./github/client";
+import { parsePrUrl } from "@dustinedwards/site-runtime/github";
+import { resolveRepo } from "./github/client";
 import { readCheckRuns, readPrFiles } from "./github/pr-files";
 import { prFacts } from "./job-outcomes";
 import { pathClassOf } from "./merge-class";

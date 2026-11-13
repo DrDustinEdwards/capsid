@@ -2,6 +2,7 @@ import type { Env } from "../env";
 import { assertRepoArg, getDefaultBranch, getRefSha, ghFetch, resolveRepo } from "./client";
 import { readRepoFile } from "./contents";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // Tag a commit, and publish its release with the notes from the repo's CHANGELOG.
 // Served as capsid_close_pr actions tag and release, which need can_merge
 // (src/scope.ts repoWriteFlags): a tag or a release can start a deploy as a merge can.
@@ -98,7 +99,7 @@ export async function tagRelease(
     release = await publishRelease(env, owner, repo, args.tag, notes);
   } catch (err) {
     throw new Error(
-      `the tag ${args.tag} was created at ${sha.slice(0, 7)} but the release was not (${err instanceof Error ? err.message : String(err)}). ` +
+      `the tag ${args.tag} was created at ${sha.slice(0, 7)} but the release was not (${errorMessage(err)}). ` +
         `Publish it from the tag on GitHub, or delete the tag and release again.`,
     );
   }

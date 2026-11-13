@@ -82,7 +82,7 @@ jobs:
         run: npm --prefix explorer test
 
       - name: Install the browser
-        run: npx --prefix explorer playwright install --with-deps chromium
+        run: npx --prefix explorer playwright install chromium
 
       # Served by wrangler dev with the deploy's own config and _headers (explorer/playwright.config.mjs).
       - name: Browser spec
@@ -157,7 +157,7 @@ jobs:
     concurrency:
       group: explorer-deploy
       cancel-in-progress: false
-    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@562daa2dbfb23f2987f81caeac34f9e054b3d03b # v0.26.4
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@33c4651984133498e49380b1cfea0894fe7f1bae # v0.43.0
     with:
       worker-name: capsid
       health-url: https://capsid.dustinedwards.info/health

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hmacHex } from "../src/auth.ts";
+import { mintConfirm } from "@dustinedwards/site-runtime/confirm-token";
+import { confirmKeys } from "../src/auth.ts";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { PORTAL_CSRF_COOKIE, type OpsFeedData } from "../src/ops-feed.ts";
 import type { OpsSiteConfig } from "../src/ops-types/sites.ts";
@@ -40,9 +41,7 @@ import { PAUSED_KEY } from "../src/merge-safety.ts";
 import { policyPin, policyPinKey, signTaskBody } from "../src/signed-docs.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
-
-const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
+import { fromBase64urlText } from "@dustinedwards/site-runtime/encoding";
 
 // approve_pr reads the pull request's head from GitHub at preview and at perform. Only
 // that read is answered; nothing in this file reaches GitHub otherwise.
@@ -346,7 +345,7 @@ async function post(path: string, body: unknown, opts: Opts = {}): Promise<Reque
       (await portalSessionCookie({ email: opts.session ?? EMAIL }, SECRET, NOW)).split(";")[0],
     );
   const cookie = opts.csrfCookie === undefined ? CSRF : opts.csrfCookie;
-  if (cookie) cookies.push(`${PORTAL_CSRF_COOKIE}=${cookie}`);
+  if (cookie) cookies.push(`__Secure-${PORTAL_CSRF_COOKIE}=${cookie}`);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (cookies.length) headers.Cookie = cookies.join("; ");
   const header = opts.csrfHeader === undefined ? CSRF : opts.csrfHeader;
@@ -418,15 +417,15 @@ async function previewOk(
 // The token's payload, decoded, edited and re-encoded with the original signature.
 function tamper(token: string, edit: (claims: Record<string, unknown>) => void): string {
   const [payload, sig] = token.split(".");
-  const claims = JSON.parse(decodeBase64url(payload)) as Record<string, unknown>;
-  edit(claims);
-  return `${base64url(JSON.stringify(claims))}.${sig}`;
+  const signed = JSON.parse(fromBase64urlText(payload)) as { c: Record<string, unknown> };
+  edit(signed.c);
+  return `${Buffer.from(JSON.stringify(signed)).toString("base64url")}.${sig}`;
 }
 
 // A token signed the way the Worker signs one, for claims no preview would issue.
 async function forge(claims: Record<string, unknown>): Promise<string> {
-  const payload = base64url(JSON.stringify(claims));
-  return `${payload}.${await hmacHex(await hmacHex(SECRET, "capsid-portal-confirm:v2"), payload)}`;
+  const keys = await confirmKeys({ COOKIE_ENCRYPTION_KEY: SECRET }, "capsid-portal-confirm:v2");
+  return (await mintConfirm({ keys, claims, ttlSeconds: 60, now: NOW.getTime() })).token;
 }
 
 // The absences
@@ -444,16 +443,14 @@ test("PLANT: a merge or a mint is refused at preview and at perform, even fully 
     wroteNothing(w, `${action} preview`);
 
     const token = await forge({
-      v: 2,
-      jti: "a".repeat(32),
       action,
       params: {},
       email: EMAIL,
-      exp: NOW.getTime() / 1000 + 60,
     });
     const performed = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
     assert.equal(performed.status, 400, `a signed ${action} token was performed`);
-    wroteNothing(w, `${action} perform`);
+    // Redeeming spends the token before its action is looked up, so only its nonce is written.
+    spentOnly(w, `${action} perform`);
   }
 });
 
@@ -588,7 +585,7 @@ for (const [action, params] of EVERY_ACTION) {
       `the click row is not in the preview's audit list: ${JSON.stringify(body.audit)}`,
     );
     assert.equal(body.audit.length, 2, "the mutator's row and the click row");
-    assert.match(body.token, /^[A-Za-z0-9_-]+\.[0-9a-f]{64}$/);
+    assert.match(body.token, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/);
     assert.equal(body.expires_at, LATER(5 * 60_000).toISOString());
     wroteNothing(w, `${action} preview`);
   });
@@ -720,12 +717,9 @@ test("PLANT: a signed switch token with no reason (issued before the rule) is re
   for (const [action, params] of SWITCH_CASES) {
     const w = world();
     const token = await forge({
-      v: 2,
-      jti: "b".repeat(32),
       action,
       params,
       email: EMAIL,
-      exp: NOW.getTime() / 1000 + 60,
     });
     const res = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
     assert.equal(res.status, 400, `${action} with no reason was performed`);
@@ -923,7 +917,7 @@ test("a co-owner's session is refused when CO_OWNER_EMAILS is unset, and a confi
     deps,
   );
   assert.equal(res.status, 403);
-  assert.match(await res.text(), /another session/);
+  assert.match(await res.text(), /issued for another email/);
   wroteNothing(w, "a confirmation issued to the primary owner");
 });
 
@@ -1037,7 +1031,7 @@ test("a token issued to another session is refused with 403", async () => {
     deps,
   );
   assert.equal(res.status, 403);
-  assert.match(await res.text(), /another session/);
+  assert.match(await res.text(), /issued for another email/);
   wroteNothing(other, "another session's perform");
 });
 
@@ -1180,7 +1174,7 @@ test("all fourteen routes refuse a bearer with 403 and send an anonymous caller 
   for (const [path, method, handler] of ROUTES) {
     const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
     const headers = {
-      Cookie: `${session}; ${PORTAL_CSRF_COOKIE}=${CSRF}`,
+      Cookie: `${session}; __Secure-${PORTAL_CSRF_COOKIE}=${CSRF}`,
       [PORTAL_CSRF_HEADER]: CSRF,
       "Sec-Fetch-Site": "same-origin",
     };
@@ -1247,16 +1241,11 @@ test("sign out expires the session and CSRF cookies at Path=/portal, and ends a 
   const res = await handlePortalSignOut(request, w.env, NOW);
   assert.equal(res.status, 204);
   const cookies = setCookies(res);
-  // Each under its __Secure- name and, for one release, the bare name it had before (src/auth.ts cookieName).
+  // Each under its __Secure- name.
   const names = cookies.map((c) => c.split("=")[0]).sort();
   assert.deepEqual(
     names,
-    [
-      "__Secure-capsid_portal",
-      `__Secure-${PORTAL_CSRF_COOKIE}`,
-      "capsid_portal",
-      PORTAL_CSRF_COOKIE,
-    ].sort(),
+    ["__Secure-capsid_portal", `__Secure-${PORTAL_CSRF_COOKIE}`].sort(),
     cookies.join(" | "),
   );
   for (const c of cookies) {

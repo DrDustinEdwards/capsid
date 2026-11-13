@@ -1,5 +1,7 @@
+import { Alert } from "capsomer/react/banner";
 import type { Kind } from "../lib/derive";
-import { age, utc, ms, ago } from "../lib/format";
+import { age, ago } from "../lib/format";
+import { parse, utc } from "capsomer/behavior/time";
 import type {
   ClaimsGroup,
   ClaimsAgreementCounts,
@@ -9,7 +11,10 @@ import type {
   PortalClaimsJob,
 } from "../types";
 import { St } from "../ui/icons";
+import { Missing } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 
 export const AGREEMENTS: readonly ClaimsAgreement[] = [
   "agree",
@@ -27,21 +32,22 @@ const AGREEMENT_KIND: Record<ClaimsAgreement, Kind> = {
   unchecked: "warn",
 };
 
-export function None({ what = "none" }: { what?: string }) {
-  return <span className="faint">{what}</span>;
-}
-
 // A wait in milliseconds as "3.2h". Null is no wait measured, never zero.
 export function wait(msValue: number | null) {
   return msValue === null ? (
-    <None what="no wait" />
+    <Missing>no wait</Missing>
   ) : (
     <span className="num">{age(0, msValue)}</span>
   );
 }
 
 export function totals(group: ClaimsGroup): ClaimsAgreementCounts {
-  const out: ClaimsAgreementCounts = { agree: 0, disagree: 0, unclaimed: 0, unchecked: 0 };
+  const out: ClaimsAgreementCounts = {
+    agree: 0,
+    disagree: 0,
+    unclaimed: 0,
+    unchecked: 0,
+  };
   for (const counts of Object.values(group.evaluations))
     for (const a of AGREEMENTS) out[a] += counts[a];
   return out;
@@ -51,7 +57,12 @@ export function byCheck(groups: ClaimsGroup[]): Array<[string, ClaimsAgreementCo
   const out = new Map<string, ClaimsAgreementCounts>();
   for (const g of groups) {
     for (const [name, counts] of Object.entries(g.evaluations)) {
-      const sum = out.get(name) ?? { agree: 0, disagree: 0, unclaimed: 0, unchecked: 0 };
+      const sum = out.get(name) ?? {
+        agree: 0,
+        disagree: 0,
+        unclaimed: 0,
+        unchecked: 0,
+      };
       for (const a of AGREEMENTS) sum[a] += counts[a];
       out.set(name, sum);
     }
@@ -108,7 +119,7 @@ function Agreement({ a }: { a: ClaimsAgreement }) {
 
 export function AgreementCounts({ c }: { c: ClaimsAgreementCounts }) {
   const parts = AGREEMENTS.filter((a) => c[a] > 0);
-  if (parts.length === 0) return <None what="no checks" />;
+  if (parts.length === 0) return <Missing>no checks</Missing>;
   return (
     <span className="mono">
       {parts.map((a, i) => (
@@ -130,10 +141,10 @@ function EvaluationRows({ rows }: { rows: JobEvaluationRow[] }) {
             {e.name}
           </td>
           <td className="mono wrap" data-label="Claimed">
-            {e.claimed ?? <None what="not stated" />}
+            {e.claimed ?? <Missing>not stated</Missing>}
           </td>
           <td className="mono wrap" data-label="Verified">
-            {e.verified ?? <None what="not checked" />}
+            {e.verified ?? <Missing>not checked</Missing>}
           </td>
           <td data-label="Agreement">
             <Agreement a={e.agreement} />
@@ -166,10 +177,10 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
         <div className="body">
           <p>{job.title}</p>
           {data.truncated.length > 0 && (
-            <div className="callout warn" role="status">
+            <Alert tone="warn">
               Cut at {data.limit} rows each: {data.truncated.join(", ")}. The tool's export reads
               every row.
-            </div>
+            </Alert>
           )}
           {data.outcome === null && (
             <p className="faint">No outcome recorded: the job has not completed or failed.</p>
@@ -195,25 +206,27 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
             return (
               <div key={c.id} className="claim" data-claim={c.id}>
                 <div className="body">
-                  <dl className="kv">
+                  <dl className="cap-detail-record">
                     <dt>Claim</dt>
                     <dd className="mono">
                       #{c.id} · {c.action} · {c.agent} ·{" "}
-                      <span title={utc(ms(c.recorded_at))}>{ago(ms(c.recorded_at), now)}</span>
+                      <span title={utc(parse(c.recorded_at))}>
+                        {ago(parse(c.recorded_at), now)}
+                      </span>
                     </dd>
                     <dt>Stated</dt>
                     <dd className="mono">
-                      {said.length ? said.join(" · ") : <None what="no structured claim" />}
+                      {said.length ? said.join(" · ") : <Missing>no structured claim</Missing>}
                     </dd>
                     <dt>Versions</dt>
-                    <dd className="mono">{v || <None what="not stated" />}</dd>
+                    <dd className="mono">{v || <Missing>not stated</Missing>}</dd>
                     <dt>Worker</dt>
-                    <dd className="mono">{c.capsid_sha ?? <None what="unknown build" />}</dd>
+                    <dd className="mono">{c.capsid_sha ?? <Missing>unknown build</Missing>}</dd>
                   </dl>
                 </div>
                 {checks.length ? (
-                  <div className="scroll-x reflow">
-                    <table className="list cards-below-1100">
+                  <div className="cap-table-wrap" data-reflow="wide">
+                    <table className="cap-table">
                       <thead>
                         <tr>
                           <th>Check</th>
@@ -241,8 +254,8 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
           })
         )}
         {orphans.length > 0 && (
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100" aria-label="Checks with no claim">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table" aria-label="Checks with no claim">
               <thead>
                 <tr>
                   <th>Check</th>
@@ -271,8 +284,8 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
             No touch recorded: nobody gated, resumed, released or reviewed this job.
           </div>
         ) : (
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>When</th>
@@ -285,8 +298,8 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
               <tbody>
                 {data.touches.map((t) => (
                   <tr key={t.id} data-row="">
-                    <td className="num" data-label="When" title={utc(ms(t.at))}>
-                      {ago(ms(t.at), now)}
+                    <td className="num" data-label="When" title={utc(parse(t.at))}>
+                      {ago(parse(t.at), now)}
                     </td>
                     <td className="mono" data-label="Kind">
                       {t.kind}
@@ -296,7 +309,7 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
                     </td>
                     <td data-label="Waited">{wait(t.waited_ms)}</td>
                     <td className="mono wrap" data-label="Detail">
-                      {t.detail ?? <None />}
+                      {t.detail ?? <Missing />}
                     </td>
                   </tr>
                 ))}

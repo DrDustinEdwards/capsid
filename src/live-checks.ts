@@ -9,6 +9,7 @@ import { readCapped } from "@dustinedwards/site-runtime/body";
 import { MINUTE_MS } from "./time";
 import { callSignal } from "./call-signal";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // THE WATCHER'S LIVE CHECKS (capsid/research/design-automation-for-speed.md, D5, ruled
 // by Dustin 2026-10-04). Four things Dustin checked by hand with PowerShell after a
 // deploy, read by the Worker instead: the deployed sha against the default branch, the
@@ -321,10 +322,7 @@ export async function readPage(
       signal: callSignal(PAGE_TIMEOUT_MS),
     });
   } catch (err) {
-    return unread(
-      null,
-      `no answer: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`,
-    );
+    return unread(null, `no answer: ${errorMessage(err).slice(0, 120)}`);
   }
   if (res.url) {
     const finalOrigin = new URL(res.url).origin;
@@ -483,7 +481,7 @@ export async function liveChecks(
       analyticsRead ??= deps.analytics().then(
         (sites) => ({ sites }),
         (err: unknown) => ({
-          problem: (err instanceof Error ? err.message : String(err)).slice(0, 400),
+          problem: errorMessage(err).slice(0, 400),
         }),
       );
       const read = await analyticsRead;

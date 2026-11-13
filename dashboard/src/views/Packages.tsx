@@ -1,7 +1,9 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { Suspense, lazy, useState } from "react";
 import { useApp } from "../app/ctx";
 import { fetchPackageHistory, useAnswer } from "../lib/api";
-import { ago, fmtN, ms } from "../lib/format";
+import { ago, fmtN } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "../types";
 import { ChartFrame } from "capsomer/react/chart-frame";
@@ -10,7 +12,9 @@ import { Panel } from "capsomer/react/panel";
 import { areaChart } from "enarratio/lite/area";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { useDemo } from "../lib/router";
-import type { PackageEditing } from "./PackageConfig";
+import { useEditor } from "capsomer/react/config-form";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 
 // The Shared code and Completeness tabs load when opened, and the add and edit form the first
 // time it opens, so Published's first paint carries neither.
@@ -129,12 +133,12 @@ function HistoryPanel({ name }: { name: string }) {
   });
   if (!h.data && !h.error) {
     return (
-      <button type="button" className="btn" disabled={h.loading} onClick={() => setAsked(true)}>
+      <button type="button" className="cap-btn" disabled={h.loading} onClick={() => setAsked(true)}>
         {h.loading ? "Reading npm…" : "Load the daily download history"}
       </button>
     );
   }
-  if (!h.data) return <div className="callout warn">The history could not be read: {h.error}</div>;
+  if (!h.data) return <Alert tone="warn">The history could not be read: {h.error}</Alert>;
   const d = h.data;
   const byName = new Map<string, number>();
   for (const day of d.days) byName.set(day.name, (byName.get(day.name) ?? 0) + day.downloads);
@@ -151,7 +155,7 @@ function HistoryPanel({ name }: { name: string }) {
         </p>
       ))}
       {d.weeks.length > 0 && (
-        <table className="list">
+        <table className="cap-table">
           <thead>
             <tr>
               <th>Week</th>
@@ -195,8 +199,13 @@ function PackagePanel({
       title={cfg.name}
       src={
         <>
-          {snap ? `read ${ago(ms(snap.at), now)} · ` : "not read yet · "}
-          <button type="button" className="btn" aria-label={`Edit ${cfg.name}`} onClick={onEdit}>
+          {snap ? `read ${ago(parse(snap.at), now)} · ` : "not read yet · "}
+          <button
+            type="button"
+            className="cap-btn"
+            aria-label={`Edit ${cfg.name}`}
+            onClick={onEdit}
+          >
             Edit
           </button>
         </>
@@ -206,7 +215,7 @@ function PackagePanel({
         {!snap ? (
           <p className="faint">The watcher reads this package on its next pass.</p>
         ) : (
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>Version</dt>
             <dd>
               <Part part={snap.npm}>
@@ -358,32 +367,31 @@ export function Packages() {
 
 function Published() {
   const { feed } = useApp();
-  const [editing, setEditing] = useState<PackageEditing | null>(null);
+  const ed = useEditor<OpsPackageConfig>();
   const byName = new Map((feed.snapshot?.packages ?? []).map((p) => [p.name, p]));
   const rows = feed.live.packages;
-  // The form is keyed on what it edits, so switching rows starts a fresh draft.
-  const formKey = editing ? (editing.kind === "add" ? "add" : `edit:${editing.row.name}`) : "";
   return (
     <>
       <div className="toolbar">
         <button
           type="button"
-          className="btn primary"
-          onClick={() => setEditing({ kind: "add" })}
-          disabled={editing?.kind === "add"}
+          className="cap-btn"
+          data-variant="primary"
+          onClick={ed.add}
+          disabled={ed.editing?.kind === "add"}
         >
           Add package
         </button>
       </div>
-      {editing && (
+      {ed.editing && (
         <Suspense fallback={null}>
-          <PackageForm key={formKey} editing={editing} onClose={() => setEditing(null)} />
+          <PackageForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />
         </Suspense>
       )}
       {!rows.length && (
-        <div className="callout" role="status">
+        <Banner tone="neutral">
           No package is configured yet. Add one to watch its versions, downloads and dependents.
-        </div>
+        </Banner>
       )}
       {rows.length > 0 && !feed.snapshot && <NoSnapshot />}
       {rows.map((cfg) => (
@@ -391,7 +399,7 @@ function Published() {
           key={cfg.name}
           cfg={cfg}
           snap={byName.get(cfg.name) ?? null}
-          onEdit={() => setEditing({ kind: "edit", row: cfg })}
+          onEdit={() => ed.edit(cfg, cfg.name)}
         />
       ))}
     </>

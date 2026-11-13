@@ -9,9 +9,9 @@ import {
   resolveRepo,
 } from "./client";
 import { SEARCH_TREE_LIMIT } from "./search";
-import { fromBase64 } from "@dustinedwards/site-runtime/encoding";
+import { fromBase64Text } from "@dustinedwards/site-runtime/encoding";
 
-const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase64(text));
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 
 export async function listRepoTree(
   env: Env,
@@ -74,13 +74,13 @@ export async function readRepoFile(
   if (data.type !== "file") throw new Error(`${path} is not a file (type: ${data.type})`);
   let content: string;
   if (data.encoding === "base64" && data.content) {
-    content = decodeBase64(data.content);
+    content = fromBase64Text(data.content);
   } else {
     // Files over 1 MB come back without inline content; fetch the blob by sha.
     const blob = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/blobs/${data.sha}`);
     if (!blob.ok) throw new Error(`read_repo_file blob fetch failed (${blob.status})`);
     const blobData = (await blob.json()) as { content: string; encoding: string };
-    content = decodeBase64(blobData.content);
+    content = fromBase64Text(blobData.content);
   }
   return { repo: `${owner}/${repo}`, path, size: data.size, sha: data.sha, content };
 }
@@ -123,7 +123,7 @@ export async function readRepoFiles(
           content: truncated ? one.content.slice(0, REPO_FILE_BUDGET) : one.content,
         };
       } catch (err) {
-        return { path, error: err instanceof Error ? err.message : String(err) };
+        return { path, error: errorMessage(err) };
       }
     }),
   );

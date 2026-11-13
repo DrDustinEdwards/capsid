@@ -1,4 +1,5 @@
-import { handleSignedInReport, SIGNED_IN_REPORT_PATH } from "./signed-in-crawl";
+import { SIGNED_IN_REPORT_PATH } from "@dustinedwards/site-runtime/signed-in-crawl";
+import { handleSignedInReport } from "./signed-in-crawl";
 import {
   PUBLIC_CODE_PATH,
   PUBLIC_DOCS,

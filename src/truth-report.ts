@@ -1,5 +1,6 @@
+import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import { ruleDocCap, ruleDocProblem, staleSummary, type RuleDocProblem } from "./rule-docs";
-import { DAY_MS } from "./time";
+import { DAY_MS, utcDay } from "./time";
 interface TruthFinding {
   // What was checked, and what did not pass.
   check: string;
@@ -128,11 +129,10 @@ function daysBetween(a: Date, b: Date): number {
 }
 
 function parseStamp(value: string): Date | null {
-  // D1 writes `YYYY-MM-DD HH:MM:SS` with no zone. Read as UTC rather than local,
-  // or the same document is stale on one machine and fresh on another.
-  const normalized = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
-  const date = new Date(normalized);
-  return Number.isNaN(date.getTime()) ? null : date;
+  // D1 writes `YYYY-MM-DD HH:MM:SS` with no zone; parseSqlTime reads it as UTC, so the
+  // same document is not stale on one machine and fresh on another.
+  const ms = parseSqlTime(value);
+  return ms === null ? null : new Date(ms);
 }
 
 // A document is "standing" if it is part of the canon rather than raw material.
@@ -427,7 +427,7 @@ export function renderTruthReport(report: TruthReport): string {
 
 // One document per namespace per day; a second run the same day overwrites.
 export function reportPath(date: Date): string {
-  return `${REPORTS_PREFIX}lint-${date.toISOString().slice(0, 10)}.md`;
+  return `${REPORTS_PREFIX}lint-${utcDay(date)}.md`;
 }
 
 // Pull the integrity number back out of a stored report. Returns null on anything

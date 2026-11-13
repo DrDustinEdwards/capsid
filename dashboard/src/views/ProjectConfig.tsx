@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { RepeaterField } from "capsomer/react/repeater-field";
-import { Field as CapField, TextField } from "capsomer/react/field";
 import { useApp } from "../app/ctx";
 import type { PortalNamespace } from "../types";
-import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
-import { Danger } from "./shared";
+import { ConfigForm, useConfigForm, type Editing } from "capsomer/react/config-form";
+import "capsomer/config-form.css";
+import { Field, TextField } from "capsomer/react/field";
+import { DangerZone } from "capsomer/react/danger-zone";
+import "capsomer/danger-zone.css";
 
 // ADD, CHANGE OR DELETE A PROJECT (the Portal audit's new map, 2026-11-06): the namespace_add,
 // namespace_edit and namespace_remove controls, which share their rules and audit rows with
 // capsid_admin_manage_namespaces (src/namespace-admin.ts, src/namespace-delete.ts). A project is
 // its namespace and the repos the repo tools resolve through, exactly one labeled primary. Every
 // change previews first in the confirm dialog, which shows what it will do or why it is refused.
-
-export type ProjectEditing = { kind: "add" } | { kind: "edit"; n: PortalNamespace };
 
 type RepoDraft = { repo: string; label: string };
 
@@ -22,17 +22,17 @@ export function ProjectForm({
   editing,
   onClose,
 }: {
-  editing: ProjectEditing;
+  editing: Editing<PortalNamespace>;
   onClose: () => void;
 }) {
   const { confirm } = useApp();
   const { f, first } = useConfigForm();
   const adding = editing.kind === "add";
-  const [ns, setNs] = useState(adding ? "" : editing.n.namespace);
+  const [ns, setNs] = useState(adding ? "" : editing.row.namespace);
   const [rows, setRows] = useState<RepoDraft[]>(() =>
-    adding || !editing.n.repos.length
+    adding || !editing.row.repos.length
       ? [draftRow("", "primary")]
-      : editing.n.repos.map((r) => draftRow(r.repo, r.label)),
+      : editing.row.repos.map((r) => draftRow(r.repo, r.label)),
   );
   const [cascade, setCascade] = useState(false);
   const [policies, setPolicies] = useState(false);
@@ -88,7 +88,7 @@ export function ProjectForm({
       onClose={onClose}
       danger={
         !adding && (
-          <Danger note="Archived documents, versions, the audit log and finished jobs are kept. The preview lists what it deletes, or what has to end first.">
+          <DangerZone note="Archived documents, versions, the audit log and finished jobs are kept. The preview lists what it deletes, or what has to end first.">
             <label className="check">
               <input
                 type="checkbox"
@@ -107,26 +107,25 @@ export function ProjectForm({
             </label>
             <button
               type="button"
-              className="btn danger"
+              className="cap-btn"
+              data-variant="danger"
               aria-label={`Delete ${ns}`}
               onClick={remove}
             >
               Delete
             </button>
-          </Danger>
+          </DangerZone>
         )
       }
     >
       <Field
-        id={f("ns")}
         label="Project"
-        note="Its namespace: a lowercase slug of a-z, 0-9 and '-'. It cannot be renamed later."
+        help="Its namespace: a lowercase slug of a-z, 0-9 and '-'. It cannot be renamed later."
       >
         <input
           ref={adding ? first : undefined}
           id={f("ns")}
-          aria-describedby={`${f("ns")}-note`}
-          className="field mono"
+          className="cap-input mono"
           value={ns}
           readOnly={!adding}
           autoComplete="off"
@@ -147,7 +146,7 @@ export function ProjectForm({
         >
           {(r, { set, index }) => (
             <>
-              <CapField label="Owner/name">
+              <Field label="Owner/name">
                 {(control) => (
                   <input
                     {...control}
@@ -160,7 +159,7 @@ export function ProjectForm({
                     onChange={(e) => set({ repo: e.target.value })}
                   />
                 )}
-              </CapField>
+              </Field>
               <TextField
                 className="mono"
                 label="Label"

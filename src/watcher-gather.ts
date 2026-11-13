@@ -6,7 +6,7 @@ import type { Env } from "./env";
 import { defaultBranchSha, ciStatus, listRepoTree } from "./github";
 import { healthReport } from "./health";
 import { readLiveConfig, liveChecks, defaultBranchHead } from "./live-checks";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { checkManualSteps, liveStepReaders } from "./manual-steps";
 import { readServerErrors } from "./site-traffic";
 import {
@@ -69,7 +69,7 @@ async function attempt<T>(what: string, fn: () => Promise<T>): Promise<T | null>
     logEvent(
       "WATCHER_READ_FAILED",
       {
-        message: `WATCHER_READ_FAILED ${what}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `WATCHER_READ_FAILED ${what}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );
@@ -281,7 +281,7 @@ export async function gatherFindings(
     ran.add("repo map");
     out.push(...unmappedRepoFindings(repoMap));
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = errorMessage(err);
     logEvent(
       "WATCHER_READ_FAILED",
       { message: `WATCHER_READ_FAILED repo map: ${reason}` },
@@ -437,7 +437,7 @@ export async function gatherFindings(
               state: "error" as const,
               script,
               rows: [],
-              reason: (err instanceof Error ? err.message : String(err)).slice(0, 300),
+              reason: errorMessage(err).slice(0, 300),
               read_at,
             }),
           );

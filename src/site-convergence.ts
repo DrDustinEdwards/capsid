@@ -7,6 +7,7 @@ import { callOperator, tokenSet, toolRefusal, type FetchLike } from "./site-oper
 import { readStoredSecrets } from "./secret-presence";
 import { callSignal } from "./call-signal";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // THE CONVERGENCE VIEW (job_09e5f6cbf782): per site that opted in, what its own operator
 // API says (sync_status: the repository count against D1, the search index and the Ask
 // index, and any named divergence) beside what its health route says per content type,
@@ -26,7 +27,7 @@ const clip = (s: string) => (s.length > TEXT_MAX ? `${s.slice(0, TEXT_MAX - 1)}â
 
 /** A health body's checks, each with the repair it maps to. Only the fields the view shows
  *  are kept, as text or numbers: the body is the site's, read as data. */
-export function healthChecks(body: unknown, operator: SiteOperator): ConvergenceCheck[] {
+export function convergenceChecks(body: unknown, operator: SiteOperator): ConvergenceCheck[] {
   const checks = (body as { checks?: unknown } | null)?.checks;
   if (!Array.isArray(checks)) return [];
   const out: ConvergenceCheck[] = [];
@@ -97,7 +98,7 @@ async function readHealth(
     });
     return { status: res.status, body: await res.json().catch(() => null), error: null };
   } catch (err) {
-    return { status: 0, body: null, error: clip(err instanceof Error ? err.message : String(err)) };
+    return { status: 0, body: null, error: clip(errorMessage(err)) };
   }
 }
 
@@ -150,7 +151,7 @@ async function readSiteConvergence(
     : {
         ok: h.status === 200 && (h.body as { ok?: unknown } | null)?.ok === true,
         http_status: h.status || null,
-        checks: healthChecks(h.body, operator),
+        checks: convergenceChecks(h.body, operator),
         error: h.error,
       };
 

@@ -12,6 +12,7 @@ import { postJob } from "./jobs";
 import { noFlags } from "./agents-schema";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 const DOCS = "https://platform.claude.com/docs/en";
 // The overview moved here in October 2026; the old about-claude/models path answers a 307 to it.
 const OVERVIEW = `${DOCS}/models/overview.md`;
@@ -65,7 +66,7 @@ export async function readSchedule(kv: KVNamespace): Promise<Schedule> {
     return {
       enabled: false,
       dayUtc: DEFAULT_DAY_UTC,
-      reason: `could not read ${SCHEDULE_KEY}: ${err instanceof Error ? err.message : String(err)}`,
+      reason: `could not read ${SCHEDULE_KEY}: ${errorMessage(err)}`,
     };
   }
   if (raw === null)

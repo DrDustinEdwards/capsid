@@ -25,6 +25,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 export const COMPLETE_MARKER = "_complete.json";
 export const SIDECARS = ["_kv.json"];
 export const OPTIONAL_SIDECARS = ["_schema.json", "_holdout-manifests.json"];
@@ -52,7 +53,7 @@ function readDumpFile(dumpDir: string, file: string): Json {
     const bytes = readFileSync(join(dumpDir, file));
     return JSON.parse((file.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8")) as Json;
   } catch (e) {
-    fail(`${file} does not parse as JSON: ${e instanceof Error ? e.message : String(e)}`);
+    fail(`${file} does not parse as JSON: ${errorMessage(e)}`);
   }
 }
 
@@ -215,7 +216,7 @@ if (invokedDirectly) {
         `cross-table consistent (${s.orphanVersions} version and ${s.orphanAudits} audit rows reference documents no longer in the store, all explained by deletions, archiving or the namespace rename)`,
     );
   } catch (e) {
-    console.error(`dump invariants FAILED: ${e instanceof Error ? e.message : String(e)}`);
+    console.error(`dump invariants FAILED: ${errorMessage(e)}`);
     process.exit(1);
   }
 }

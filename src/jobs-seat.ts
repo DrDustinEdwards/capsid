@@ -13,7 +13,8 @@ import {
 } from "./jobs-schema";
 import { approveByPolicy, classifyCommand, type GateClass } from "./gate-policy";
 import { readRepoFile } from "./github/contents";
-import { ghFetch, parsePrUrl, resolveRepo, type PrUrl } from "./github/client";
+import { parsePrUrl } from "@dustinedwards/site-runtime/github";
+import { ghFetch, resolveRepo } from "./github/client";
 import { verifySignedBody } from "./signed-docs";
 import { outcomeFrom, outcomeStatement, verifyEvidence } from "./job-outcomes";
 import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from "./jobs-mirror";
@@ -41,6 +42,9 @@ import {
   refuse,
   type JobResult,
 } from "./jobs-transition";
+import { plural } from "@drdustinedwards/site-helpers/text";
+
+type PrUrl = NonNullable<ReturnType<typeof parsePrUrl>>;
 
 // The transitions made on a job the caller does not hold: the seat's fail and release,
 // supersede and resume.
@@ -62,7 +66,7 @@ import {
 //
 // `opts.extra` rides in the same guarded batch, so a caller's own write commits only
 // with the fail; `opts.outcome: false` writes no outcome row, for a fail that is not the
-// holder's (the bench score step, src/bench.ts finishRun).
+// holder's (the bench score step, src/bench.ts finishBenchRun).
 export async function adminFailJob(
   env: Env,
   agent: Agent,
@@ -473,20 +477,16 @@ export async function releaseJob(
 /** Why a job's row shows work was done on it, or null. */
 export function workRecorded(job: JobRow): string | null {
   const done: string[] = [];
-  if (job.blocked_count > 0)
-    done.push(`it has hit a gate ${job.blocked_count} time${job.blocked_count === 1 ? "" : "s"}`);
-  if (job.resumed_count > 0)
-    done.push(`it has been resumed ${job.resumed_count} time${job.resumed_count === 1 ? "" : "s"}`);
+  if (job.blocked_count > 0) done.push(`it has hit a gate ${plural(job.blocked_count, "time")}`);
+  if (job.resumed_count > 0) done.push(`it has been resumed ${plural(job.resumed_count, "time")}`);
   if (job.corrections_count > 0)
-    done.push(
-      `it has been sent back for correction ${job.corrections_count} time${job.corrections_count === 1 ? "" : "s"}`,
-    );
+    done.push(`it has been sent back for correction ${plural(job.corrections_count, "time")}`);
   if (job.result_ref) done.push(`it records a result_ref (${job.result_ref})`);
   return done.length ? done.join(", ") : null;
 }
 
 // `extra` rides in the same guarded batch, so a caller's own write commits only with the
-// supersede (the bench score step, src/bench.ts finishRun).
+// supersede (the bench score step, src/bench.ts finishBenchRun).
 export async function supersedeJob(
   env: Env,
   agent: Agent,

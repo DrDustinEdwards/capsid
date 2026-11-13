@@ -6,6 +6,7 @@ import type { LibraryEntry, LibraryShelf, PortalLibrary } from "./ops-types/view
 import { portalGate } from "./portal-auth";
 import { jsonResponse as json } from "@dustinedwards/site-runtime/http";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The Portal's Library: GET /portal/api/library, read-only, over the knowledge store
 // (search, decisions, rulings, research, links to jobs). Writing stays in chat and with drivers.
 // Search, one document and its edges go through src/doc-reads.ts, the readers behind
@@ -78,10 +79,7 @@ export async function handlePortalLibrary(
     } catch (err) {
       // A query FTS5 refuses is retried as a quoted phrase, which it always accepts, so a
       // second refusal is the store failing, not the caller's input.
-      return json(
-        { error: `The search could not run: ${err instanceof Error ? err.message : String(err)}` },
-        500,
-      );
+      return json({ error: `The search could not run: ${errorMessage(err)}` }, 500);
     }
     const truncated = rows.length > SEARCH_ROWS;
     const body: PortalLibrary = {

@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { readSiteRow } from "./ops-sites";
 import type { SiteOperator } from "./ops-types/sites";
 import {
@@ -185,7 +185,7 @@ export async function runSiteRepair(
     logEvent(
       "SITE_REPAIR_NOT_RECORDED",
       {
-        message: `SITE_REPAIR_NOT_RECORDED ${args.namespace} ${args.tool}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `SITE_REPAIR_NOT_RECORDED ${args.namespace} ${args.tool}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );

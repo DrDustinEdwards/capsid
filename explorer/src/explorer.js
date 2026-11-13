@@ -3,12 +3,17 @@
 // its tabs, Enarratio's chart tooltips, the flow players, the front page's panel and tour, the filters
 // and sorting, and search.
 import { controller } from "./capsomer/system-map/system-map.js";
-import { enhance as enhanceTabs } from "./tabs.js";
+import { enhance as enhanceTabs } from "./capsomer/tabs/tabs.js";
 // Every chart in Capsomer's frame: drawn again at its column's width where the server wrote a spec, and enhanced.
 import "capsomer/behavior/chart-enhance";
 import { enhance as enhanceHeader } from "./capsomer/site-header/site-header.js";
 import { enhance as enhanceTheme, toggleTheme } from "./capsomer/theme-switch/theme-switch.js";
 import { enhance as enhanceMeters } from "./capsomer/meter/meter.js";
+import { trustedHtml } from "capsomer/behavior/trusted-html";
+import { startPage } from "@dustinedwards/site-runtime/page-client";
+
+// First, before anything renders: the Trusted Types default policy and INP reporting (site-runtime ./page-client).
+startPage();
 
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const STEP_MS = 3600;
@@ -139,7 +144,8 @@ function flowPage(map, root, host) {
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error(String(res.status));
-      doc = new DOMParser().parseFromString(await res.text(), "text/html");
+      // Our own page, parsed and its swap regions moved in: markup this site wrote, so it goes in as Capsomer's.
+      doc = new DOMParser().parseFromString(trustedHtml(await res.text()), "text/html");
     } catch {
       location.assign(url);
       return;
@@ -542,7 +548,24 @@ if (field) {
   const out = document.querySelector("[data-search-results]");
   const count = document.querySelector("[data-search-count]");
   let entries = null;
-  const escape = (s) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  /** One result as DOM, so no markup string is involved. */
+  const item = ([kind, name, detail, href]) => {
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.href = href;
+    for (const [cls, text] of [
+      ["search-kind", kind],
+      ["search-name", name],
+      ["search-detail", detail],
+    ]) {
+      const span = document.createElement("span");
+      span.className = cls;
+      span.textContent = text;
+      a.append(span);
+    }
+    li.append(a);
+    return li;
+  };
   const run = () => {
     const url = new URL(location.href);
     if (field.value.trim()) url.searchParams.set("q", field.value);
@@ -555,12 +578,7 @@ if (field) {
       return;
     }
     const shown = found.slice(0, 60);
-    out.innerHTML = shown
-      .map(
-        (e) =>
-          `<li><a href="${escape(e[3])}"><span class="search-kind">${escape(e[0])}</span><span class="search-name">${escape(e[1])}</span><span class="search-detail">${escape(e[2])}</span></a></li>`,
-      )
-      .join("");
+    out.replaceChildren(...shown.map(item));
     count.textContent = found.length
       ? `${found.length} found${found.length > shown.length ? `, the first ${shown.length} shown` : ""}.`
       : `Nothing matches “${field.value.trim()}”.`;

@@ -8,8 +8,10 @@ import { Panel } from "capsomer/react/panel";
 import type { ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, useAnswer } from "../lib/api";
-import { cfNoData, cfOk, ringOf, slotStart } from "../lib/derive";
-import { DAY, HOUR, MIN, SLOT_MS, fmtN, ms, pct, shortId, utc } from "../lib/format";
+import { padRing } from "capsomer/behavior/uptime-strip";
+import { RING_SLOTS, cfNoData, cfOk, slotStart } from "../lib/derive";
+import { DAY, HOUR, MIN, SLOT_MS, fmtN, pct, shortId } from "../lib/format";
+import { parse, utc } from "capsomer/behavior/time";
 import { useTrends } from "../lib/trends";
 import type {
   ClaimsAgreement,
@@ -22,6 +24,7 @@ import type {
 } from "../types";
 import { errorTotals } from "../ui/charts";
 import { St } from "../ui/icons";
+import { formatMoney } from "@dustinedwards/site-runtime/money";
 
 // The Portal's charts drawn with Enarratio's primitives (docs/design/design-portal-evaluation.md
 // section 3; ruled 2026-10-09, DECIDE 6 and 7): 1 minutes of Dustin per week (Needs you),
@@ -31,7 +34,7 @@ import { St } from "../ui/icons";
 // queue), 5 (claims against verified), 6 (cost), 7 (merges) and 9 (errors and deploys) are
 // Enarratio's bar, line and area charts from enarratio/lite, which drop Observable Plot and
 // fit the chunk budget. This module loads with the page that shows a chart, never in the
-// initial bundle. Each is Enarratio's whole figure (title, finding, notes, source, "Show data")
+// initial bundle. Each is Enarratio's whole figure (title, finding, notes, source, and a toolbar with the data download)
 // in Capsomer's chart frame, which redraws it to its width.
 
 // A later read that failed keeps the last answer on screen; this says so, so the failure is
@@ -288,7 +291,11 @@ export function ProjectChart({ counts }: { counts: ProjectCounts[] }) {
     seriesDomain: JOB_STATES,
     layout: "stacked",
     orientation: "horizontal",
-    colors: { Blocked: "var(--warn)", Running: "var(--info)", Queued: "var(--nodata)" },
+    colors: {
+      Blocked: "var(--warn)",
+      Running: "var(--info)",
+      Queued: "var(--nodata)",
+    },
     xLabel: null,
     yLabel: "Jobs",
     height: 64 + 36 * counts.length,
@@ -310,7 +317,12 @@ export function agreementRows(
   const per = new Map<string, Record<ClaimsAgreement, number>>();
   for (const g of groups) {
     const key = g.agent ?? "no claim yet";
-    const sum = per.get(key) ?? { agree: 0, disagree: 0, unclaimed: 0, unchecked: 0 };
+    const sum = per.get(key) ?? {
+      agree: 0,
+      disagree: 0,
+      unclaimed: 0,
+      unchecked: 0,
+    };
     for (const counts of Object.values(g.evaluations))
       for (const a of AGREEMENTS) sum[a] += counts[a];
     per.set(key, sum);
@@ -318,7 +330,11 @@ export function agreementRows(
   return [...per]
     .filter(([, c]) => AGREEMENTS.some((a) => c[a] > 0))
     .flatMap(([agent, c]) =>
-      AGREEMENTS.map((agreement) => ({ agent, agreement, checks: c[agreement] })),
+      AGREEMENTS.map((agreement) => ({
+        agent,
+        agreement,
+        checks: c[agreement],
+      })),
     );
 }
 
@@ -387,10 +403,10 @@ export function CostChart() {
     y: "usd",
     xLabel: "Week starting",
     yLabel: "Model spend (USD)",
-    formatValue: (v: number) => `$${v.toFixed(2)}`,
+    formatValue: (v: number) => formatMoney(v, "usd", { scale: 0 }),
     height: 240,
     title: "What does the work cost?",
-    alt: `Model spend per week for the last ${weeks.length} weeks${now.usd === null ? ", none recorded this week" : `, $${now.usd.toFixed(2)} this week`}. Weeks with no recorded cost are gaps.`,
+    alt: `Model spend per week for the last ${weeks.length} weeks${now.usd === null ? ", none recorded this week" : `, ${formatMoney(now.usd, "usd", { scale: 0 })} this week`}. Weeks with no recorded cost are gaps.`,
     caption: "A week with no job outcome carrying a cost is a gap, not a free week.",
     source: { name: "Job outcomes, telemetry cost, an estimate" },
   } as const;
@@ -421,7 +437,11 @@ export function MergesChart() {
   const weeks = data.merges.weeks;
   const rollbacks = data.merges.rollbacks;
   const rows = weeks.flatMap((w) =>
-    MERGE_KINDS.map((k) => ({ week: w.week.slice(5), kind: MERGE_NAME[k], pulls: w[k] })),
+    MERGE_KINDS.map((k) => ({
+      week: w.week.slice(5),
+      kind: MERGE_NAME[k],
+      pulls: w[k],
+    })),
   );
   const total = (k: (typeof MERGE_KINDS)[number]) => weeks.reduce((a, w) => a + w[k], 0);
   const merged = total("auto") + total("approved") + total("seat");
@@ -478,8 +498,8 @@ export function DeploysTable() {
       id="deploy-measures"
     >
       <Stale error={error} />
-      <div className="scroll-x reflow">
-        <table className="list cards-below-1100">
+      <div className="cap-table-wrap" data-reflow="wide">
+        <table className="cap-table">
           <thead>
             <tr>
               <th>Repository</th>
@@ -534,20 +554,25 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
   if (!cf) return <ChartFrame noData={{ title, reason: why ?? "" }} />;
   if (!cf.errors24)
     return (
-      <ChartFrame noData={{ title, reason: cf.errors_reason ?? "the analytics read failed" }} />
+      <ChartFrame
+        noData={{
+          title,
+          reason: cf.errors_reason ?? "the analytics read failed",
+        }}
+      />
     );
   const e = cf.errors24;
   if (!e.length)
     return <ChartFrame noData={{ title, reason: "the analytics read returned no hours" }} />;
   const rates = e.map((x) => (x.requests ? (x.errors / x.requests) * 100 : 0));
   const peak = Math.max(...rates);
-  const t0 = ms(e[0]!.hour);
-  const t1 = ms(e[e.length - 1]!.hour) + HOUR;
-  const inWindow = cf.deploys.filter((d) => ms(d.created_on) >= t0 && ms(d.created_on) <= t1);
+  const t0 = parse(e[0]!.hour);
+  const t1 = parse(e[e.length - 1]!.hour) + HOUR;
+  const inWindow = cf.deploys.filter((d) => parse(d.created_on) >= t0 && parse(d.created_on) <= t1);
   const tot = errorTotals(e);
   const opts = {
     data: e.map((x, i) => ({
-      hour: new Date(ms(x.hour)).toISOString(),
+      hour: new Date(parse(x.hour)).toISOString(),
       rate: Math.round(rates[i]! * 100) / 100,
     })),
     x: "hour",
@@ -557,7 +582,7 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     formatValue: (v: number) => `${v}%`,
     references: [{ y: 1, label: "Alert at 1%" }],
     markers: inWindow.map((d) => ({
-      x: new Date(ms(d.created_on)).toISOString(),
+      x: new Date(parse(d.created_on)).toISOString(),
       label: `Deploy ${shortId(d.version_id ?? d.id)}`,
     })),
     height: 220,
@@ -565,7 +590,7 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     subtitle: `${fmtN(tot.req)} requests and ${fmtN(tot.err)} errors (${pct(tot.rate)})`,
     alt: `Error rate for ${site.name} over the last 24 hours: peak ${peak.toFixed(2)}% in an hour, ${pct(tot.rate)} overall, ${inWindow.length} ${inWindow.length === 1 ? "deploy" : "deploys"} in the window.`,
     caption: inWindow.length
-      ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(ms(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.`
+      ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(parse(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.`
       : "No deploy in the window.",
     source: { name: "Cloudflare Workers analytics, hourly" },
   } as const;
@@ -591,7 +616,7 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
   let downSlots = 0;
   const noData: string[] = [];
   for (const s of sites) {
-    const ring = ringOf(s);
+    const ring = padRing(s.ring, RING_SLOTS);
     // Consecutive slots of one kind make one span.
     for (let k = 0; k < ring.length;) {
       const c = ring[k];
@@ -617,7 +642,7 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
     const why = cfNoData(s.cloudflare);
     if (why) noData.push(`${s.name}: ${why}`);
     for (const d of cfOk(s)?.deploys ?? []) {
-      const t = ms(d.created_on);
+      const t = parse(d.created_on);
       if (t < t0 || t > now) continue;
       deploys++;
       events.push({
@@ -658,7 +683,11 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
  *  lanes start together; heavy lanes share one session, so they run one after another. A
  *  gated job is a warning. The window runs a tenth past the budget or the last job, so the
  *  last tick is not drawn on the edge. */
-function planEvents(plan: PortalPlan): { events: TimelineEvent[]; start: number; end: number } {
+function planEvents(plan: PortalPlan): {
+  events: TimelineEvent[];
+  start: number;
+  end: number;
+} {
   const events: TimelineEvent[] = [];
   const start = Date.parse(plan.generated);
   let heavyAt = start;
