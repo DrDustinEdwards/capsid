@@ -1,48 +1,23 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { PUSH_KEY } from "../lib/keys";
 import { useApp } from "../app/ctx";
 import { fetchPush, postPush, useAnswer, type Answer, type PushOp } from "../lib/api";
 import { BASE } from "../lib/base";
-import { ago, msSql } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import type { PortalPush } from "../types";
 import { Panel } from "capsomer/react/panel";
+import { PushDevices } from "capsomer/react/web-push";
+import "capsomer/web-push.css";
+import "capsomer/button.css";
 
 // Phone alerts (src/push.ts; docs/design/design-merge-pipeline.md section 5): turn Web
 // Push on for this browser, list the devices that have it, turn one off, send a test.
 // Loaded on its own after Settings' first paint, so it adds nothing to the initial
-// script. The alert itself is shown by dashboard/public/sw.js.
-
-const supported = () =>
-  typeof window !== "undefined" &&
-  "serviceWorker" in navigator &&
-  "PushManager" in window &&
-  "Notification" in window;
-
-/** "Chrome on Android": enough to tell two devices apart, and nothing more. */
-function deviceLabel(ua: string): string {
-  const browser = /Edg\//.test(ua)
-    ? "Edge"
-    : /Firefox\//.test(ua)
-      ? "Firefox"
-      : /Chrome\//.test(ua)
-        ? "Chrome"
-        : /Safari\//.test(ua)
-          ? "Safari"
-          : "A browser";
-  const os = /Android/.test(ua)
-    ? "Android"
-    : /iPhone|iPad/.test(ua)
-      ? "iOS"
-      : /Mac OS X/.test(ua)
-        ? "macOS"
-        : /Windows/.test(ua)
-          ? "Windows"
-          : /Linux/.test(ua)
-            ? "Linux"
-            : "this device";
-  return `${browser} on ${os}`;
-}
+// script. The alert itself is shown by Capsomer's push worker (capsomer/push-sw.js), which the
+// build writes as sw.js (vite.config.ts).
 
 export function PhoneAlerts() {
   const { feed, now, signOut } = useApp();
@@ -72,39 +47,15 @@ export function PhoneAlerts() {
     }
   };
 
-  const turnOn = async () => {
-    if (!data?.public_key) return;
+  // PushDevices asks for permission and subscribes; the server stores what it sends here.
+  const turnOn = async (subscription: PushSubscriptionJSON, label: string) => {
     setBusy(true);
     setNote(null);
     try {
-      if ((await Notification.requestPermission()) !== "granted") {
-        setNote({
-          kind: "crit",
-          text: "This browser did not allow notifications. Allow them for this site in the browser's settings, then try again.",
-        });
-        return;
-      }
-      const reg = await navigator.serviceWorker.register(`${BASE}/sw.js`, { scope: `${BASE}/` });
-      await navigator.serviceWorker.ready;
-      const sub =
-        (await reg.pushManager.getSubscription()) ??
-        (await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: data.public_key,
-        }));
       take(
-        await postPush(feed.csrf, {
-          op: "on",
-          subscription: sub.toJSON(),
-          label: deviceLabel(navigator.userAgent),
-        }),
+        await postPush(feed.csrf, { op: "on", subscription, label }),
         "Phone alerts are on for this device.",
       );
-    } catch (e) {
-      setNote({
-        kind: "crit",
-        text: `Alerts were not turned on: ${e instanceof Error ? e.message : String(e)}`,
-      });
     } finally {
       setBusy(false);
     }
@@ -123,71 +74,32 @@ export function PhoneAlerts() {
             and number, never a title, and a tap opens that item in the Portal; it has no Approve
             button.
           </p>
-          {data?.problem && (
-            <div className="callout warn" role="status">
-              Not set up yet: {data.problem}
-            </div>
-          )}
-          {note && (
-            <div
-              className={note.kind === "crit" ? "callout crit" : "callout"}
-              role={note.kind === "crit" ? "alert" : "status"}
-            >
-              {note.text}
-            </div>
-          )}
-          <div className="toolbar">
-            {supported() ? (
-              <button
-                type="button"
-                className="btn primary"
-                disabled={busy || !data?.public_key}
-                onClick={() => void turnOn()}
-              >
-                Turn on for this device
-              </button>
-            ) : (
-              <span className="faint">This browser cannot receive Web Push.</span>
-            )}
-            <button
-              type="button"
-              className="btn"
-              disabled={busy || devices.length === 0 || !data?.public_key}
-              onClick={() => void send({ op: "test" }, "Test alert sent to each device.")}
-            >
-              Send a test alert
-            </button>
-          </div>
-          {devices.length > 0 && (
-            <ul className="device-list">
-              {devices.map((d) => (
-                <li key={d.id} className="prefrow">
-                  <span>
-                    {d.label ?? `Device ${d.id}`}{" "}
-                    <span className="faint">
-                      turned on {ago(msSql(d.created_at), now)}
-                      {d.last_sent_at
-                        ? `, last alert ${ago(msSql(d.last_sent_at), now)}${d.last_status && (d.last_status < 200 || d.last_status > 299) ? ` (answered ${d.last_status})` : ""}`
-                        : ", no alert yet"}
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    className="btn ml-auto"
-                    disabled={busy}
-                    onClick={() =>
-                      void send(
-                        { op: "off", id: d.id },
-                        `Alerts are off for ${d.label ?? `device ${d.id}`}.`,
-                      )
-                    }
-                  >
-                    Turn off
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <PushDevices
+            publicKey={data?.public_key ?? null}
+            worker={`${BASE}/sw.js`}
+            scope={`${BASE}/`}
+            busy={busy}
+            note={note}
+            problem={data?.problem}
+            devices={devices.map((d) => ({
+              id: d.id,
+              label: d.label ?? `Device ${d.id}`,
+              detail: `turned on ${ago(parse(d.created_at), now)}${
+                d.last_sent_at
+                  ? `, last alert ${ago(parse(d.last_sent_at), now)}${d.last_status && (d.last_status < 200 || d.last_status > 299) ? ` (answered ${d.last_status})` : ""}`
+                  : ", no alert yet"
+              }`,
+            }))}
+            onTurnOn={turnOn}
+            onTurnOff={(id) => {
+              const d = devices.find((x) => x.id === id);
+              void send(
+                { op: "off", id: Number(id) },
+                `Alerts are off for ${d?.label ?? `device ${id}`}.`,
+              );
+            }}
+            onTest={() => void send({ op: "test" }, "Test alert sent to each device.")}
+          />
         </div>
       </Panel>
       {data && <DailyDigest digest={data.digest} now={now} />}
@@ -206,26 +118,34 @@ function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: numbe
           questions, blocked jobs, rollbacks, and what finished or became ready since the last one.
         </p>
         {digest.on ? (
-          <div className="callout" role="status">
-            On. It goes to {digest.to}.
-          </div>
+          <Banner tone="ok">On. It goes to {digest.to}.</Banner>
         ) : (
           // Plain words first (the UX audit's m11); what the setup still needs, in the
           // Worker's own words, is one click away.
-          <div className="callout warn" role="status">
-            <b>Not set up yet.</b> Nothing is sent until it is.
-            <details className="mt4">
-              <summary>What it needs</summary>
-              <p className="small">{digest.problem}</p>
-            </details>
-          </div>
+          <Banner
+            tone="warn"
+            title="Not set up yet."
+            body={
+              <>
+                <p>Nothing is sent until it is.</p>
+                <details>
+                  <summary>What it needs</summary>
+                  <p className="small">{digest.problem}</p>
+                </details>
+              </>
+            }
+          />
         )}
-        {digest.last && (
-          <p className={digest.last.outcome === "failed" ? "callout crit" : "faint"}>
-            {digest.last.outcome === "sent" ? "Last sent" : "Last attempt failed"}{" "}
-            {ago(Date.parse(digest.last.at), now)}: {digest.last.note}
-          </p>
-        )}
+        {digest.last &&
+          (digest.last.outcome === "failed" ? (
+            <Alert tone="crit">
+              Last attempt failed {ago(Date.parse(digest.last.at), now)}: {digest.last.note}
+            </Alert>
+          ) : (
+            <p className="faint">
+              Last sent {ago(Date.parse(digest.last.at), now)}: {digest.last.note}
+            </p>
+          ))}
       </div>
     </Panel>
   );

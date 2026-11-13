@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { auditStatement } from "./store-guards";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
 // THE OVERNIGHT RUN SWITCH (capsid/research/design-automation-for-speed.md, D2 and D3, ruled
 // by Dustin 2026-10-04). A scheduled run of the per-namespace drivers on Dustin's own
@@ -74,7 +74,7 @@ function parseDecision(raw: string | null): OvernightDecision | null {
     logEvent(
       "OVERNIGHT_DECISION_UNREADABLE",
       {
-        message: `OVERNIGHT_DECISION_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; treating the record as absent`,
+        message: `OVERNIGHT_DECISION_UNREADABLE: ${errorMessage(err)}; treating the record as absent`,
       },
       { level: "error" },
     );
@@ -108,7 +108,7 @@ export async function overnightState(env: Env): Promise<OvernightState> {
     logEvent(
       "OVERNIGHT_UNREADABLE",
       {
-        message: `OVERNIGHT_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; treating the switch as off`,
+        message: `OVERNIGHT_UNREADABLE: ${errorMessage(err)}; treating the switch as off`,
       },
       { level: "error" },
     );

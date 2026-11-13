@@ -1,8 +1,12 @@
 import { useState } from "react";
+import { RepeaterField } from "capsomer/react/repeater-field";
 import { useApp } from "../app/ctx";
 import type { PortalNamespace } from "../types";
-import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
-import { Danger } from "./shared";
+import { ConfigForm, useConfigForm, type Editing } from "capsomer/react/config-form";
+import "capsomer/config-form.css";
+import { Field, TextField } from "capsomer/react/field";
+import { DangerZone } from "capsomer/react/danger-zone";
+import "capsomer/danger-zone.css";
 
 // ADD, CHANGE OR DELETE A PROJECT (the Portal audit's new map, 2026-11-06): the namespace_add,
 // namespace_edit and namespace_remove controls, which share their rules and audit rows with
@@ -10,37 +14,29 @@ import { Danger } from "./shared";
 // its namespace and the repos the repo tools resolve through, exactly one labeled primary. Every
 // change previews first in the confirm dialog, which shows what it will do or why it is refused.
 
-export type ProjectEditing = { kind: "add" } | { kind: "edit"; n: PortalNamespace };
+type RepoDraft = { repo: string; label: string };
 
-type RepoDraft = { key: number; repo: string; label: string };
-
-let nextKey = 0;
-const draftRow = (repo = "", label = ""): RepoDraft => ({ key: nextKey++, repo, label });
+const draftRow = (repo = "", label = ""): RepoDraft => ({ repo, label });
 
 export function ProjectForm({
   editing,
   onClose,
 }: {
-  editing: ProjectEditing;
+  editing: Editing<PortalNamespace>;
   onClose: () => void;
 }) {
   const { confirm } = useApp();
   const { f, first } = useConfigForm();
   const adding = editing.kind === "add";
-  const [ns, setNs] = useState(adding ? "" : editing.n.namespace);
+  const [ns, setNs] = useState(adding ? "" : editing.row.namespace);
   const [rows, setRows] = useState<RepoDraft[]>(() =>
-    adding || !editing.n.repos.length
+    adding || !editing.row.repos.length
       ? [draftRow("", "primary")]
-      : editing.n.repos.map((r) => draftRow(r.repo, r.label)),
+      : editing.row.repos.map((r) => draftRow(r.repo, r.label)),
   );
   const [cascade, setCascade] = useState(false);
   const [policies, setPolicies] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
-
-  const edit = (key: number, patch: Partial<RepoDraft>) => (
-    setRows((all) => all.map((r) => (r.key === key ? { ...r, ...patch } : r))),
-    setHint(null)
-  );
 
   const submit = () => {
     const name = ns.trim();
@@ -92,7 +88,7 @@ export function ProjectForm({
       onClose={onClose}
       danger={
         !adding && (
-          <Danger note="Archived documents, versions, the audit log and finished jobs are kept. The preview lists what it deletes, or what has to end first.">
+          <DangerZone note="Archived documents, versions, the audit log and finished jobs are kept. The preview lists what it deletes, or what has to end first.">
             <label className="check">
               <input
                 type="checkbox"
@@ -111,26 +107,25 @@ export function ProjectForm({
             </label>
             <button
               type="button"
-              className="btn danger"
+              className="cap-btn"
+              data-variant="danger"
               aria-label={`Delete ${ns}`}
               onClick={remove}
             >
               Delete
             </button>
-          </Danger>
+          </DangerZone>
         )
       }
     >
       <Field
-        id={f("ns")}
         label="Project"
-        note="Its namespace: a lowercase slug of a-z, 0-9 and '-'. It cannot be renamed later."
+        help="Its namespace: a lowercase slug of a-z, 0-9 and '-'. It cannot be renamed later."
       >
         <input
           ref={adding ? first : undefined}
           id={f("ns")}
-          aria-describedby={`${f("ns")}-note`}
-          className="field mono"
+          className="cap-input mono"
           value={ns}
           readOnly={!adding}
           autoComplete="off"
@@ -138,54 +133,46 @@ export function ProjectForm({
           onChange={(e) => (setNs(e.target.value), setHint(null))}
         />
       </Field>
-      <fieldset className="full repos">
-        <legend className="section-title">Repos</legend>
-        <p className="faint note">
-          What an agent scoped to this project may reach through the repo tools. Exactly one is
-          labeled primary.
-        </p>
-        {rows.map((r, i) => (
-          <div className="repo-row" key={r.key} data-repo-row="">
-            <input
-              ref={!adding && i === 0 ? first : undefined}
-              className="field mono"
-              aria-label={`Repo ${i + 1}, as owner/name`}
-              placeholder="owner/name"
-              value={r.repo}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => edit(r.key, { repo: e.target.value })}
-            />
-            <input
-              className="field mono"
-              aria-label={`Label of repo ${i + 1}`}
-              placeholder="primary"
-              value={r.label}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => edit(r.key, { label: e.target.value })}
-            />
-            <button
-              type="button"
-              className="btn"
-              aria-label={`Remove repo ${i + 1}`}
-              disabled={rows.length === 1}
-              onClick={() => setRows((all) => all.filter((x) => x.key !== r.key))}
-            >
-              Remove
-            </button>
-          </div>
-        ))}
-        <div>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setRows((all) => [...all, draftRow()])}
-          >
-            Add a repo
-          </button>
-        </div>
-      </fieldset>
+      <div className="full">
+        <RepeaterField
+          legend="Repos"
+          help="What an agent scoped to this project may reach through the repo tools. Exactly one is labeled primary."
+          rows={rows}
+          onChange={(next) => (setRows(next), setHint(null))}
+          newRow={() => draftRow()}
+          rowLabel={(i) => `Repo ${i + 1}`}
+          addLabel="Add a repo"
+          min={1}
+        >
+          {(r, { set, index }) => (
+            <>
+              <Field label="Owner/name">
+                {(control) => (
+                  <input
+                    {...control}
+                    ref={!adding && index === 0 ? first : undefined}
+                    className="cap-input mono"
+                    placeholder="owner/name"
+                    value={r.repo}
+                    autoComplete="off"
+                    spellCheck={false}
+                    onChange={(e) => set({ repo: e.target.value })}
+                  />
+                )}
+              </Field>
+              <TextField
+                className="mono"
+                label="Label"
+                placeholder="primary"
+                value={r.label}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => set({ label: e.target.value })}
+              />
+            </>
+          )}
+        </RepeaterField>
+      </div>
       {adding && (
         <p className="faint note full">
           No driver agent is minted here: a mint hands out a key, so it stays with the admin tools.

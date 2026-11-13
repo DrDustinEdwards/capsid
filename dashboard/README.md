@@ -44,7 +44,6 @@ WF_MOCK=no-sites npm run dev     # no site configured: no Sites view, no site it
 ```sh
 npm run check   # the fixture against OpsFeed, route types, then tsc --noEmit
 npm run build   # check, react-router build, the Worker's module, the demo's data
-npm run size    # the size budget; run after build
 npm run e2e     # the browser tests, against the build
 ```
 
@@ -52,9 +51,8 @@ npm run e2e     # the browser tests, against the build
 fixture as an `as const` literal that `satisfies` the contract, so a field the
 contract lacks, a missing field or a value outside a union fails the typecheck.
 
-`npm run size` reads React Router's asset manifest and fails (non-zero exit) when
-the heaviest page is over budget; its header lists the limits and each raise. A
-missing build is a failure, not a pass.
+From the repository root, `npm run size:dashboard` (devkit's `devkit-size-budget`, limits in `.size-budget.json`) reads React Router's asset manifest and fails (non-zero exit) when
+the heaviest page is over budget. A missing build is a failure, not a pass. Run it after the build.
 
 ## Constraints the build keeps
 

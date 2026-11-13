@@ -213,7 +213,7 @@ describe("the feed's routes through the Worker", () => {
   it("serves a signed-in administrator the feed, uncached", async () => {
     const response = await signedFetch(OPS_FEED_PATH);
     expect(response.status).toBe(200);
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     const feed = (await response.json()) as OpsFeed;
     expect(feed.live.jobs.length).toBe(4);
     // No Portal CSRF cookie on the request, so one is minted and the body carries it.

@@ -2,11 +2,13 @@ import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { AGENT_TABS, tabOf, useApp } from "../app/ctx";
 import { agentState, archiveAgents, nsList, rosterAgents } from "../lib/derive";
-import { ago, ms, pct } from "../lib/format";
+import { ago, pct } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
+import { Missing } from "capsomer/react/empty";
 
 // Chart 6, weekly model spend, sits under the roster.
 const CostChart = trendChart("CostChart");
@@ -39,8 +41,8 @@ function Archive() {
         {rows.length === 0 ? (
           <div className="body faint">No agent has been revoked.</div>
         ) : (
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table">
               <thead>
                 <tr>
                   <th>Agent</th>
@@ -66,15 +68,15 @@ function Archive() {
                         {a.kind} · {nsList(a)}
                       </div>
                     </td>
-                    <td data-label="Revoked">{ago(ms(a.revoked_at as string), now)}</td>
+                    <td data-label="Revoked">{ago(parse(a.revoked_at as string), now)}</td>
                     <td data-label="Archive">
                       {a.archived_at ? (
-                        <St kind="nodata">Archived {ago(ms(a.archived_at), now)}</St>
+                        <St kind="nodata">Archived {ago(parse(a.archived_at), now)}</St>
                       ) : (
                         <St kind="queued">
                           Moves by{" "}
                           {new Date(
-                            ms(a.revoked_at as string) + ARCHIVE_AFTER_MS,
+                            parse(a.revoked_at as string) + ARCHIVE_AFTER_MS,
                           ).toLocaleDateString()}
                         </St>
                       )}
@@ -86,7 +88,7 @@ function Archive() {
                       {a.prs_merged} of {a.prs_opened}
                     </td>
                     <td data-label="Last seen">
-                      {a.last_seen ? ago(ms(a.last_seen), now) : "never"}
+                      {a.last_seen ? ago(parse(a.last_seen), now) : "never"}
                     </td>
                   </tr>
                 ))}
@@ -106,7 +108,10 @@ function Archive() {
 const OWNER_PAGES = [
   { name: "Capsid", url: "https://mcp.dustinedwards.info/owner" },
   { name: "Carrel", url: "https://carrel-mcp.dustinedwards.info/owner" },
-  { name: "Dustin Edwards Admin", url: "https://admin-mcp.dustinedwards.info/owner" },
+  {
+    name: "Dustin Edwards Admin",
+    url: "https://admin-mcp.dustinedwards.info/owner",
+  },
   { name: "Foxing Admin", url: "https://admin-mcp.foxing.app/owner" },
   { name: "Foxhound Admin", url: "https://admin-mcp.foxhoundapp.com/owner" },
 ] as const;
@@ -119,8 +124,8 @@ function Access() {
           Grants you gave AI clients, with Revoke, and every tool call. Each opens on its server
           after a sign-in.
         </div>
-        <div className="scroll-x">
-          <table className="list">
+        <div className="cap-table-wrap">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th>Server</th>
@@ -152,8 +157,8 @@ function Roster() {
   return (
     <div className="embedded">
       <Panel flush title="Roster" src="live agents · job outcomes">
-        <div className="scroll-x reflow">
-          <table className="list cards-below-1100">
+        <div className="cap-table-wrap" data-reflow="wide">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th>Agent</th>
@@ -185,7 +190,9 @@ function Roster() {
                     </td>
                     <td data-label="Last seen">
                       <St kind={st.kind}>{st.label}</St>
-                      <div className="src">{a.last_seen ? ago(ms(a.last_seen), now) : "never"}</div>
+                      <div className="src">
+                        {a.last_seen ? ago(parse(a.last_seen), now) : "never"}
+                      </div>
                     </td>
                     <td data-label="Done / failed / blocked" className="num">
                       {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}
@@ -205,12 +212,12 @@ function Roster() {
                     <td data-label="Flags">
                       {a.flags.length ? (
                         a.flags.map((f) => (
-                          <span key={f} className="chip flag">
+                          <span key={f} className="cap-pill" data-variant="outline">
                             {f}
                           </span>
                         ))
                       ) : (
-                        <span className="faint">none</span>
+                        <Missing />
                       )}
                     </td>
                   </tr>

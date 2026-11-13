@@ -23,6 +23,7 @@ import {
 import { readRepoFile } from "./github/contents";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // Signing a policy document: the one path that mints the signature the auto-merge and
 // gate policies are verified against. Its constraints:
 //
@@ -152,7 +153,7 @@ async function commitSigned(
 > {
   const signed = await signTaskBody(env.IMPROVE_SCORE_SECRET!, body);
   const { signature } = splitSignedTask(signed);
-  const sha256 = await sha256Hex(signed);
+  const digest = await sha256Hex(signed);
   // The anti-rollback record is written first: from here on the loaders accept this
   // body and no other signed copy (policyPin in signed-docs.ts). Written before the
   // store so every failure refuses, including a store that aborts below.
@@ -161,7 +162,7 @@ async function commitSigned(
   } catch (err) {
     return {
       ok: false,
-      error: `the anti-rollback record for ${namespace}/${path} could not be written (${err instanceof Error ? err.message : String(err)}). Nothing was signed or written. Sign it again.`,
+      error: `the anti-rollback record for ${namespace}/${path} could not be written (${errorMessage(err)}). Nothing was signed or written. Sign it again.`,
     };
   }
   // The body guard goes first, so an edit after the read aborts rather than being
@@ -171,7 +172,7 @@ async function commitSigned(
       requireBodyUnchanged(env.DB, namespace, path, prior.body),
       snapshotLive(env.DB, namespace, path),
       documentUpsert(env.DB, namespace, path, prior.title, signed, null, null, null),
-      audit(signature, sha256, signed.length),
+      audit(signature, digest, signed.length),
     ]);
   } catch (err) {
     if (isMissingRowAbort(err)) {
@@ -187,7 +188,7 @@ async function commitSigned(
     }
     throw err;
   }
-  return { ok: true, signed, signature, sha256 };
+  return { ok: true, signed, signature, sha256: digest };
 }
 
 // ---------------------------------------------------------------------------
@@ -459,7 +460,7 @@ export async function planPolicyFromRepo(env: Env): Promise<RepoPolicyPlan> {
     ).content;
   } catch (err) {
     return refuse(
-      `${REPO_POLICY_PATH} could not be read from the ${POLICY_SIGN_NAMESPACE} repo's default branch, so nothing is signed: ${err instanceof Error ? err.message : String(err)}`,
+      `${REPO_POLICY_PATH} could not be read from the ${POLICY_SIGN_NAMESPACE} repo's default branch, so nothing is signed: ${errorMessage(err)}`,
     );
   }
   if (splitSignedTask(content).signature !== null || content.startsWith("---\n")) {

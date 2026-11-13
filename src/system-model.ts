@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SLUG_PATTERN } from "@drdustinedwards/site-helpers/slug";
 import { bounded } from "./limits";
 
 // The system model (capsid/rulings/system-explorer-2026-10-10.md, answers 1 and 2;
@@ -13,13 +14,12 @@ import { bounded } from "./limits";
 // The file is in a public repo, so it holds only what may be published: what a system is
 // for and what it is made of, never a secret, an id or an internal address.
 
-const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/;
 // A Worker script name as Cloudflare allows it.
 const SCRIPT = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
 
-const Id = bounded(64).regex(ID, "an id is lowercase kebab-case");
+const Id = bounded(64).regex(SLUG_PATTERN, "an id is lowercase kebab-case");
 const Text = bounded(280).trim().min(1);
 
 // Family follows the shared-homes naming (capsid/rulings/shared-homes-2026-10-06.md);

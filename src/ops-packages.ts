@@ -1,9 +1,10 @@
+import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "./ops-types/sites";
 import { auditStatement } from "./store-guards";
-import { logEvent } from "@dustinedwards/site-runtime/log";
-import { DAY_MS } from "./time";
+import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { DAY_MS, isoWeek, utcDay } from "./time";
 import { callSignal } from "./call-signal";
 
 // The packages Capsid Portal watches (job_c6e4ab939a54). Ruled 2026-09-29: "Portal monitoring is optional and configured per install; packages panel
@@ -248,7 +249,7 @@ async function getJson(
     return {
       ok: false,
       status: null,
-      reason: `${new URL(url).host} could not be read: ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}`,
+      reason: `${new URL(url).host} could not be read: ${errorMessage(err).slice(0, 160)}`,
     };
   }
 }
@@ -413,7 +414,7 @@ async function ghJson(env: Env, owner: string, repo: string, path: string): Prom
     return {
       ok: false,
       status: null,
-      reason: `GitHub could not be read: ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}`,
+      reason: `GitHub could not be read: ${errorMessage(err).slice(0, 160)}`,
     };
   }
 }
@@ -473,16 +474,6 @@ export async function readPackage(
   };
 }
 
-/** "2026-W40": the ISO 8601 week `d` falls in. */
-export function isoWeek(d: Date): string {
-  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const day = t.getUTCDay() || 7;
-  t.setUTCDate(t.getUTCDate() + 4 - day);
-  const yearStart = Date.UTC(t.getUTCFullYear(), 0, 1);
-  const week = Math.ceil(((t.getTime() - yearStart) / DAY_MS + 1) / 7);
-  return `${t.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-}
-
 /** The week's GitHub numbers, written once: the first pass of each ISO week that read
  *  the repository keeps its row, and later passes that week change nothing. */
 export function weekStatement(
@@ -510,8 +501,6 @@ export function weekStatement(
 
 // ---- The daily history, on demand ------------------------------------------------------
 
-const dayOf = (d: Date) => d.toISOString().slice(0, 10);
-
 /** When npm first published `name`, from the full document's time.created (the
  *  abbreviated one has no time object). An unpublished package keeps its document and
  *  its created time, so a former name still has a start. */
@@ -531,7 +520,7 @@ export function historyRanges(from: string, to: string): Array<[string, string]>
     const chunkEnd = new Date(
       Math.min(start.getTime() + (RANGE_CHUNK_DAYS - 1) * DAY_MS, end.getTime()),
     );
-    out.push([dayOf(start), dayOf(chunkEnd)]);
+    out.push([utcDay(start), utcDay(chunkEnd)]);
     start = new Date(chunkEnd.getTime() + DAY_MS);
   }
   return out;
@@ -550,7 +539,7 @@ async function dailyDownloads(
     );
   const from = first && first > NPM_FIRST_DAY ? first : NPM_FIRST_DAY;
   // npm counts each day after UTC midnight; yesterday is the newest it may have.
-  const to = dayOf(new Date(now.getTime() - DAY_MS));
+  const to = utcDay(new Date(now.getTime() - DAY_MS));
   const days: Array<{ day: string; downloads: number; name: string }> = [];
   for (const [a, b] of historyRanges(from, to)) {
     const got = await getJson(fetchImpl, `https://api.npmjs.org/downloads/range/${a}:${b}/${name}`);
@@ -583,35 +572,26 @@ export async function packageHistory(
     .bind(cfg.name)
     .all<PortalPackageHistory["weeks"][number]>();
   const key = historyKey(cfg.name);
-  let cached: {
-    formerly: string | null;
-    fetched_at: string;
-    days: PortalPackageHistory["days"];
-    notes: string[];
-  } | null = null;
-  try {
-    const raw = await env.APP_KV.get(key);
-    cached = raw ? JSON.parse(raw) : null;
-  } catch (err) {
-    logEvent(
-      "PACKAGES_HISTORY_CACHE_UNREADABLE",
-      {
-        message: `PACKAGES_HISTORY_CACHE_UNREADABLE ${key}: ${err instanceof Error ? err.message : String(err)}`,
-      },
-      { level: "warn" },
-    );
-  }
-  // A cache written before the former name changed is not this package's history.
-  if (!cached || cached.formerly !== cfg.formerly) {
-    const notes: string[] = [];
-    const days = [
-      ...(cfg.formerly ? await dailyDownloads(fetchImpl, cfg.formerly, now, notes) : []),
-      ...(await dailyDownloads(fetchImpl, cfg.name, now, notes)),
-    ];
-    days.sort((a, b) => (a.day === b.day ? a.name.localeCompare(b.name) : a.day < b.day ? -1 : 1));
-    cached = { formerly: cfg.formerly, fetched_at: now.toISOString(), days, notes };
-    await env.APP_KV.put(key, JSON.stringify(cached), { expirationTtl: HISTORY_TTL_SECONDS });
-  }
+  // A kept history written before the former name changed is not this package's history.
+  const cached = await kvCached(
+    env.APP_KV,
+    key,
+    {
+      ttl: HISTORY_TTL_SECONDS,
+      valid: (kept) => kept !== null && (kept as { formerly?: unknown }).formerly === cfg.formerly,
+    },
+    async () => {
+      const notes: string[] = [];
+      const days = [
+        ...(cfg.formerly ? await dailyDownloads(fetchImpl, cfg.formerly, now, notes) : []),
+        ...(await dailyDownloads(fetchImpl, cfg.name, now, notes)),
+      ];
+      days.sort((x, y) =>
+        x.day === y.day ? x.name.localeCompare(y.name) : x.day < y.day ? -1 : 1,
+      );
+      return { formerly: cfg.formerly, fetched_at: now.toISOString(), days, notes };
+    },
+  );
   return {
     name: cfg.name,
     formerly: cfg.formerly,

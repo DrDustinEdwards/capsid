@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { SEARCH_ROWS } from "./limits";
 import type { SearchFilter, SearchRow } from "./doc-reads";
 
@@ -143,7 +143,7 @@ async function routeThroughGateway(env: Env, instance: AiSearchInstance): Promis
   } catch (err) {
     logEvent(
       "DOC_INDEX_GATEWAY_FAILED",
-      { message: `DOC_INDEX_GATEWAY_FAILED ${err instanceof Error ? err.message : String(err)}` },
+      { message: `DOC_INDEX_GATEWAY_FAILED ${errorMessage(err)}` },
       { level: "error" },
     );
   }
@@ -180,7 +180,7 @@ async function upload(instance: AiSearchInstance, row: IndexRow): Promise<string
     });
     return null;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       "DOC_INDEX_UPLOAD_FAILED",
       { message: `DOC_INDEX_UPLOAD_FAILED ${row.namespace}/${row.path}: ${message}` },
@@ -389,7 +389,7 @@ export async function hybridSearch(
   } catch (err) {
     // The upstream error goes to the log only; the caller is told what happened, never
     // the raw text of another service's answer (area 11, C12).
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       "DOC_INDEX_SEARCH_FAILED",
       { message: `DOC_INDEX_SEARCH_FAILED ${message}` },

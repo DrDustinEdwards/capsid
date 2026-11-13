@@ -12,7 +12,8 @@ import { test } from "node:test";
 // - A zone-less D1 timestamp ("YYYY-MM-DD HH:MM:SS") handed to Date.parse is read as
 //   local time. Behind UTC that puts it hours in the future.
 process.env.TZ = "America/Chicago";
-const { ago, ms, portalNow } = await import("../dashboard/src/lib/format.ts");
+const { ago } = await import("../dashboard/src/lib/format.ts");
+const { parse: ms, serverNow: portalNow } = await import("capsomer/behavior/time");
 
 test("the test really runs behind UTC, so the zone-less cases below mean something", () => {
   assert.notEqual(

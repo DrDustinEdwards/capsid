@@ -1,8 +1,9 @@
-import { Empty, Spinner } from "capsomer/react/empty";
+import { Empty, Missing, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchResources, useAnswer } from "../lib/api";
-import { ago, ms } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import type { ResourcesDoc } from "../types";
 import { St } from "../ui/icons";
 
@@ -17,16 +18,12 @@ type Worker = ResourcesDoc["workers"][number];
 type User = ResourcesDoc["databases"][number]["used_by"][number];
 
 const names = (list: string[]) =>
-  list.length ? (
-    <span className="mono">{list.join(", ")}</span>
-  ) : (
-    <span className="faint">none</span>
-  );
+  list.length ? <span className="mono">{list.join(", ")}</span> : <Missing />;
 const pairs = (list: Array<{ binding: string; to: string }>) =>
   list.length ? (
     <span className="mono">{list.map((p) => `${p.binding} → ${p.to}`).join(", ")}</span>
   ) : (
-    <span className="faint">none</span>
+    <Missing />
   );
 
 function WorkerPanel({ w }: { w: Worker }) {
@@ -84,8 +81,8 @@ function WorkerPanel({ w }: { w: Worker }) {
           <St kind="nodata">Could not read: {w.error}</St>
         </p>
       ) : (
-        <table className="brief workers-bindings">
-          <caption className="sr-only">What {w.script} binds</caption>
+        <table className="cap-table workers-bindings">
+          <caption className="cap-sr-only">What {w.script} binds</caption>
           <colgroup>
             <col className="c-label" />
             <col />
@@ -134,8 +131,8 @@ function StoresPanel({ doc }: { doc: ResourcesDoc }) {
         </span>
       }
     >
-      <table className="brief workers-stores">
-        <caption className="sr-only">
+      <table className="cap-table workers-stores">
+        <caption className="cap-sr-only">
           Every D1 database, KV namespace and R2 bucket, and who uses it
         </caption>
         <thead>
@@ -224,7 +221,7 @@ function NotRead({ load }: { load: ReturnType<typeof useResources> }) {
 function ReadNote({ doc }: { doc: ResourcesDoc }) {
   const { now } = useApp();
   return (
-    <p className="faint shared-read">{`Read from Cloudflare ${ago(ms(doc.read_at), now)}, nightly. Names only: no secret or variable value is ever read.`}</p>
+    <p className="faint shared-read">{`Read from Cloudflare ${ago(parse(doc.read_at), now)}, nightly. Names only: no secret or variable value is ever read.`}</p>
   );
 }
 

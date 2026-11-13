@@ -56,7 +56,7 @@ import {
   PUBLIC_STATS_PATH,
   PUBLIC_VERSIONS_PATH,
 } from "../src/public-data.ts";
-import { SIGNED_IN_REPORT_PATH } from "../src/signed-in-crawl.ts";
+import { SIGNED_IN_REPORT_PATH } from "@dustinedwards/site-runtime/signed-in-crawl";
 import { ROUTE_GRANTS, UNGATED_ROUTES, requiredForAction } from "../src/scope.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 import { buildAdminServer, buildServer } from "../src/server.ts";

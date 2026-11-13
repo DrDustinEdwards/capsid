@@ -1,6 +1,7 @@
 import { gatherInbox } from "./inbox";
 import { adminAgentForEmail } from "./agents";
-import { capsidCookie, getCookie } from "./auth";
+import { capsidCookie } from "./auth";
+import { readCookie } from "@dustinedwards/site-runtime/headers";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
 import { loadMergePolicy } from "./auto-merge-policy";
 import { readSafetyReport } from "./merge-safety";
@@ -47,8 +48,9 @@ import {
   type WatcherReport,
 } from "./watcher";
 import { gatherFindings } from "./watcher-gather";
-import { logEvent } from "@dustinedwards/site-runtime/log";
-import { textResponse } from "./http";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
+import { warningHeaders } from "./http";
+import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 import { MINUTE_MS, DAY_MS } from "./time";
 
 // The Watch Floor's one read (capsid/research/design-ops-console.md): GET
@@ -132,7 +134,7 @@ async function siteUptime(env: Env, now: Date): Promise<OpsUptime | null> {
   } catch (err) {
     logEvent(
       "OPS_FEED_UPTIME_UNREADABLE",
-      { message: `OPS_FEED_UPTIME_UNREADABLE ${err instanceof Error ? err.message : String(err)}` },
+      { message: `OPS_FEED_UPTIME_UNREADABLE ${errorMessage(err)}` },
       { level: "error" },
     );
     return null;
@@ -147,7 +149,7 @@ const CSRF_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 /** The request's Portal CSRF value, and the Set-Cookie that mints one when it has none. */
 export function portalCsrf(request: Request): { value: string; setCookie: string | null } {
-  const presented = getCookie(request, PORTAL_CSRF_COOKIE);
+  const presented = readCookie(request, PORTAL_CSRF_COOKIE);
   if (presented !== null && CSRF_SHAPE.test(presented))
     return { value: presented, setCookie: null };
   const value = crypto.randomUUID();
@@ -296,7 +298,7 @@ export function awaitingFrom(raw: string | null): OpsAwaitingSeat[] {
     logEvent(
       "OPS_FEED_AWAITING_UNREADABLE",
       {
-        message: `OPS_FEED_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `OPS_FEED_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );
@@ -408,7 +410,7 @@ async function liveMergePolicy(env: Env): Promise<OpsLive["merge_policy"]> {
   } catch (err) {
     return {
       loads: false,
-      reason: `the policy could not be read: ${err instanceof Error ? err.message : String(err)}`,
+      reason: `the policy could not be read: ${errorMessage(err)}`,
     };
   }
 }
@@ -469,7 +471,7 @@ async function scheduled(
   try {
     return { read: await readTaskRuns(env.DB) };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       "OPS_FEED_TASK_RUNS_UNREADABLE",
       { message: `OPS_FEED_TASK_RUNS_UNREADABLE ${message}` },
@@ -503,7 +505,7 @@ export async function opsFeed(env: Env, now: Date): Promise<OpsFeedData> {
   };
 }
 
-function feedResponse(
+function opsFeedAnswer(
   request: Request,
   user: PortalUser,
   data: OpsFeedData,
@@ -511,13 +513,10 @@ function feedResponse(
 ): Response {
   const csrf = portalCsrf(request);
   const feed: OpsFeed = { ...data, csrf: csrf.value, user: portalDisplay(user) };
-  const headers = new Headers({
-    "Content-Type": "application/json",
-    "Cache-Control": "no-store",
+  return jsonResponse(feed, 200, {
     ...extra,
+    ...(csrf.setCookie ? { "Set-Cookie": csrf.setCookie } : {}),
   });
-  if (csrf.setCookie) headers.set("Set-Cookie", csrf.setCookie);
-  return new Response(JSON.stringify(feed), { status: 200, headers });
 }
 
 // What the two handlers can be handed in a test in place of the live reads. The
@@ -536,7 +535,7 @@ export async function handleOpsFeed(
 ): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
-  return feedResponse(request, gate.user, await (deps.feed ?? opsFeed)(env, now));
+  return opsFeedAnswer(request, gate.user, await (deps.feed ?? opsFeed)(env, now));
 }
 
 export async function handleOpsRefresh(
@@ -561,7 +560,7 @@ export async function handleOpsRefresh(
   try {
     last = await env.APP_KV.get(OPS_REFRESH_KEY);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       "OPS_REFRESH_LIMIT_UNREADABLE",
       { message: `OPS_REFRESH_LIMIT_UNREADABLE ${message}` },
@@ -586,7 +585,7 @@ export async function handleOpsRefresh(
   try {
     await env.APP_KV.put(OPS_REFRESH_KEY, now.toISOString());
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       "OPS_REFRESH_LIMIT_UNWRITABLE",
       { message: `OPS_REFRESH_LIMIT_UNWRITABLE ${message}` },
@@ -604,7 +603,7 @@ export async function handleOpsRefresh(
   try {
     report = await watcherTick(env, now, () => gather(env, now), { force: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       "OPS_REFRESH_PASS_FAILED",
       { message: `OPS_REFRESH_PASS_FAILED ${message}` },
@@ -635,14 +634,9 @@ export async function handleOpsRefresh(
   } catch (err) {
     // The pass happened; only its audit row failed. Said in a header and the log, not
     // turned into a failure of a pass that ran.
-    warning = `the pass ran, but the Portal audit row naming ${actor} was not written: ${err instanceof Error ? err.message : String(err)}`;
+    warning = `the pass ran, but the Portal audit row naming ${actor} was not written: ${errorMessage(err)}`;
     logEvent("OPS_REFRESH_AUDIT_FAILED", { message: warning }, { level: "error" });
   }
   const feed = await (deps.feed ?? opsFeed)(env, now);
-  return feedResponse(
-    request,
-    gate.user,
-    feed,
-    warning ? { "X-Capsid-Warning": warning.replace(/[^\x20-\x7e]+/g, " ") } : {},
-  );
+  return opsFeedAnswer(request, gate.user, feed, warningHeaders(warning));
 }

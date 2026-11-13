@@ -1,3 +1,4 @@
+import { Alert } from "capsomer/react/banner";
 import {
   Fragment,
   useEffect,
@@ -7,16 +8,20 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { Spinner } from "capsomer/react/empty";
+import { Dialog } from "capsomer/react/dialog";
+import { Missing as NoValue, Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
 import { JOB } from "../lib/derive";
-import { ago, ms } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import { Pill, St } from "../ui/icons";
-import { When } from "../ui/When";
+import { Time } from "capsomer/react/time";
 import { agentState, nsList } from "../lib/derive";
 import { AgentControls, Head, JobBody } from "./DrawerJob";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 
 type Ref = { type: DrawerType; id: string };
 
@@ -24,11 +29,11 @@ function Missing({ what, onClose }: { what: string; onClose: () => void }) {
   return (
     <>
       <Head label="Not found" title={what} sub="" onClose={onClose} />
-      <div className="dbody">
-        <div className="callout">
+      <div className="cap-dialog-body cap-detail-body">
+        <Alert tone="neutral">
           It is not in the current feed. It may have ended more than 24 hours ago, or the watcher
           has not seen it yet.
-        </div>
+        </Alert>
       </div>
     </>
   );
@@ -39,12 +44,14 @@ function Missing({ what, onClose }: { what: string; onClose: () => void }) {
 // by name (src/audit-detail.ts). Never the raw params.
 function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
   const { now } = useApp();
-  const load = useAnswer(["activity", "row", id], () => fetchActivity({ id }), { keep: false });
+  const load = useAnswer(["activity", "row", id], () => fetchActivity({ id }), {
+    keep: false,
+  });
   if (!load.data && load.loading) {
     return (
       <>
         <Head label="Audit row" title={`#${id}`} sub="" onClose={onClose} />
-        <div className="dbody">
+        <div className="cap-dialog-body cap-detail-body">
           <div className="loading" role="status">
             <Spinner label="Reading the row..." />
           </div>
@@ -56,10 +63,8 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
     return (
       <>
         <Head label="Audit row" title={`#${id}`} sub="" onClose={onClose} />
-        <div className="dbody">
-          <div className="callout crit" role="alert">
-            Could not read the row: {load.error}
-          </div>
+        <div className="cap-dialog-body cap-detail-body">
+          <Alert tone="crit">Could not read the row: {load.error}</Alert>
         </div>
       </>
     );
@@ -69,11 +74,11 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
     return (
       <>
         <Head label="Not found" title={`Audit row #${id}`} sub="" onClose={onClose} />
-        <div className="dbody">
-          <div className="callout">
+        <div className="cap-dialog-body cap-detail-body">
+          <Alert tone="neutral">
             There is no audit row with this id. Rows older than the retention are pruned after the
             nightly dump.
-          </div>
+          </Alert>
         </div>
       </>
     );
@@ -87,11 +92,11 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
         sub={`#${r.id} · ${r.action ?? "no action"} · ${r.actor ?? "no actor"}`}
         onClose={onClose}
       />
-      <div className="dbody">
+      <div className="cap-dialog-body cap-detail-body">
         {d.reason !== null && (
           <div>
             <p className="section-title">Reason</p>
-            <div className="callout reason">{d.reason}</div>
+            <Alert tone="neutral">{d.reason}</Alert>
           </div>
         )}
         {d.changes !== null && (
@@ -100,11 +105,11 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
             {d.changes.length === 0 ? (
               <p className="faint">No field changed.</p>
             ) : (
-              <dl className="kv diff">
+              <dl className="cap-detail-record">
                 {d.changes.map((c) => (
                   <Fragment key={c.field}>
                     <dt>{c.field}</dt>
-                    <dd>
+                    <dd className="cap-detail-diff">
                       {c.before !== null && (
                         <del className="mono" aria-label={`before: ${c.before}`}>
                           {c.before}
@@ -126,13 +131,13 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
         )}
         <div>
           <p className="section-title">Recorded</p>
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>When</dt>
             <dd>
-              {ago(ms(r.at), now)} <When t={ms(r.at)} />
+              {ago(parse(r.at), now)} <Time at={r.at} format="exact" />
             </dd>
             <dt>Actor</dt>
-            <dd className="mono">{r.actor ?? <span className="faint">none</span>}</dd>
+            <dd className="mono">{r.actor ?? <NoValue />}</dd>
             {r.client && (
               <>
                 <dt>Via</dt>
@@ -187,15 +192,15 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
         badge={<Pill kind={st.kind}>{st.label}</Pill>}
         onClose={onClose}
       />
-      <div className="dbody">
-        <dl className="kv">
+      <div className="cap-dialog-body cap-detail-body">
+        <dl className="cap-detail-record">
           <dt>Namespaces</dt>
           <dd className="mono">{nsList(a)}</dd>
           <dt>Last seen</dt>
           <dd>
             {a.last_seen ? (
               <>
-                {ago(ms(a.last_seen), now)} <When t={ms(a.last_seen)} />
+                {ago(parse(a.last_seen), now)} <Time at={a.last_seen} format="exact" />
               </>
             ) : (
               "never"
@@ -205,7 +210,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
             <>
               <dt>Revoked</dt>
               <dd>
-                <When t={ms(a.revoked_at)} />
+                <Time at={a.revoked_at} format="exact" />
               </dd>
             </>
           )}
@@ -213,7 +218,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
             <>
               <dt>Archived</dt>
               <dd>
-                <When t={ms(a.archived_at)} />
+                <Time at={a.archived_at} format="exact" />
               </dd>
             </>
           )}
@@ -246,7 +251,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
                 <div className="t">
                   <b>{j.title}</b>
                 </div>
-                <div className="m">{ago(ms(j.updated_at), now)}</div>
+                <div className="m">{ago(parse(j.updated_at), now)}</div>
               </div>
             ))
           ) : (
@@ -258,47 +263,19 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
   );
 }
 
-// The detail panel: a native modal <dialog> opened with showModal(), so the page behind
-// is inert and Tab stays inside (audit DECIDE 9). The route drives it: an address
-// /<view>/<type>/<id> opens it, and closing it (Close, Esc, a click on the backdrop)
-// navigates back to /<view>. It slides in from the right (styles.css, drawer), and focus
-// returns to the row that opened it.
+// The detail panel: Capsomer's Dialog as a side sheet on the right (native showModal, so the page
+// behind is inert and Tab stays inside, audit DECIDE 9). The route drives it: an address
+// /<view>/<type>/<id> opens it, and closing it (Close, Esc, a click on the backdrop) navigates back
+// to /<view>. Focus returns to the row that opened it, or to the view when that row is gone.
 export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => void }) {
   const { feed, open } = useApp();
   // Keep the last content while the drawer slides out.
   const [shown, setShown] = useState<Ref | null>(route);
   if (route && (shown?.type !== route.type || shown.id !== route.id)) setShown(route);
-  const panel = useRef<HTMLDialogElement>(null);
-  const opener = useRef<Element | null>(null);
   const routed = useRef(route != null);
   useEffect(() => {
     routed.current = route != null;
   });
-  const key = route ? `${route.type}:${route.id}` : "";
-  useEffect(() => {
-    const d = panel.current;
-    if (!d) return;
-    if (route) {
-      // Remember what had focus before the drawer opened, once, to hand it back.
-      if (!d.open) {
-        opener.current = document.activeElement;
-        d.showModal();
-      }
-      d.querySelector<HTMLElement>("[data-close]")?.focus();
-    } else if (d.open) {
-      d.close();
-      // Back to the row that opened it; when that is gone, or sat in a dialog since closed
-      // (the command menu), to the view.
-      const from = opener.current;
-      const back =
-        from instanceof HTMLElement && from.isConnected && !from.closest("dialog:not([open])")
-          ? from
-          : document.querySelector<HTMLElement>("main");
-      back?.focus();
-      opener.current = null;
-    }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- `key` names the route (type:id); the effect runs when the drawer opens on another row, not on a new route object
-  }, [key]);
   const ref = route ?? shown;
   let body: ReactNode = null;
   if (ref?.type === "job") {
@@ -322,32 +299,17 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
     return true;
   };
   return (
-    <dialog
-      ref={panel}
-      className="drawer"
+    <Dialog
+      open={route != null}
+      // Closed by Esc, the backdrop or Back while the address still names it: follow the address.
+      onOpenChange={(o) => {
+        if (!o && routed.current) onClose();
+      }}
+      placement="right"
+      closeButton={false}
+      className="drawer cap-detail"
       aria-labelledby="drawerTitle"
-      onCancel={(e) => {
-        // Esc: the route closes the dialog, so the address and the panel stay one thing.
-        e.preventDefault();
-        onClose();
-      }}
-      onClose={() => {
-        // Closed some other way while the address still names it: follow the address.
-        if (routed.current) onClose();
-      }}
       onClick={(e) => {
-        const d = panel.current;
-        if (d && e.target === d) {
-          // A click on the dialog element itself outside its box is the backdrop.
-          const r = d.getBoundingClientRect();
-          if (
-            e.clientX < r.left ||
-            e.clientX > r.right ||
-            e.clientY < r.top ||
-            e.clientY > r.bottom
-          )
-            return onClose();
-        }
         openRow(e);
       }}
       onKeyDown={(e) => {
@@ -357,6 +319,6 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
       }}
     >
       {body}
-    </dialog>
+    </Dialog>
   );
 }

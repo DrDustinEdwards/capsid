@@ -9,6 +9,7 @@ import {
   resolveRepo,
 } from "./client";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // Merge or close an open pull request. Merging can trigger CI deploys in repos with
 // deploy workflows, so callers gate by blast radius.
 //
@@ -88,7 +89,7 @@ async function deleteHeadBranchAfterPr(
     return {
       head_branch: null,
       head_branch_deleted: false,
-      head_branch_note: `branch cleanup errored: ${err instanceof Error ? err.message : String(err)}; the PR action itself succeeded`,
+      head_branch_note: `branch cleanup errored: ${errorMessage(err)}; the PR action itself succeeded`,
     };
   }
 }

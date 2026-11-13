@@ -3,7 +3,7 @@ import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalDigest, PortalPlan } from "./ops-types/views";
 import { digestSinceFrom, readOvernightDigest, readOvernightPlan } from "./overnight-plan";
 import { portalGate } from "./portal-auth";
-import { jsonResponse as json } from "./http";
+import { jsonResponse as json } from "@dustinedwards/site-runtime/http";
 
 // The Portal's Tonight plan and its "since you last looked" strip
 // (docs/design/design-portal-evaluation.md, DECIDE 3, ruled 2026-10-09):

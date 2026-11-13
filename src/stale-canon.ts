@@ -1,8 +1,9 @@
+import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import type { Env } from "./env";
 import { isCanonPath } from "./canon";
 import { ghFetch, resolveRepo } from "./github/client";
 import { readPrFiles, type PrFileRow } from "./github/pr-files";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { externalFence } from "./provenance";
 import type { Finding } from "./watcher-detect";
 import { DAY_MS } from "./time";
@@ -145,8 +146,7 @@ export function staleCanonDoc(
 
 /** A D1 datetime ("2026-10-18 09:00:00", UTC) or an ISO string, as milliseconds. */
 export function instant(at: string): number {
-  const iso = /[zZ]$|[+-]\d\d:?\d\d$/.test(at) ? at : `${at.replace(" ", "T")}Z`;
-  return Date.parse(iso);
+  return parseSqlTime(at) ?? Number.NaN;
 }
 
 export interface Edge {
@@ -301,7 +301,7 @@ export function parseMemory(raw: string | null): { memory: MergeMemory } | { pro
     }
     return { memory: parsed as MergeMemory };
   } catch (err) {
-    return { problem: err instanceof Error ? err.message : String(err) };
+    return { problem: errorMessage(err) };
   }
 }
 
@@ -413,7 +413,7 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
         pending.push({ namespace, owner, repo, pull });
       memory[namespace] ??= { repo: full, prs: [] };
     } catch (err) {
-      unread.push(`${namespace} (${err instanceof Error ? err.message : String(err)})`);
+      unread.push(`${namespace} (${errorMessage(err)})`);
     }
   }
   pending.sort((a, b) => instant(a.pull.merged_at!) - instant(b.pull.merged_at!));
@@ -431,9 +431,7 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
       });
       read++;
     } catch (err) {
-      unread.push(
-        `${p.namespace} #${p.pull.number} (${err instanceof Error ? err.message : String(err)})`,
-      );
+      unread.push(`${p.namespace} #${p.pull.number} (${errorMessage(err)})`);
     }
   }
   const kept = pruneMemory(memory, now);

@@ -41,7 +41,7 @@ export function Problems({ sitesOn }: { sitesOn: boolean }) {
               <div className="att-more">
                 <button
                   type="button"
-                  className="linkbtn"
+                  className="cap-link-btn"
                   aria-expanded={more}
                   aria-controls="att-more"
                   onClick={() => setMore(!more)}

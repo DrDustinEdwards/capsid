@@ -4,6 +4,7 @@ import { CF_CONFIG_ACTIONS, CF_PERMISSION, readCloudflareConfig } from "../ops-c
 import { fail, ok, type ToolCtx } from "./docs";
 import { bounded } from "../limits";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // A zone name as Cloudflare lists it: labels of letters, digits and hyphens.
 const ZONE_NAME = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 
@@ -44,7 +45,7 @@ export function defineCloudflareOperations(server: McpServer, ctx: ToolCtx): voi
           ),
         );
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );

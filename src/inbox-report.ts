@@ -2,6 +2,7 @@ import { checkScope } from "./scope";
 import type { Agent } from "./agents";
 import type { InboxItem } from "./inbox";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // WHAT AN APP REPORTS ABOUT ITSELF TO THE INBOX (job_84e901d8eb71; design
 // capsid/research/design-inbox-report.md, Dustin's answers 2026-10-10). Some things that
 // need Dustin live only in an app's own database (Carrel's AI drafts waiting). Capsid does
@@ -139,7 +140,7 @@ export async function spendReportRate(
     return {
       ok: false,
       status: 503,
-      refusal: `the report rate limit could not be read, so the report is refused: ${err instanceof Error ? err.message : String(err)}`,
+      refusal: `the report rate limit could not be read, so the report is refused: ${errorMessage(err)}`,
     };
   }
   return { ok: true };

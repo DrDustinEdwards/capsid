@@ -1,15 +1,18 @@
-import { useState } from "react";
+import { Banner } from "capsomer/react/banner";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
 import { agentState, driverOf } from "../lib/derive";
-import { ago, ms, pct } from "../lib/format";
+import { ago, pct } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 import type { PortalNamespace, PortalNamespaces } from "../types";
 import { Panel } from "capsomer/react/panel";
+import { ReadAgain } from "capsomer/react/read-state";
 import "capsomer/button.css";
 import { PageHead } from "./shared";
-import { ProjectForm, type ProjectEditing } from "./ProjectConfig";
+import { useEditor } from "capsomer/react/config-form";
+import { ProjectForm } from "./ProjectConfig";
 
 // PROJECTS (the Portal audit's new map, 2026-11-06; out of Settings): each project's driver,
 // its jobs and the integrity of its latest truth report. A project paused after repeated
@@ -27,9 +30,9 @@ function Driver({ ns }: { ns: string }) {
       <St kind={st.kind}>{st.label}</St>
       <div className="src">
         {d.revoked_at
-          ? `revoked ${ago(ms(d.revoked_at), now)}`
+          ? `revoked ${ago(parse(d.revoked_at), now)}`
           : d.last_seen
-            ? `seen ${ago(ms(d.last_seen), now)}`
+            ? `seen ${ago(parse(d.last_seen), now)}`
             : "never seen"}
       </div>
     </>
@@ -48,7 +51,7 @@ function Report({ n }: { n: PortalNamespace }) {
       ) : (
         <span className="num">{pct(rep.integrity, 0)}</span>
       )}
-      <div className="src">report {ago(ms(rep.generated), now)}</div>
+      <div className="src">report {ago(parse(rep.generated), now)}</div>
     </>
   );
 }
@@ -105,13 +108,18 @@ function Row({
       </td>
       <td className="ctl">
         <div className="toolbar col">
-          <button type="button" className="btn" aria-label={`Edit ${n.namespace}`} onClick={onEdit}>
+          <button
+            type="button"
+            className="cap-btn"
+            aria-label={`Edit ${n.namespace}`}
+            onClick={onEdit}
+          >
             Edit
           </button>
           {n.breaker.open && (
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Reset ${n.namespace}`}
               onClick={() =>
                 confirm({
@@ -138,28 +146,26 @@ function Roster() {
   const load = useAnswer<PortalNamespaces>([LIVE, "namespaces"], fetchNamespaces);
   const read = load.reread;
   const data = load.data;
-  const [editing, setEditing] = useState<ProjectEditing | null>(null);
-  // The form is keyed on what it edits, so switching rows starts a fresh draft.
-  const formKey = editing ? (editing.kind === "add" ? "add" : `edit:${editing.n.namespace}`) : "";
-  const close = () => (setEditing(null), read());
+  const ed = useEditor<PortalNamespace>(read);
   return (
     <>
       <div className="toolbar">
         <button
           type="button"
-          className="btn primary"
-          onClick={() => setEditing({ kind: "add" })}
-          disabled={editing?.kind === "add"}
+          className="cap-btn"
+          data-variant="primary"
+          onClick={ed.add}
+          disabled={ed.editing?.kind === "add"}
         >
           Add project
         </button>
       </div>
-      {editing && <ProjectForm key={formKey} editing={editing} onClose={close} />}
+      {ed.editing && <ProjectForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />}
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Banner tone="crit">
           Could not read the projects: {load.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+          {data ? `. Showing the read from ${ago(parse(data.generated), now)}.` : ""}
+        </Banner>
       )}
       <Panel
         flush
@@ -167,12 +173,12 @@ function Roster() {
         id="projects"
         count={data?.namespaces.length}
         src={
-          <>
-            {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-            <button type="button" className="btn" disabled={load.loading} onClick={read}>
-              {load.loading ? "Reading..." : "Read again"}
-            </button>
-          </>
+          <ReadAgain
+            at={data ? parse(data.generated) : undefined}
+            now={now}
+            reading={load.loading}
+            onRead={read}
+          />
         }
       >
         {!data && load.loading ? (
@@ -180,8 +186,8 @@ function Roster() {
             <Spinner label="Reading the projects..." />
           </div>
         ) : data && data.namespaces.length ? (
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100 roster">
+          <div className="cap-table-wrap" data-reflow="wide">
+            <table className="cap-table roster">
               <thead>
                 <tr>
                   <th>Project</th>
@@ -190,7 +196,7 @@ function Roster() {
                   <th>Jobs</th>
                   <th>Integrity</th>
                   <th>
-                    <span className="sr-only">Controls</span>
+                    <span className="cap-sr-only">Controls</span>
                   </th>
                 </tr>
               </thead>
@@ -200,7 +206,7 @@ function Roster() {
                     key={n.namespace}
                     n={n}
                     onChanged={read}
-                    onEdit={() => setEditing({ kind: "edit", n })}
+                    onEdit={() => ed.edit(n, n.namespace)}
                   />
                 ))}
               </tbody>

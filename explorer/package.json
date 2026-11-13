@@ -11,9 +11,10 @@
     "indexnow": "node indexnow.mjs"
   },
   "dependencies": {
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.41.2",
-    "capsomer": "github:DrDustinEdwards/capsomer#v0.87.0",
-    "enarratio": "0.9.1"
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.50.0",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.138.0",
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.123.0",
+    "enarratio": "^0.12.2"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",

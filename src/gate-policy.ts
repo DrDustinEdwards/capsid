@@ -1,6 +1,9 @@
+import { handOnly, statements as migrationStatements } from "@dustinedwards/devkit/migration-scan";
+
 import type { Env } from "./env";
 import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./signed-docs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // Pre-approved gates: which blocked commands the seat may approve without asking the
 // human. A driver that reaches a push, a migration or a pull request stops and blocks
 // with the exact command, and without this every one of those waits on a person,
@@ -221,6 +224,12 @@ function classifySegment(
         refused: `${path} is not under migrations/, so it is not a migration this policy covers.`,
       };
     }
+    // devkit-migrations applies only files named NNNN_name.sql; any other name waits for a person at deploy.
+    if (!/(^|\/)\d{4}_[\w-]+\.sql$/.test(path)) {
+      return {
+        refused: `${path} is not named NNNN_name.sql, so the deploy would not apply it; it is not pre-approved.`,
+      };
+    }
     return { klass: "additive_migration", migrationPath: path };
   }
   if (PUSH_BRANCH.test(segment)) return { klass: "push_branch" };
@@ -306,20 +315,18 @@ const ADDITIVE: Array<{ pattern: RegExp; what: string }> = [
   { pattern: /^create\s+(unique\s+)?index\s+(if\s+not\s+exists\s+)?/i, what: "CREATE INDEX" },
 ];
 
-export function splitStatements(sql: string): string[] {
-  // Comments first, so a DROP inside a comment is not read as a statement and a
-  // semicolon inside one does not split.
-  const withoutComments = sql.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
-  return withoutComments
-    .split(";")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 export function isAdditiveMigration(
   sql: string,
 ): { ok: true; statements: string[] } | { ok: false; reason: string } {
-  const statements = splitStatements(sql);
+  // The deploy refuses to apply such a file unattended (a `-- contract:` line, or a drop, rename, delete or update),
+  // so pre-approving it would approve a migration that never runs. devkit-migrations' own reader decides.
+  const handOnlyWhy = handOnly(sql);
+  if (handOnlyWhy.length > 0)
+    return {
+      ok: false,
+      reason: `the deploy leaves this migration to a person (${handOnlyWhy.join(", ")}); it is not pre-approved.`,
+    };
+  const statements = migrationStatements(sql);
   if (statements.length === 0)
     return { ok: false, reason: "the migration file contains no statements." };
   const kinds: string[] = [];
@@ -435,7 +442,7 @@ export async function approveByPolicy(
     } catch (err) {
       return {
         approved: false,
-        reason: `${path} could not be read (${err instanceof Error ? err.message : String(err)}), so its statements could not be checked. A migration nobody parsed is not pre-approved.`,
+        reason: `${path} could not be read (${errorMessage(err)}), so its statements could not be checked. A migration nobody parsed is not pre-approved.`,
       };
     }
     if (sql === null) {

@@ -232,6 +232,39 @@ test("PLANT: a repo on two versions is drift at once, a pin behind only after th
   );
 });
 
+test("PLANT: a pin moved back since last night, and a repo that runs no no-bloat check, are drift at once", () => {
+  const night = (pinned: string) =>
+    view([
+      user("sample", ".github/workflows (2 uses)", pinned, 0),
+      user("sample", "package.json", pinned, 0),
+    ]);
+  const first = versionDrift(night("v0.42.0"), {}, NOW);
+  assert.equal(first.since["pin|example-org/sample|Kit|.github/workflows"], "v0.42.0");
+  const back = versionDrift(night("v0.39.0"), first.since, new Date(NOW.getTime() + 86_400_000));
+  assert.deepEqual(
+    back.items.map((i) => i.line).filter((l) => l.includes("moved Kit back")),
+    [
+      "example-org/sample moved Kit back from v0.42.0 to v0.39.0 in .github/workflows: an older release runs an older check. Move it forward, or find who moved it.",
+      "example-org/sample moved Kit back from v0.42.0 to v0.39.0 in package.json: an older release runs an older check. Move it forward, or find who moved it.",
+    ],
+  );
+  assert.equal(versionDrift(night("v0.43.0"), first.since, NOW).items.length, 0);
+  const off = {
+    ...night("v0.42.0"),
+    no_bloat_off: [
+      {
+        namespace: "sample",
+        repo: "example-org/sample",
+        line: "example-org/sample runs no no-bloat check",
+      },
+    ],
+  };
+  assert.deepEqual(
+    versionDrift(off, {}, NOW).items.map((i) => i.line),
+    ["example-org/sample runs no no-bloat check"],
+  );
+});
+
 test("a stored resources doc from before `previews` still reads with an empty list (the Workers tab crashed on it)", async () => {
   const old = {
     version: 1,

@@ -11,6 +11,7 @@ import type { MaintenanceItem } from "./maintenance";
 import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The daily maintenance pass's branch rules (job_549550d73d4e, piece 3). A merged branch is
 // one capsid_close_pr action delete_branch with merged:true would prune (job_8779278b8e91, src/github/prune.ts): its
 // latest pull request merged and its tip is the commit that pull request merged from. The
@@ -107,7 +108,7 @@ export async function gatherBranchItems(
   try {
     settings = await readBranchSettings(env.APP_KV);
   } catch (err) {
-    const why = `the prune switch or keep list could not be read: ${err instanceof Error ? err.message : String(err)}`;
+    const why = `the prune switch or keep list could not be read: ${errorMessage(err)}`;
     return { items: namespaces.map((ns) => notChecked(ns, why)), read, pruned };
   }
 
@@ -116,7 +117,7 @@ export async function gatherBranchItems(
     try {
       plan = await readers.plan(namespace, settings.keep[namespace] ?? []);
     } catch (err) {
-      items.push(notChecked(namespace, err instanceof Error ? err.message : String(err)));
+      items.push(notChecked(namespace, errorMessage(err)));
       continue;
     }
     read[namespace] = plan.branchesRead;
@@ -208,7 +209,7 @@ export async function gatherBranchItems(
         items.push(
           notChecked(
             namespace,
-            `the last commit of ${plan.repo} branch ${k.branch}: ${err instanceof Error ? err.message : String(err)}`,
+            `the last commit of ${plan.repo} branch ${k.branch}: ${errorMessage(err)}`,
           ),
         );
         continue;

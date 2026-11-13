@@ -2,6 +2,7 @@ import { RETIRED_FLAGS, SCOPE_FLAGS, type ScopeFlag } from "./agents-schema";
 import type { Agent } from "./agents";
 import { checkScope, JOBS_TOOL } from "./scope";
 import { toHex } from "@dustinedwards/site-runtime/encoding";
+import { plural } from "@drdustinedwards/site-helpers/text";
 
 // The work queue's vocabulary, in one place so the table, the tool and the driver
 // cannot disagree about it.
@@ -283,7 +284,7 @@ export function missingForRecord(
   if (!parsed.ok) return `this job's ${parsed.problem}, so no record can be compared against it.`;
   const { prs_merged } = parsed.value;
   if (prs_merged === undefined || record.prs_merged >= prs_merged) return null;
-  return `this job asks for a driver with at least ${prs_merged} merged pull request${prs_merged === 1 ? "" : "s"} on its record, and this one has ${record.prs_merged}.`;
+  return `this job asks for a driver with at least ${plural(prs_merged, "merged pull request")} on its record, and this one has ${record.prs_merged}.`;
 }
 
 // A swallowed parameter tag: a caller that closes a parameter tag inside a value sends

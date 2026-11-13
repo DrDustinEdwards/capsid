@@ -1,5 +1,6 @@
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // INSERT that violates NOT NULL, guarded by NOT EXISTS, so a missing row aborts
 // the batch. A pre-read is a different transaction. meta.changes is inflated by
 // FTS5 triggers and cannot count what a batch did.
@@ -39,7 +40,7 @@ export function requireJobUnchanged(
     .bind(id, status, claimedBy, updatedAt);
 }
 
-// The same abort for a bench run (src/bench.ts finishRun): fires unless the run is still
+// The same abort for a bench run (src/bench.ts finishBenchRun): fires unless the run is still
 // running, so a run's close and its job's close commit together or not at all.
 export function requireBenchRunRunning(db: D1Database, runId: string): D1PreparedStatement {
   return db
@@ -52,7 +53,7 @@ export function requireBenchRunRunning(db: D1Database, runId: string): D1Prepare
 }
 
 export function isMissingRowAbort(err: unknown): boolean {
-  return (err instanceof Error ? err.message : String(err)).includes(GUARD_VIOLATION);
+  return errorMessage(err).includes(GUARD_VIOLATION);
 }
 
 // Body equality rather than a stored sha column. `IS` rather than `=` because a
@@ -151,7 +152,7 @@ export function guardedCommit(opts: {
       } catch (err) {
         if (!isMissingRowAbort(err)) {
           return {
-            refusal: refusals.batchFailed(err instanceof Error ? err.message : String(err)),
+            refusal: refusals.batchFailed(errorMessage(err)),
           };
         }
         if (guard === "missing") return { refusal: refusals.createCollision };

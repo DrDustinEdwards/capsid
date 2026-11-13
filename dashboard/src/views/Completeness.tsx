@@ -1,8 +1,13 @@
+import { Alert } from "capsomer/react/banner";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import { StatusMatrix } from "capsomer/react/status-matrix";
+import "capsomer/table.css";
+import "capsomer/status-matrix.css";
 import { useApp } from "../app/ctx";
 import { fetchCompleteness, useAnswer } from "../lib/api";
-import { ago, fmtN, ms } from "../lib/format";
+import { ago, fmtN } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import type {
   CompletenessArea,
   CompletenessCell,
@@ -25,6 +30,15 @@ const KIND = {
   partial: "warn",
   missing: "crit",
   unmeasured: "unknown",
+  "n/a": "nodata",
+} as const;
+// The grid's tones (Capsomer's StatusMatrix); a check that could not measure is the muted
+// question mark, the same mark as KIND's "unknown" in the panels below.
+const TONE = {
+  complete: "ok",
+  partial: "warn",
+  missing: "crit",
+  unmeasured: "muted",
   "n/a": "nodata",
 } as const;
 const LABEL: Record<CompletenessStatus, string> = {
@@ -72,7 +86,7 @@ export function Completeness() {
   const count = (s: CompletenessStatus) => cells.filter((c) => c.status === s).length;
   return (
     <div className="embedded">
-      <div className={`callout${data.finished ? "" : " warn"} done-verdict`}>
+      <Alert tone={data.finished ? "neutral" : "warn"}>
         <b>{data.finished ? "Finished." : "Not finished."}</b> {fmtN(count("complete"))} of{" "}
         {fmtN(cells.length)} cells complete, {fmtN(count("partial"))} partial,{" "}
         {fmtN(count("missing"))} missing
@@ -80,7 +94,7 @@ export function Completeness() {
         {data.finished
           ? `Every cell is complete and has passed ${CLEAN_DAYS} daily runs in a row.`
           : `Finished means every cell complete and clean for ${CLEAN_DAYS} daily runs.`}
-      </div>
+      </Alert>
       <Panel
         flush
         title="Every area on every site"
@@ -95,65 +109,39 @@ export function Completeness() {
           </>
         }
       >
-        <div className="scroll-x">
-          <table className="brief done-grid">
-            <caption className="sr-only">
-              Each area of the shared code, for the package and each live site
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Area</th>
-                {columns.map((c) => (
-                  <th key={c.id} scope="col">
-                    {c.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.areas.map((a) => (
-                <tr key={a.id}>
-                  <th scope="row">
-                    <a href={`#done-area-${a.id}`}>
-                      {a.id}. {a.name}
-                    </a>
-                  </th>
-                  {columns.map((c) => {
-                    const cell = a.cells[c.id];
-                    return (
-                      <td key={c.id}>
-                        {cell ? (
-                          <Mark cell={cell} where={`${a.name}, ${c.name}`} />
-                        ) : (
-                          <span className="faint">·</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <StatusMatrix
+          caption="Each area of the shared code, for the package and each live site"
+          columns={columns}
+          rows={data.areas.map((a) => ({
+            id: String(a.id),
+            name: (
+              <a href={`#done-area-${a.id}`}>
+                {a.id}. {a.name}
+              </a>
+            ),
+            text: a.name,
+            cells: Object.fromEntries(
+              Object.entries(a.cells).map(([id, c]) => [
+                id,
+                {
+                  tone: TONE[c.status],
+                  glyph: c.status === "unmeasured" ? ("unknown" as const) : undefined,
+                  label: LABEL[c.status],
+                  reason: c.reason,
+                },
+              ]),
+            ),
+          }))}
+        />
       </Panel>
       {data.areas.map((a) => (
         <AreaPanel key={a.id} area={a} columns={columns} publicOnly={data.public_token} />
       ))}
       <p className="faint shared-read">
-        Newest run {data.as_of ? ago(ms(data.as_of), now) : "unknown"}; read{" "}
-        {ago(ms(data.read), now)}. Runs daily at 06:23 UTC. Kept for ten minutes.
+        Newest run {data.as_of ? ago(parse(data.as_of), now) : "unknown"}; read{" "}
+        {ago(parse(data.read), now)}. Runs daily at 06:23 UTC. Kept for ten minutes.
       </p>
     </div>
-  );
-}
-
-// One cell in the grid: the status as an icon, its words for a screen reader and on hover.
-function Mark({ cell, where }: { cell: CompletenessCell; where: string }) {
-  const label = `${where}: ${LABEL[cell.status]}. ${cell.reason}`;
-  return (
-    <span className={`done-mark ${KIND[cell.status]}`} title={label} role="img" aria-label={label}>
-      <St kind={KIND[cell.status]}>{""}</St>
-    </span>
   );
 }
 

@@ -2,6 +2,8 @@
 
 A Cloudflare Worker, run by its owner and the co-owners in `CO_OWNER_EMAILS`, serving the portfolio's knowledge base (D1, R2) over MCP, reaching GitHub through an App. Live: https://mcp.dustinedwards.info/mcp; Portal https://portal.dustinedwards.info. Public MIT repo. Read `capsid/core.md` in Capsid before acting. Before writing anything another site might have, read what the family shares: https://github.com/DrDustinEdwards/devkit/blob/shared-list/SHARED.md (CI's family check fails on a copy). Rule detail loads from `.claude/rules/` when you touch its files.
 
+Browser support (Portal and explorer): devkit's docs/browser-support.md (Baseline Widely available freely; Newly available with a small fallback; Limited only feature-detected; no polyfills).
+
 ## Commands
 
 - CI also runs `npm run test:integration` and `npm run test:browser`; run them locally only when needed, one heavy session at a time.

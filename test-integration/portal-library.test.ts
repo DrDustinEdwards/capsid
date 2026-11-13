@@ -70,7 +70,7 @@ describe("GET /portal/api/library", () => {
     const before = await auditRows();
     const response = await signedGet("");
     expect(response.status, await response.clone().text()).toBe(200);
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     const body = (await response.json()) as PortalLibrary;
     expect(body.kind).toBe("shelves");
     if (body.kind !== "shelves") return;

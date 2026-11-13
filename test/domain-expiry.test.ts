@@ -30,6 +30,12 @@ test("a site's registrable domain, and none for a hosting suffix or an address",
   assert.equal(registrableDomain("https://sample.example"), "sample.example");
   assert.equal(registrableDomain("https://sample.dustin-edwards.workers.dev"), null);
   assert.equal(registrableDomain("https://sample.vercel.app"), null);
+  assert.equal(
+    registrableDomain("https://www.sample.co.uk"),
+    "sample.co.uk",
+    "a multi-label public suffix",
+  );
+  assert.equal(registrableDomain("https://a.sample.github.io"), null, "the list's private section");
   assert.equal(registrableDomain("https://192.0.2.1"), null);
   assert.equal(registrableDomain("not a url"), null);
 });

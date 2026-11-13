@@ -33,6 +33,7 @@ import { checklistWarning } from "../job-checklist";
 import { factCheckBody } from "../job-fact-check";
 import { fail, ok, type ToolCtx } from "./docs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 const MAX_JOB_ID = 64;
 
 // How many pull requests one job may name as evidence. Each one costs a GitHub read
@@ -489,7 +490,7 @@ block and complete act only on a job this caller holds, except as stated above.`
         }
         return fail(`unknown jobs action '${String(args.action as unknown as string)}'.`);
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );

@@ -26,6 +26,8 @@ import {
   type BehindSince,
 } from "./system-versions";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { utcDay } from "./time";
 // THE NIGHTLY SYSTEM FACTS BUILD (Dustin, 2026-11-03). Once a UTC day after 06:00 (the
 // small hours in Chicago, so the 11:00 maintenance pass lists its drift) the tick reads:
 //   the versions model: every model repo's pins of the network's packages, from their
@@ -51,7 +53,7 @@ const LIVE: FactsReaders = {
   resources: (env) => readResourceFacts(env),
 };
 
-const why = (err: unknown) => (err instanceof Error ? err.message : String(err)).slice(0, 300);
+const why = (err: unknown) => errorMessage(err).slice(0, 300);
 
 export async function systemFactsTick(
   env: Env,
@@ -59,7 +61,7 @@ export async function systemFactsTick(
   readers: FactsReaders = LIVE,
   model: SystemModel = bundledModel(),
 ): Promise<{ ran: false; note: string } | { ran: true; note: string; failed: boolean }> {
-  const today = now.toISOString().slice(0, 10);
+  const today = utcDay(now);
   if (now.getUTCHours() < AFTER_UTC_HOUR)
     return { ran: false, note: `before ${AFTER_UTC_HOUR}:00 UTC` };
   const last = await env.APP_KV.get(FACTS_LAST_KEY);

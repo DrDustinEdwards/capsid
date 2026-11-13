@@ -12,22 +12,16 @@ import {
   startAccessLogin,
 } from "./access-login";
 import { isAdminEmail } from "@dustinedwards/site-runtime/access";
-import { capsidCookie, getCookie, hmacHex } from "./auth";
+import { capsidCookie } from "./auth";
+import { readCookie } from "@dustinedwards/site-runtime/headers";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { logEvent, OWASP_EVENTS } from "@dustinedwards/site-runtime/log";
 import { emailKey } from "@dustinedwards/site-runtime/rate-limit";
 import type { Env } from "./env";
-import {
-  isPortalHost,
-  isSameOriginPath,
-  PORTAL_HOST,
-  portalCookiePath,
-  publicPortalPath,
-} from "./portal-host";
-import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+import { isPortalHost, PORTAL_HOST, portalCookiePath, publicPortalPath } from "./portal-host";
+import { base64url, fromBase64urlText, hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { isSameOriginPath } from "@dustinedwards/site-runtime/url";
 import { isolationVerdict, originRefusal } from "@dustinedwards/site-runtime/origin";
-
-const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
 // Capsid Portal's own session. The OAuth provider mints tokens for MCP clients, and a
 // browser opening /portal has nothing to present, so the Portal signs in through the
@@ -114,7 +108,7 @@ export async function portalSessionCookie(
     exp: Math.floor(now.getTime() / 1000) + PORTAL_SESSION_TTL_SECONDS,
   };
   const encoded = base64url(JSON.stringify(payload));
-  const sig = await hmacHex(secret, encoded);
+  const sig = await hmacSha256Hex(secret, encoded);
   return capsidCookie(
     PORTAL_SESSION_COOKIE,
     `${sig}.${encoded}`,
@@ -124,13 +118,11 @@ export async function portalSessionCookie(
 }
 
 /** The Set-Cookie values that sign this browser out: the session and CSRF cookies,
- *  same name, path and attributes, Max-Age=0, under the prefixed name and the bare one
- *  they had before (for one release, with getCookie's fallback). */
+ *  same name, path and attributes, Max-Age=0. */
 export function portalSignOutCookies(cookiePath: string = PORTAL_PATH): string[] {
-  return [PORTAL_SESSION_COOKIE, PORTAL_CSRF_COOKIE].flatMap((name) => [
+  return [PORTAL_SESSION_COOKIE, PORTAL_CSRF_COOKIE].map((name) =>
     capsidCookie(name, "", cookiePath, 0),
-    `${name}=; Path=${cookiePath}; Secure; HttpOnly; SameSite=Lax; Max-Age=0`,
-  ]);
+  );
 }
 
 // The verified payload, expired or not, or null: a bad signature or shape, an email no
@@ -147,16 +139,16 @@ function verifiedSession(request: Request, env: Env): Promise<SessionPayload | n
 }
 
 async function verifySession(request: Request, env: Env): Promise<SessionPayload | null> {
-  const raw = getCookie(request, PORTAL_SESSION_COOKIE);
+  const raw = readCookie(request, PORTAL_SESSION_COOKIE);
   if (!raw) return null;
   const dot = raw.indexOf(".");
   if (dot === -1) return null;
   const sig = raw.slice(0, dot);
   const encoded = raw.slice(dot + 1);
-  if (!(await safeEqual(sig, await hmacHex(env.COOKIE_ENCRYPTION_KEY, encoded)))) return null;
+  if (!(await safeEqual(sig, await hmacSha256Hex(env.COOKIE_ENCRYPTION_KEY, encoded)))) return null;
   let payload: SessionPayload;
   try {
-    payload = JSON.parse(decodeBase64url(encoded)) as SessionPayload;
+    payload = JSON.parse(fromBase64urlText(encoded)) as SessionPayload;
   } catch {
     return null;
   }
@@ -232,10 +224,10 @@ export async function withPortalIdle(
 ): Promise<Response> {
   const session = await verifiedSession(request, env);
   if (!session) return handle();
-  const id = await hmacHex(env.COOKIE_ENCRYPTION_KEY, `portal-idle.${session.sid}`);
+  const id = await hmacSha256Hex(env.COOKIE_ENCRYPTION_KEY, `portal-idle.${session.sid}`);
   // The seen cookie's key, derived from COOKIE_ENCRYPTION_KEY under its own label (HMAC as the
   // KDF, NIST SP 800-108r1), so the Portal needs no second secret and one key does not serve two uses.
-  const secret = await hmacHex(env.COOKIE_ENCRYPTION_KEY, "admin-idle-secret");
+  const secret = await hmacSha256Hex(env.COOKIE_ENCRYPTION_KEY, "admin-idle-secret");
   const gate = await adminIdle(request, {
     session: { id, signedInAt: session.at },
     now: now.getTime(),

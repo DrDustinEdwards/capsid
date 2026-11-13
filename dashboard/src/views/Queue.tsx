@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy } from "react";
@@ -6,12 +7,14 @@ import { QUEUE_TABS, tabOf, useApp } from "../app/ctx";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { LIVE, fetchStale, useAnswer, type Load } from "../lib/api";
 import { JOB } from "../lib/derive";
-import { ago, ms } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import type { OpsJob, PortalStale, StaleRule } from "../types";
 import { St } from "../ui/icons";
 import { Anchors } from "../ui/anchors";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import { ReadAgain } from "capsomer/react/read-state";
 import { FilterEmpty, NsChips, PageHead, QueueRows, useNsFilter } from "./shared";
 import { Tonight } from "./Overnight";
 
@@ -56,21 +59,21 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
       section="Stuck jobs"
       count={data ? rows.length : undefined}
       src={
-        <>
-          {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-          <button type="button" className="btn" disabled={load.loading} onClick={reread}>
-            {load.loading ? "Reading..." : "Read again"}
-          </button>
-        </>
+        <ReadAgain
+          at={data ? parse(data.generated) : undefined}
+          now={now}
+          reading={load.loading}
+          onRead={reread}
+        />
       }
     >
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Banner tone="crit">
           Could not read the stale jobs: {load.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+          {data ? `. Showing the read from ${ago(parse(data.generated), now)}.` : ""}
+        </Banner>
       )}
-      {data?.note && <div className="callout warn">{data.note}</div>}
+      {data?.note && <Banner tone="warn">{data.note}</Banner>}
       {!data && load.loading ? (
         <div className="loading" role="status">
           <Spinner label="Reading the stale jobs..." />

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  isSameOriginPath,
   PORTAL_HOST,
   portalCookiePath,
   portalHostRequest,
@@ -73,10 +72,6 @@ test("PLANT: on the Portal host, a /portal path that would leave the origin is r
   ]) {
     assert.deepEqual(routed(`${PORTAL}${path}`), { redirect: "null", status: 404 }, path);
   }
-  assert.equal(isSameOriginPath("/queue"), true);
-  assert.equal(isSameOriginPath("//attacker.example"), false);
-  assert.equal(isSameOriginPath("/\\attacker.example"), false);
-  assert.equal(isSameOriginPath("queue"), false);
 });
 
 test("the cookie path and the public path follow the host", () => {

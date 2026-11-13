@@ -274,7 +274,7 @@ describe("GET /portal/api/stale, through the Worker", () => {
     )) as unknown as Response;
     await waitOnExecutionContext(ctx);
     expect(response.status).toBe(200);
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     const body = (await response.json()) as PortalStale;
     expect(body.rows.map((r) => r.id).sort()).toEqual([mine, theirs].sort());
     expect(body.rows.every((r) => r.rule === "unchanged")).toBe(true);

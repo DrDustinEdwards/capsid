@@ -7,16 +7,16 @@
 // cannot run: it carries no nonce. The page is never shared-cached, so a nonce per response is
 // the right form (site-runtime ./csp). Nothing unlisted (denyUnlisted). The consent dialog's CSP
 // is separate. Violations go to the sink on the MCP host (REPORT_URL), the group
-// Reporting-Endpoints names. Trusted Types is staged (the Portal's registry entry): the
-// Report-Only policy is the same with require-trusted-types-for added, sent beside it until the
-// reports name every sink React reaches.
+// Reporting-Endpoints names. Trusted Types is enforced (the Portal's registry entry,
+// site-runtime 0.132.0): require-trusted-types-for 'script' with the family's policy names, after
+// the Report-Only policy's reports named no sink React reaches.
 import {
   buildContentSecurityPolicy,
-  buildStagedPolicy,
   CSP_REPORT_GROUP,
   generateNonce,
   type SitePolicy,
 } from "@dustinedwards/site-runtime/csp";
+import { TRUSTED_TYPES_NAMES } from "@dustinedwards/site-runtime/trusted-types";
 import { REPORT_URL } from "./security-headers";
 
 const POLICY: SitePolicy = {
@@ -26,20 +26,19 @@ const POLICY: SitePolicy = {
   reportTo: CSP_REPORT_GROUP,
   // default-src 'none' refuses the web manifest unless it is named: the Portal's install and phone alerts need it.
   extraDirectives: ["manifest-src 'self'"],
+  trustedTypes: TRUSTED_TYPES_NAMES,
 };
 
 export interface DashboardCsp {
   nonce: string;
   policy: string;
-  reportOnly: string;
 }
 
-/** A fresh nonce and the two policies that carry it, for one page response. */
+/** A fresh nonce and the policy that carries it, for one page response. */
 export function dashboardCsp(nonce: string = generateNonce()): DashboardCsp {
   const site = { ...POLICY, nonce };
   return {
     nonce,
     policy: buildContentSecurityPolicy(site).value,
-    reportOnly: buildStagedPolicy(site, { trustedTypes: true }).value,
   };
 }

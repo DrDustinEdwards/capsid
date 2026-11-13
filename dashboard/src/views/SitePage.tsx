@@ -1,5 +1,6 @@
+import { Banner } from "capsomer/react/banner";
 import { Suspense, lazy, useState } from "react";
-import { Empty } from "capsomer/react/empty";
+import { Empty, Missing } from "capsomer/react/empty";
 import { PageHead } from "capsomer/react/page-head";
 import "capsomer/page-head.css";
 import { Panel } from "capsomer/react/panel";
@@ -9,16 +10,20 @@ import "capsomer/uptime-strip.css";
 import { uptimeStrip } from "enarratio";
 import { SITE_TABS, parseRoute, tabOf, useApp, type SiteTab } from "../app/ctx";
 import { Link, useLocation } from "../lib/router";
-import { PROBE, cfNoData, cfOk, ringOf, siteScripts, uptime } from "../lib/derive";
-import { ago, hostOf, ms, msSql, pct, shortId, utc } from "../lib/format";
+import { padRing, uptimeOf } from "capsomer/behavior/uptime-strip";
+import { PROBE, RING_SLOTS, cfNoData, cfOk, siteScripts } from "../lib/derive";
+import { ago, hostOf, pct, shortId } from "../lib/format";
+import { parse, utc } from "capsomer/behavior/time";
 import type { OpsSiteConfig, SiteSnapshot } from "../types";
 import { NoData, Pill, St } from "../ui/icons";
-import { When } from "../ui/When";
+import { Time } from "capsomer/react/time";
 import { ChartSlot } from "../ui/ChartSlot";
 import { uptimeOptions } from "../ui/charts";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { trendChart } from "./charts";
 import { Convergence, SiteSecrets } from "./Convergence";
+import "capsomer/summary-list.css";
+import "capsomer/detail-panel.css";
 // The settings form loads the first time Edit is pressed, so the page's first paint does not carry it.
 const SiteForm = lazy(() => import("./SiteConfig").then((m) => ({ default: m.SiteForm })));
 import { Uptime90 } from "./Uptime90";
@@ -53,7 +58,7 @@ export function SitePage() {
           kind="no-match"
           title="No site has this name."
           action={
-            <Link className="btn" href="/sites">
+            <Link className="cap-btn" href="/sites">
               All sites
             </Link>
           }
@@ -121,9 +126,9 @@ const UPTIME_KEYS = [
 ] as const;
 
 function SiteUptime({ s }: { s: SiteSnapshot }) {
-  const ring = ringOf(s);
-  const p7 = uptime(ring);
-  const p24 = uptime(ring.slice(-48));
+  const ring = padRing(s.ring, RING_SLOTS);
+  const p7 = uptimeOf(ring);
+  const p24 = uptimeOf(ring.slice(-48));
   const subtitle = `${p7 == null ? "no data" : pct(p7)} up over 7 days, ${p24 == null ? "no data" : pct(p24, 1)} over 24 hours`;
   return (
     <ChartFrame
@@ -174,19 +179,17 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
   return (
     <>
       {detail && (
-        <div
-          className={`callout ${s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : ""}`}
-        >
+        <Banner tone={s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : "neutral"}>
           {detail}
-        </div>
+        </Banner>
       )}
       <div className="grid2">
-        <Panel flush title="Probe" src={`watcher pass · checked ${ago(ms(s.checked_at), now)}`}>
+        <Panel flush title="Probe" src={`watcher pass · checked ${ago(parse(s.checked_at), now)}`}>
           <div className="body">
-            <dl className="kv">
+            <dl className="cap-detail-record">
               <dt>Checked</dt>
               <dd>
-                {ago(ms(s.checked_at), now)} <When t={ms(s.checked_at)} />
+                {ago(parse(s.checked_at), now)} <Time at={s.checked_at} format="exact" />
               </dd>
               <dt>URL</dt>
               <dd className="mono">
@@ -260,8 +263,8 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
           <NoData reason={cfNoData(snap.cloudflare) ?? ""} />
         </div>
       ) : cf.deploys.length ? (
-        <div className="scroll-x">
-          <table className="list">
+        <div className="cap-table-wrap">
+          <table className="cap-table">
             <thead>
               <tr>
                 <th scope="col">When</th>
@@ -274,8 +277,8 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
             <tbody>
               {cf.deploys.map((d) => (
                 <tr key={d.id}>
-                  <td className="num" title={utc(ms(d.created_on))}>
-                    {ago(ms(d.created_on), now)}
+                  <td className="num" title={utc(parse(d.created_on))}>
+                    {ago(parse(d.created_on), now)}
                   </td>
                   <td className="mono">{shortId(d.version_id ?? d.id)}</td>
                   <td className="muted">{d.message ?? ""}</td>
@@ -306,15 +309,15 @@ function Setup({
 }) {
   const { feed, now, confirm } = useApp();
   const [editing, setEditing] = useState(false);
-  const none = <span className="faint">none</span>;
-  const at = row ? msSql(row.updated_at) : NaN;
+  const none = <Missing />;
+  const at = row ? parse(row.updated_at) : NaN;
   return (
     <>
       {editing && row && (
         <Suspense fallback={null}>
           <SiteForm
             key={`edit:${row.namespace}`}
-            editing={{ kind: "edit", row }}
+            editing={{ kind: "edit", row, key: row.namespace }}
             onClose={() => setEditing(false)}
           />
         </Suspense>
@@ -328,7 +331,7 @@ function Setup({
           row ? (
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Edit ${row.namespace}`}
               onClick={() => setEditing(true)}
               disabled={editing}
@@ -340,7 +343,7 @@ function Setup({
       >
         {row ? (
           <div className="body">
-            <dl className="kv">
+            <dl className="cap-detail-record">
               <dt>Project</dt>
               <dd className="mono">{row.namespace}</dd>
               <dt>Name</dt>
@@ -358,7 +361,7 @@ function Setup({
               <dd className="mono">
                 {row.origin === null
                   ? none
-                  : (row.health_path ?? <span className="faint">none, root probed</span>)}
+                  : (row.health_path ?? <Missing>none, root probed</Missing>)}
               </dd>
               <dt>Platform</dt>
               <dd>
@@ -417,7 +420,7 @@ function Setup({
           <div className="toolbar">
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Rotate the operator key of ${row.name}`}
               onClick={() =>
                 confirm({

@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { Suspense, useEffect, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
@@ -5,7 +6,8 @@ import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchDigest, fetchPlan, useAnswer } from "../lib/api";
-import { ago, ms } from "../lib/format";
+import { ago } from "../lib/format";
+import { parse } from "capsomer/behavior/time";
 import { readPref, writePref } from "../lib/prefs";
 import type { PortalDigest, PortalPlan } from "../types";
 import { St } from "../ui/icons";
@@ -22,9 +24,9 @@ const TonightTimeline = trendChart("TonightTimeline");
 
 function Failed({ what, error }: { what: string; error: string | null }) {
   return error ? (
-    <div className="callout crit" role="alert">
+    <Banner tone="crit">
       Could not read {what}: {error}
-    </div>
+    </Banner>
   ) : null;
 }
 
@@ -50,18 +52,18 @@ export function Tonight() {
       count={plan ? planned : undefined}
       src={
         plan
-          ? `planned ${ago(ms(plan.generated), now)} · ${plan.budget_minutes} min budget`
+          ? `planned ${ago(parse(plan.generated), now)} · ${plan.budget_minutes} min budget`
           : "jobs list view plan"
       }
     >
       <Failed what="the plan" error={load.error} />
       {plan && plan.policy !== "document" && (
-        <div className="callout warn">
+        <Banner tone="warn">
           {plan.policy_note ??
             (plan.policy === "default"
               ? "No overnight policy document: every repo counts as heavy."
               : "The overnight policy document did not parse.")}
-        </div>
+        </Banner>
       )}
       {!plan && load.loading ? (
         <div className="loading" role="status">
@@ -180,7 +182,7 @@ export function SinceLastLooked() {
     <Panel
       title="Since you last looked"
       id="since"
-      src={`since ${ago(ms(since), now)} · jobs list view digest`}
+      src={`since ${ago(parse(since), now)} · jobs list view digest`}
     >
       <Failed what="the digest" error={load.error} />
       {!d && load.loading ? (
@@ -223,7 +225,8 @@ export function SinceLastLooked() {
                       tabIndex={0}
                       className="click"
                     >
-                      <b>{b.title}</b> <span className="faint">blocked {ago(ms(b.at), now)}</span>
+                      <b>{b.title}</b>{" "}
+                      <span className="faint">blocked {ago(parse(b.at), now)}</span>
                     </li>
                   ))}
                 </ul>

@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   historyRanges,
-  isoWeek,
   readPackage,
   validatePackage,
   type FetchLike,
 } from "../src/ops-packages.ts";
 import type { OpsPackageConfig } from "../src/ops-types/sites.ts";
+import { isoWeek } from "../src/time.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // The Packages panel's pure parts and its per-pass read, against a fake of each source.

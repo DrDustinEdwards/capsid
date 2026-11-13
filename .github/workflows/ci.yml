@@ -131,10 +131,12 @@ jobs:
       # deleted, nor a later one that drops or renames without a `-- contract:` line
       # (migrations/manifest.json; a new migration adds its hash with
       # `npx devkit-migrations migrations --write`).
-      - name: Console and migration ratchets
+      - name: Console, migration, secret and destructive-action ratchets
         run: |
           npm run check:console
           npm run check:migrations
+          npm run check:secrets
+          npm run check:destructive
 
       - name: Tests
         run: npm test
@@ -148,7 +150,7 @@ jobs:
         run: npm run test:integration
 
       # The Watch Floor app builds, and stays inside its size budget
-      # (dashboard/scripts/size-budget.mjs, which fails closed on a missing build).
+      # (devkit-size-budget, dashboard/.size-budget.json, which fails closed on a missing build).
       # scripts/deploy.mjs runs the same two before every deploy.
       - name: Build the dashboard and hold its size budget
         run: npm run build:dashboard
@@ -159,7 +161,7 @@ jobs:
       # Only Chromium is installed; its version is pinned by @playwright/test in
       # dashboard/package-lock.json.
       - name: Install the browser for the app's browser tests
-        run: npx --prefix dashboard playwright install --with-deps chromium
+        run: npx --prefix dashboard playwright install chromium
 
       - name: Browser tests
         run: npm run test:browser

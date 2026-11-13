@@ -1,8 +1,10 @@
+import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import type { Env } from "./env";
-import { PR_URL_SOURCE, ghFetch, parsePrUrl, resolveRepo } from "./github/client";
+import { PR_URL_SOURCE, parsePrUrl } from "@dustinedwards/site-runtime/github";
+import { ghFetch, resolveRepo } from "./github/client";
 import { prFacts, verifyEvidence } from "./job-outcomes";
 import { auditStatement } from "./store-guards";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { DAY_MS } from "./time";
 
 // Merge-state re-verification. An outcome row records merge state when `complete`
@@ -170,14 +172,9 @@ export function unverifiableStatements(
   ];
 }
 
-// A time from GitHub (ISO with a zone) or from D1 (datetime('now'), "YYYY-MM-DD HH:MM:SS",
-// which is UTC) as milliseconds, or NaN.
+// A time from GitHub (ISO with a zone) or from D1 (UTC with no zone) as milliseconds, or NaN.
 function instant(t: string | null | undefined): number {
-  if (!t) return Number.NaN;
-  const iso = /^\d{4}-\d\d-\d\d \d/.test(t)
-    ? `${t.replace(" ", "T")}${/(Z|[+-]\d\d:?\d\d)$/.test(t) ? "" : "Z"}`
-    : t;
-  return Date.parse(iso);
+  return parseSqlTime(t) ?? Number.NaN;
 }
 
 /** When the repository a pull request URL names was created, or null when it could not
@@ -202,7 +199,7 @@ async function repoCreatedAt(env: Env, namespace: string, prUrl: string): Promis
     logEvent(
       "OUTCOME_PRS_REPO_UNREADABLE",
       {
-        message: `outcome-prs: could not read the repository behind ${prUrl}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `outcome-prs: could not read the repository behind ${prUrl}: ${errorMessage(err)}`,
       },
       { level: "warn" },
     );

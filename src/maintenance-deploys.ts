@@ -3,8 +3,9 @@ import { ghFetch, resolveRepo } from "./github/client";
 import type { MaintenanceItem } from "./maintenance";
 import type { OpsSnapshot } from "./ops-types/sites";
 import { readSnapshot } from "./ops-snapshot";
-import { HOUR_MS, DAY_MS } from "./time";
+import { HOUR_MS, days } from "./time";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The daily maintenance pass's undeployed-merge rule (job_549550d73d4e, piece 5). Carrel sat
 // four days behind its default branch before anyone noticed. A site's live Worker is
 // behind when its newest Cloudflare deployment is older than the last commit on its repo's
@@ -35,8 +36,6 @@ export interface DeployReaders {
   /** The head commit of the namespace's repo's default branch. Throws when not read. */
   defaultHead(namespace: string): Promise<DefaultHead>;
 }
-
-const days = (ms: number): string => `${(ms / DAY_MS).toFixed(1)} days`;
 
 /** Whether two shas name the same commit, when either may be abbreviated. */
 function sameSha(a: string, b: string): boolean {
@@ -74,12 +73,7 @@ export async function gatherDeployItems(
     snapshot = await readers.snapshot();
   } catch (err) {
     return {
-      items: [
-        notChecked(
-          "capsid",
-          `the watcher snapshot: ${err instanceof Error ? err.message : String(err)}`,
-        ),
-      ],
+      items: [notChecked("capsid", `the watcher snapshot: ${errorMessage(err)}`)],
       read,
     };
   }
@@ -101,12 +95,7 @@ export async function gatherDeployItems(
     try {
       head = await readers.defaultHead(site.namespace);
     } catch (err) {
-      items.push(
-        notChecked(
-          site.namespace,
-          `its default branch: ${err instanceof Error ? err.message : String(err)}`,
-        ),
-      );
+      items.push(notChecked(site.namespace, `its default branch: ${errorMessage(err)}`));
       continue;
     }
     read[site.namespace] = 1;

@@ -3,6 +3,7 @@ import { docStatements, priorDoc } from "./doc-statements";
 import { checkJobText, type SignatureCheck } from "./job-signing";
 import { jobDocPath, isTerminalJobStatus, type JobRow } from "./jobs-schema";
 import { auditStatement } from "./store-guards";
+import { plural } from "@drdustinedwards/site-helpers/text";
 
 // The records a job transition writes beside its UPDATE: the mirror document, the
 // audit row, and the latest resume note read back from that audit row.
@@ -188,8 +189,7 @@ function renderJobDoc(job: JobRow, notes: ResumeNote[], dropped = 0): string {
       if (earlier.note) lines.push("", earlier.note, "");
     }
   }
-  if (dropped > 0)
-    lines.push("", `(${dropped} older resume${dropped === 1 ? "" : "s"} not shown.)`);
+  if (dropped > 0) lines.push("", `(${plural(dropped, "older resume")} not shown.)`);
   lines.push("", "## The prompt", "", job.body);
   return lines.join("\n");
 }

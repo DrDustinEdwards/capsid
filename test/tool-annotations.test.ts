@@ -361,7 +361,7 @@ const OPEN_WORLD_THROUGH: Record<
     via: /\breadSiteBackups\(/,
     evidence: [
       { file: "site-backup.ts", pattern: /\bcallOperator\(/ },
-      { file: "site-operator.ts", pattern: /\bfetchImpl\(/ },
+      { file: "site-operator.ts", pattern: /\boperatorCall\(/ },
     ],
   },
   workers_build_logs: {
@@ -378,7 +378,7 @@ const OPEN_WORLD_THROUGH: Record<
       { file: "controls-perform.ts", pattern: /\brunSiteRepair\(/ },
       { file: "controls-perform.ts", pattern: /\brunSiteBackups\(/ },
       { file: "site-repair.ts", pattern: /\bcallOperator\(/ },
-      { file: "site-operator.ts", pattern: /\bfetchImpl\(/ },
+      { file: "site-operator.ts", pattern: /\boperatorCall\(/ },
     ],
   },
   set_site_key: {

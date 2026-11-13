@@ -15,6 +15,7 @@ import {
   type TrialStatus,
 } from "./model-routing";
 import { DAY_MS } from "./time";
+import { plural } from "@drdustinedwards/site-helpers/text";
 
 // WHAT THE ROUTING LEARNS (capsid/research/design-model-routing.md): per kind and model,
 // the share of jobs merged with green CI and not undone since, the corrections spent,
@@ -128,6 +129,6 @@ export async function readModelLearning(db: D1Database, now: Date): Promise<Mode
     note:
       read.length === 0
         ? "No routed outcome in the window yet: outcomes written before migration 0032 carry no kind or model. Nothing is proposed from no evidence."
-        : `${cells.length} kind and model cells, ${enough} with at least ${MIN_SAMPLE} outcomes; only those are acted on. ${proposals.length} proposed change${proposals.length === 1 ? "" : "s"}, none applied: the seat approves each rule edit.${mismatched ? ` ${mismatched} outcome${mismatched === 1 ? " was" : "s were"} left out because the session reported a model other than the one chosen.` : ""}${truncated ? ` The window holds more than ${LEARNING_ROWS_MAX} outcomes, so this is the newest ${LEARNING_ROWS_MAX}.` : ""}`,
+        : `${cells.length} kind and model cells, ${enough} with at least ${MIN_SAMPLE} outcomes; only those are acted on. ${plural(proposals.length, "proposed change")}, none applied: the seat approves each rule edit.${mismatched ? ` ${mismatched} outcome${mismatched === 1 ? " was" : "s were"} left out because the session reported a model other than the one chosen.` : ""}${truncated ? ` The window holds more than ${LEARNING_ROWS_MAX} outcomes, so this is the newest ${LEARNING_ROWS_MAX}.` : ""}`,
   };
 }

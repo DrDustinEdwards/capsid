@@ -1,36 +1,32 @@
 // The Sites table's small charts, drawn by Enarratio: each site's uptime and errors per hour.
 // Inline forms (the bare SVG, role="img" with its text alternative), since a chart in a table
 // cell needs no frame.
-import { sparkline, uptimeStrip, uptimeStripTable, type UptimeSlot } from "enarratio";
+import { sparkline, uptimeStrip, uptimeStripTable } from "enarratio";
 import type { HourBucket, SiteSnapshot } from "../types";
-import { RING_SLOTS, ringOf, slotStart, uptime } from "../lib/derive";
-import { pct, utc } from "../lib/format";
+import { fromRing, padRing, uptimeOf } from "capsomer/behavior/uptime-strip";
+import { RING_SLOTS, slotStart } from "../lib/derive";
+import { pct } from "../lib/format";
+import { utc } from "capsomer/behavior/time";
+import { markup } from "capsomer/behavior/trusted-html";
 
 // ---- uptime ticks: 336 half-hour slots as 84 two-hour ticks ------------------------
 
 const TICKS = 84;
-const PER = RING_SLOTS / TICKS;
 
 // Chart 8 (design-portal-evaluation.md section 3: "Is every site up, and since when?"), drawn
 // with Enarratio's uptimeStrip: each two-hour window up, degraded (a failed probe among
 // passes), down (every probe failed) or unknown (no watcher pass). The site drawer draws the
 // same options as a whole figure in Capsomer's frame (app/Drawer.tsx).
 export function uptimeOptions(site: SiteSnapshot) {
-  const ring = ringOf(site);
-  const slots: UptimeSlot[] = [];
-  let downTicks = 0;
-  let gaps = 0;
-  for (let b = 0; b < TICKS; b++) {
-    const slice = Array.from(ring.slice(b * PER, (b + 1) * PER));
-    const seen = slice.filter((c) => c !== "-").length;
-    const down = slice.filter((c) => c === "0").length;
-    const status = !seen ? "unknown" : down === seen ? "down" : down ? "degraded" : "up";
-    if (down) downTicks++;
-    if (!seen) gaps++;
-    const label = `${utc(slotStart(site, b * PER)).slice(5)} +2h, ${seen ? `${seen - down} of ${seen} probes up` : "no watcher pass"}`;
-    slots.push({ status, label });
-  }
-  const up = uptime(ring);
+  const ring = padRing(site.ring, RING_SLOTS);
+  const slots = fromRing(ring, {
+    slots: TICKS,
+    label: ({ first, seen, down }) =>
+      `${utc(slotStart(site, first)).slice(5)} +2h, ${seen ? `${seen - down} of ${seen} probes up` : "no watcher pass"}`,
+  });
+  const downTicks = slots.filter((x) => x.status === "down" || x.status === "degraded").length;
+  const gaps = slots.filter((x) => x.status === "unknown").length;
+  const up = uptimeOf(ring);
   return {
     slots,
     width: 420,
@@ -46,24 +42,20 @@ export function UptimeTicks({ site }: { site: SiteSnapshot }) {
     <>
       <span
         className="cap-uptime-strip"
-        dangerouslySetInnerHTML={{ __html: uptimeStrip({ ...opts, inline: true }) }}
+        dangerouslySetInnerHTML={markup(uptimeStrip({ ...opts, inline: true }))}
       />
-      <span
-        dangerouslySetInnerHTML={{
-          __html: uptimeStripTable(opts, { dataTable: "visually-hidden" }).markup,
-        }}
-      />
+      <span dangerouslySetInnerHTML={markup(uptimeStripTable(opts).markup)} />
     </>
   );
 }
 
 export function UptimeFoot({ site }: { site: SiteSnapshot }) {
-  const ring = ringOf(site);
+  const ring = padRing(site.ring, RING_SLOTS);
   return (
     <div className="upct">
       <span>7d</span>
       <span>
-        {pct(uptime(ring))} · 24h {pct(uptime(ring.slice(-48)), 1)}
+        {pct(uptimeOf(ring))} · 24h {pct(uptimeOf(ring.slice(-48)), 1)}
       </span>
     </div>
   );
@@ -82,8 +74,8 @@ export function ErrorSpark({ values, label }: { values: number[]; label: string 
   return (
     <span
       className="spark"
-      dangerouslySetInnerHTML={{
-        __html: sparkline({
+      dangerouslySetInnerHTML={markup(
+        sparkline({
           values,
           label,
           alt: label,
@@ -92,7 +84,7 @@ export function ErrorSpark({ values, label }: { values: number[]; label: string 
           area: true,
           inline: true,
         }),
-      }}
+      )}
     />
   );
 }

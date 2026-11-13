@@ -1,12 +1,13 @@
+import { githubJson } from "@dustinedwards/site-runtime/github";
 import type { Env } from "./env";
 import { ghFetch, getDefaultBranch } from "./github/client";
 import { createTag, publishRelease, releaseNotes } from "./github/releases";
 import type { MaintenanceItem } from "./maintenance";
 import { readRootManifest, readSharedConfig, releaseDecision } from "./shared-code";
 import { auditStatement } from "./store-guards";
-import { fromBase64 } from "@dustinedwards/site-runtime/encoding";
+import { fromBase64Text } from "@dustinedwards/site-runtime/encoding";
 
-const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase64(text));
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 
 // The daily maintenance pass's release-tag rule (Capsid improvement list, item 13:
 // releases without Dustin's PC). A cloud session cannot push a tag, so a shared package's
@@ -126,7 +127,7 @@ export async function gatherReleaseItems(
       items: [
         notChecked(
           "capsid",
-          `the switch or the shared packages could not be read: ${err instanceof Error ? err.message : String(err)}`,
+          `the switch or the shared packages could not be read: ${errorMessage(err)}`,
         ),
       ],
       read,
@@ -202,21 +203,14 @@ export async function gatherReleaseItems(
       sha = found;
       changelog = await readers.changelog(repo, sha);
     } catch (err) {
-      items.push(
-        notChecked(namespace, `${repo}: ${err instanceof Error ? err.message : String(err)}`),
-      );
+      items.push(notChecked(namespace, `${repo}: ${errorMessage(err)}`));
       continue;
     }
 
     try {
       await readers.tag(repo, tag, sha);
     } catch (err) {
-      items.push(
-        notChecked(
-          namespace,
-          `${repo} ${tag} was not made: ${err instanceof Error ? err.message : String(err)}`,
-        ),
-      );
+      items.push(notChecked(namespace, `${repo} ${tag} was not made: ${errorMessage(err)}`));
       continue;
     }
     tagged++;
@@ -228,7 +222,7 @@ export async function gatherReleaseItems(
       try {
         release = await readers.release(repo, tag, notes);
       } catch (err) {
-        releaseError = err instanceof Error ? err.message : String(err);
+        releaseError = errorMessage(err);
       }
     }
     // One audit row per tag, written before the next tag. A failed write stops the rule
@@ -275,12 +269,7 @@ export function githubReleaseReaders(env: Env): ReleaseReaders {
   };
   const getJson = async (full: string, path: string): Promise<unknown> => {
     const { owner, name } = split(full);
-    const resp = await ghFetch(env, owner, name, `/repos/${owner}/${name}${path}`);
-    if (!resp.ok) {
-      await resp.body?.cancel();
-      throw new Error(`GitHub answered ${resp.status} for ${full}${path.split("?")[0]}`);
-    }
-    return resp.json();
+    return githubJson((p) => ghFetch(env, owner, name, p), `/repos/${owner}/${name}${path}`);
   };
   return {
     async packages() {
@@ -347,7 +336,7 @@ export function githubReleaseReaders(env: Env): ReleaseReaders {
       }
       const data = (await resp.json()) as { content?: unknown; encoding?: unknown };
       return data.encoding === "base64" && typeof data.content === "string"
-        ? decodeBase64(data.content)
+        ? fromBase64Text(data.content)
         : null;
     },
     async tag(repo, tag, sha) {

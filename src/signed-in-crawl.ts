@@ -21,7 +21,6 @@ import { HOUR_MS } from "./time";
 // ADMIN_EMAIL that lives for one request and never leaves the isolate. GET only, plus R4's two refused POSTs, which the
 // action gate answers with 415 before it reads a body, a CSRF pair or a session's rights.
 
-export { SIGNED_IN_REPORT_PATH } from "@dustinedwards/site-runtime/signed-in-crawl";
 const SIGNED_IN_REPORT_KEY = "reports:signed-in-security";
 // Hourly; devkit reads it once a day and refuses one older than 180 minutes.
 const REFRESH_MS = HOUR_MS;

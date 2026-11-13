@@ -3,7 +3,7 @@ import { dashboardCsp } from "./dashboard-csp";
 import type { Env } from "./env";
 import { PORTAL_PATH, portalGate } from "./portal-auth";
 import { isPortalHost } from "./portal-host";
-import { textResponse as text } from "./http";
+import { textResponse as text } from "@dustinedwards/site-runtime/http";
 
 // Capsid Portal (capsid/research/design-ops-console.md, moved from /console/app/ by
 // capsid/research/design-portal-unify.md): React Router pages rendered here, on the server, with
@@ -64,15 +64,11 @@ export async function serveFile(
 }
 
 /** The response a page leaves with: never cached, and its policy carrying the page's nonce. */
-export function pageHeaders(
-  response: Response,
-  csp: { policy: string; reportOnly: string },
-): Response {
+export function pageHeaders(response: Response, csp: { policy: string }): Response {
   const headers = new Headers(response.headers);
   headers.set("Cache-Control", "no-store");
   // Referrer-Policy, X-Frame-Options and the rest come from withSecurityHeaders (src/security-headers.ts).
   headers.set("Content-Security-Policy", csp.policy);
-  headers.set("Content-Security-Policy-Report-Only", csp.reportOnly);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

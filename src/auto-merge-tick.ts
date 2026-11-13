@@ -22,7 +22,7 @@ import {
   evaluatePolicy,
   ciVerdict,
 } from "./auto-merge-policy";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { isVisual, visualDetails, type VisualPr } from "./visual-pr";
 import {
   closeAsAutoMerged,
@@ -262,7 +262,7 @@ async function auditDeclineOnChange(
     logEvent(
       "AUTO_MERGE",
       {
-        message: `AUTO_MERGE could not read the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `AUTO_MERGE could not read the last decline of ${key}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );
@@ -276,7 +276,7 @@ async function auditDeclineOnChange(
     logEvent(
       "AUTO_MERGE",
       {
-        message: `AUTO_MERGE could not record the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `AUTO_MERGE could not record the last decline of ${key}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );
@@ -366,7 +366,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     logEvent(
       "AUTO_MERGE",
       {
-        message: `AUTO_MERGE could not read the suspended merge units, so nothing merges unattended this tick: ${err instanceof Error ? err.message : String(err)}`,
+        message: `AUTO_MERGE could not read the suspended merge units, so nothing merges unattended this tick: ${errorMessage(err)}`,
       },
       { level: "error" },
     );
@@ -382,7 +382,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     logEvent(
       "AUTO_MERGE",
       {
-        message: `AUTO_MERGE could not read the paused namespaces, so nothing merges unattended this tick: ${err instanceof Error ? err.message : String(err)}`,
+        message: `AUTO_MERGE could not read the paused namespaces, so nothing merges unattended this tick: ${errorMessage(err)}`,
       },
       { level: "error" },
     );
@@ -423,7 +423,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
         logEvent(
           "AUTO_MERGE",
           {
-            message: `AUTO_MERGE could not read the approvals on ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}`,
+            message: `AUTO_MERGE could not read the approvals on ${owner}/${repo}: ${errorMessage(err)}`,
           },
           { level: "error" },
         );
@@ -432,7 +432,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       logEvent(
         "AUTO_MERGE",
         {
-          message: `AUTO_MERGE could not read ${namespace}: ${err instanceof Error ? err.message : String(err)}`,
+          message: `AUTO_MERGE could not read ${namespace}: ${errorMessage(err)}`,
         },
         { level: "error" },
       );
@@ -483,7 +483,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
           logEvent(
             "AUTO_MERGE",
             {
-              message: `AUTO_MERGE could not audit the decline of ${owner}/${repo}#${pr.number}: ${err instanceof Error ? err.message : String(err)}`,
+              message: `AUTO_MERGE could not audit the decline of ${owner}/${repo}#${pr.number}: ${errorMessage(err)}`,
             },
             { level: "error" },
           );
@@ -515,7 +515,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
             visual,
           );
         } catch (err) {
-          const why = err instanceof Error ? err.message : String(err);
+          const why = errorMessage(err);
           logEvent(
             "AUTO_MERGE",
             { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` },
@@ -547,7 +547,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
             logEvent(
               "AUTO_MERGE",
               {
-                message: `AUTO_MERGE could not audit the failure on ${owner}/${repo}#${pr.number}: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
+                message: `AUTO_MERGE could not audit the failure on ${owner}/${repo}#${pr.number}: ${errorMessage(auditErr)}`,
               },
               { level: "error" },
             );
@@ -570,7 +570,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     logEvent(
       "AUTO_MERGE",
       {
-        message: `AUTO_MERGE could not expire old approvals: ${err instanceof Error ? err.message : String(err)}`,
+        message: `AUTO_MERGE could not expire old approvals: ${errorMessage(err)}`,
       },
       { level: "error" },
     );
@@ -599,7 +599,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     logEvent(
       "AUTO_MERGE",
       {
-        message: `AUTO_MERGE could not record the awaiting-seat set: ${err instanceof Error ? err.message : String(err)}`,
+        message: `AUTO_MERGE could not record the awaiting-seat set: ${errorMessage(err)}`,
       },
       { level: "error" },
     );

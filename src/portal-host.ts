@@ -19,6 +19,8 @@
 
 // The same values as portal-auth's PORTAL_PATH and PORTAL_PREFIX, stated here rather than
 // imported, because portal-auth imports this module.
+import { isSameOriginPath } from "@dustinedwards/site-runtime/url";
+
 const PORTAL_PATH = "/portal";
 const PORTAL_PREFIX = "/portal/";
 
@@ -40,12 +42,6 @@ export function publicPortalPath(url: URL, internal: string): string {
   if (!isPortalHost(url)) return internal;
   if (internal === PORTAL_PATH) return "/";
   return internal.startsWith(PORTAL_PREFIX) ? internal.slice(PORTAL_PATH.length) : internal;
-}
-
-/** A path the browser may be sent to on this origin: one leading slash and no backslash.
- *  "//host/x" and "/\\host/x" are protocol-relative to a browser and would leave the origin. */
-export function isSameOriginPath(path: string): boolean {
-  return path.startsWith("/") && !path.startsWith("//") && !path.includes("\\");
 }
 
 /** On the Portal host: a redirect for an old /portal path, or the request rewritten to its

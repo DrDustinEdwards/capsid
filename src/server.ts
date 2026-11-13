@@ -1,3 +1,4 @@
+import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import { McpServer } from "@modelcontextprotocol/server";
 import type { Env } from "./env";
 import { grantAgent, type Agent } from "./agents";
@@ -63,11 +64,10 @@ export function concurrentEditWarning(
   now: number,
 ): string | null {
   if (!updatedAt) return null;
-  // D1 stores datetime('now') in UTC with no zone, which Date.parse reads as local.
-  // That would silence the warning on a machine behind UTC and fire it constantly on
-  // one ahead.
-  const parsed = Date.parse(`${updatedAt.replace(" ", "T")}Z`);
-  if (Number.isNaN(parsed)) return null;
+  // D1 stores datetime('now') in UTC with no zone; read as local it would silence the
+  // warning on a machine behind UTC and fire it constantly on one ahead.
+  const parsed = parseSqlTime(updatedAt);
+  if (parsed === null) return null;
   const age = now - parsed;
   if (age < 0 || age > CONCURRENT_EDIT_WINDOW_MS) return null;
   return (

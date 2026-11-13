@@ -49,6 +49,8 @@ import { limitRefusalFor } from "./site-repair";
 import { BACKUP_LIMIT, backupRefusal, backupSites, CAPSID_DUMP } from "./site-backup";
 import { CAPSID_NAMESPACE, jobRefusal } from "./site-jobs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { plural } from "@drdustinedwards/site-helpers/text";
 // A control's preview (src/controls.ts is the core): reads the current state, writes
 // nothing, and returns what will change and the audit rows it will write.
 
@@ -163,7 +165,7 @@ export async function planAction(
               ? `${label}: blocked -> queued, claimed by nobody. The resume records why: ${toQueue}`
               : `${label}: blocked -> claimed by ${holder}. ${holder} continues it; it does not move to you.`,
             `resumed_count: ${job.resumed_count} -> ${job.resumed_count + 1}.`,
-            `Your approval "${p.reason}" is recorded in the resume note the next holder reads${p.note ? `, with your note of ${p.note.length} character${p.note.length === 1 ? "" : "s"} in full` : ""}.`,
+            `Your approval "${p.reason}" is recorded in the resume note the next holder reads${p.note ? `, with your note of ${plural(p.note.length, "character")} in full` : ""}.`,
           ],
           audit: [`job-resumed by ${actor}`, click],
         };
@@ -222,7 +224,7 @@ export async function planAction(
           `${job.id} ('${job.title}' in ${job.namespace}): blocked -> done, with the result "Closed as shipped by ${actor}: ${p.reason}".`,
           `The outcome row credits ${job.claimed_by ?? "nobody"}, who did the work. No claim is recorded for you; one admin_complete touch records that you closed it.`,
           shipped.prs.length
-            ? `The outcome verifies ${shipped.prs.length} pull request${shipped.prs.length === 1 ? "" : "s"} against GitHub: ${shipped.prs.join(", ")}${shipped.more ? ` (${shipped.more} more named, left out)` : ""}.`
+            ? `The outcome verifies ${plural(shipped.prs.length, "pull request")} against GitHub: ${shipped.prs.join(", ")}${shipped.more ? ` (${shipped.more} more named, left out)` : ""}.`
             : "The job names no pull request, so the outcome verifies nothing.",
         ],
         audit: [`job-admin-complete by ${actor}`, click],
@@ -446,7 +448,7 @@ export async function planAction(
       try {
         full = (await resolveRepo(env, p.namespace, p.repo)).full;
       } catch (err) {
-        return refused(err instanceof Error ? err.message : String(err));
+        return refused(errorMessage(err));
       }
       return {
         ok: true,
@@ -728,7 +730,7 @@ export async function planAction(
           `agent ${p.name} (${agent.kind}): live -> revoked. Its key stops resolving on the next request, and the name can never be minted again.`,
           held.length === 0
             ? `It holds no claimed or blocked job.`
-            : `It holds ${held.length} job${held.length === 1 ? "" : "s"}, which stay as they are until released or failed: ${held
+            : `It holds ${plural(held.length, "job")}, which stay as they are until released or failed: ${held
                 .map((j) => `${j.id} (${j.status}, '${j.title}' in ${j.namespace})`)
                 .join("; ")}.`,
         ],

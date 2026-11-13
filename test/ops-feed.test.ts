@@ -241,7 +241,7 @@ async function signed(path: string, init: RequestInit = {}): Promise<Request> {
 test("the feed answers a signed-in administrator with the feed, uncached", async () => {
   const res = await handleOpsFeed(await signed(OPS_FEED_PATH), env(), NOW, { feed });
   assert.equal(res.status, 200);
-  assert.equal(res.headers.get("Cache-Control"), "no-store");
+  assert.equal(res.headers.get("Cache-Control"), "private, no-store");
   assert.match(res.headers.get("Content-Type") ?? "", /application\/json/);
   const body = (await res.json()) as { csrf: string };
   assert.deepEqual(body, { ...FEED, csrf: body.csrf, user: { name: "admin", initials: "A" } });
@@ -294,7 +294,7 @@ async function signedWithCsrf(
   init: RequestInit = {},
 ): Promise<Request> {
   const req = await signed(path, init);
-  req.headers.set("Cookie", `${req.headers.get("Cookie")}; ${PORTAL_CSRF_COOKIE}=${csrf}`);
+  req.headers.set("Cookie", `${req.headers.get("Cookie")}; __Secure-${PORTAL_CSRF_COOKIE}=${csrf}`);
   return req;
 }
 

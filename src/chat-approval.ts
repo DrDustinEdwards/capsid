@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { auditStatement } from "./store-guards";
 import { readPrFiles } from "./github/pr-files";
 import { pathClassOfAll } from "./merge-class";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
 // A chat approval in the approval record (src/pr-approvals.ts, table pr_approvals).
 // Dustin approves most pull requests with a "yes" in a Claude chat, and the session
@@ -72,7 +72,7 @@ export async function recordChatApproval(
     ]);
     return { recorded: true, path_class: pathClass };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       "CHAT_APPROVAL_NOT_RECORDED",
       { message: `CHAT_APPROVAL_NOT_RECORDED ${p.repo}#${p.number}: ${message}` },

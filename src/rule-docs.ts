@@ -21,6 +21,7 @@ import { COMPOSITES } from "./tools/surface";
 import { JOB_ACTIONS } from "./jobs-schema";
 import type { OpsMaintenanceItem } from "./ops-types/views";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 export const CORE_CAP_BYTES = 8 * 1024;
 export const RULE_DOC_CAP_BYTES = 20 * 1024;
 
@@ -261,7 +262,7 @@ export async function gatherRuleDocItems(
     });
     return { items, read: rule.length };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     return {
       items: [
         {
