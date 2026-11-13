@@ -100,7 +100,13 @@ export function ProjectSelect({
       <label className="cap-sr-only" htmlFor={id}>
         Project
       </label>
-      <select id={id} className="search" value={value} onChange={(e) => onChange(e.target.value)}>
+      <select
+        id={id}
+        name="namespace"
+        className="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
         <option value="">All projects</option>
         {names.map((n) => (
           <option key={n} value={n}>

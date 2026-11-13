@@ -71,6 +71,7 @@ export function Activity() {
             agent on the roster, and every actor in the rows read. */}
         <select
           id="actActor"
+          name="actor"
           className="search"
           value={actorInput}
           onChange={(e) => filters.setInput({ actor: e.target.value })}
