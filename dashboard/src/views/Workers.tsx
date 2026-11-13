@@ -1,4 +1,5 @@
-import { Empty, Missing, Spinner } from "capsomer/react/empty";
+import { Empty, Missing } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchResources } from "../lib/api";

@@ -12,7 +12,7 @@ import { Time } from "capsomer/react/time";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
 import { NoSnapshot } from "./shared";
-import { Spinner } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { fetchBackups } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
 import type { SiteBackupRow } from "../types";

@@ -1,6 +1,7 @@
 import { Alert } from "capsomer/react/banner";
 import { AwayLink } from "capsomer/react/link";
-import { Empty, Spinner } from "capsomer/react/empty";
+import { Empty } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { Panel } from "capsomer/react/panel";
 import { StatusMatrix } from "capsomer/react/status-matrix";
 import "capsomer/status-matrix.css";

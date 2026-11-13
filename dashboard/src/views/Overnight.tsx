@@ -1,7 +1,7 @@
 import { Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { Suspense } from "react";
-import { Spinner } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";

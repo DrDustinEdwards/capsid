@@ -9,7 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { Dialog } from "capsomer/react/dialog";
-import { Missing as NoValue, Spinner } from "capsomer/react/empty";
+import { Missing as NoValue } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { useApp, type DrawerType } from "./ctx";
 import { fetchActivity } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";

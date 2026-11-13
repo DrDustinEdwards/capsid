@@ -1,5 +1,6 @@
 import { Alert, Banner } from "capsomer/react/banner";
-import { Empty, Spinner } from "capsomer/react/empty";
+import { Empty } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
 import { useApp } from "../app/ctx";

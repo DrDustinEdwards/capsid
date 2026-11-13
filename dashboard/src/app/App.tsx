@@ -11,7 +11,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { Spinner } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { useNow, useRemembered } from "capsomer/react/hooks";
 import { copyText } from "capsomer/behavior/copy";
 import { Freshness } from "capsomer/react/freshness";

@@ -1,5 +1,5 @@
 import { Banner } from "capsomer/react/banner";
-import { Spinner } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";

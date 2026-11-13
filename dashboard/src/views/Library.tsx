@@ -1,7 +1,8 @@
 import { parseDocParam } from "../lib/keys";
 import { type FormEvent, type ReactNode } from "react";
 import { FilterBar, withParams } from "capsomer/react/filter-bar";
-import { Empty, Spinner } from "capsomer/react/empty";
+import { Empty } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { Panel } from "capsomer/react/panel";
 import { Snippet } from "capsomer/react/search-results";
 import "capsomer/search-results.css";

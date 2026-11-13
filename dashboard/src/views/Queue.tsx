@@ -4,7 +4,7 @@ import "capsomer/anchor-bar.css";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy } from "react";
-import { Spinner } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { QUEUE_TABS, tabOf, useApp } from "../app/ctx";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { LIVE, fetchStale } from "../lib/api";

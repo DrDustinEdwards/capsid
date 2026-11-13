@@ -1,5 +1,6 @@
 import { AwayLink } from "capsomer/react/link";
-import { Empty, Spinner } from "capsomer/react/empty";
+import { Empty } from "capsomer/react/empty";
+import { Spinner } from "capsomer/react/skeleton";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchSharedCode } from "../lib/api";
