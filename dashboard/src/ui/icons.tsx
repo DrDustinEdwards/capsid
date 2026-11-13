@@ -297,7 +297,7 @@ export function NoData({ reason, brief }: { reason: string; brief?: boolean }) {
 
 // The menu's icons: the shared set where it has the drawing, the Portal's own 16-unit drawings where
 // it does not (Jobs, Sites, Pull requests, Packages, Health).
-const NAV_ICONS: Record<string, { d: string; box?: 16 }> = {
+const NAV_ICONS: Record<string, { d: string; box?: number }> = {
   needs: { d: iconQueue },
   sites: {
     d: "M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM2 8h12M8 2c1.8 1.7 2.6 3.7 2.6 6S9.8 12.3 8 14C6.2 12.3 5.4 10.3 5.4 8S6.2 3.7 8 2z",
@@ -323,6 +323,5 @@ const NAV_ICONS: Record<string, { d: string; box?: 16 }> = {
 export function NavIcon({ id, size = 16 }: { id: string; size?: number }) {
   const icon = NAV_ICONS[id];
   if (!icon) return null;
-  const className = size > 16 ? "navicon navicon-lg" : "navicon";
-  return <CapIcon d={icon.d} box={icon.box} className={className} />;
+  return <CapIcon {...icon} className={size > 16 ? "navicon navicon-lg" : "navicon"} />;
 }

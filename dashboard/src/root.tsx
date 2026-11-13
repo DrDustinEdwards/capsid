@@ -12,7 +12,9 @@ import {
   useRouteLoaderData,
   type LoaderFunctionArgs,
 } from "react-router";
-// The network's faces, self-hosted (CSP font-src 'self'): one variable file each, every weight.
+// The faces the Portal draws, self-hosted (CSP font-src 'self'): Inter and Martian Mono, and Jost
+// for the error page's title (--poster). One variable file each, every weight; the network's other
+// faces stay out of the stylesheet.
 import "capsomer/fonts-inter.css";
 import "capsomer/fonts-martian-mono.css";
 import "capsomer/fonts-jost.css";
@@ -38,6 +40,7 @@ import "capsomer/site-header.css";
 import "capsomer/admin-shell.css";
 import "capsomer/theme-switch.css";
 import "capsomer/tabs.css";
+import "capsomer/anchor-bar.css";
 import "capsomer/banner.css";
 import "capsomer/button.css";
 import "capsomer/copy.css";

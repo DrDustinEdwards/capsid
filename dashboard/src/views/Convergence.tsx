@@ -94,18 +94,18 @@ function SitePanel({
       section="Operator API"
       src={<ReadAgain at={parse(site.read_at)} now={now} reading={loading} onRead={reread} />}
     >
-      <div className="body stack-gap" data-convergence={site.namespace}>
+      <div className="body cap-stack" data-gap="4" data-convergence={site.namespace}>
         {site.problem && <Alert tone="warn">{site.problem}</Alert>}
         {op && !op.secret_set && (
           <Alert tone="warn">
-            The Capsid Worker secret <span className="mono">{op.auth_var}</span> is not set, so
+            The Capsid Worker secret <span className="cap-mono">{op.auth_var}</span> is not set, so
             Capsid calls nothing on this site. The seat sets it with wrangler secret put.
           </Alert>
         )}
         {op && (
           <dl className="cap-detail-record">
             <dt>Operator API</dt>
-            <dd className="mono">
+            <dd className="cap-mono">
               {site.origin}
               {op.path}
             </dd>
@@ -125,7 +125,7 @@ function SitePanel({
                 <dd className="row-gap">
                   {op.weekly.map((tool) => (
                     <span key={tool}>
-                      <span className="mono">{tool}</span>{" "}
+                      <span className="cap-mono">{tool}</span>{" "}
                       <button
                         type="button"
                         className="cap-btn"
@@ -146,7 +146,7 @@ function SitePanel({
         <Checks checks={site.health.checks} canRun={!!op?.secret_set} run={run} />
       )}
       {site.status && (
-        <div className="body stack-gap">
+        <div className="body cap-stack" data-gap="4">
           <h3 className="conv-h">Operator sync_status</h3>
           {site.status.error ? (
             <Alert tone="neutral">
@@ -162,12 +162,12 @@ function SitePanel({
         </div>
       )}
       {site.recent.length > 0 && (
-        <div className="body stack-gap">
+        <div className="body cap-stack" data-gap="4">
           <h3 className="conv-h">Recent repairs</h3>
           <ul className="plain">
             {site.recent.map((r, i) => (
               <li key={`${r.at}|${i}`}>
-                <span className="mono">{r.tool}</span>{" "}
+                <span className="cap-mono">{r.tool}</span>{" "}
                 {r.converged === true ? (
                   <St kind="ok">converged</St>
                 ) : r.converged === false ? (
@@ -175,7 +175,7 @@ function SitePanel({
                 ) : (
                   <St kind="nodata">{r.error ? "failed" : "no verdict"}</St>
                 )}{" "}
-                <span className="faint">
+                <span className="cap-text" data-tone="dim">
                   {ago(parse(r.at), now)} by {r.actor}
                   {r.via ? ` (${r.via})` : ""}
                   {r.error ? `: ${r.error}` : ""}
@@ -192,8 +192,8 @@ function SitePanel({
 function FieldRow({ k, v }: { k: string; v: string }) {
   return (
     <>
-      <dt className="mono">{k}</dt>
-      <dd className="num">{v}</dd>
+      <dt className="cap-mono">{k}</dt>
+      <dd className="cap-num">{v}</dd>
     </>
   );
 }
@@ -215,7 +215,7 @@ function Checks({
           <tr>
             <th>Check</th>
             <th>State</th>
-            <th className="num">Present</th>
+            <th className="cap-num">Present</th>
             <th>Repair</th>
           </tr>
         </thead>
@@ -223,23 +223,29 @@ function Checks({
           {sorted.map((c) => (
             <tr key={c.name} data-check={c.name}>
               <td>
-                <b className="mono">{c.name}</b>
-                {c.detail && <div className="faint">{c.detail}</div>}
+                <b className="cap-mono">{c.name}</b>
+                {c.detail && (
+                  <div className="cap-text" data-tone="dim">
+                    {c.detail}
+                  </div>
+                )}
               </td>
               <td>{c.ok ? <St kind="ok">ok</St> : <St kind="warn">drifted</St>}</td>
-              <td className="num">
+              <td className="cap-num">
                 {c.expected === null ? "" : `${c.present ?? "?"} of ${c.expected}`}
               </td>
               <td>
                 {!c.repair ? (
-                  <span className="faint">none Capsid may run</span>
+                  <span className="cap-text" data-tone="dim">
+                    none Capsid may run
+                  </span>
                 ) : c.repair_refusal ? (
-                  <span className="faint" title={c.repair_refusal}>
-                    <span className="mono">{c.repair}</span> not allowed
+                  <span className="cap-text" data-tone="dim" title={c.repair_refusal}>
+                    <span className="cap-mono">{c.repair}</span> not allowed
                   </span>
                 ) : (
                   <span className="row-gap">
-                    <span className="mono">{c.repair}</span>
+                    <span className="cap-mono">{c.repair}</span>
                     <button
                       type="button"
                       className="cap-btn"
@@ -274,8 +280,12 @@ export function SiteSecrets({ ns }: { ns: string }) {
 
 function Secrets({ secrets }: { secrets: NonNullable<ConvergenceSite["secrets"]> }) {
   return (
-    <div className="body stack-gap">
-      {secrets.script ? <p className="faint mono">{secrets.script}</p> : null}
+    <div className="body cap-stack" data-gap="4">
+      {secrets.script ? (
+        <p className="cap-text cap-mono" data-tone="dim">
+          {secrets.script}
+        </p>
+      ) : null}
       {secrets.state !== "ok" ? (
         <Alert tone="neutral">
           <St kind="nodata">Not read</St> {secrets.reason}
@@ -286,14 +296,19 @@ function Secrets({ secrets }: { secrets: NonNullable<ConvergenceSite["secrets"]>
         <ul className="plain">
           {secrets.rows.map((r) => (
             <li key={r.name}>
-              <span className="mono">{r.name}</span>{" "}
+              <span className="cap-mono">{r.name}</span>{" "}
               {r.set ? <St kind="ok">set</St> : <St kind="crit">not set</St>}
-              {!r.expected && <span className="faint"> not named in the site's configuration</span>}
+              {!r.expected && (
+                <span className="cap-text" data-tone="dim">
+                  {" "}
+                  not named in the site's configuration
+                </span>
+              )}
             </li>
           ))}
         </ul>
       )}
-      <div className="faint">
+      <div className="cap-text" data-tone="dim">
         Names only, from Cloudflare's secrets list on the watcher's pass
         {secrets.read_at ? ` (${secrets.read_at.slice(0, 16).replace("T", " ")} UTC)` : ""}. A value
         is never read.

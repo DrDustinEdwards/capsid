@@ -48,9 +48,8 @@ function withJobLinks(text: string, back: string): ReactNode[] {
       <Link
         key={`${at}-${m[0]}`}
         href={`${routePath("library", { type: "job", id: m[0] })}${back}`}
-        className="mono"
       >
-        {m[0]}
+        <span className="cap-mono">{m[0]}</span>
       </Link>,
     );
     last = at + m[0].length;
@@ -138,7 +137,7 @@ export function Library() {
             <Shelf key={s.id} title={s.title} none={s.none} rows={data.shelves[s.id]} now={now} />
           ))}
           {data.truncated && (
-            <p className="faint shared-read">
+            <p className="cap-text shared-read" data-tone="dim">
               The shelves show the first 500 documents; search for the rest.
             </p>
           )}
@@ -155,7 +154,7 @@ function EntryRow({ row, now }: { row: LibraryEntry; now: number }) {
         <Link href={docHref(row.namespace, row.path)}>{row.title || row.path}</Link>
       </td>
       <td className="c-where">
-        <span className="mono">
+        <span className="cap-mono">
           {row.namespace}/{row.path}
         </span>
       </td>
@@ -183,7 +182,7 @@ function Shelf({
       id={id}
       section={title}
       footer={
-        <span className="faint">
+        <span className="cap-text" data-tone="dim">
           {rows.length} {rows.length === 1 ? "document" : "documents"}
         </span>
       }
@@ -205,7 +204,9 @@ function Shelf({
           </tbody>
         </table>
       ) : (
-        <p className="faint shared-none">{none}</p>
+        <p className="cap-text shared-none" data-tone="dim">
+          {none}
+        </p>
       )}
     </Panel>
   );
@@ -221,7 +222,7 @@ function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" 
       id="library-results"
       section="Results"
       footer={
-        <span className="faint">
+        <span className="cap-text" data-tone="dim">
           {data.truncated
             ? `The best ${data.rows.length}; narrow the search for the rest.`
             : `${data.rows.length} ${data.rows.length === 1 ? "match" : "matches"}`}
@@ -234,10 +235,10 @@ function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" 
             <Link href={docHref(r.namespace, r.path)}>
               <b>{r.title || r.path}</b>
             </Link>{" "}
-            <span className="mono faint">
+            <span className="cap-text cap-mono" data-tone="dim">
               {r.namespace}/{r.path}
             </span>{" "}
-            <span className="faint">
+            <span className="cap-text" data-tone="dim">
               · {r.type} · {ago(parse(r.updated_at), now)}
             </span>
             <div>
@@ -282,7 +283,7 @@ function DocumentView({
       section="Document"
       src={
         <>
-          <span className="mono">
+          <span className="cap-mono">
             {d.namespace}/{d.path}
           </span>
           {" · "}
@@ -295,11 +296,13 @@ function DocumentView({
         <ul className="shared-local lib-edges" aria-label="Linked documents">
           {edges.map((e) => (
             <li key={`${e.dir}|${e.type}|${e.ns}/${e.path}`}>
-              <span className="faint">
+              <span className="cap-text" data-tone="dim">
                 {e.type} {e.dir}
               </span>{" "}
-              <Link href={docHref(e.ns, e.path)} className="mono">
-                {e.ns}/{e.path}
+              <Link href={docHref(e.ns, e.path)}>
+                <span className="cap-mono">
+                  {e.ns}/{e.path}
+                </span>
               </Link>
             </li>
           ))}

@@ -81,7 +81,7 @@ export function Maintenance() {
           <Spinner label="Reading the Maintenance list..." />
         </div>
       ) : data && !data.generated ? (
-        <div className="body faint">
+        <div className="cap-text body" data-tone="dim">
           The daily pass has not run yet. It runs once a day after 11:00 UTC.
         </div>
       ) : items.length ? (
@@ -101,15 +101,21 @@ export function Maintenance() {
               </button>
             </div>
           )}
-          <div className="mt-read faint">{readLine}</div>
+          <div className="cap-text mt-read" data-tone="dim">
+            {readLine}
+          </div>
         </>
       ) : data ? (
         <>
           <Empty kind="all-clear" title="Nothing to maintain." />
-          <div className="mt-read faint">{readLine}</div>
+          <div className="cap-text mt-read" data-tone="dim">
+            {readLine}
+          </div>
         </>
       ) : (
-        <div className="body faint">No read yet.</div>
+        <div className="cap-text body" data-tone="dim">
+          No read yet.
+        </div>
       )}
     </Panel>
   );

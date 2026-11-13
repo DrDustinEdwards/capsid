@@ -80,9 +80,13 @@ export function SitePage() {
                 {hostOf(origin)}
               </a>
             ) : (
-              <span className="faint">serves no site</span>
+              <span className="cap-text" data-tone="dim">
+                serves no site
+              </span>
             )}
-            <span className="faint mono">{ns}</span>
+            <span className="cap-text cap-mono" data-tone="dim">
+              {ns}
+            </span>
           </span>
         }
       />
@@ -190,7 +194,7 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
                 {ago(parse(s.checked_at), now)} <Time at={s.checked_at} format="exact" />
               </dd>
               <dt>URL</dt>
-              <dd className="mono">
+              <dd className="cap-mono">
                 {healthUrl ? (
                   <a href={healthUrl} target="_blank" rel="noopener noreferrer">
                     {healthUrl}
@@ -200,23 +204,31 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
                 )}
               </dd>
               <dt>HTTP status</dt>
-              <dd className="num">{s.http_status ?? "no answer"}</dd>
+              <dd className="cap-num">{s.http_status ?? "no answer"}</dd>
               <dt>Latency</dt>
-              <dd className="num">{s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}</dd>
+              <dd className="cap-num">
+                {s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}
+              </dd>
               <dt>Health route</dt>
               <dd>
                 {s.health_path ? (
-                  <span className="mono">{s.health_path}</span>
+                  <span className="cap-mono">{s.health_path}</span>
                 ) : (
                   <St kind="nodata">none</St>
                 )}
               </dd>
               <dt>Reports sha</dt>
-              <dd className="mono">{s.sha ?? <span className="faint">not reported</span>}</dd>
+              <dd className="cap-mono">
+                {s.sha ?? (
+                  <span className="cap-text" data-tone="dim">
+                    not reported
+                  </span>
+                )}
+              </dd>
               <dt>Platform</dt>
               <dd>{s.platform === "vercel" ? "Vercel" : "Cloudflare"}</dd>
               <dt>Cloudflare script</dt>
-              <dd className="mono">
+              <dd className="cap-mono">
                 {cf ? cf.script : <NoData reason={cfNoData(s.cloudflare) ?? ""} />}
               </dd>
             </dl>
@@ -227,7 +239,7 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
           title="Uptime and errors"
           src="the watcher's probes and Cloudflare's analytics"
         >
-          <div className="body stack-gap">
+          <div className="body cap-stack" data-gap="4">
             <SiteUptime s={s} />
             <ChartSlot>
               <ErrorRate site={s} />
@@ -253,7 +265,7 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
       src="Cloudflare's record, at most 10, newest first"
     >
       {!snap ? (
-        <div className="body faint">
+        <div className="cap-text body" data-tone="dim">
           Not probed yet: deploys are read with the watcher's next pass.
         </div>
       ) : !cf ? (
@@ -275,20 +287,22 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
             <tbody>
               {cf.deploys.map((d) => (
                 <tr key={d.id}>
-                  <td className="num" title={utc(parse(d.created_on))}>
+                  <td className="cap-num" title={utc(parse(d.created_on))}>
                     {ago(parse(d.created_on), now)}
                   </td>
-                  <td className="mono">{shortId(d.version_id ?? d.id)}</td>
-                  <td className="muted">{d.message ?? ""}</td>
-                  <td className="muted">{d.triggered_by ?? ""}</td>
-                  <td className="muted">{d.author_email ?? ""}</td>
+                  <td className="cap-mono">{shortId(d.version_id ?? d.id)}</td>
+                  <td className="cap-muted">{d.message ?? ""}</td>
+                  <td className="cap-muted">{d.triggered_by ?? ""}</td>
+                  <td className="cap-muted">{d.author_email ?? ""}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ) : (
-        <div className="body faint">No deploys recorded.</div>
+        <div className="cap-text body" data-tone="dim">
+          No deploys recorded.
+        </div>
       )}
     </Panel>
   );
@@ -343,7 +357,7 @@ function Setup({
           <div className="body">
             <dl className="cap-detail-record">
               <dt>Project</dt>
-              <dd className="mono">{row.namespace}</dd>
+              <dd className="cap-mono">{row.namespace}</dd>
               <dt>Name</dt>
               <dd>{row.name}</dd>
               <dt>Origin</dt>
@@ -351,12 +365,17 @@ function Setup({
                 {row.origin === null ? (
                   <St kind="nodata">Serves no site</St>
                 ) : (
-                  <span className="mono">{row.origin}</span>
+                  <span className="cap-mono">{row.origin}</span>
                 )}
-                {row.self_probe && <span className="faint"> probed in-process</span>}
+                {row.self_probe && (
+                  <span className="cap-text" data-tone="dim">
+                    {" "}
+                    probed in-process
+                  </span>
+                )}
               </dd>
               <dt>Health path</dt>
-              <dd className="mono">
+              <dd className="cap-mono">
                 {row.origin === null
                   ? none
                   : (row.health_path ?? <Missing>none, root probed</Missing>)}
@@ -370,10 +389,10 @@ function Setup({
                     : none}
               </dd>
               <dt>Worker script</dt>
-              <dd className="mono">
+              <dd className="cap-mono">
                 {row.script ??
                   (snap && cfOk(snap) ? (
-                    <span className="faint">
+                    <span className="cap-text" data-tone="dim">
                       {cfOk(snap)!.script}, found from the custom domains
                     </span>
                   ) : (
@@ -383,7 +402,7 @@ function Setup({
               <dt>Operator API</dt>
               <dd>
                 {row.operator ? (
-                  <span className="mono">{row.operator.path}</span>
+                  <span className="cap-mono">{row.operator.path}</span>
                 ) : row.operator_problem ? (
                   <St kind="warn">{row.operator_problem}</St>
                 ) : (
@@ -392,17 +411,21 @@ function Setup({
               </dd>
               <dt>Revision</dt>
               <dd>
-                <span className="num" data-revision="">
+                <span className="cap-num" data-revision="">
                   {row.revision}
                 </span>{" "}
-                <span className="faint" title={Number.isNaN(at) ? row.updated_at : utc(at)}>
+                <span
+                  className="cap-text"
+                  data-tone="dim"
+                  title={Number.isNaN(at) ? row.updated_at : utc(at)}
+                >
                   {Number.isNaN(at) ? `updated ${row.updated_at}` : `updated ${ago(at, now)}`}
                 </span>
               </dd>
             </dl>
           </div>
         ) : (
-          <div className="body faint">
+          <div className="cap-text body" data-tone="dim">
             This site has no settings row: it is in the watcher's last pass only. It leaves the
             Portal on the next pass.
           </div>
@@ -430,7 +453,7 @@ function Setup({
             >
               Rotate key
             </button>
-            <span className="faint note">
+            <span className="cap-text note" data-tone="dim" data-size="small">
               A new key is minted and set on the site's Worker, then on Carrel. It is never shown.
             </span>
           </div>

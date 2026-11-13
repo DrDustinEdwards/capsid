@@ -38,7 +38,7 @@ export function Backups() {
     <div className="embedded">
       <div className="grid2">
         <Panel flush title="Primary: Capsid D1" src="/health backup">
-          <div className="body stack-gap">
+          <div className="body cap-stack" data-gap="4">
             {!h ? (
               <Alert tone="neutral">
                 <St kind="nodata">No data</St> Capsid health was not read on the last pass.
@@ -48,7 +48,7 @@ export function Backups() {
                 {h.backup.warning && <Alert tone="crit">{h.backup.warning}</Alert>}
                 <dl className="cap-detail-record">
                   <dt>Last good dump</dt>
-                  <dd className="num">
+                  <dd className="cap-num">
                     {h.backup.last_ok ? (
                       <>
                         {ago(parse(h.backup.last_ok), now)}{" "}
@@ -59,7 +59,7 @@ export function Backups() {
                     )}
                   </dd>
                   <dt>Age</dt>
-                  <dd className="num">
+                  <dd className="cap-num">
                     {h.backup.age_hours == null ? (
                       <St kind="nodata">No data</St>
                     ) : (
@@ -77,18 +77,18 @@ export function Backups() {
                   <dt>Health</dt>
                   <dd>
                     {h.status === "ok" ? <St kind="ok">ok</St> : <St kind="warn">degraded</St>}{" "}
-                    <span className="mono faint">
+                    <span className="cap-text cap-mono" data-tone="dim">
                       sha {h.sha.slice(0, 7)}
                       {h.dirty ? " (dirty)" : ""}
                     </span>
                   </dd>
                   <dt>Store</dt>
-                  <dd className="mono">
+                  <dd className="cap-mono">
                     d1 {h.store.d1} · fts {h.store.fts} · media {h.bindings.media} · kv{" "}
                     {h.bindings.app_kv}
                   </dd>
                   <dt>Size</dt>
-                  <dd className="num" data-store-size="">
+                  <dd className="cap-num" data-store-size="">
                     {(() => {
                       const use = storeUse(feed);
                       const s = feed.live.store;
@@ -103,14 +103,14 @@ export function Backups() {
                     })()}
                   </dd>
                   <dt>Schema</dt>
-                  <dd className="mono">{h.schema_version ?? "not reported"}</dd>
+                  <dd className="cap-mono">{h.schema_version ?? "not reported"}</dd>
                 </dl>
               </>
             )}
           </div>
         </Panel>
         <Panel flush title="Off-account: Amazon S3" src="watch.yml report">
-          <div className="body stack-gap">
+          <div className="body cap-stack" data-gap="4">
             {!o || !os ? (
               <Alert tone="neutral">
                 <St kind="nodata">No data</St> The Amazon copy's report was not read on the last
@@ -127,7 +127,7 @@ export function Backups() {
                   {o.sites.map((s) => (
                     <Fragment key={s.site}>
                       <dt>{s.site}</dt>
-                      <dd className="num">
+                      <dd className="cap-num">
                         {s.newest ? (
                           <>
                             {ago(parse(s.newest), now)} <Time at={s.newest} format="exact" />{" "}
@@ -144,7 +144,7 @@ export function Backups() {
                     </Fragment>
                   ))}
                   <dt>Report</dt>
-                  <dd className="num">
+                  <dd className="cap-num">
                     {o.reported_at ? (
                       <>
                         {ago(parse(o.reported_at), now)} <Time at={o.reported_at} format="exact" />
@@ -205,7 +205,7 @@ export function Backups() {
       <Suspense fallback={null}>
         <BackupSlots />
       </Suspense>
-      <p className="faint note">
+      <p className="cap-text note" data-tone="dim" data-size="small">
         The primary panel is Capsid's own store. The sites panel is each site's own backups, read
         live through its operator API; Back up now runs the site's files passes, as its nightly cron
         does. The Amazon panel is every site's off-account copy, each site's newest complete one, as
@@ -253,7 +253,7 @@ function SiteBackups() {
         </>
       }
     >
-      <div className="body stack-gap">
+      <div className="body cap-stack" data-gap="4">
         {load.error && <Banner tone="crit">Could not read the sites' backups: {load.error}</Banner>}
         {!data ? (
           !load.error && (
@@ -265,7 +265,7 @@ function SiteBackups() {
           <>
             {data.not_configured.length > 0 && (
               <Alert tone="neutral">
-                Not checked from here yet (no <span className="mono">backup: true</span> in the
+                Not checked from here yet (no <span className="cap-mono">backup: true</span> in the
                 operator configuration): {data.not_configured.join(", ")}.
               </Alert>
             )}
@@ -322,7 +322,7 @@ function SiteRow({ site, now, backUp }: { site: SiteBackupRow; now: number; back
   return (
     <tr data-site-backup={site.namespace}>
       <th scope="row">{site.namespace}</th>
-      <td className="num">
+      <td className="cap-num">
         {st ? (
           <Fresh
             at={st.last_ok}
@@ -343,13 +343,13 @@ function SiteRow({ site, now, backUp }: { site: SiteBackupRow; now: number; back
         ) : (
           files.map(([name, f]) => (
             <div key={name}>
-              <span className="mono">{name}</span>{" "}
+              <span className="cap-mono">{name}</span>{" "}
               <Fresh at={f.last_ok} warning={f.warning} now={now} />
             </div>
           ))
         )}
       </td>
-      <td className="num">
+      <td className="cap-num">
         {site.amazon?.newest ? ago(parse(site.amazon.newest), now) : <St kind="nodata">No copy</St>}
       </td>
       <td>
