@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { readPref, writePref } from "capsomer/behavior/shell";
+import { readPref } from "capsomer/behavior/shell";
 import { SINGLE_KEYS_PREF, setSingleKeys, singleKeysOn } from "capsomer/behavior/shortcuts";
 import {
   applyStoredTheme,
