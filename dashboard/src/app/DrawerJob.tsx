@@ -1,4 +1,5 @@
 import { Alert } from "capsomer/react/banner";
+import { AwayLink } from "capsomer/react/link";
 import type { ReactNode } from "react";
 import { CopyButton } from "capsomer/react/copy";
 import { jobBadge, resumeCall } from "../lib/derive";
@@ -404,9 +405,9 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
                 <dt>Result</dt>
                 <dd className="cap-mono">
                   {/^https?:\/\//.test(j.result_ref) ? (
-                    <a href={j.result_ref} target="_blank" rel="noopener noreferrer">
+                    <AwayLink href={j.result_ref} newTab>
                       {j.result_ref}
-                    </a>
+                    </AwayLink>
                   ) : (
                     j.result_ref
                   )}
@@ -431,9 +432,9 @@ function FragmentPr({ url, merged }: { url: string; merged: boolean | null }) {
     <>
       <dt>Pull request</dt>
       <dd>
-        <a href={url} target="_blank" rel="noopener noreferrer">
+        <AwayLink href={url} newTab>
           {url.replace(/^https:\/\/github\.com\//, "")}
-        </a>{" "}
+        </AwayLink>{" "}
         <span className="cap-text" data-tone="dim">
           {merged === true ? "merged" : merged === false ? "not merged" : "open"}
         </span>

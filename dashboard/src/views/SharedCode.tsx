@@ -1,3 +1,4 @@
+import { AwayLink } from "capsomer/react/link";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
@@ -127,9 +128,9 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
       section={pkg.name}
       src={
         <>
-          <a href={`https://github.com/${pkg.repo}`} target="_blank" rel="noreferrer noopener">
+          <AwayLink href={`https://github.com/${pkg.repo}`} newTab>
             {pkg.repo}
-          </a>
+          </AwayLink>
           {" · "}
           {pkg.latest ? (
             <>

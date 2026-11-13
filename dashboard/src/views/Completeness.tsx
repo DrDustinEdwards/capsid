@@ -1,4 +1,5 @@
 import { Alert } from "capsomer/react/banner";
+import { AwayLink } from "capsomer/react/link";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { StatusMatrix } from "capsomer/react/status-matrix";
@@ -105,9 +106,9 @@ export function Completeness() {
         src={
           <>
             From the live checks and the verifiers' verdicts only ·{" "}
-            <a href={BOARD_URL} target="_blank" rel="noreferrer noopener">
+            <AwayLink href={BOARD_URL} newTab>
               the board on GitHub
-            </a>
+            </AwayLink>
           </>
         }
       >
@@ -266,9 +267,9 @@ function Evidence({ urls }: { urls: string[] }) {
       {urls.map((u, i) => (
         <span key={u}>
           {i > 0 && ", "}
-          <a href={u} target="_blank" rel="noreferrer noopener">
+          <AwayLink href={u} newTab>
             proof {i + 1}
-          </a>
+          </AwayLink>
         </span>
       ))}
     </span>

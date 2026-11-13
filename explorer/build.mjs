@@ -214,6 +214,7 @@ export async function build({
       "site-header",
       "manual",
       "family-footer",
+      "hero",
       "chart-frame",
       "meter",
       "graph",

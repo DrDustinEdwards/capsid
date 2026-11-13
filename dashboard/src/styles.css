@@ -442,17 +442,8 @@ details > summary + .cap-cluster {
   }
 }
 
-/* Library: the search row, results, and one document's text. Empty shelves and links
+/* Library: the results, and one document's text. Empty shelves and links
    reuse Shared code's classes below. */
-.lib-search {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 16px;
-}
-.lib-search .search {
-  flex: 1 1 240px;
-}
 .lib-results {
   list-style: none;
   margin: 0;
