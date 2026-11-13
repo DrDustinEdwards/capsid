@@ -1,11 +1,17 @@
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
-  QueryCache,
-  QueryClient,
-  keepPreviousData,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+  SignedOut,
+  answerOf,
+  ask,
+  createFlag,
+  createQueryClient as createClient,
+  sessionEnded,
+  useAnswer,
+  useFlag,
+  type Answer,
+  type Load,
+} from "capsomer/react/data";
+import { useCallback, useEffect } from "react";
 import { BASE } from "./base";
 import type {
   OpsFeed,
@@ -69,21 +75,6 @@ const PUSH_URL = `${BASE}/api/push`;
 export const APP_URL = `${BASE}/`;
 export const POLL_MS = 60_000;
 
-// The Portal session ended: Access answers with a redirect to its login, or the
-// Worker answers 401 or 403. redirect: "manual" keeps a cross-origin login redirect
-// from surfacing as an opaque network error. The action endpoints answer 403 for a
-// CSRF or cross-site refusal, with its text, so they pass forbidden = false and show
-// that text instead of the signed-out page.
-function sessionEnded(res: Response, forbidden = true): boolean {
-  return (
-    res.type === "opaqueredirect" ||
-    res.redirected ||
-    res.status === 401 ||
-    (forbidden && res.status === 403) ||
-    (res.status >= 300 && res.status < 400)
-  );
-}
-
 async function asFeed(res: Response): Promise<OpsFeed> {
   const type = res.headers.get("content-type") ?? "";
   if (!type.includes("json"))
@@ -91,26 +82,12 @@ async function asFeed(res: Response): Promise<OpsFeed> {
   return (await res.json()) as OpsFeed;
 }
 
-// The session ended: thrown by a read so every query stops the same way, and kept here
-// for the app to show the signed-out page. A feed that answers again (a sign-in in
+// The session ended: a read throws SignedOut so every query stops the same way, and this flag
+// keeps it for the app to show the signed-out page. A feed that answers again (a sign-in in
 // another tab) clears it.
-class SignedOut extends Error {}
-
-let ended = false;
-const watchers = new Set<() => void>();
-function setSignedOut(next: boolean): void {
-  if (ended === next) return;
-  ended = next;
-  for (const w of watchers) w();
-}
-function useSignedOut(): boolean {
-  return useSyncExternalStore(
-    (w) => (watchers.add(w), () => void watchers.delete(w)),
-    () => ended,
-    // The server renders a page only for a signed-in session.
-    () => false,
-  );
-}
+const signedOutFlag = createFlag();
+const setSignedOut = (next: boolean): void => signedOutFlag.set(next);
+const useSignedOut = (): boolean => useFlag(signedOutFlag);
 
 // No retries: a failed read says why at once and the next feed or Read again tries anew.
 // Reads go again only when asked (a key, a feed or a button), never on focus, except
@@ -118,61 +95,18 @@ function useSignedOut(): boolean {
 // server (root.tsx, server/prefetch.ts), so no request shares a cache with another
 // (TanStack Query, Advanced Server Rendering).
 export function createQueryClient(): QueryClient {
-  return new QueryClient({
-    queryCache: new QueryCache({ onError: (e) => e instanceof SignedOut && setSignedOut(true) }),
-    // staleTime above 0, as TanStack Query's SSR guide says: a read the server made for this page
-    // is fresh on hydration, so the page shows it and does not read it again at once. The feed's
-    // minute poll, Read again and every action's invalidation read again whatever the age.
-    defaultOptions: {
-      queries: {
-        retry: false,
-        refetchOnWindowFocus: false,
-        refetchOnReconnect: false,
-        staleTime: 60_000,
-      },
-    },
+  // staleTime above 0, as TanStack Query's SSR guide says: a read the server made for this page
+  // is fresh on hydration, so the page shows it and does not read it again at once. The feed's
+  // minute poll, Read again and every action's invalidation read again whatever the age.
+  return createClient({
+    staleTime: 60_000,
+    retries: 0,
+    refetchOnFocus: false,
+    onError: (e) => e instanceof SignedOut && setSignedOut(true),
   });
 }
 
-// A route's Answer as a query: its value, or a throw that carries the server's text.
-export async function ask<T>(read: () => Promise<Answer<T>>): Promise<T> {
-  const r = await read();
-  if (r.kind === "ok") return r.value;
-  if (r.kind === "signed-out") throw new SignedOut("signed out");
-  throw new Error(r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message);
-}
-
-export type Load<T> = { data: T | null; loading: boolean; error: string | null };
-
-// One Portal route, cached under key. A new key keeps what is on screen and marks it
-// loading (keep: false starts it empty); a failed read keeps it too and says why; a
-// session that ended signs out (SignedOut). reread reads it again now.
-type Read<T> = Load<T> & { reread: () => void };
-
-export function useAnswer<T>(
-  key: readonly unknown[],
-  read: () => Promise<Answer<T>>,
-  {
-    keep = true,
-    staleTime,
-    enabled = true,
-  }: { keep?: boolean; staleTime?: number; enabled?: boolean } = {},
-): Read<T> {
-  const q = useQuery({
-    queryKey: key,
-    queryFn: () => ask(read),
-    placeholderData: keep ? keepPreviousData : undefined,
-    enabled,
-    ...(staleTime === undefined ? {} : { staleTime }),
-  });
-  const { refetch } = q;
-  return {
-    data: q.data ?? null,
-    loading: q.isFetching,
-    error: q.error && !(q.error instanceof SignedOut) ? q.error.message : null,
-    reread: useCallback(() => void refetch(), [refetch]),
-  };
-}
+export { ask, useAnswer, type Answer, type Load };
 
 // The feed is read only by the page itself (on load, the minute poll and a return to
 // the tab), never by a click, so it is marked background: the Worker's idle hour
@@ -188,7 +122,7 @@ async function readFeed(): Promise<OpsFeed> {
     cache: "no-store",
     headers: { accept: "application/json", ...BACKGROUND },
   });
-  if (sessionEnded(res)) throw new SignedOut("signed out");
+  if (sessionEnded(res)) throw new SignedOut();
   if (!res.ok) throw new Error(`The feed answered ${res.status}`);
   return asFeed(res);
 }
@@ -285,32 +219,6 @@ export async function requestRefresh(): Promise<RefreshResult> {
 
 // ---- Portal controls, namespaces and activity ----------------------------------------------
 
-// What a control's request came to. A refusal carries the server's text verbatim.
-export type Answer<T> =
-  | { kind: "ok"; value: T }
-  | { kind: "refused"; status: number; message: string }
-  | { kind: "expired"; message: string }
-  | { kind: "signed-out" }
-  | { kind: "error"; message: string };
-
-async function refusalText(res: Response): Promise<string> {
-  const text = (await res.text()).trim();
-  return text || `The server answered ${res.status} with no text`;
-}
-
-export async function answer<T>(res: Response, forbidden: boolean): Promise<Answer<T>> {
-  if (sessionEnded(res, forbidden)) return { kind: "signed-out" };
-  if (res.status === 410) return { kind: "expired", message: await refusalText(res) };
-  if (!res.ok) return { kind: "refused", status: res.status, message: await refusalText(res) };
-  const type = res.headers.get("content-type") ?? "";
-  if (!type.includes("json"))
-    return {
-      kind: "error",
-      message: `The server answered ${res.status} with ${type || "no content type"}, not JSON`,
-    };
-  return { kind: "ok", value: (await res.json()) as T };
-}
-
 // How long a control waits for the Worker before it says so. A request with no answer
 // would otherwise leave the dialog busy, with every button disabled and nothing said.
 const ACTION_TIMEOUT_MS = 20_000;
@@ -337,7 +245,7 @@ async function post<T>(
       body: JSON.stringify(body),
       signal: abort.signal,
     });
-    return await answer<T>(res, false);
+    return await answerOf<T>(res, false);
   } catch (e) {
     if (abort.signal.aborted) {
       return {
@@ -359,7 +267,7 @@ async function get<T>(url: string): Promise<Answer<T>> {
       cache: "no-store",
       headers: { accept: "application/json" },
     });
-    return await answer<T>(res, true);
+    return await answerOf<T>(res, true);
   } catch (e) {
     return { kind: "error", message: e instanceof Error ? e.message : String(e) };
   }
@@ -589,7 +497,11 @@ export async function signOutRequest(
       body: "{}",
     });
     if (res.status === 204 || sessionEnded(res, false)) return { kind: "ok" };
-    return { kind: "error", message: await refusalText(res) };
+    const r = await answerOf<unknown>(res, false);
+    return {
+      kind: "error",
+      message: "message" in r ? r.message : `The server answered ${res.status}`,
+    };
   } catch (e) {
     return { kind: "error", message: e instanceof Error ? e.message : String(e) };
   }
