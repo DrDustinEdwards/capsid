@@ -36,6 +36,7 @@ import "capsomer/site-header.css";
 import "capsomer/admin-shell.css";
 import "capsomer/theme-switch.css";
 import "capsomer/tabs.css";
+import "capsomer/anchor-bar.css";
 import "capsomer/banner.css";
 import "capsomer/button.css";
 import "capsomer/copy.css";

@@ -160,7 +160,7 @@ export function SiteForm({
               <input
                 ref={first}
                 {...control}
-                className="cap-input mono"
+                className="cap-input cap-mono"
                 list={f("nslist")}
                 value={d.namespace}
                 autoComplete="off"
@@ -174,7 +174,7 @@ export function SiteForm({
               </datalist>
             </>
           ) : (
-            <input {...control} className="cap-input mono" value={d.namespace} readOnly />
+            <input {...control} className="cap-input cap-mono" value={d.namespace} readOnly />
           )
         }
       </Field>
@@ -199,7 +199,7 @@ export function SiteForm({
       <Field label="Origin" help="https:// and a hostname only.">
         <input
           id={f("origin")}
-          className="cap-input mono"
+          className="cap-input cap-mono"
           value={d.noSite ? "" : d.origin}
           disabled={d.noSite}
           placeholder="https://example.com"
@@ -214,7 +214,7 @@ export function SiteForm({
       >
         <input
           id={f("health")}
-          className="cap-input mono"
+          className="cap-input cap-mono"
           value={d.noSite ? "" : d.health_path}
           disabled={d.noSite}
           placeholder="/health"
@@ -245,7 +245,7 @@ export function SiteForm({
       >
         <input
           id={f("script")}
-          className="cap-input mono"
+          className="cap-input cap-mono"
           value={d.noSite || d.platform !== "cloudflare" ? "" : d.script}
           disabled={d.noSite || d.platform !== "cloudflare"}
           autoComplete="off"
@@ -264,7 +264,7 @@ export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void })
   return (
     <tr data-row="">
       <td>
-        <b className="mono">{s.namespace}</b>
+        <b className="cap-mono">{s.namespace}</b>
       </td>
       <td data-label="Name">{s.name}</td>
       <td data-label="Origin">
@@ -272,24 +272,28 @@ export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void })
           <St kind="nodata">Serves no site</St>
         ) : (
           <>
-            <span className="mono">{s.origin}</span>
+            <span className="cap-mono">{s.origin}</span>
             {s.self_probe && <div className="src">probed in-process</div>}
           </>
         )}
       </td>
-      <td data-label="Health path" className="mono">
+      <td data-label="Health path" className="cap-mono">
         {s.origin === null
           ? none
-          : (s.health_path ?? <span className="faint">none, root probed</span>)}
+          : (s.health_path ?? (
+              <span className="cap-text" data-tone="dim">
+                none, root probed
+              </span>
+            ))}
       </td>
       <td data-label="Platform">
         {s.platform === "vercel" ? "Vercel" : s.platform === "cloudflare" ? "Cloudflare" : none}
       </td>
-      <td data-label="Worker script" className="mono">
+      <td data-label="Worker script" className="cap-mono">
         {s.script ?? none}
       </td>
       <td data-label="Revision">
-        <span className="num">{s.revision}</span>
+        <span className="cap-num">{s.revision}</span>
         <div className="src" title={Number.isNaN(at) ? s.updated_at : utc(at)}>
           {Number.isNaN(at) ? `updated ${s.updated_at}` : `updated ${ago(at, now)}`}
         </div>

@@ -118,10 +118,15 @@ function LiveDeployCell({ s }: { s: SiteSnapshot }) {
   const cf = cfOk(s);
   if (!cf) return <NoData brief reason={cfShort(s.cloudflare) ?? ""} />;
   const d = cf.deploys[0];
-  if (!d) return <span className="faint">No deploys recorded</span>;
+  if (!d)
+    return (
+      <span className="cap-text" data-tone="dim">
+        No deploys recorded
+      </span>
+    );
   return (
     <>
-      <span className="mono">{shortId(d.version_id ?? d.id)}</span>
+      <span className="cap-mono">{shortId(d.version_id ?? d.id)}</span>
       <div className="src">
         {ago(parse(d.created_on), now)}
         {d.triggered_by ? ` · ${d.triggered_by}` : ""}
@@ -222,7 +227,7 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
                   <BackupCell s={s} />
                 </td>
                 <td data-label="Probe">
-                  <span className="num">
+                  <span className="cap-num">
                     {s.http_status == null ? "no answer" : `HTTP ${s.http_status}`}
                   </span>
                   <div className="src">
@@ -337,11 +342,17 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                   onClick={() => setOpen((o) => ({ ...o, [g.id]: !shown }))}
                 >
                   <span className="chev" aria-hidden="true" />
-                  {g.label} <span className="num faint">{list.length}</span>
+                  {g.label}{" "}
+                  <span className="cap-text cap-num" data-tone="dim">
+                    {list.length}
+                  </span>
                 </button>
               ) : (
                 <>
-                  {g.label} <span className="num faint">{list.length}</span>
+                  {g.label}{" "}
+                  <span className="cap-text cap-num" data-tone="dim">
+                    {list.length}
+                  </span>
                 </>
               )}
             </h3>
@@ -465,7 +476,7 @@ export function TimelinePanel({
   return (
     <Panel flush title={title} src={src} id={id} section={section}>
       {!hasSites(feed) ? (
-        <div className="body faint">
+        <div className="cap-text body" data-tone="dim">
           No site is configured, so there is no probe to chart. Add one on Sites.
         </div>
       ) : sites.length ? (

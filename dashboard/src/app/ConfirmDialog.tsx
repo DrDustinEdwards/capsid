@@ -266,18 +266,19 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
         <DialogTitle>{req.title}</DialogTitle>
         {preview && <DialogDescription data-summary="">{preview.summary}</DialogDescription>}
       </DialogHeader>
-      <DialogBody className="stack-gap">
+      <DialogBody className="cap-stack" data-gap="4">
         {given && (
           <div>
             <p className="section-title">Your reply</p>
-            <p className="note prewrap" data-given-reason="">
+            <p className="cap-text prewrap note" data-size="small" data-given-reason="">
               {given}
             </p>
           </div>
         )}
         {typesConfirm && !askReason && !preview && (
           <form
-            className="stack-gap"
+            className="cap-stack"
+            data-gap="4"
             noValidate
             onSubmit={(e) => {
               e.preventDefault();
@@ -310,7 +311,8 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
         )}
         {askReason && !preview && (
           <form
-            className="stack-gap"
+            className="cap-stack"
+            data-gap="4"
             noValidate
             onSubmit={(e) => {
               e.preventDefault();
@@ -360,7 +362,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
           </form>
         )}
         {pending === "preview" && (
-          <div className="faint" role="status">
+          <div className="cap-text" data-tone="dim" role="status">
             Checking what this will change...
           </div>
         )}
@@ -369,7 +371,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
             change's lines are what is being decided, so they start open. */}
         {preview && (
           <Disclosure summary="Details" defaultOpen={OPEN_DETAILS.has(req.action)}>
-            <div className="stack-gap">
+            <div className="cap-stack" data-gap="4">
               <div>
                 <p className="section-title">What changes</p>
                 {preview.changes.length ? (
@@ -379,22 +381,26 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
                     ))}
                   </ul>
                 ) : (
-                  <div className="faint">The server lists no change.</div>
+                  <div className="cap-text" data-tone="dim">
+                    The server lists no change.
+                  </div>
                 )}
               </div>
               <div>
                 <p className="section-title">Audit rows it writes</p>
                 {preview.audit.length ? (
-                  <ul className="plain mono">
+                  <ul className="plain cap-mono">
                     {preview.audit.map((a, i) => (
                       <li key={i}>{a}</li>
                     ))}
                   </ul>
                 ) : (
-                  <div className="faint">The server lists no audit row.</div>
+                  <div className="cap-text" data-tone="dim">
+                    The server lists no audit row.
+                  </div>
                 )}
               </div>
-              <p className="faint note">
+              <p className="cap-text note" data-tone="dim" data-size="small">
                 This confirmation is good until {utc(parse(preview.expires_at))} (
                 {ago(parse(preview.expires_at))}).
               </p>
@@ -547,25 +553,31 @@ function BatchDialog({
       <DialogHeader>
         <DialogTitle>{req.title}</DialogTitle>
       </DialogHeader>
-      <DialogBody className="stack-gap">
+      <DialogBody className="cap-stack" data-gap="4">
         <ol className="plain batch-list">
           {rows.map((r) => (
             <li key={r.item.label} data-batch-item={r.item.label}>
               <b>{r.item.label}</b>
               {r.preview ? (
-                <span className="muted note"> {r.preview.summary}</span>
+                <span className="cap-text note" data-tone="muted" data-size="small">
+                  {" "}
+                  {r.preview.summary}
+                </span>
               ) : r.error ? (
                 <Alert>
                   <ErrorText>{r.error}</ErrorText>
                 </Alert>
               ) : (
-                <span className="faint"> Checking...</span>
+                <span className="cap-text" data-tone="dim">
+                  {" "}
+                  Checking...
+                </span>
               )}
             </li>
           ))}
         </ol>
         {pending === "preview" && (
-          <div className="faint" role="status">
+          <div className="cap-text" data-tone="dim" role="status">
             Checking what each one will change...
           </div>
         )}

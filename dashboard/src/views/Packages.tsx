@@ -40,7 +40,9 @@ function Part({
 }) {
   if (part.state === "ok") return <>{children()}</>;
   return part.state === "none" ? (
-    <span className="faint">{part.reason}</span>
+    <span className="cap-text" data-tone="dim">
+      {part.reason}
+    </span>
   ) : (
     <St kind="nodata">Could not read: {part.reason}</St>
   );
@@ -143,14 +145,14 @@ function HistoryPanel({ name }: { name: string }) {
   const byName = new Map<string, number>();
   for (const day of d.days) byName.set(day.name, (byName.get(day.name) ?? 0) + day.downloads);
   return (
-    <div className="stack-gap" data-history={d.name}>
+    <div className="cap-stack" data-gap="4" data-history={d.name}>
       <DownloadsChart data={d} />
-      <p className="note faint">
+      <p className="cap-text note" data-size="small" data-tone="dim">
         {[...byName].map(([n, total]) => `${n}: ${fmtN(total)}`).join(" · ")} · read from npm{" "}
         {d.fetched_at.slice(0, 16).replace("T", " ")} UTC, kept six hours
       </p>
       {d.notes.map((n) => (
-        <p key={n} className="note">
+        <p key={n} className="cap-text note" data-size="small">
           {n}
         </p>
       ))}
@@ -168,11 +170,11 @@ function HistoryPanel({ name }: { name: string }) {
           <tbody>
             {d.weeks.slice(0, 8).map((w) => (
               <tr key={w.week}>
-                <td className="num">{w.week}</td>
-                <td className="num">{w.stars}</td>
-                <td className="num">{w.open_issues}</td>
-                <td className="num">{w.open_prs}</td>
-                <td className="mono">{w.latest_release ?? "none"}</td>
+                <td className="cap-num">{w.week}</td>
+                <td className="cap-num">{w.stars}</td>
+                <td className="cap-num">{w.open_issues}</td>
+                <td className="cap-num">{w.open_prs}</td>
+                <td className="cap-mono">{w.latest_release ?? "none"}</td>
               </tr>
             ))}
           </tbody>
@@ -211,9 +213,11 @@ function PackagePanel({
         </>
       }
     >
-      <div className="body stack-gap" data-package={cfg.name}>
+      <div className="body cap-stack" data-gap="4" data-package={cfg.name}>
         {!snap ? (
-          <p className="faint">The watcher reads this package on its next pass.</p>
+          <p className="cap-text" data-tone="dim">
+            The watcher reads this package on its next pass.
+          </p>
         ) : (
           <dl className="cap-detail-record">
             <dt>Version</dt>
@@ -222,8 +226,8 @@ function PackagePanel({
                 {() =>
                   snap.npm.state === "ok" && (
                     <>
-                      <span className="mono">{snap.npm.latest ?? "no latest tag"}</span>{" "}
-                      <span className="faint">
+                      <span className="cap-mono">{snap.npm.latest ?? "no latest tag"}</span>{" "}
+                      <span className="cap-text" data-tone="dim">
                         {Object.entries(snap.npm.dist_tags)
                           .map(([t, v]) => `${t} ${v}`)
                           .join(" · ")}{" "}
@@ -240,16 +244,16 @@ function PackagePanel({
                 {() =>
                   snap.downloads.state === "ok" && (
                     <>
-                      <span className="num">{fmtN(snap.downloads.last_week)}</span> in 7 days ·{" "}
-                      <span className="num">{fmtN(snap.downloads.last_month)}</span> in 30 days
-                      <span className="faint">
+                      <span className="cap-num">{fmtN(snap.downloads.last_week)}</span> in 7 days ·{" "}
+                      <span className="cap-num">{fmtN(snap.downloads.last_month)}</span> in 30 days
+                      <span className="cap-text" data-tone="dim">
                         {" "}
                         {snap.downloads.through
                           ? `(counted to ${snap.downloads.through})`
                           : "(npm has no counts yet)"}
                       </span>
                       {Object.keys(snap.downloads.by_version_last_week).length > 0 && (
-                        <div className="small faint">
+                        <div className="cap-text hint" data-size="small" data-tone="dim">
                           Per version, last 7 days only (npm keeps no per-version history):{" "}
                           {Object.entries(snap.downloads.by_version_last_week)
                             .sort((a, b) => b[1] - a[1])
@@ -268,14 +272,14 @@ function PackagePanel({
                 {() =>
                   snap.dependents.state === "ok" && (
                     <>
-                      <span className="num">{fmtN(snap.dependents.total)}</span> packages depend on{" "}
-                      {snap.dependents.version}: {fmtN(snap.dependents.direct)} directly,{" "}
+                      <span className="cap-num">{fmtN(snap.dependents.total)}</span> packages depend
+                      on {snap.dependents.version}: {fmtN(snap.dependents.direct)} directly,{" "}
                       {fmtN(snap.dependents.indirect)} through another package
                     </>
                   )
                 }
               </Part>
-              <div className="small">
+              <div className="cap-text hint" data-size="small">
                 Counts from deps.dev, which it calls indicative rather than exact. No public API
                 lists them:{" "}
                 <a
@@ -299,22 +303,21 @@ function PackagePanel({
                   snap.github.state === "ok" && (
                     <>
                       <a
-                        className="mono"
                         href={`https://github.com/${snap.github.repo}`}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        {snap.github.repo}
+                        <span className="cap-mono">{snap.github.repo}</span>
                       </a>{" "}
-                      · <span className="num">{snap.github.stars}</span> stars ·{" "}
-                      <span className="num">{snap.github.open_issues}</span> open issues ·{" "}
-                      <span className="num">
+                      · <span className="cap-num">{snap.github.stars}</span> stars ·{" "}
+                      <span className="cap-num">{snap.github.open_issues}</span> open issues ·{" "}
+                      <span className="cap-num">
                         {snap.github.open_prs}
                         {snap.github.open_prs_capped ? "+" : ""}
                       </span>{" "}
                       open PRs ·{" "}
                       {snap.github.latest_release ? (
-                        <span className="mono">{snap.github.latest_release.tag}</span>
+                        <span className="cap-mono">{snap.github.latest_release.tag}</span>
                       ) : (
                         "no release"
                       )}
@@ -326,7 +329,7 @@ function PackagePanel({
             {cfg.formerly && (
               <>
                 <dt>Formerly</dt>
-                <dd className="mono">{cfg.formerly}</dd>
+                <dd className="cap-mono">{cfg.formerly}</dd>
               </>
             )}
           </dl>

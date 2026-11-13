@@ -191,22 +191,22 @@ export function Claims() {
               <tbody>
                 {data.groups.map((g) => (
                   <tr key={`${g.agent ?? ""}\u0000${g.namespace}`} data-row="">
-                    <td className="mono wrap" data-label="Agent">
+                    <td className="cap-mono wrap" data-label="Agent">
                       {g.agent ?? <Missing>no claim yet</Missing>}
                     </td>
-                    <td className="mono" data-label="Project">
+                    <td className="cap-mono" data-label="Project">
                       {g.namespace}
                     </td>
-                    <td className="num" data-label="Jobs">
+                    <td className="cap-num" data-label="Jobs">
                       {g.jobs}
                     </td>
-                    <td className="num" data-label="Claims">
+                    <td className="cap-num" data-label="Claims">
                       {g.claims}
                     </td>
                     <td data-label="Checks">
                       <AgreementCounts c={totals(g)} />
                     </td>
-                    <td className="mono wrap" data-label="Touches">
+                    <td className="cap-mono wrap" data-label="Touches">
                       {g.touches.count ? (
                         `${g.touches.count}: ${counts(g.touches.by_kind)}`
                       ) : (
@@ -230,11 +230,13 @@ export function Claims() {
             </table>
           </div>
         ) : data ? (
-          <div className="body faint">
+          <div className="cap-text body" data-tone="dim">
             {filtered ? "No claims match these filters." : "No claim has been recorded yet."}
           </div>
         ) : (
-          <div className="body faint">No read yet.</div>
+          <div className="cap-text body" data-tone="dim">
+            No read yet.
+          </div>
         )}
       </Panel>
       {data && data.groups.length > 0 && (
@@ -257,11 +259,11 @@ export function Claims() {
               <tbody>
                 {checks.map(([name, c]) => (
                   <tr key={name} data-row="">
-                    <td className="mono" data-label="Check">
+                    <td className="cap-mono" data-label="Check">
                       {name}
                     </td>
                     {AGREEMENTS.map((a) => (
-                      <td key={a} className="num" data-label={a}>
+                      <td key={a} className="cap-num" data-label={a}>
                         {c[a]}
                       </td>
                     ))}
@@ -404,7 +406,9 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
   };
   return (
     <div className="toolbar" role="group" aria-label="Export">
-      <span className="faint small">Export as CSV:</span>
+      <span className="cap-text hint" data-tone="dim" data-size="small">
+        Export as CSV:
+      </span>
       <button type="button" className="cap-btn" onClick={agents}>
         By agent
       </button>
