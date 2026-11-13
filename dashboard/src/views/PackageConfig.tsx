@@ -106,7 +106,7 @@ export function PackageForm({
         <input
           ref={first}
           id={f("name")}
-          className="cap-input mono"
+          className="cap-input cap-mono"
           value={d.name}
           readOnly={!adding}
           autoComplete="off"
@@ -117,7 +117,7 @@ export function PackageForm({
       <Field label="GitHub repository">
         <input
           id={f("repo")}
-          className="cap-input mono"
+          className="cap-input cap-mono"
           value={d.repo}
           placeholder="owner/name"
           autoComplete="off"
@@ -128,7 +128,7 @@ export function PackageForm({
       <Field label="Formerly" help="Its download history is shown joined to this one.">
         <input
           id={f("formerly")}
-          className="cap-input mono"
+          className="cap-input cap-mono"
           value={d.formerly}
           placeholder="an earlier npm name"
           autoComplete="off"

@@ -166,35 +166,42 @@ export function Activity() {
                     data-open={`audit:${r.id}`}
                     tabIndex={0}
                   >
-                    <td className="num" title={utc(parse(r.at))}>
+                    <td className="cap-num" title={utc(parse(r.at))}>
                       {ago(parse(r.at), now)}
                     </td>
-                    <td className="mono">
+                    <td className="cap-mono">
                       {r.actor ?? <Missing />}
                       {r.client && <div className="src">via {r.client}</div>}
                     </td>
                     <td>
                       {actionWords(r.action) ?? (
-                        <span className="mono">{r.action ?? <Missing />}</span>
+                        <span className="cap-mono">{r.action ?? <Missing />}</span>
                       )}
-                      {r.target && <span className="faint"> {TARGET_LABEL[r.target]}</span>}
-                      {actionWords(r.action) && <div className="src mono">{r.action}</div>}
+                      {r.target && (
+                        <span className="cap-text" data-tone="dim">
+                          {" "}
+                          {TARGET_LABEL[r.target]}
+                        </span>
+                      )}
+                      {actionWords(r.action) && <div className="src cap-mono">{r.action}</div>}
                     </td>
-                    <td className="mono">{r.namespace ?? <Missing />}</td>
-                    <td className="mono wrap">{r.path ?? <Missing />}</td>
+                    <td className="cap-mono">{r.namespace ?? <Missing />}</td>
+                    <td className="cap-mono wrap">{r.path ?? <Missing />}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : data ? (
-          <div className="body faint">
+          <div className="cap-text body" data-tone="dim">
             {data.filter.namespace || data.filter.actor
               ? "No rows match these filters."
               : "The audit log has no rows."}
           </div>
         ) : (
-          <div className="body faint">No read yet.</div>
+          <div className="cap-text body" data-tone="dim">
+            No read yet.
+          </div>
         )}
       </Panel>
     </div>

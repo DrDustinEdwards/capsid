@@ -3,10 +3,6 @@ import { useApp } from "../app/ctx";
 import { ReasonForm, SwitchWithReason } from "capsomer/react/switch-reason";
 import { useApplySwitch } from "../ui/applySwitch";
 import { Panel } from "capsomer/react/panel";
-import "capsomer/button.css";
-import "capsomer/field.css";
-import "capsomer/switch.css";
-import "capsomer/switch-reason.css";
 
 // The overnight run, first on Settings (ruled 2026-09-30, DECIDE 5, 6 and 7; the UX audit's M3
 // put it first). Every change is a switch that asks for a reason beside it, moves only when the

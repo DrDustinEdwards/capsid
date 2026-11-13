@@ -24,12 +24,12 @@ export function Problems({ sitesOn }: { sitesOn: boolean }) {
     <section className="attention" id="attention" data-section="Problems" aria-labelledby="attH">
       <header>
         <h2 id="attH">Problems</h2>
-        <span className="num faint">
+        <span className="cap-text cap-num" data-tone="dim">
           {problems.length
             ? `${problems.length} ${problems.length === 1 ? "problem" : "problems"}, worst first`
             : "no problems"}
         </span>
-        <span className="src ml-auto">{sitesOn ? "sites, " : ""}backups, CI, watcher, agents</span>
+        <span className="src cap-push">{sitesOn ? "sites, " : ""}backups, CI, watcher, agents</span>
       </header>
       {problems.length ? (
         <div className="att-list">

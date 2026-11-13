@@ -3,10 +3,6 @@ import { Switch } from "capsomer/react/switch";
 import { ThemeSwitch } from "capsomer/react/theme-switch";
 import { THEME_PREF, setSingleKeys, useSingleKeys } from "../lib/prefs";
 import { Panel } from "capsomer/react/panel";
-import "capsomer/button.css";
-import "capsomer/field.css";
-import "capsomer/switch.css";
-import "capsomer/switch-reason.css";
 // The lazy Automation section's segmented control: loaded with the route, so that section
 // brings no stylesheet of its own to wait for before it hydrates.
 import "capsomer/segmented.css";
@@ -43,7 +39,7 @@ function Display() {
   const singleKeys = useSingleKeys();
   return (
     <Panel flush title="Display" src="this browser only">
-      <div className="body stack-gap">
+      <div className="body cap-stack" data-gap="4">
         <div className="prefrow">
           <span className="section-title">Theme</span>
           <ThemeSwitch prefKey={THEME_PREF} />
@@ -55,7 +51,7 @@ function Display() {
             checked={singleKeys}
             onCheckedChange={setSingleKeys}
           />
-          <span className="faint">
+          <span className="cap-text" data-tone="dim">
             g then a letter, j, k, r, t and the rest. Turn them off if they clash with a screen
             reader.
           </span>

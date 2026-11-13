@@ -39,7 +39,7 @@ export function SharedCode() {
             <PackagePanel key={p.name} pkg={p} />
           ))}
           {/* What was read, at the foot: a view's heading stands alone (design D13). */}
-          <p className="faint shared-read">
+          <p className="cap-text shared-read" data-tone="dim">
             Read {ago(parse(data.generated), now)} from {data.apps_read}{" "}
             {data.apps_read === 1 ? "app" : "apps"}
             {data.apps_failed.length
@@ -85,7 +85,7 @@ function ReleaseLine({ pkg }: { pkg: SharedCodePackage }) {
   // One span, so its words flow inline where the header lays its parts out as flex items.
   return (
     <span>
-      {" · "}package.json <span className="mono">{pkg.version}</span>
+      {" · "}package.json <span className="cap-mono">{pkg.version}</span>
       {pkg.untagged && (
         <>
           {" · "}
@@ -97,7 +97,7 @@ function ReleaseLine({ pkg }: { pkg: SharedCodePackage }) {
           {" · "}
           {pkg.npm_latest ? (
             <>
-              npm <span className="mono">{pkg.npm_latest}</span>
+              npm <span className="cap-mono">{pkg.npm_latest}</span>
             </>
           ) : (
             <St kind="nodata">{pkg.npm_note ?? "npm not read"}</St>
@@ -133,7 +133,7 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
           {" · "}
           {pkg.latest ? (
             <>
-              newest <span className="mono">{pkg.latest}</span>
+              newest <span className="cap-mono">{pkg.latest}</span>
             </>
           ) : (
             <St kind="nodata">{pkg.tags_error ?? "No release tag"}</St>
@@ -141,7 +141,11 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
           <ReleaseLine pkg={pkg} />
         </>
       }
-      footer={<span className="faint">{summary}</span>}
+      footer={
+        <span className="cap-text" data-tone="dim">
+          {summary}
+        </span>
+      }
     >
       {pkg.users.length ? (
         <table className="cap-table shared-users">
@@ -163,14 +167,19 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
                     <b>{u.name}</b>
                   </td>
                   <td>
-                    <span className="mono">{u.pinned ?? "none"}</span>
-                    {u.via_old_name && <span className="faint"> (old repo name)</span>}
+                    <span className="cap-mono">{u.pinned ?? "none"}</span>
+                    {u.via_old_name && (
+                      <span className="cap-text" data-tone="dim">
+                        {" "}
+                        (old repo name)
+                      </span>
+                    )}
                   </td>
                   <td>
                     <St kind={b.kind}>{b.text}</St>
                   </td>
                   <td className="c-where">
-                    <span className="mono">{u.where}</span>
+                    <span className="cap-mono">{u.where}</span>
                   </td>
                 </tr>
               );
@@ -178,7 +187,9 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
           </tbody>
         </table>
       ) : (
-        <p className="faint shared-none">No app pins it yet.</p>
+        <p className="cap-text shared-none" data-tone="dim">
+          No app pins it yet.
+        </p>
       )}
       {pkg.local_copies.length > 0 && (
         <ul className="shared-local" aria-label={`Local copies ${pkg.name} replaces`}>
@@ -187,7 +198,10 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
               <St kind={l.present === null ? "nodata" : l.present ? "warn" : "ok"}>
                 {l.present === null ? "Not read" : l.present ? "Still there" : "Removed"}
               </St>{" "}
-              <span className="mono">{l.path}</span> <span className="faint">in {l.namespace}</span>
+              <span className="cap-mono">{l.path}</span>{" "}
+              <span className="cap-text" data-tone="dim">
+                in {l.namespace}
+              </span>
             </li>
           ))}
         </ul>

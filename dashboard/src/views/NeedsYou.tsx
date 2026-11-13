@@ -108,7 +108,9 @@ function Waiting() {
       src={`read ${ago(parse(inbox.generated), now)}`}
       footer={
         quiet.length > 0 ? (
-          <span className="faint">Nothing waiting: {quiet.map((a) => a.name).join(", ")}</span>
+          <span className="cap-text" data-tone="dim">
+            Nothing waiting: {quiet.map((a) => a.name).join(", ")}
+          </span>
         ) : undefined
       }
     >
@@ -146,7 +148,10 @@ function Group({
     <section className="wgroup" aria-labelledby={`${id}-h`} data-group={id}>
       <div className="wgroup-head">
         <h3 id={`${id}-h`}>
-          {title} <span className="num faint">{count}</span>
+          {title}{" "}
+          <span className="cap-text cap-num" data-tone="dim">
+            {count}
+          </span>
         </h3>
         {batch}
       </div>
@@ -326,7 +331,7 @@ function PrRow({
           </button>
         )}
         {seat && !ok && (
-          <span className="faint wnote">
+          <span className="cap-text wnote" data-tone="dim">
             {seat.class === "typed"
               ? "Approve it by typing its number in chat."
               : "Not approvable here."}
@@ -423,7 +428,9 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
             {verb}
           </button>
         )}
-        {!blocked && j && <span className="faint wnote">{`Now ${j.status}.`}</span>}
+        {!blocked && j && (
+          <span className="cap-text wnote" data-tone="dim">{`Now ${j.status}.`}</span>
+        )}
       </div>
     </li>
   );
@@ -533,7 +540,7 @@ function WeeklyDigest() {
           <div className="wgroup-head">
             <h3>
               {site}
-              <span className="num faint">
+              <span className="cap-text cap-num" data-tone="dim">
                 {" "}
                 {open.filter((f) => f.namespace === site).length} open
               </span>
@@ -567,7 +574,10 @@ function Trends() {
     <details className="trends" id="trends">
       <summary>
         <span className="chev" aria-hidden="true" />
-        Trends <span className="faint">your time per week, and where waiting goes</span>
+        Trends{" "}
+        <span className="cap-text" data-tone="dim" data-size="small">
+          your time per week, and where waiting goes
+        </span>
       </summary>
       <div className="trends-body chart-row">
         <ChartSlot>
