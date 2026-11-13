@@ -1,11 +1,10 @@
-import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import type { Env } from "./env";
 import { PR_URL_SOURCE, parsePrUrl } from "@dustinedwards/site-runtime/github";
 import { ghFetch, resolveRepo } from "./github/client";
 import { prFacts, verifyEvidence } from "./job-outcomes";
 import { auditStatement } from "./store-guards";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
-import { DAY_MS } from "./time";
+import { DAY_MS, timeMs } from "./time";
 
 // Merge-state re-verification. An outcome row records merge state when `complete`
 // runs, but the seat merges afterwards, so the row would always read "opened, not
@@ -172,11 +171,6 @@ export function unverifiableStatements(
   ];
 }
 
-// A time from GitHub (ISO with a zone) or from D1 (UTC with no zone) as milliseconds, or NaN.
-function instant(t: string | null | undefined): number {
-  return parseSqlTime(t) ?? Number.NaN;
-}
-
 /** When the repository a pull request URL names was created, or null when it could not
  *  be read. Resolved through the namespace mapping, as prFacts is. */
 async function repoCreatedAt(env: Env, namespace: string, prUrl: string): Promise<string | null> {
@@ -239,8 +233,8 @@ function decide(
       note: `${prUrl} now answers as ${answered.node_id} (opened ${answered.created_at ?? "at an unknown time"}), not ${row.pr_node_id}, the pull request this row named`,
     };
   }
-  const named = instant(row.named_at);
-  const born = instant(repoCreated);
+  const named = timeMs(row.named_at);
+  const born = timeMs(repoCreated);
   if (Number.isNaN(named) || Number.isNaN(born)) return { kind: "leave" };
   if (born > named) {
     return {
@@ -250,7 +244,7 @@ function decide(
     };
   }
   if (!answered?.node_id) return { kind: "leave" };
-  const opened = instant(answered.created_at);
+  const opened = timeMs(answered.created_at);
   if (Number.isNaN(opened)) return { kind: "leave" };
   if (opened > named) {
     return {
