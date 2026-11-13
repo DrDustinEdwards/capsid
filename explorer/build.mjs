@@ -213,6 +213,7 @@ export async function build({
       "family-footer",
       "chart-frame",
       "meter",
+      "graph",
     ],
   });
   // Every stylesheet blocks the first paint, so each ships minified: Capsomer's sources are mostly comments, and on a
