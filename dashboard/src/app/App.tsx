@@ -347,7 +347,10 @@ function PortalApp() {
     signOut();
   }, [feed, leaving, fail, signOut]);
 
-  const theme = useCallback(() => say(toggleTheme(THEME_PREF) === "dark" ? "Dark" : "Light"), [say]);
+  const theme = useCallback(
+    () => say(toggleTheme(THEME_PREF) === "dark" ? "Dark" : "Light"),
+    [say],
+  );
 
   const railRef = useRef(railCollapsed);
   useEffect(() => {
