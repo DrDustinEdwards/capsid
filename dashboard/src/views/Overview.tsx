@@ -111,7 +111,7 @@ export function Overview() {
           },
   ];
   return (
-    <div className="embedded" id="summary">
+    <div className="cap-stack" id="summary">
       {/* Figure and label on one line, the detail under them; a tile is never narrower
           than its text, so the row wraps instead of cutting a word (design D3). */}
       <StatTiles label="Health figures">

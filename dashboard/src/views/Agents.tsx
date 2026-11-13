@@ -36,7 +36,7 @@ function Archive() {
   const { feed, now } = useApp();
   const rows = archiveAgents(feed.live.agents);
   return (
-    <div className="embedded">
+    <div className="cap-stack">
       <Panel flush title="Archive" src="agents · agents_archive">
         {rows.length === 0 ? (
           <div className="cap-text body" data-tone="dim">
@@ -120,7 +120,7 @@ const OWNER_PAGES = [
 
 function Access() {
   return (
-    <div className="embedded">
+    <div className="cap-stack">
       <Panel flush title="AI access" src="each MCP server's owner page">
         <div className="cap-text body" data-tone="dim">
           Grants you gave AI clients, with Revoke, and every tool call. Each opens on its server
@@ -157,7 +157,7 @@ function Roster() {
   const { feed, now } = useApp();
   const live = feed.live;
   return (
-    <div className="embedded">
+    <div className="cap-stack">
       <Panel flush title="Roster" src="live agents · job outcomes">
         <div className="cap-table-wrap" data-reflow="wide">
           <table className="cap-table">

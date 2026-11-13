@@ -96,7 +96,7 @@ export function SitePage() {
         tabs={SITE_TABS}
         current={tab}
       />
-      <div className="embedded" id={tab} data-tab-panel={tab}>
+      <div className="cap-stack" id={tab} data-tab-panel={tab}>
         {tab === "overview" ? (
           <Overview ns={ns} snap={snap} />
         ) : tab === "deploys" ? (
@@ -185,7 +185,7 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
           {detail}
         </Banner>
       )}
-      <div className="cap-panes" data-gap="5">
+      <div className="cap-panes" data-even data-gap="5">
         <Panel flush title="Probe" src={`watcher pass · checked ${ago(parse(s.checked_at), now)}`}>
           <div className="body">
             <dl className="cap-detail-record">

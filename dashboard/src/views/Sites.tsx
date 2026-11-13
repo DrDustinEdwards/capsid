@@ -38,7 +38,7 @@ function AllSites() {
   const probed = new Set((snap?.sites ?? []).map((s) => s.namespace));
   const waiting = configured.filter((s) => s.origin !== null && !probed.has(s.namespace));
   return (
-    <div className="embedded">
+    <div className="cap-stack">
       <div className="cap-cluster" data-gap="3">
         <button
           type="button"

@@ -33,7 +33,7 @@ export function Health() {
       <HealthVerdict />
       <Overview />
       <PageTabs label="Health" path="/health" tabs={HEALTH_TABS} current={tab} />
-      <div className="embedded" id={tab} data-tab-panel={tab}>
+      <div className="cap-stack" id={tab} data-tab-panel={tab}>
         <TabPanel tab={tab} />
       </div>
     </div>

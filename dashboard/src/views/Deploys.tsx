@@ -30,7 +30,7 @@ export function Deploys() {
     .sort((a, b) => parse(b.d.created_on) - parse(a.d.created_on));
   const missing = (snap?.sites ?? []).filter((s) => !cfOk(s));
   return (
-    <div className="embedded">
+    <div className="cap-stack">
       <div className="cap-cluster" data-gap="3">
         {RANGES.map((r) => (
           <button

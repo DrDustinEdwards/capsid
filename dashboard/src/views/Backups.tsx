@@ -26,7 +26,7 @@ export function Backups() {
   const snap = feed.snapshot;
   if (!snap) {
     return (
-      <div className="embedded">
+      <div className="cap-stack">
         <NoSnapshot />
       </div>
     );
@@ -35,8 +35,8 @@ export function Backups() {
   const o = snap.offaccount;
   const os = o ? offaccountState(o, now) : null;
   return (
-    <div className="embedded">
-      <div className="cap-panes" data-gap="5">
+    <div className="cap-stack">
+      <div className="cap-panes" data-even data-gap="5">
         <Panel flush title="Primary: Capsid D1" src="/health backup">
           <div className="body cap-stack" data-gap="4">
             {!h ? (

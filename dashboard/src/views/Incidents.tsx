@@ -19,9 +19,9 @@ export function Incidents() {
   const all = incidents(feed);
   const emptied = ns !== "all" && all.length > 0 && !all.some((x) => x.ns === ns);
   return (
-    <div className="embedded">
+    <div className="cap-stack">
       <NsChips list={all.map((x) => x.ns)} />
-      <div className="cap-panes" data-gap="5">
+      <div className="cap-panes" data-even data-gap="5">
         <Panel flush title="Findings" src="jobs posted by agent:watcher">
           {emptied ? (
             <FilterEmpty onShowAll={() => setNs("all")}>

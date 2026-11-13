@@ -2,6 +2,8 @@
    app's own dimensions live here. */
 :root {
   --top: 44px;
+  /* Two even panes split once the row holds two 480 px charts with their panel padding. */
+  --panes-break: 64rem;
 }
 
 /* After Capsomer's base.css (main.tsx) in the same layer, so the Portal's denser type wins. Margin,
@@ -541,12 +543,6 @@ table.workers-stores .st {
   }
 }
 
-/* A view's content inside another page (a Health or Packages tab, say). */
-.embedded {
-  display: grid;
-  gap: 14px;
-}
-
 /* a site's own page: its status, address and project under its name */
 .site-lead {
   display: inline-flex;
@@ -571,7 +567,7 @@ table.workers-stores .st {
 .chart-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
-  gap: 0 32px;
+  gap: 0 var(--space-6);
   align-items: start;
 }
 .wait-chart,

@@ -177,7 +177,7 @@ function JobsTab() {
         />
       </div>
       <StaleJobs load={stale.load} reread={stale.reread} />
-      <div className="cap-panes" data-gap="5">
+      <div className="cap-panes" data-even data-gap="5">
         <Panel
           flush
           title="All jobs"

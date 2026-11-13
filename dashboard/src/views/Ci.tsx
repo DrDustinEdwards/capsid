@@ -136,7 +136,7 @@ export function PullRequests() {
       </Panel>
       {/* Auto-merge, one section: whether the signed policy loads, then the safety meter.
           A pause alert opens it (src/push.ts, /prs#auto-merge). */}
-      <div className="embedded" id="auto-merge">
+      <div className="cap-stack" id="auto-merge">
         {/* The signed auto-merge policy (src/auto-merge-policy.ts): whether the Worker loads it,
             and the control that writes it from docs/policy/auto-merge.md and signs it
             (sign_policy_from_repo). The version is typed in the dialog. */}

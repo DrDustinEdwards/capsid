@@ -69,7 +69,7 @@ export function Claims() {
   const checks = data ? byCheck(data.groups) : [];
 
   return (
-    <div className="embedded">
+    <div className="cap-stack">
       <form
         className="cap-cluster"
         data-gap="3"

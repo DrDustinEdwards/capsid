@@ -350,7 +350,7 @@ export function Packages() {
     <div className="cap-admin-page">
       <PageHead title="Packages" />
       <PageTabs label="Packages" path="/packages" tabs={PACKAGE_TABS} current={tab} />
-      <div className="embedded" id={tab}>
+      <div className="cap-stack" id={tab}>
         {tab === "shared" ? (
           <Suspense fallback={null}>
             <SharedCode />
