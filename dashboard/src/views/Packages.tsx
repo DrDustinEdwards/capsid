@@ -8,7 +8,6 @@ import { parse } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "../types";
 import { ChartFrame } from "capsomer/react/chart-frame";
-import "capsomer/chart-frame.css";
 import { Panel } from "capsomer/react/panel";
 import { areaChart } from "enarratio/lite/area";
 import { PageTabs, useTabParam } from "../ui/pagetabs";

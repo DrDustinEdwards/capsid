@@ -1,6 +1,5 @@
 import { Fragment, Suspense, lazy, useState, type ReactNode } from "react";
 import { LogView } from "capsomer/react/log-view";
-import "capsomer/table.css";
 import "capsomer/log-view.css";
 import { Panel } from "capsomer/react/panel";
 import { ReadState, SourceState, type SourceResult } from "capsomer/react/read-state";

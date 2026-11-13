@@ -11,7 +11,6 @@ import type { PortalPush } from "../types";
 import { Panel } from "capsomer/react/panel";
 import { PushDevices } from "capsomer/react/web-push";
 import "capsomer/web-push.css";
-import "capsomer/button.css";
 
 // Phone alerts (src/push.ts; docs/design/design-merge-pipeline.md section 5): turn Web
 // Push on for this browser, list the devices that have it, turn one off, send a test.
