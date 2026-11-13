@@ -14,7 +14,7 @@
     min-height: 100%;
   }
   body {
-    font: var(--weight-regular) var(--fs-detail)/ var(--leading-compact) var(--ui);
+    font: var(--weight-regular) var(--fs-detail)/var(--leading-compact) var(--ui);
   }
   /* A link in running text is underlined, since color alone can't set it apart from the words
      around it (WCAG 1.4.1). */

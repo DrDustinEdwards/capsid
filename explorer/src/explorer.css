@@ -814,7 +814,8 @@ html:not(.js) .chapter h3::before {
 }
 .chapter h3 {
   margin: 0 0 var(--space-3);
-  font: var(--weight-heading) clamp(var(--title-4), 1.8vw, 1.625rem) / var(--leading-tight) var(--face);
+  font: var(--weight-heading) clamp(var(--title-4), 1.8vw, 1.625rem) / var(--leading-tight)
+    var(--face);
 }
 .chapter .chapter-n {
   margin-inline-start: 0.5em;
