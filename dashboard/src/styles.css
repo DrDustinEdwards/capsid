@@ -14,7 +14,7 @@
     min-height: 100%;
   }
   body {
-    font: 400 13px/1.4 var(--ui);
+    font: var(--weight-regular) var(--fs-detail)/ var(--leading-compact) var(--ui);
   }
   /* A link in running text is underlined, since color alone can't set it apart from the words
      around it (WCAG 1.4.1). */
@@ -25,16 +25,16 @@
 }
 /* Text roles are Capsomer's: .cap-mono for identifiers only (ids, shas, fingerprints, commands,
    agent and namespace names, paths), .cap-num for times, counts, percentages and hostnames, and
-   .cap-text for size and tone (capsomer/utilities.css). Nothing is set below 11 px, and nothing
+   .cap-text for size and tone (capsomer/text.css). Nothing is set below 11 px, and nothing
    below 13 px on a phone (the capsid-portal site entry). */
 /* The shell is Capsomer's AdminShell (capsomer/admin-shell.css); the freshness line is Capsomer's
    Freshness; only the page's own controls are styled here. */
 .sample {
   font-family: var(--mono);
   font-size: var(--fs-label);
-  padding: 3px 7px;
-  border-radius: 3px;
-  border: 1px dashed var(--warn);
+  padding: var(--space-1-5) 7px;
+  border-radius: var(--radius-s);
+  border: var(--line-w) dashed var(--warn);
   color: var(--warn);
   white-space: nowrap;
 }
@@ -42,8 +42,8 @@ kbd {
   font-family: var(--mono);
   font-size: var(--fs-label);
   padding: 1px 5px;
-  border-radius: 3px;
-  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-s);
+  border: var(--line-w) solid var(--line-strong);
   background: var(--surface);
   color: var(--muted);
 }
@@ -60,19 +60,19 @@ main {
 .pagehead {
   display: flex;
   align-items: end;
-  gap: 16px;
+  gap: var(--space-5);
   flex-wrap: wrap;
 }
 .pagehead h1 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--fs-h3);
   font-weight: var(--weight-heading);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--tracking-tight);
   text-wrap: balance;
 }
 
 .prcards .wrow + .wrow {
-  border-top: 1px solid var(--line);
+  border-top: var(--line-w) solid var(--line);
 }
 .ns {
   font-family: var(--mono);
@@ -87,30 +87,30 @@ main {
 /* attention strip. Lists carry no rules between rows: hover and selection carry the
    structure. One status glyph per row, and a red left edge on critical rows only. */
 .attention {
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--radius-l);
   background: var(--surface);
   overflow: hidden;
 }
 .attention > header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 9px 16px;
+  gap: var(--space-4);
+  padding: 9px var(--space-5);
   background: var(--raised);
   flex-wrap: wrap;
 }
 .attention h2 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-detail);
   font-weight: var(--weight-heading);
 }
 .att-row {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 6px 16px;
+  gap: var(--space-4);
+  padding: var(--space-2-5) var(--space-5);
   cursor: pointer;
 }
 .att-row:hover {
@@ -120,7 +120,7 @@ main {
   min-width: 0;
 }
 .att-row .what b {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -153,7 +153,7 @@ main {
   background: none;
   padding: 0;
   text-align: left;
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -171,17 +171,17 @@ tr:has(.stretch) {
   outline: none;
 }
 .att-row:has(.rowlink:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  outline: var(--focus-width) solid var(--accent);
+  outline-offset: calc(-1 * var(--focus-offset));
   border-radius: 4px;
 }
 .chev {
   display: inline-block;
   width: 7px;
   height: 7px;
-  margin: 0 3px 2px 6px;
-  border-right: 1.5px solid var(--muted);
-  border-bottom: 1.5px solid var(--muted);
+  margin: 0 var(--space-1-5) var(--space-1) var(--space-2-5);
+  border-right: var(--line-w-mid) solid var(--muted);
+  border-bottom: var(--line-w-mid) solid var(--muted);
   transform: rotate(-45deg);
   transition: transform 0.12s;
 }
@@ -193,8 +193,8 @@ tr:has(.stretch) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 4px 16px 4px 116px;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-5) var(--space-2) 116px;
   background: var(--raised);
   cursor: pointer;
 }
@@ -205,7 +205,7 @@ tr:has(.stretch) {
   min-width: 0;
 }
 .att-child .what b {
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   display: block;
   overflow-wrap: anywhere;
 }
@@ -220,51 +220,51 @@ tr:has(.stretch) {
   white-space: nowrap;
 }
 .grouplink {
-  padding: 4px 16px 8px 116px;
+  padding: var(--space-2) var(--space-5) var(--space-3) 116px;
   background: var(--raised);
   font-size: var(--fs-detail);
 }
 .notices {
-  border-top: 1px solid var(--line);
+  border-top: var(--line-w) solid var(--line);
 }
 .notices .rowlink {
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 .att-more {
-  padding: 4px 16px 8px 116px;
+  padding: var(--space-2) var(--space-5) var(--space-3) 116px;
   font-size: var(--fs-detail);
 }
 
 /* Needs you, Waiting for you: a group per kind, each row its subject, a quiet line and its
    own buttons. On a phone the buttons go full width under the row. */
 .wgroup + .wgroup {
-  border-top: 1px solid var(--line);
+  border-top: var(--line-w) solid var(--line);
 }
 .wgroup-head {
   display: flex;
   align-items: center;
-  gap: 8px 12px;
+  gap: var(--space-3) var(--space-4);
   flex-wrap: wrap;
-  padding: 10px 16px 2px;
+  padding: var(--space-3-5) var(--space-5) var(--space-1);
 }
 .wgroup-head h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-detail);
   font-weight: var(--weight-heading);
 }
 .wgroup-head .cap-num {
-  font-weight: 400;
+  font-weight: var(--weight-regular);
 }
 .wbatch {
   display: flex;
   align-items: center;
-  gap: 8px 12px;
+  gap: var(--space-3) var(--space-4);
   flex-wrap: wrap;
   margin-left: auto;
 }
 .wselect {
   display: inline-flex;
-  gap: 6px;
+  gap: var(--space-2-5);
   align-items: center;
   color: var(--muted);
   min-height: 32px;
@@ -273,14 +273,14 @@ tr:has(.stretch) {
 .wlist {
   list-style: none;
   margin: 0;
-  padding: 0 0 6px;
+  padding: 0 0 var(--space-2-5);
 }
 .wrow {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 6px 12px;
-  padding: 8px 16px;
+  gap: var(--space-2-5) var(--space-4);
+  padding: var(--space-3) var(--space-5);
 }
 .wtick {
   display: flex;
@@ -301,13 +301,13 @@ tr:has(.stretch) {
   flex: 1 1 280px;
   min-width: 0;
   display: grid;
-  gap: 3px;
+  gap: var(--space-1-5);
   justify-items: start;
   overflow-wrap: anywhere;
 }
 .wmain b,
 .wtitle {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 .wmeta {
   font-size: var(--fs-detail);
@@ -318,7 +318,7 @@ tr:has(.stretch) {
 }
 .wlinks {
   display: inline-flex;
-  gap: 4px 16px;
+  gap: var(--space-2) var(--space-5);
   flex-wrap: wrap;
 }
 .wlink {
@@ -326,7 +326,7 @@ tr:has(.stretch) {
 }
 .wact {
   display: flex;
-  gap: 8px;
+  gap: var(--space-3);
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -340,18 +340,18 @@ tr:has(.stretch) {
 }
 /* Trends, folded at the foot. Open, it keeps room for its charts while they load. */
 .trends {
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--radius-l);
   background: var(--surface);
 }
 .trends > summary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
-  padding: 10px 16px;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3-5) var(--space-5);
   min-height: 44px;
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   list-style: none;
 }
 summary {
@@ -362,7 +362,7 @@ summary.cap-btn::-webkit-details-marker {
   display: none;
 }
 .trends > summary .cap-text {
-  font-weight: 400;
+  font-weight: var(--weight-regular);
 }
 details[open] > summary .chev {
   transform: rotate(45deg);
@@ -372,7 +372,7 @@ details > summary + .cap-cluster {
   margin-block-start: var(--space-3);
 }
 .trends-body {
-  padding: 4px 16px 0;
+  padding: var(--space-2) var(--space-5) 0;
   min-height: 320px;
 }
 @media (max-width: 820px) {
@@ -394,25 +394,25 @@ details > summary + .cap-cluster {
   padding: 0;
 }
 .lib-results li {
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
+  padding: var(--space-3-5) var(--space-5);
+  border-bottom: var(--line-w) solid var(--line);
   overflow-wrap: anywhere;
 }
 .lib-body {
-  padding: 12px 16px;
+  padding: var(--space-4) var(--space-5);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font: 13px/1.55 var(--mono);
+  font: var(--fs-detail)/1.55 var(--mono);
 }
 
 /* Shared code: the read line, each package's users, and its local copies. */
 .shared-read {
-  margin: 12px 0 0;
+  margin: var(--space-4) 0 0;
   font-size: var(--fs-detail);
 }
 .shared-none {
   margin: 0;
-  padding: 10px 16px;
+  padding: var(--space-3-5) var(--space-5);
 }
 table.workers-bindings,
 table.workers-stores {
@@ -424,9 +424,9 @@ table.workers-bindings col.c-label {
 table.workers-bindings th {
   text-align: left;
   vertical-align: top;
-  padding: 9px 12px;
+  padding: 9px var(--space-4);
   color: var(--muted);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   text-transform: none;
   letter-spacing: 0;
 }
@@ -438,12 +438,12 @@ table.workers-stores td {
   white-space: normal;
   overflow-wrap: anywhere;
   vertical-align: top;
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
   height: auto;
 }
 table.workers-stores details {
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 table.workers-stores .cap-status {
   white-space: normal;
@@ -459,10 +459,10 @@ table.workers-stores .cap-status {
 .shared-local {
   list-style: none;
   margin: 0;
-  padding: 8px 16px;
-  border-top: 1px solid var(--line);
+  padding: var(--space-3) var(--space-5);
+  border-top: var(--line-w) solid var(--line);
   display: grid;
-  gap: 4px;
+  gap: var(--space-2);
 }
 @media (max-width: 820px) {
   .shared-users .c-where,
@@ -482,13 +482,13 @@ table.workers-stores .cap-status {
 .site-lead {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-4);
   flex-wrap: wrap;
 }
 
 /* fleet table */
 .fleet .site b {
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   display: block;
 }
 .fleet .site span {
@@ -507,11 +507,11 @@ table.workers-stores .cap-status {
 }
 .wait-chart,
 .minutes-chart {
-  margin: 0 0 16px;
+  margin: 0 0 var(--space-5);
 }
 .slot-head {
   font-size: var(--fs-detail);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2);
   overflow-wrap: anywhere;
 }
 .upct {
@@ -519,7 +519,7 @@ table.workers-stores .cap-status {
   color: var(--muted);
   display: flex;
   justify-content: space-between;
-  margin-top: 3px;
+  margin-top: var(--space-1-5);
 }
 
 /* queue */
@@ -527,10 +527,10 @@ table.workers-stores .cap-status {
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
+  gap: var(--space-3);
+  padding: var(--space-2-5) var(--space-5);
   font-size: var(--fs-label);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
@@ -539,7 +539,7 @@ table.workers-stores .cap-status {
 .qgroup > h3 .disclose {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-3);
   border: 0;
   background: none;
   padding: 0;
@@ -549,14 +549,14 @@ table.workers-stores .cap-status {
   color: inherit;
 }
 .qgroup > h3 .disclose .chev {
-  margin: 0 2px 2px 0;
+  margin: 0 var(--space-1) var(--space-1) 0;
 }
 .qrow {
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: var(--space-4);
   align-items: center;
-  padding: 6px 16px;
+  padding: var(--space-2-5) var(--space-5);
   cursor: pointer;
 }
 .qrow:hover {
@@ -566,7 +566,7 @@ table.workers-stores .cap-status {
   min-width: 0;
 }
 .qrow .t b {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -602,14 +602,14 @@ table.workers-stores .cap-status {
 }
 .mrow .t div.why {
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--fs-detail);
 }
 .mt-read {
-  padding: 6px 16px 10px;
+  padding: var(--space-2-5) var(--space-5) var(--space-3-5);
   font-size: var(--fs-detail);
 }
 .empty-group {
-  padding: 6px 16px;
+  padding: var(--space-2-5) var(--space-5);
   font-size: var(--fs-detail);
   color: var(--dim);
 }
@@ -621,8 +621,8 @@ table.workers-stores .cap-status {
 .frow {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr) auto;
-  gap: 12px;
-  padding: 6px 16px;
+  gap: var(--space-4);
+  padding: var(--space-2-5) var(--space-5);
   cursor: pointer;
   align-items: center;
 }
@@ -633,7 +633,7 @@ table.workers-stores .cap-status {
   min-width: 0;
 }
 .frow b {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -648,7 +648,7 @@ table.workers-stores .cap-status {
 }
 /* The namespace's monospace face would otherwise stretch the line (D2, 47 px rows). */
 .frow .sub .ns {
-  line-height: 1;
+  line-height: var(--leading-none);
 }
 .frow .m {
   font-size: var(--fs-detail);
@@ -664,10 +664,10 @@ tr.click {
 
 .search {
   height: 32px;
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
+  border: var(--line-w) solid var(--line-strong);
+  border-radius: var(--radius-m);
   background: var(--surface);
-  padding: 0 10px;
+  padding: 0 var(--space-3-5);
   min-width: 220px;
 }
 .search::placeholder {
@@ -676,11 +676,11 @@ tr.click {
 
 .section-title {
   font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-widest);
   text-transform: uppercase;
   color: var(--muted);
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-3);
 }
 
 dialog {
@@ -689,12 +689,12 @@ dialog {
 
 .tip {
   position: fixed;
-  z-index: 80;
+  z-index: var(--z-tip);
   pointer-events: none;
   background: var(--text);
   color: var(--ground);
   font-size: var(--fs-detail);
-  padding: 6px 8px;
+  padding: var(--space-2-5) var(--space-3);
   border-radius: 5px;
   white-space: pre;
   opacity: 0;
@@ -715,18 +715,18 @@ dialog {
 /* The space around a small note (.cap-text data-size="small"): a hint under a control has 6px
    above it, a note in a stack none. */
 .hint {
-  margin: 6px 0 0;
+  margin: var(--space-2-5) 0 0;
 }
 .note {
   margin: 0;
 }
 /* The padded block inside a flush Capsomer Panel, beside a table or feed that runs to its edges. */
 .body {
-  padding: 14px 16px;
+  padding: 14px var(--space-5);
 }
 .conv-h {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-detail);
   font-weight: var(--weight-heading);
 }
 .src.hot,
@@ -752,14 +752,14 @@ td.wrap {
   white-space: nowrap;
 }
 select.search {
-  padding-right: 6px;
+  padding-right: var(--space-2-5);
 }
 ul.plain {
   margin: 0;
   padding-left: 18px;
   display: grid;
-  gap: 4px;
-  font-size: 13px;
+  gap: var(--space-2);
+  font-size: var(--fs-detail);
 }
 [data-open] {
   cursor: pointer;
@@ -769,23 +769,23 @@ ul.plain {
 .att-row:focus-visible,
 .att-child:focus-visible,
 tr[data-open]:focus-visible {
-  outline-offset: -2px;
+  outline-offset: calc(-1 * var(--focus-offset));
 }
 /* Selection is keyboard focus: j and k move focus among the rows (App.tsx), and the
    focused row wears the selected look, a changed background and a ring at 3:1. */
 /* One rule for every kind of row; a critical row keeps its red edge. */
 main [data-row]:focus-visible {
-  outline-offset: -2px;
+  outline-offset: calc(-1 * var(--focus-offset));
   background: var(--sel);
-  box-shadow: inset 0 0 0 1px var(--accent-line);
+  box-shadow: inset 0 0 0 var(--line-w) var(--accent-line);
 }
 .sev-crit {
-  box-shadow: inset 3px 0 var(--crit);
+  box-shadow: inset var(--line-w-bar) 0 var(--crit);
 }
 main .sev-crit[data-row]:focus-visible {
   box-shadow:
-    inset 3px 0 var(--crit),
-    inset 0 0 0 1px var(--accent-line);
+    inset var(--line-w-bar) 0 var(--crit),
+    inset 0 0 0 var(--line-w) var(--accent-line);
 }
 .loading {
   padding: 40px 0;
@@ -795,7 +795,7 @@ main .sev-crit[data-row]:focus-visible {
   .att-child,
   .grouplink,
   .att-more {
-    padding-left: 16px;
+    padding-left: var(--space-5);
   }
   /* The kind's word goes, its glyph stays; titles wrap instead of being cut. */
   .att-row {
@@ -839,9 +839,9 @@ main .sev-crit[data-row]:focus-visible {
 .cap-config-form .check {
   grid-column: 1 / -1;
   display: flex;
-  gap: 8px;
+  gap: var(--space-3);
   align-items: center;
-  font-size: 13px;
+  font-size: var(--fs-detail);
 }
 .cap-config-form :is(.full, .cap-danger) {
   grid-column: 1 / -1;
@@ -861,9 +861,9 @@ main .sev-crit[data-row]:focus-visible {
   display: grid;
   grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
   align-items: center;
-  gap: 8px 16px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--line);
+  gap: var(--space-3) var(--space-5);
+  padding: var(--space-3-5) var(--space-5);
+  border-top: var(--line-w) solid var(--line);
 }
 .auto-row:first-child {
   border-top: 0;
@@ -879,7 +879,7 @@ main .sev-crit[data-row]:focus-visible {
   grid-column: 2;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-3);
   flex-wrap: wrap;
   font-size: var(--fs-detail);
   color: var(--muted);
@@ -887,8 +887,8 @@ main .sev-crit[data-row]:focus-visible {
 .prefrow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 13px;
+  gap: var(--space-3-5);
+  font-size: var(--fs-detail);
 }
 
 @media (max-width: 820px) {
@@ -904,8 +904,8 @@ main .sev-crit[data-row]:focus-visible {
 .visual-look {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-top: 4px;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-2);
   color: var(--text);
 }
 .visual-look > span:first-child {
@@ -917,23 +917,23 @@ main .sev-crit[data-row]:focus-visible {
 /* A build log: strangers' text, kept as written, scrolled in place. */
 pre.log {
   margin: 0;
-  padding: 12px 16px;
+  padding: var(--space-4) var(--space-5);
   max-height: 480px;
   overflow: auto;
   background: var(--sunken);
   font-family: var(--mono);
   font-size: var(--fs-detail);
-  line-height: 1.5;
+  line-height: var(--leading-normal);
   white-space: pre;
 }
 .search-rows + .search-rows {
-  margin-top: 12px;
+  margin-top: var(--space-4);
 }
 
 /* The menu's icons are Capsomer's Icon (1.25em by default); the menu's own sizes. */
 .navicon {
-  --icon-size: 16px;
+  --icon-size: var(--title-6);
 }
 .navicon-lg {
-  --icon-size: 20px;
+  --icon-size: var(--title-4);
 }
