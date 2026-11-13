@@ -187,7 +187,8 @@ h3 {
 .desk {
   border: 1px solid var(--text);
 }
-.desk-title {
+.desk-title,
+.kb-head {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -197,9 +198,12 @@ h3 {
   padding: var(--space-3) var(--space-4);
   border-block-end: 1px solid var(--text);
   font: var(--weight-heading) 1.125rem / 1.3 var(--face);
+}
+.desk-title {
   letter-spacing: 0;
 }
-.desk-title span {
+.desk-title span,
+.kb-head span {
   color: var(--muted);
   font-size: 0.875rem;
   font-weight: 400;
@@ -208,20 +212,6 @@ h3 {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   border-block-end: 1px solid var(--line);
-}
-.desk-kind {
-  min-block-size: 48px;
-  padding: var(--space-2) var(--space-3);
-  border: 0;
-  border-inline-end: 1px solid var(--line);
-  background: none;
-  color: var(--muted);
-  font: 600 0.9375rem / 1.25 var(--face);
-  text-align: start;
-  cursor: pointer;
-}
-.desk-kind:last-child {
-  border-inline-end: 0;
 }
 .desk-kind:hover {
   background: var(--sunken);
@@ -426,22 +416,6 @@ html:not(.js) .desk-play {
 .kb-box {
   border: 1px solid var(--text);
 }
-.kb-head {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--space-2) var(--space-4);
-  margin: 0;
-  padding: var(--space-3) var(--space-4);
-  border-block-end: 1px solid var(--text);
-  font: var(--weight-heading) 1.125rem / 1.3 var(--face);
-}
-.kb-head span {
-  color: var(--muted);
-  font-size: 0.875rem;
-  font-weight: 400;
-}
 .kb-qs,
 .kb-modes {
   display: grid;
@@ -453,6 +427,7 @@ html:not(.js) .desk-play {
 .kb-modes {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+.desk-kind,
 .kb-q,
 .kb-mode {
   min-block-size: 48px;
@@ -465,6 +440,7 @@ html:not(.js) .desk-play {
   text-align: start;
   cursor: pointer;
 }
+.desk-kind:last-child,
 .kb-q:last-child,
 .kb-mode:last-child {
   border-inline-end: 0;
