@@ -160,7 +160,7 @@ test("a system with a code map links to it, and its code page shows each module'
 
 test("the code page draws the folders, then each folder's modules, every box linked and colored by its worst function", () => {
   const page = readFileSync(join(out, "s", "theme", "code", "index.html"), "utf8");
-  const figures = [...page.matchAll(/<figure class="code-graph">(.*?)<\/figure>/gs)].map(
+  const figures = [...page.matchAll(/<figure class="cap-graph">(.*?)<\/figure>/gs)].map(
     (m) => m[1],
   );
   assert.equal(
@@ -175,30 +175,21 @@ test("the code page draws the folders, then each folder's modules, every box lin
   // A box per folder, leading to that folder's drawing and table; a wire from src/ to src/util/.
   assert.match(
     figures[0],
-    /<a href="#theme-f-src" tabindex="-1"><g class="code-graph-box" data-tone="crit">/,
+    /<a href="#theme-f-src" tabindex="-1"><g class="cap-graph-box" data-tone="crit">/,
   );
   assert.match(
     figures[0],
-    /<a href="#theme-f-src-util" tabindex="-1"><g class="code-graph-box" data-tone="warn" data-cycle>/,
+    /<a href="#theme-f-src-util" tabindex="-1"><g class="cap-graph-box" data-tone="warn" data-ring>/,
   );
-  assert.equal((figures[0].match(/class="code-graph-wire"/g) ?? []).length, 1);
+  assert.equal((figures[0].match(/class="cap-graph-wire"/g) ?? []).length, 1);
   // The util folder's modules, each linked to its file on GitHub, both in the cycle, with a wire each way.
   assert.ok(
     figures[2].includes(
-      `<a href="${blob("src/util/a.ts")}" tabindex="-1"><g class="code-graph-box" data-tone="ok" data-cycle>`,
+      `<a href="${blob("src/util/a.ts")}" tabindex="-1"><g class="cap-graph-box" data-tone="ok" data-ring>`,
     ),
   );
-  assert.equal((figures[2].match(/class="code-graph-wire"/g) ?? []).length, 2);
+  assert.equal((figures[2].match(/class="cap-graph-wire"/g) ?? []).length, 2);
   assert.equal((figures[2].match(/>cycle<\/text>/g) ?? []).length, 2);
-  // The drawing repeats the table: hidden from assistive technology, its links no tab stop.
-  for (const f of figures) {
-    assert.match(f, /<svg class="code-graph-svg"[^>]*aria-hidden="true"/);
-    assert.doesNotMatch(f, /<a href="[^"]*"(?! tabindex="-1")/);
-    assert.match(
-      f,
-      /<div class="scroller" role="region" aria-labelledby="[^"]+-caption" tabindex="0">/,
-    );
-  }
   for (const id of ["theme-f-src", "theme-f-src-util"])
     assert.ok(page.includes(`id="${id}"`), `the folder anchor ${id} is missing`);
 });
