@@ -34,8 +34,9 @@ import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
 import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
 import { writeIntegrity } from "@dustinedwards/site-runtime/sri";
+import { inlineCss, minifyCss } from "capsomer/build";
 import { themeScript } from "capsomer/theme-server";
-import { buildSync, transformSync } from "esbuild";
+import { buildSync } from "esbuild";
 
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PublicStatsSchema } from "../src/public-stats.ts";
@@ -89,26 +90,6 @@ function contentHash(/** @type {string} */ dir) {
       .update(readFileSync(join(dir, file)))
       .update("\0");
   return hash.digest("hex");
-}
-
-/** A stylesheet minified by esbuild, which keeps its layers and cascade order. @param {string} css */
-const minifyCss = (css) => transformSync(css, { loader: "css", minify: true }).code;
-
-/**
- * Capsomer's CSS as one file: each import inlined, a layered one inside its layer.
- * @param {string} file
- * @returns {string}
- */
-function inlineCss(file) {
-  const text = readFileSync(file, "utf8");
-  return text.replace(
-    /@import\s+"([^"]+)"(?:\s+layer\(([^)]+)\))?\s*;/g,
-    (_m, /** @type {string} */ rel, /** @type {string | undefined} */ layer) => {
-      // A bare specifier ("enarratio/base.css", which capsomer/enarratio.css imports) resolves as a bundler would.
-      const inner = inlineCss(/^[./]/.test(rel) ? join(dirname(file), rel) : require.resolve(rel));
-      return layer ? `@layer ${layer} {\n${inner}\n}` : inner;
-    },
-  );
 }
 
 /**
@@ -234,17 +215,17 @@ export async function build({
     .join("\n");
   // Every stylesheet blocks the first paint, so each ships minified: Capsomer's sources are mostly comments, and on a
   // phone (Lighthouse's slow 4G) their bytes held the home page's LCP within 50 ms of its 2.5 s budget (2026-11-01).
-  writeFileSync(join(assets, "capsomer.css"), minifyCss(css));
+  writeFileSync(join(assets, "capsomer.css"), await minifyCss(css));
   // The whole chart stylesheet, as every site loads it: Enarratio's base rules on Capsomer's tokens, gridlines, series inks
   // and color pairs (capsomer/enarratio.css; the teal family and prefers-contrast come from the tokens). Only a page that
   // draws a chart links it (src/pages.mjs).
   writeFileSync(
     join(assets, "enarratio.css"),
-    minifyCss(inlineCss(join(capsomer, "css", "enarratio.css"))),
+    await minifyCss(inlineCss(join(capsomer, "css", "enarratio.css"))),
   );
   writeFileSync(
     join(assets, "explorer.css"),
-    minifyCss(readFileSync(join(here, "src", "explorer.css"), "utf8")),
+    await minifyCss(readFileSync(join(here, "src", "explorer.css"), "utf8")),
   );
   // The page's one module, bundled: src/explorer.js imports tabs, Capsomer's chart-enhance and the
   // system map's and the header's modules by the paths they are staged at here, each folder whole
