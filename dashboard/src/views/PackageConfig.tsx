@@ -3,6 +3,7 @@ import { useApp } from "../app/ctx";
 import type { OpsPackageConfig } from "../types";
 import { ConfigForm, useConfigForm, type Editing } from "capsomer/react/config-form";
 import "capsomer/config-form.css";
+import "capsomer/field.css";
 import { Field } from "capsomer/react/field";
 import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";

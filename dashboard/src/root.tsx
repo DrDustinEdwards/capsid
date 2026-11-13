@@ -22,8 +22,9 @@ import monoFontUrl from "capsomer/fonts/martian-mono-latin-wght-normal.woff2?url
 import uiFontUrl from "capsomer/fonts/inter-latin-wght-normal.woff2?url";
 // Capsomer: its layer order and tokens first, then its element defaults (base.css, which carries
 // the utility classes), then its components (all in the cap.* layers, so the app's unlayered
-// styles win), then the app's styles. Every stylesheet a server-rendered part of a page needs is
-// here, not only in the lazy chunk that draws it: a page read with scripts off has no chunk.
+// styles win), then the app's styles. Every stylesheet the shell or most pages need is here; a
+// component that only some pages draw (a form field, a switch, the anchor bar, the filter bar)
+// brings its stylesheet with the view that draws it, so the other pages never load it.
 import "capsomer/tokens.css";
 import "capsomer/base.css";
 import "capsomer/family-teal.css";
@@ -41,16 +42,10 @@ import "capsomer/admin-shell.css";
 import "capsomer/theme-switch.css";
 import "capsomer/tabs.css";
 import "capsomer/link.css";
-import "capsomer/anchor-bar.css";
 import "capsomer/banner.css";
 import "capsomer/button.css";
-import "capsomer/filter-bar.css";
 import "capsomer/copy.css";
 import "capsomer/icons.css";
-import "capsomer/field.css";
-import "capsomer/repeater-field.css";
-import "capsomer/switch.css";
-import "capsomer/switch-reason.css";
 import "capsomer/meter.css";
 import "capsomer/chart-frame.css";
 import "capsomer/uptime-strip.css";

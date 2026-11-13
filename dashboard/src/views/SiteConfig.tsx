@@ -1,16 +1,13 @@
 import { useState } from "react";
 import { useApp } from "../app/ctx";
-import { ago } from "../lib/format";
-import { parse, utc } from "capsomer/behavior/time";
-import { Status } from "capsomer/react/status";
 import type { OpsSiteConfig } from "../types";
 import { ConfigForm, useConfigForm, type Editing } from "capsomer/react/config-form";
 import "capsomer/config-form.css";
+import "capsomer/field.css";
 import { Field } from "capsomer/react/field";
 import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
 import "capsomer/select.css";
-import { Missing } from "capsomer/react/empty";
 
 // The site configuration (live.sites, the ops_sites table): one row per namespace. A row
 // with an origin is a site the watcher probes; a row with no origin records that the
@@ -254,61 +251,5 @@ export function SiteForm({
         />
       </Field>
     </ConfigForm>
-  );
-}
-
-export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
-  const { now } = useApp();
-  const at = parse(s.updated_at);
-  const none = <Missing />;
-  return (
-    <tr data-row="">
-      <td>
-        <b className="cap-mono">{s.namespace}</b>
-      </td>
-      <td data-label="Name">{s.name}</td>
-      <td data-label="Origin">
-        {s.origin === null ? (
-          <Status tone="nodata">Serves no site</Status>
-        ) : (
-          <>
-            <span className="cap-mono">{s.origin}</span>
-            {s.self_probe && <div className="src">probed in-process</div>}
-          </>
-        )}
-      </td>
-      <td data-label="Health path" className="cap-mono">
-        {s.origin === null
-          ? none
-          : (s.health_path ?? (
-              <span className="cap-text" data-tone="dim">
-                none, root probed
-              </span>
-            ))}
-      </td>
-      <td data-label="Platform">
-        {s.platform === "vercel" ? "Vercel" : s.platform === "cloudflare" ? "Cloudflare" : none}
-      </td>
-      <td data-label="Worker script" className="cap-mono">
-        {s.script ?? none}
-      </td>
-      <td data-label="Revision">
-        <span className="cap-num">{s.revision}</span>
-        <div className="src" title={Number.isNaN(at) ? s.updated_at : utc(at)}>
-          {Number.isNaN(at) ? `updated ${s.updated_at}` : `updated ${ago(at, now)}`}
-        </div>
-      </td>
-      <td className="ctl">
-        {/* Edit only: Remove is in the form's Danger area (UX audit M9). */}
-        <button
-          type="button"
-          className="cap-btn"
-          aria-label={`Edit ${s.namespace}`}
-          onClick={onEdit}
-        >
-          Edit
-        </button>
-      </td>
-    </tr>
   );
 }
