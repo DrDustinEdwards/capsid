@@ -101,8 +101,8 @@ export const TASKS: ReadonlyArray<{
   // The nightly Amazon copy's start (src/offaccount-dispatch.ts), on the tick; recorded only
   // on the day it dispatched, found the run already there, or was refused.
   { id: "offaccount-dispatch", label: "Amazon copy start", period_ms: null },
-  // The meaning index (src/doc-index.ts), on the tick; recorded only when it sent or
-  // removed something, so a quiet spell means nothing changed.
+  // The meaning index (src/doc-index.ts), on the tick; recorded only when it started a
+  // sync or was refused, so a quiet spell means nothing changed.
   { id: "doc-index", label: "Search index", period_ms: null },
   // The daily supersede pass (src/supersede.ts), with the backup; recorded only when it
   // marked something.
@@ -125,8 +125,7 @@ const STALE_PERIODS = 2;
 // held /health at warn for days after the cause was fixed. Best practice for event
 // alerts is a window the event ages out of (Prometheus increase(errors[window]) > 0; the
 // SRE workbook's "reset time": an alert that keeps firing after recovery gets ignored).
-// A day is the longest retry among these tasks (doc-index's daily reconcile, the daily
-// digest; site-repair retries every 30 minutes, up to AUTO_PER_DAY times), so a fault that
+// A day is the longest retry among these tasks (the daily digest; site-repair retries every 30 minutes, up to AUTO_PER_DAY times), so a fault that
 // persists fails again, and is flagged again, before its last failure ages out.
 const EVENT_FAILURE_WINDOW_MS = DAY_MS;
 // Rows older than this are pruned, PRUNE_BATCH at a time on each write.
