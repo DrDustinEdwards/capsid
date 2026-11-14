@@ -11,9 +11,9 @@
     "indexnow": "node indexnow.mjs"
   },
   "dependencies": {
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.56.0",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.59.1",
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.155.0",
-    "capsomer": "github:DrDustinEdwards/capsomer#v0.149.0",
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.151.1",
     "enarratio": "^0.12.2",
     "react": "19.3.1",
     "react-dom": "19.3.1"
@@ -25,8 +25,10 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "esbuild": "0.28.2",
-    "hast-util-from-html": "2.0.3",
+    "hast-util-from-html": "2.1.0",
     "hast-util-to-mdast": "10.1.2",
+    "hastscript": "9.0.1",
+    "htmlparser2": "12.0.0",
     "lighthouse": "13.5.0",
     "lightningcss": "1.33.0",
     "mdast-util-gfm": "3.1.0",

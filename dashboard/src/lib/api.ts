@@ -11,6 +11,7 @@ import {
 } from "capsomer/react/data";
 import { useCallback, useEffect } from "react";
 import { BASE } from "./base";
+import { DAY } from "./format";
 import type {
   OpsFeed,
   PortalActionRequest,
@@ -410,6 +411,12 @@ export function fetchPlan(): Promise<Answer<PortalPlan>> {
 
 // GET /portal/api/digest?since=: what finished, blocked and is ready since then, the
 // reader behind jobs list view digest.
+/** The digest's default window: the 24 hours before `now`. Here, not in views/Overnight, so the
+ * server prefetch every page runs does not pull the Overnight views into the first load. */
+export function digestSince(now: number): string {
+  return new Date(now - DAY).toISOString();
+}
+
 export function fetchDigest(since: string): Promise<Answer<PortalDigest>> {
   return getAnswer<PortalDigest>(`${DIGEST_URL}?since=${encodeURIComponent(since)}`);
 }

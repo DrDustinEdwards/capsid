@@ -1,12 +1,11 @@
 import { QueryClient, dehydrate, type DehydratedState } from "@tanstack/react-query";
 import { createContext, type RouterContextProvider } from "react-router";
 import { answerOf, ask, type Answer } from "capsomer/react/data";
-import { FEED_KEY, LIVE } from "../lib/api";
+import { FEED_KEY, LIVE, digestSince } from "../lib/api";
 import { DAY } from "../lib/format";
 import { pageBase } from "../lib/router";
 import type { OpsFeed } from "../types";
 import type { ViewId } from "../app/ctx";
-import { digestSince } from "../views/Overnight";
 import { FILTER_KEYS, PUSH_KEY, parseDocParam } from "../lib/keys";
 
 // The server's half of TanStack Query's server rendering (Advanced Server Rendering guide): a
