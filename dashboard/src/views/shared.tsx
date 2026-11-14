@@ -404,8 +404,9 @@ export function JobRow({
       title={job.title}
       href={href(`job:${job.id}`)}
       detail={detail}
+      // One box, so the break holds inside row-list's flex meta cell.
       meta={
-        <>
+        <span>
           <span className="ns">{job.namespace}</span>
           {fact != null && (
             <>
@@ -413,7 +414,7 @@ export function JobRow({
               {fact}
             </>
           )}
-        </>
+        </span>
       }
       renderLink={rowLink}
     />
@@ -493,7 +494,9 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                   })}
                 </RowList>
               ) : (
-                <div className="empty-group">None</div>
+                <div className="cap-text mt-read" data-tone="dim">
+                  None
+                </div>
               )}
             </div>
           </div>

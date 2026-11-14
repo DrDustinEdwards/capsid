@@ -385,14 +385,10 @@ table.workers-stores .cap-status {
 .qgroup > h3 .disclose .chev {
   margin: 0 var(--space-1) var(--space-1) 0;
 }
+/* A quiet line at the foot of a list or in place of an empty group (Maintenance, the queue). */
 .mt-read {
   padding: var(--space-2-5) var(--space-5) var(--space-3-5);
   font-size: var(--fs-detail);
-}
-.empty-group {
-  padding: var(--space-2-5) var(--space-5);
-  font-size: var(--fs-detail);
-  color: var(--dim);
 }
 
 /* feed */
@@ -404,7 +400,6 @@ table.workers-stores .cap-status {
   grid-template-columns: 14px minmax(0, 1fr) auto;
   gap: var(--space-4);
   padding: var(--space-2-5) var(--space-5);
-  cursor: pointer;
   align-items: center;
 }
 .frow:hover {
@@ -539,10 +534,6 @@ ul.plain {
 }
 [data-open] {
   cursor: pointer;
-}
-.frow:focus-visible,
-tr[data-open]:focus-visible {
-  outline-offset: calc(-1 * var(--focus-offset));
 }
 /* Selection is keyboard focus: j and k move focus among the rows (App.tsx), and the
    focused row wears the selected look, a changed background and a ring at 3:1. */
