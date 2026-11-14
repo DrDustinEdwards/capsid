@@ -134,7 +134,10 @@ export function dumpJson<
 >(r2: { objects: Map<string, string | Uint8Array> }, key: string): T {
   const value = r2.objects.get(key);
   if (value === undefined) throw new Error(`no object ${key}`);
-  return JSON.parse(typeof value === "string" ? value : gunzipSync(value).toString("utf8")) as T;
+  if (typeof value === "string") return JSON.parse(value) as T;
+  // d1-dump 0.16 writes every object as bytes, so it can checksum what it put.
+  const bytes = key.endsWith(".gz") ? gunzipSync(value) : value;
+  return JSON.parse(new TextDecoder().decode(bytes)) as T;
 }
 
 export interface FakeR2 {
