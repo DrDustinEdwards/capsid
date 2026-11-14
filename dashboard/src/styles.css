@@ -32,7 +32,7 @@
 .sample {
   font-family: var(--mono);
   font-size: var(--fs-label);
-  padding: var(--space-1-5) 7px;
+  padding: var(--space-1-5) var(--space-2-5);
   border-radius: var(--radius-s);
   border: var(--line-w) dashed var(--warn);
   color: var(--warn);
@@ -41,7 +41,7 @@
 kbd {
   font-family: var(--mono);
   font-size: var(--fs-label);
-  padding: 1px 5px;
+  padding: 1px var(--space-2);
   border-radius: var(--radius-s);
   border: var(--line-w) solid var(--line-strong);
   background: var(--surface);
@@ -100,7 +100,7 @@ tr:has(.stretch) {
   border-right: var(--line-w-mid) solid var(--muted);
   border-bottom: var(--line-w-mid) solid var(--muted);
   transform: rotate(-45deg);
-  transition: transform 0.12s;
+  transition: transform var(--dur-fast);
 }
 .disclose[aria-expanded="true"] .chev {
   transform: rotate(45deg);
@@ -276,7 +276,7 @@ table.workers-bindings col.c-label {
 table.workers-bindings th {
   text-align: left;
   vertical-align: top;
-  padding: 9px var(--space-4);
+  padding: var(--space-3) var(--space-4);
   color: var(--muted);
   font-weight: var(--weight-medium);
   text-transform: none;
@@ -365,7 +365,7 @@ table.workers-stores .cap-status {
   padding: var(--space-2-5) var(--space-5);
   font-size: var(--fs-label);
   font-weight: var(--weight-semibold);
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-widest);
   text-transform: uppercase;
   color: var(--muted);
   background: var(--raised);
@@ -471,10 +471,10 @@ dialog {
   color: var(--ground);
   font-size: var(--fs-detail);
   padding: var(--space-2-5) var(--space-3);
-  border-radius: 5px;
+  border-radius: var(--radius-s-5);
   white-space: pre;
   opacity: 0;
-  transition: opacity 0.08s;
+  transition: opacity var(--dur-fast);
 }
 .tip.on {
   opacity: 1;
@@ -527,7 +527,7 @@ select.search {
 }
 ul.plain {
   margin: 0;
-  padding-left: 18px;
+  padding-left: var(--space-5);
   display: grid;
   gap: var(--space-2);
   font-size: var(--fs-detail);
