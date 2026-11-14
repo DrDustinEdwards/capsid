@@ -704,9 +704,11 @@ test("the dump carries the KV pins, by allowlist and never by prefix sweep", asy
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
-  const raw = r2.objects.get(`${result.json_prefix}_kv.json`);
-  assert.ok(raw, "the dump carries no KV pins");
-  const dumped = JSON.parse(raw as string) as { keys: Record<string, string | null> };
+  assert.ok(r2.objects.has(`${result.json_prefix}_kv.json`), "the dump carries no KV pins");
+  const dumped = dumpJson<{ keys: Record<string, string | null> }>(
+    r2,
+    `${result.json_prefix}_kv.json`,
+  );
   assert.equal(dumped.keys["backup:last-ok"], "2026-10-18T02:00:00.000Z");
   const leaked = Object.keys(dumped.keys).filter((k) => k.startsWith("gh:"));
   assert.deepEqual(

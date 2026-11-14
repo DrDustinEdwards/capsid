@@ -157,7 +157,7 @@ jobs:
     concurrency:
       group: explorer-deploy
       cancel-in-progress: false
-    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@b5a5c77b385ff6d8f7bbd4e323aed68d5d99e62f # v0.50.0
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@89fc1eabd3405fb0d756087bc3a23ae22e3f159c # v0.50.1
     with:
       worker-name: capsid
       health-url: https://capsid.dustinedwards.info/health
