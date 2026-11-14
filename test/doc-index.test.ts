@@ -4,25 +4,21 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import {
-  CURSOR_KEY,
   HYBRID_MONTHLY_CAP,
   aiSearchUsage,
-  INDEX_BATCH,
   INDEX_INSTANCE,
+  INDEX_QUERY,
   docIndexTick,
   hybridSearch,
-  indexKey,
-  isCanon,
 } from "../src/doc-index.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// The meaning index is fed from D1 by a watermark, so these run the real migrations
-// (the FTS triggers included) in Node's SQLite, and AI Search is an in-memory fake that
-// records what it was sent.
+// AI Search reads the meaning index's rows from D1 itself, so these run the real
+// migrations (the FTS triggers included) in Node's SQLite, and AI Search is an in-memory
+// fake that records what it was asked.
 
 const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
 const DAY1 = new Date("2026-10-15T12:00:00Z");
-const DAY2 = new Date("2026-10-16T12:00:00Z");
 
 function d1(db: DatabaseSync): D1Database {
   const statement = (sql: string, params: unknown[] = []) => {
@@ -68,58 +64,33 @@ function put(
   );
 }
 
-interface FakeItem {
-  id: string;
-  key: string;
-  content: string;
-  metadata: Record<string, unknown>;
-}
-
 function fakeSearch(
   opts: {
-    exists?: boolean;
-    refuse?: (key: string) => boolean;
+    running?: boolean;
     search?: (request: AiSearchSearchRequest) => AiSearchSearchResponse["chunks"];
   } = {},
 ) {
-  const items = new Map<string, FakeItem>();
-  const created: unknown[] = [];
-  let next = 1;
-  let exists = opts.exists ?? false;
+  const updates: unknown[] = [];
+  const jobs: string[] = [];
   const instance = {
     search: async (request: AiSearchSearchRequest) => {
       if (!opts.search) throw new Error("no search fake");
       return { search_query: request.query ?? "", chunks: opts.search(request) };
     },
-    info: async () => {
-      if (!exists) throw new Error("AiSearchNotFoundError");
+    update: async (config: unknown) => {
+      updates.push(config);
       return { id: INDEX_INSTANCE };
     },
-    items: {
-      upload: async (key: string, content: string, o?: { metadata?: Record<string, unknown> }) => {
-        if (opts.refuse?.(key)) throw new Error("refused");
-        // The live index refused a number and a boolean (2026-10-15).
-        if (Object.values(o?.metadata ?? {}).some((v) => typeof v !== "string"))
-          throw new Error("invalid_metadata_format");
-        const prior = [...items.values()].find((i) => i.key === key);
-        const id = prior?.id ?? `item-${next++}`;
-        items.set(id, { id, key, content, metadata: o?.metadata ?? {} });
-        return { id, key, status: "queued" };
-      },
-      list: async (p: { page?: number; per_page?: number } = {}) => {
-        // The real binding's limit; it refused 100 in production on 2026-10-15.
-        if ((p.per_page ?? 20) > 50) throw new Error("Too big: expected number to be <=50");
-        const all = [...items.values()];
-        const size = p.per_page ?? 20;
-        const start = ((p.page ?? 1) - 1) * size;
+    jobs: {
+      // A sync already running answers a new request with itself (seen live 2026-11-14).
+      create: async () => {
+        const at = opts.running ? new Date(Date.now() - 60_000) : new Date(Date.now() + 1000);
+        jobs.push(`job-${jobs.length + 1}`);
         return {
-          result: all
-            .slice(start, start + size)
-            .map((i) => ({ id: i.id, key: i.key, status: "completed", metadata: i.metadata })),
+          id: jobs.at(-1),
+          source: "user",
+          started_at: at.toISOString().slice(0, 19).replace("T", " "),
         };
-      },
-      delete: async (id: string) => {
-        items.delete(id);
       },
     },
   };
@@ -128,147 +99,80 @@ function fakeSearch(
       assert.equal(name, INDEX_INSTANCE);
       return instance;
     },
-    create: async (config: unknown) => {
-      created.push(config);
-      exists = true;
-      return instance;
-    },
   } as unknown as AiSearchNamespace;
-  return { ns, items, created, keys: () => [...items.values()].map((i) => i.key).sort() };
+  return { ns, updates, jobs };
 }
 
 test("unbound, the tick does nothing and says so", async () => {
   const { db } = fresh();
-  const report = await docIndexTick(fakeEnv({ DB: db, APP_KV: fakeKv({}).kv }), DAY1);
+  const report = await docIndexTick(fakeEnv({ DB: db, APP_KV: fakeKv({}).kv }));
   assert.deepEqual([report.ran, report.note], [false, "AI_SEARCH is not bound"]);
 });
 
-test("first tick creates a hybrid instance with the five metadata fields and sends every document", async () => {
-  const { raw, db } = fresh();
-  put(raw, "capsid", "rulings/testing.md", "Tested once where code lives.");
-  put(raw, "sample", "notes/backup", "Nightly dump to R2.");
-  const search = fakeSearch();
-  const kv = fakeKv({});
-  const report = await docIndexTick(fakeEnv({ DB: db, APP_KV: kv.kv, AI_SEARCH: search.ns }), DAY1);
-  assert.equal(search.created.length, 1);
-  const config = search.created[0] as {
-    index_method: unknown;
-    custom_metadata: Array<{ field_name: string }>;
-  };
-  assert.deepEqual(config.index_method, { vector: true, keyword: true });
-  assert.deepEqual(
-    config.custom_metadata.map((m) => m.field_name),
-    ["namespace", "type", "status", "doc_id", "canon"],
-  );
-  assert.deepEqual(search.keys(), ["capsid/rulings/testing.md", "sample/notes/backup.md"]);
-  const ruling = [...search.items.values()].find((i) => i.key === "capsid/rulings/testing.md");
-  assert.equal(ruling?.content, "# rulings/testing.md\n\nTested once where code lives.");
-  assert.deepEqual(ruling?.metadata, {
-    namespace: "capsid",
-    type: "note",
-    status: "published",
-    doc_id: "1",
-    canon: "true",
-  });
-  assert.equal(report.sent, 2);
-
-  // Nothing changed: no upload, no run recorded, and an existing instance is not re-created.
-  const again = await docIndexTick(fakeEnv({ DB: db, APP_KV: kv.kv, AI_SEARCH: search.ns }), DAY1);
-  assert.deepEqual([again.ran, again.sent, search.created.length], [false, 0, 1]);
-});
-
-test("an edit is sent on the next tick, and two writes in the same second are both sent", async () => {
+test("the tick sends the query once and starts a sync only when the store changed", async () => {
   const { raw, db } = fresh();
   put(raw, "sample", "a.md", "one");
-  const search = fakeSearch({ exists: true });
+  const search = fakeSearch();
   const kv = fakeKv({});
   const env = fakeEnv({ DB: db, APP_KV: kv.kv, AI_SEARCH: search.ns });
-  await docIndexTick(env, DAY1);
-  put(raw, "sample", "b.md", "two", "2026-10-15 11:00:00");
-  put(raw, "sample", "c.md", "three", "2026-10-15 11:00:00");
-  raw
-    .prepare(
-      "UPDATE documents SET body = 'one, edited', updated_at = '2026-10-15 11:00:00' WHERE path = 'a.md'",
-    )
-    .run();
-  const report = await docIndexTick(env, DAY1);
-  assert.equal(report.sent, 3);
-  assert.equal(
-    [...search.items.values()].find((i) => i.key === "sample/a.md")?.content,
-    "# a.md\n\none, edited",
-  );
-  assert.deepEqual(JSON.parse(kv.store.get(CURSOR_KEY) ?? "{}"), {
-    updated_at: "2026-10-15 11:00:00",
-    id: 3,
-  });
-});
-
-test("a backfill larger than one batch goes a batch per tick", async () => {
-  const { raw, db } = fresh();
-  for (let i = 0; i < INDEX_BATCH + 5; i++) put(raw, "sample", `n/${i}.md`, `doc ${i}`);
-  const search = fakeSearch({ exists: true });
-  const env = fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, AI_SEARCH: search.ns });
-  assert.equal((await docIndexTick(env, DAY1)).sent, INDEX_BATCH);
-  assert.equal((await docIndexTick(env, DAY1)).sent, 5);
-  assert.equal(search.items.size, INDEX_BATCH + 5);
-});
-
-test("a refused upload is counted and does not hold back the rest; the next day's reconcile re-sends it", async () => {
-  const { raw, db } = fresh();
-  put(raw, "sample", "bad.md", "x");
-  put(raw, "sample", "good.md", "y");
-  let refuse = true;
-  const search = fakeSearch({ exists: true, refuse: (key) => refuse && key === "sample/bad.md" });
-  const env = fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, AI_SEARCH: search.ns });
-  const first = await docIndexTick(env, DAY1);
-  // Refused twice: on the tick's send, and again by the same day's first reconcile.
-  assert.deepEqual([first.ran, first.sent, first.failed], [true, 1, 2]);
-  assert.deepEqual(search.keys(), ["sample/good.md"]);
-  refuse = false;
-  const next = await docIndexTick(env, DAY2);
-  assert.deepEqual([next.sent, next.failed], [1, 0]);
-  assert.deepEqual(search.keys(), ["sample/bad.md", "sample/good.md"]);
-});
-
-test("PLANT: the daily reconcile removes the items of a deleted and a moved document, and keeps the rest", async () => {
-  const { raw, db } = fresh();
-  put(raw, "sample", "keep.md", "k");
-  put(raw, "sample", "gone.md", "g");
-  const moved = put(raw, "sample", "old.md", "m");
-  const search = fakeSearch({ exists: true });
-  const env = fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, AI_SEARCH: search.ns });
-  await docIndexTick(env, DAY1);
-  raw.prepare("DELETE FROM documents WHERE path = 'gone.md'").run();
-  raw
-    .prepare(
-      "UPDATE documents SET path = 'new.md', updated_at = '2026-10-16 01:00:00' WHERE id = ?",
-    )
-    .run(moved);
-  // Same day: the move is sent, but the reconcile already ran, so the old items stay.
-  await docIndexTick(env, DAY1);
-  assert.deepEqual(search.keys(), [
-    "sample/gone.md",
-    "sample/keep.md",
-    "sample/new.md",
-    "sample/old.md",
+  const first = await docIndexTick(env);
+  assert.deepEqual(search.updates, [
+    { source_params: { d1: { query: INDEX_QUERY, template: "content_only" } } },
   ]);
-  const report = await docIndexTick(env, DAY2);
-  assert.equal(report.deleted, 2);
-  assert.deepEqual(search.keys(), ["sample/keep.md", "sample/new.md"]);
+  assert.deepEqual([first.ran, first.failed, search.jobs.length], [true, 0, 1]);
+  assert.equal((await docIndexTick(env)).note, "nothing changed");
+  raw.prepare("DELETE FROM documents WHERE path = 'a.md'").run();
+  assert.equal((await docIndexTick(env)).ran, true, "a delete starts a sync");
+  assert.deepEqual([search.updates.length, search.jobs.length], [1, 2]);
 });
 
-test("canon is the conventions, decisions, rulings and every core.md; keys always end in .md", () => {
-  assert.ok(isCanon("capsid", "conventions.md"));
-  assert.ok(isCanon("capsid", "conventions-cloud.md"));
-  assert.ok(isCanon("capsid", "rulings/testing-2026-10-04.md"));
-  assert.ok(isCanon("capsid", "archive/decisions-vol-8.md"));
-  assert.ok(!isCanon("capsid", "decisions.md"), "the old decisions log is gone");
-  assert.ok(isCanon("sample", "core.md"));
-  assert.ok(!isCanon("capsid", "archive/decisions-vol-1.md"), "a closed log volume is history");
-  assert.ok(!isCanon("sample", "rulings/x.md"), "rulings are capsid's");
-  assert.ok(!isCanon("capsid", "handoffs/session.md"));
-  assert.equal(indexKey("sample", "jobs/job_1.md"), "sample/jobs/job_1.md");
-  assert.equal(indexKey("sample", "notes/backup"), "sample/notes/backup.md");
+test("PLANT: a sync already running is not taken for one that saw the change", async () => {
+  const { raw, db } = fresh();
+  put(raw, "sample", "a.md", "one");
+  const search = fakeSearch({ running: true });
+  const env = fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, AI_SEARCH: search.ns });
+  assert.match((await docIndexTick(env)).note, /already running/);
+  assert.match((await docIndexTick(env)).note, /already running/, "the next tick asks again");
+  assert.equal(search.jobs.length, 2);
+});
+
+test("the index query runs on the real schema, marks the canon and keeps AI Search's rules", () => {
+  const { raw } = fresh();
+  const paths: Array<[string, string, number]> = [
+    ["capsid", "conventions.md", 1],
+    ["capsid", "conventions-cloud.md", 1],
+    ["capsid", "rulings/testing-2026-10-04.md", 1],
+    ["capsid", "archive/decisions-vol-8.md", 1],
+    ["sample", "core.md", 1],
+    ["capsid", "decisions.md", 0],
+    ["capsid", "archive/decisions-vol-1.md", 0],
+    ["capsid", "notes/conventions.md", 0],
+    ["sample", "rulings/x.md", 0],
+    ["capsid", "handoffs/session.md", 0],
+  ];
+  for (const [ns, path] of paths) put(raw, ns, path, "body");
+  const rows = raw.prepare(INDEX_QUERY).all() as Array<Record<string, unknown>>;
+  const canon = new Map(rows.map((r) => [r.id, r.meta_canon]));
+  for (const [ns, path, want] of paths) {
+    const id = (
+      raw.prepare("SELECT id FROM documents WHERE namespace = ? AND path = ?").get(ns, path) as {
+        id: number;
+      }
+    ).id;
+    assert.equal(canon.get(id), want, `${ns}/${path}`);
+  }
+  assert.deepEqual(Object.keys(rows[0] ?? {}).sort(), [
+    "content",
+    "id",
+    "meta_canon",
+    "meta_namespace",
+    "meta_status",
+    "meta_type",
+    "title",
+  ]);
+  // https://developers.cloudflare.com/ai-search/configuration/data-source/d1/#query-requirements
+  assert.doesNotMatch(INDEX_QUERY, /;|--|\/\*|\?|\bORDER BY\b|\bLIMIT\b|\breplace\(/i);
+  assert.ok(INDEX_QUERY.length <= 10_000);
 });
 
 // Hybrid search
@@ -283,10 +187,10 @@ const chunk = (
   type: "text",
   score,
   text,
-  item: { key: `k${doc_id}`, metadata: { doc_id: String(doc_id) } },
+  item: { key: `${doc_id}.md`, metadata: { row_id: String(doc_id) } },
   scoring_details: ranks,
 });
-const READY = { "doc-index:instance": "ready" };
+const READY = { "doc-index:instance": INDEX_QUERY };
 
 test("hybrid search keeps the index's order and reads every hit back from D1 with the caller's filters", async () => {
   const { raw, db } = fresh();
@@ -297,7 +201,6 @@ test("hybrid search keeps the index's order and reads every hit back from D1 wit
   raw.prepare("DELETE FROM documents WHERE id = ?").run(gone);
   const requests: AiSearchSearchRequest[] = [];
   const search = fakeSearch({
-    exists: true,
     search: (request) => {
       requests.push(request);
       return [
@@ -371,7 +274,6 @@ test("hybrid search keeps the index's order and reads every hit back from D1 wit
 test("hybrid search says why instead of answering when the index cannot, so the caller falls back", async () => {
   const { db } = fresh();
   const failing = fakeSearch({
-    exists: true,
     search: () => {
       throw new Error("index unavailable");
     },
@@ -422,29 +324,6 @@ test("hybrid search says why instead of answering when the index cannot, so the 
   );
 });
 
-test("when the index refuses every document the cursor stays, reconcile waits, and the note names the refusal", async () => {
-  const { raw, db } = fresh();
-  put(raw, "sample", "a.md", "one");
-  put(raw, "sample", "b.md", "two");
-  const search = fakeSearch({ refuse: () => true });
-  const kv = fakeKv({});
-  const env = fakeEnv({ DB: db, APP_KV: kv.kv, AI_SEARCH: search.ns });
-  const report = await docIndexTick(env, DAY1);
-  assert.equal(report.sent, 0);
-  assert.equal(report.failed, 2);
-  assert.match(report.note, /first refusal: refused/);
-  assert.equal(
-    await kv.kv.get(CURSOR_KEY),
-    null,
-    "the cursor did not move past rows nothing accepted",
-  );
-  assert.equal(
-    await kv.kv.get("doc-index:reconciled"),
-    null,
-    "no reconcile while everything is refused",
-  );
-});
-
 test("retired documents are hidden unless asked for, in the index's filter and again in D1", async () => {
   const { raw, db } = fresh();
   const live = put(raw, "sample", "live.md", "current");
@@ -453,7 +332,6 @@ test("retired documents are hidden unless asked for, in the index's filter and a
   const requests: AiSearchSearchRequest[] = [];
   // The fake ignores the filter, as a stale index entry would: the D1 read must still hold.
   const search = fakeSearch({
-    exists: true,
     search: (request) => {
       requests.push(request);
       return [chunk(old, "old", 0.9), chunk(live, "live", 0.8)];

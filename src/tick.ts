@@ -199,13 +199,13 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "SYSTEM_FACTS_THREW:", rethrow: false },
   );
 
-  // The meaning index (src/doc-index.ts): documents changed since the last tick go to
-  // AI Search, and once a day stale items are removed and missing ones re-sent. A
-  // refused upload is recorded as refused; the next edit or the daily pass retries it.
+  // The meaning index (src/doc-index.ts): when documents changed since the last sync
+  // started, AI Search is asked to sync from D1. A refused request is recorded as refused
+  // and asked again on the next tick.
   await runTask(
     env,
     "doc-index",
-    () => docIndexTick(env, now),
+    () => docIndexTick(env),
     (report): TaskResult => {
       if (!report.ran) return null;
       logEvent(
