@@ -21,15 +21,11 @@ const DownloadsChart = trendChart("DownloadsChart");
 
 // The Shared code and Completeness tabs load when opened, and the add and edit form the first
 // time it opens, so Published's first paint carries neither.
-const SharedCode = lazy(() =>
-  import("./SharedCode").then((m) => ({ default: m.SharedCode })),
-);
+const SharedCode = lazy(() => import("./SharedCode").then((m) => ({ default: m.SharedCode })));
 const Completeness = lazy(() =>
   import("./Completeness").then((m) => ({ default: m.Completeness })),
 );
-const PackageForm = lazy(() =>
-  import("./PackageConfig").then((m) => ({ default: m.PackageForm })),
-);
+const PackageForm = lazy(() => import("./PackageConfig").then((m) => ({ default: m.PackageForm })));
 import { PACKAGE_TABS, tabOf } from "../app/ctx";
 import { NoSnapshot, PageHead } from "./shared";
 
@@ -61,42 +57,28 @@ function HistoryPanel({ name }: { name: string }) {
   // visitor and the live chart check (devkit live/areas.json, area 10), not behind a button.
   const demo = useDemo();
   const [asked, setAsked] = useState(demo);
-  const h = useAnswer(
-    ["packages", "history", name],
-    () => fetchPackageHistory(name),
-    {
-      enabled: asked,
-    },
-  );
+  const h = useAnswer(["packages", "history", name], () => fetchPackageHistory(name), {
+    enabled: asked,
+  });
   if (!h.data && !h.error) {
     return (
-      <button
-        type="button"
-        className="cap-btn"
-        disabled={h.loading}
-        onClick={() => setAsked(true)}
-      >
+      <button type="button" className="cap-btn" disabled={h.loading} onClick={() => setAsked(true)}>
         {h.loading ? "Reading npm…" : "Load the daily download history"}
       </button>
     );
   }
-  if (!h.data)
-    return <Alert tone="warn">The history could not be read: {h.error}</Alert>;
+  if (!h.data) return <Alert tone="warn">The history could not be read: {h.error}</Alert>;
   const d = h.data;
   const byName = new Map<string, number>();
-  for (const day of d.days)
-    byName.set(day.name, (byName.get(day.name) ?? 0) + day.downloads);
+  for (const day of d.days) byName.set(day.name, (byName.get(day.name) ?? 0) + day.downloads);
   return (
     <div className="cap-stack" data-gap="4" data-history={d.name}>
       <ChartSlot>
         <DownloadsChart data={d} />
       </ChartSlot>
       <p className="cap-text note" data-size="small" data-tone="dim">
-        {[...byName]
-          .map(([n, total]) => `${n}: ${shortCount(total)}`)
-          .join(" · ")}{" "}
-        · read from npm {d.fetched_at.slice(0, 16).replace("T", " ")} UTC, kept
-        six hours
+        {[...byName].map(([n, total]) => `${n}: ${shortCount(total)}`).join(" · ")} · read from npm{" "}
+        {d.fetched_at.slice(0, 16).replace("T", " ")} UTC, kept six hours
       </p>
       {d.notes.map((n) => (
         <p key={n} className="cap-text note" data-size="small">
@@ -173,9 +155,7 @@ function PackagePanel({
                 {() =>
                   snap.npm.state === "ok" && (
                     <>
-                      <span className="cap-mono">
-                        {snap.npm.latest ?? "no latest tag"}
-                      </span>{" "}
+                      <span className="cap-mono">{snap.npm.latest ?? "no latest tag"}</span>{" "}
                       <span className="cap-text" data-tone="dim">
                         {Object.entries(snap.npm.dist_tags)
                           .map(([t, v]) => `${t} ${v}`)
@@ -193,29 +173,19 @@ function PackagePanel({
                 {() =>
                   snap.downloads.state === "ok" && (
                     <>
-                      <span className="cap-num">
-                        {shortCount(snap.downloads.last_week)}
-                      </span>{" "}
-                      in 7 days ·{" "}
-                      <span className="cap-num">
-                        {shortCount(snap.downloads.last_month)}
-                      </span>{" "}
-                      in 30 days
+                      <span className="cap-num">{shortCount(snap.downloads.last_week)}</span> in 7
+                      days ·{" "}
+                      <span className="cap-num">{shortCount(snap.downloads.last_month)}</span> in 30
+                      days
                       <span className="cap-text" data-tone="dim">
                         {" "}
                         {snap.downloads.through
                           ? `(counted to ${snap.downloads.through})`
                           : "(npm has no counts yet)"}
                       </span>
-                      {Object.keys(snap.downloads.by_version_last_week).length >
-                        0 && (
-                        <div
-                          className="cap-text hint"
-                          data-size="small"
-                          data-tone="dim"
-                        >
-                          Per version, last 7 days only (npm keeps no
-                          per-version history):{" "}
+                      {Object.keys(snap.downloads.by_version_last_week).length > 0 && (
+                        <div className="cap-text hint" data-size="small" data-tone="dim">
+                          Per version, last 7 days only (npm keeps no per-version history):{" "}
                           {Object.entries(snap.downloads.by_version_last_week)
                             .sort((a, b) => b[1] - a[1])
                             .map(([v, n]) => `${v} ${shortCount(n)}`)
@@ -233,20 +203,16 @@ function PackagePanel({
                 {() =>
                   snap.dependents.state === "ok" && (
                     <>
-                      <span className="cap-num">
-                        {shortCount(snap.dependents.total)}
-                      </span>{" "}
-                      packages depend on {snap.dependents.version}:{" "}
-                      {shortCount(snap.dependents.direct)} directly,{" "}
-                      {shortCount(snap.dependents.indirect)} through another
-                      package
+                      <span className="cap-num">{shortCount(snap.dependents.total)}</span> packages
+                      depend on {snap.dependents.version}: {shortCount(snap.dependents.direct)}{" "}
+                      directly, {shortCount(snap.dependents.indirect)} through another package
                     </>
                   )
                 }
               </Part>
               <div className="cap-text hint" data-size="small">
-                Counts from deps.dev, which it calls indicative rather than
-                exact. No public API lists them:{" "}
+                Counts from deps.dev, which it calls indicative rather than exact. No public API
+                lists them:{" "}
                 <a
                   href={`https://www.npmjs.com/package/${enc}?activeTab=dependents`}
                   target="_blank"
@@ -255,11 +221,7 @@ function PackagePanel({
                   npm's list
                 </a>{" "}
                 ·{" "}
-                <a
-                  href={`https://deps.dev/npm/${enc}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <a href={`https://deps.dev/npm/${enc}`} target="_blank" rel="noopener noreferrer">
                   deps.dev
                 </a>
                 . GitHub offers no API for the repositories that use it.
@@ -278,19 +240,15 @@ function PackagePanel({
                       >
                         <span className="cap-mono">{snap.github.repo}</span>
                       </a>{" "}
-                      · <span className="cap-num">{snap.github.stars}</span>{" "}
-                      stars ·{" "}
-                      <span className="cap-num">{snap.github.open_issues}</span>{" "}
-                      open issues ·{" "}
+                      · <span className="cap-num">{snap.github.stars}</span> stars ·{" "}
+                      <span className="cap-num">{snap.github.open_issues}</span> open issues ·{" "}
                       <span className="cap-num">
                         {snap.github.open_prs}
                         {snap.github.open_prs_capped ? "+" : ""}
                       </span>{" "}
                       open PRs ·{" "}
                       {snap.github.latest_release ? (
-                        <span className="cap-mono">
-                          {snap.github.latest_release.tag}
-                        </span>
+                        <span className="cap-mono">{snap.github.latest_release.tag}</span>
                       ) : (
                         "no release"
                       )}
@@ -323,12 +281,7 @@ export function Packages() {
   return (
     <div className="cap-admin-page">
       <PageHead title="Packages" />
-      <PageTabs
-        label="Packages"
-        path="/packages"
-        tabs={PACKAGE_TABS}
-        current={tab}
-      />
+      <PageTabs label="Packages" path="/packages" tabs={PACKAGE_TABS} current={tab} />
       <div className="cap-stack" id={tab}>
         {tab === "shared" ? (
           <Suspense fallback={null}>
@@ -349,9 +302,7 @@ export function Packages() {
 function Published() {
   const { feed } = useApp();
   const ed = useEditor<OpsPackageConfig>();
-  const byName = new Map(
-    (feed.snapshot?.packages ?? []).map((p) => [p.name, p]),
-  );
+  const byName = new Map((feed.snapshot?.packages ?? []).map((p) => [p.name, p]));
   const rows = feed.live.packages;
   return (
     <>
@@ -368,17 +319,12 @@ function Published() {
       </div>
       {ed.editing && (
         <Suspense fallback={null}>
-          <PackageForm
-            key={ed.formKey}
-            editing={ed.editing}
-            onClose={ed.close}
-          />
+          <PackageForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />
         </Suspense>
       )}
       {!rows.length && (
         <Banner tone="neutral">
-          No package is configured yet. Add one to watch its versions, downloads
-          and dependents.
+          No package is configured yet. Add one to watch its versions, downloads and dependents.
         </Banner>
       )}
       {rows.length > 0 && !feed.snapshot && <NoSnapshot />}
