@@ -1,3 +1,4 @@
+import type { AttentionGroupInfo, AttentionItem } from "capsomer/behavior/attention-list";
 import { outcomeStatus, type GlyphName, type Tone } from "capsomer/behavior/status";
 import type {
   CiObservation,
@@ -175,7 +176,7 @@ export function passStale(snap: OpsSnapshot | null, now: number): boolean {
 // ---- needs attention ----------------------------------------------------------
 
 type Sev = "crit" | "warn" | "nodata";
-type OpenRef = string; // "site:<key>" | "job:<id>" | "agent:<name>" | "view:<id>"
+export type OpenRef = string; // "site:<key>" | "job:<id>" | "agent:<name>" | "view:<id>"
 
 export interface Attention {
   sev: Sev;
@@ -402,7 +403,6 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       sub: [...new Set(blocked.map((j) => j.namespace))].join(", "),
       at: Math.max(...blocked.map((j) => parse(j.updated_at))),
       open: blocked.length === 1 && blocked[0] ? `job:${blocked[0].id}` : "view:queue",
-      group: { key: "blocked", facet: "" },
     });
   }
   // The watcher's attention-class findings (src/watcher.ts, findingClass), which post no
@@ -455,34 +455,18 @@ function worstFirst(a: { sev: Sev; at: number }, b: { sev: Sev; at: number }): n
   return RANK[a.sev] - RANK[b.sev] || b.at - a.at;
 }
 
-// ---- needs attention, grouped (audit ruling 3) ---------------------------------------
+// ---- needs attention, as Capsomer's attention list (audit ruling 3) --------------------
 //
 // Two tiers. A problem (critical or warning) needs a person; a notice (missing data, a
 // check that could not run, CI that could not be read, site map drift, a silent
 // driver) is a fact with nothing to do now. Session incidents join as problems when
 // attentionItems lists them: a failure is critical, a session waiting on input a
-// warning. The tier follows from the severity, so any new row lands in the right one.
+// warning. The tier follows from the severity (Capsomer's arrange), so any new row lands
+// in the right one, and rows with one cause fold into one row there.
 
-type Tier = "problem" | "notice";
-type GroupKey = "blocked" | "pr-seat" | "silent";
-
-function tierOf(a: { sev: Sev }): Tier {
-  return a.sev === "nodata" ? "notice" : "problem";
-}
-
-// A group shows up to this many children, then a link to the full view.
-export const GROUP_CHILDREN = 5;
-// Past this many problem rows the rest of the warnings wait behind "N more warnings".
-// Critical rows are always shown.
-export const PROBLEM_ROWS = 8;
+type GroupKey = "pr-seat" | "silent";
 
 const GROUPS: Record<GroupKey, { title: (n: number) => string; view: string; label: string }> = {
-  // The blocked row is already one row (attentionItems); the group gives it children.
-  blocked: {
-    title: (n) => `${n} ${n === 1 ? "job is" : "jobs are"} waiting on you`,
-    view: "queue",
-    label: "Jobs",
-  },
   "pr-seat": {
     title: (n) => `${n} pull requests await the seat`,
     view: "prs",
@@ -495,108 +479,46 @@ const GROUPS: Record<GroupKey, { title: (n: number) => string; view: string; lab
   },
 };
 
-export interface AttentionRow extends Attention {
-  key: string;
-  // A group: its first children, how many it holds, and the view that lists them all.
-  children?: Attention[];
-  total?: number;
-  view?: { id: string; label: string };
-}
-
-export interface AttentionGroups {
-  // Worst first: critical, then warnings, newest first within each.
-  problems: AttentionRow[];
-  notices: AttentionRow[];
-  // How many notice items the notice rows stand for (a group counts each of its items).
-  noticeCount: number;
-}
-
-function fold(items: Attention[], feed: OpsFeed, now: number): AttentionRow[] {
-  const out: AttentionRow[] = [];
-  const byKey = new Map<GroupKey, Attention[]>();
-  for (const a of items) {
-    // A critical row is never folded into a collapsed group.
-    if (a.group && a.sev !== "crit") {
-      const list = byKey.get(a.group.key) ?? [];
-      list.push(a);
-      byKey.set(a.group.key, list);
-    } else out.push({ ...a, key: `${a.kind}|${a.title}` });
-  }
-  for (const [key, list] of byKey) {
-    const g = GROUPS[key];
-    const first = list[0]!;
-    if (key === "blocked") {
-      const jobs = blockedOrder(feed.live.jobs, now).all;
-      // One blocked job opens that job; more open in place.
-      if (jobs.length < 2) {
-        out.push({ ...first, key: "group:blocked" });
-        continue;
-      }
-      out.push({
-        ...first,
-        title: g.title(jobs.length),
-        key: "group:blocked",
-        children: jobs.slice(0, GROUP_CHILDREN).map((j) => ({
-          sev: "warn",
-          kind: "Queue",
-          title: j.title,
-          sub: `${j.namespace} · waits on: ${j.waits_on ?? "no reason recorded"}`,
-          at: parse(j.updated_at),
-          open: `job:${j.id}`,
-        })),
-        total: jobs.length,
-        view: { id: g.view, label: g.label },
-      });
-      continue;
-    }
-    if (list.length < 2) {
-      out.push({ ...first, key: `${first.kind}|${first.title}` });
-      continue;
-    }
-    const sorted = [...list].sort(worstFirst);
-    const facets = [...new Set(sorted.map((a) => a.group!.facet))];
-    out.push({
-      sev: sorted[0]!.sev,
-      kind: first.kind,
-      title: g.title(list.length),
-      sub:
-        facets.length > 3
-          ? `${facets.slice(0, 3).join(", ")} and ${facets.length - 3} more`
-          : facets.join(", "),
-      at: Math.max(...list.map((a) => a.at)),
-      open: `view:${g.view}`,
-      group: first.group,
-      key: `group:${key}`,
-      children: sorted.slice(0, GROUP_CHILDREN),
-      total: list.length,
-      view: { id: g.view, label: g.label },
-    });
-  }
-  return out.sort(worstFirst);
-}
-
 // What waits on a person's decision: blocked jobs, pull
 // requests waiting for you and stopped queues. Needs you lists each of these with its
 // buttons, so its Problems list, and Health's, leave them out (UX audit m2: one count, in
 // one place).
 export const WAITING_KINDS: ReadonlySet<string> = new Set(["Queue", "PR", "Breaker"]);
 
-export function attentionGroups(
+// The attention rows as Capsomer's attention list takes them, worst first, with what is
+// in `skip` left out. `href` turns a row's OpenRef into the address it opens. The row's
+// kind ("Backup", "CI") leads its detail; the status says how bad it is.
+export function attentionList(
   feed: OpsFeed,
   now: number,
+  href: (ref: OpenRef) => string,
   skip?: ReadonlySet<string>,
-): AttentionGroups {
-  const items = attentionItems(feed, now).filter((a) => !skip?.has(a.kind));
-  const notices = items.filter((a) => tierOf(a) === "notice");
-  return {
-    problems: fold(
-      items.filter((a) => tierOf(a) === "problem"),
-      feed,
-      now,
-    ),
-    notices: fold(notices, feed, now),
-    noticeCount: notices.length,
-  };
+): { items: AttentionItem[]; groups: Record<string, AttentionGroupInfo> } {
+  const rows = attentionItems(feed, now).filter((a) => !skip?.has(a.kind));
+  const items = rows.map((a, i): AttentionItem => ({
+    id: `${a.kind}|${a.title}|${i}`,
+    tone: a.sev,
+    title: a.title,
+    detail: `${a.kind} · ${a.sub}`,
+    when: { text: ago(a.at, now), datetime: new Date(a.at).toISOString() },
+    href: href(a.open),
+    group: a.group?.key,
+  }));
+  const groups: Record<string, AttentionGroupInfo> = {};
+  for (const [key, g] of Object.entries(GROUPS)) {
+    const facets = [
+      ...new Set(rows.filter((a) => a.group?.key === key).map((a) => a.group!.facet)),
+    ];
+    groups[key] = {
+      title: g.title,
+      detail:
+        facets.length > 3
+          ? `${facets.slice(0, 3).join(", ")} and ${facets.length - 3} more`
+          : facets.join(", "),
+      view: { href: href(`view:${g.view}`), label: g.label },
+    };
+  }
+  return { items, groups };
 }
 
 // ---- blocked jobs (audit ruling 10) ---------------------------------------------------

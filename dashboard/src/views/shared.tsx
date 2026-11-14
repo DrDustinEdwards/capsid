@@ -3,7 +3,10 @@ import { Empty } from "capsomer/react/empty";
 import { Meter } from "capsomer/react/meter";
 import { Panel } from "capsomer/react/panel";
 import { useCallback, useState, type ReactNode } from "react";
-import { useLocation, useSearch } from "../lib/router";
+import { rowLink, useLocation, useSearch } from "../lib/router";
+// Row-list's stylesheet comes with the view that draws QueueRows (Queue), not with this
+// module, which every page imports.
+import { Row, RowList } from "capsomer/react/row-list";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
 import {
@@ -381,6 +384,43 @@ export function jobMeta(j: OpsJob, now: number): string {
   }
 }
 
+// A job's row: its status, title and detail, then its namespace over one last fact. It opens
+// the job's drawer.
+export function JobRow({
+  job,
+  status,
+  detail,
+  fact,
+}: {
+  job: { id: string; title: string; namespace: string };
+  status: ReactNode;
+  detail?: ReactNode;
+  fact?: ReactNode;
+}) {
+  const { href } = useApp();
+  return (
+    <Row
+      status={status}
+      title={job.title}
+      href={href(`job:${job.id}`)}
+      detail={detail}
+      // One box, so the break holds inside row-list's flex meta cell.
+      meta={
+        <span>
+          <span className="ns">{job.namespace}</span>
+          {fact != null && (
+            <>
+              <br />
+              {fact}
+            </>
+          )}
+        </span>
+      }
+      renderLink={rowLink}
+    />
+  );
+}
+
 export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
   const { now, feed } = useApp();
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -420,52 +460,43 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
             </h3>
             <div id={bodyId} hidden={!shown}>
               {!shown ? null : list.length ? (
-                list.map((j) => {
-                  const pr = feed.live.prs.find((p) => p.job_id === j.id);
-                  // Plain English in the row; the job id is in the drawer (D11).
-                  const sub =
-                    j.status === "blocked" && j.question
-                      ? `Asks: ${(j.waits_on ?? "no question recorded").replace(/^QUESTION:\s*/, "")}`
-                      : j.status === "blocked"
-                        ? `Waits on: ${j.waits_on ?? "no reason recorded"}`
-                        : j.status === "parked"
-                          ? `Comes back: ${j.parked_reason ?? "no reason recorded"}`
-                          : j.status === "claimed"
-                            ? `Held by ${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`
-                            : j.status === "queued"
-                              ? `${j.finding ? "Watcher finding · " : ""}${j.started_by && j.started_at ? `Started by ${agentLabel(j.started_by)} ${ago(parse(j.started_at), now)} · ` : ""}priority ${j.priority}`
-                              : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
-                  // A blocked job that asks something is marked as a question: it waits on
-                  // an answer, not on a command (design-portal-evaluation.md, the question row).
-                  const k =
-                    j.status === "blocked" && j.question
-                      ? { kind: JOB.blocked.kind, label: "Question" }
-                      : jobBadge(j, now);
-                  return (
-                    <div
-                      className="qrow"
-                      key={j.id}
-                      data-row=""
-                      data-open={`job:${j.id}`}
-                      role="button"
-                      tabIndex={0}
-                      {...(j.question ? { "data-question": "" } : {})}
-                    >
-                      <Status {...KIND_STATUS[k.kind]}>{k.label}</Status>
-                      <div className="t">
-                        <b>{j.title}</b>
-                        <div>{sub}</div>
-                      </div>
-                      <div className="m">
-                        <span className="ns">{j.namespace}</span>
-                        <br />
-                        {jobMeta(j, now)}
-                      </div>
-                    </div>
-                  );
-                })
+                <RowList label={g.label}>
+                  {list.map((j) => {
+                    const pr = feed.live.prs.find((p) => p.job_id === j.id);
+                    // Plain English in the row; the job id is in the drawer (D11).
+                    const sub =
+                      j.status === "blocked" && j.question
+                        ? `Asks: ${(j.waits_on ?? "no question recorded").replace(/^QUESTION:\s*/, "")}`
+                        : j.status === "blocked"
+                          ? `Waits on: ${j.waits_on ?? "no reason recorded"}`
+                          : j.status === "parked"
+                            ? `Comes back: ${j.parked_reason ?? "no reason recorded"}`
+                            : j.status === "claimed"
+                              ? `Held by ${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`
+                              : j.status === "queued"
+                                ? `${j.finding ? "Watcher finding · " : ""}${j.started_by && j.started_at ? `Started by ${agentLabel(j.started_by)} ${ago(parse(j.started_at), now)} · ` : ""}priority ${j.priority}`
+                                : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
+                    // A blocked job that asks something is marked as a question: it waits on
+                    // an answer, not on a command (design-portal-evaluation.md, the question row).
+                    const k =
+                      j.status === "blocked" && j.question
+                        ? { kind: JOB.blocked.kind, label: "Question" }
+                        : jobBadge(j, now);
+                    return (
+                      <JobRow
+                        key={j.id}
+                        job={j}
+                        status={<Status {...KIND_STATUS[k.kind]}>{k.label}</Status>}
+                        detail={sub}
+                        fact={jobMeta(j, now)}
+                      />
+                    );
+                  })}
+                </RowList>
               ) : (
-                <div className="empty-group">None</div>
+                <div className="cap-text mt-read" data-tone="dim">
+                  None
+                </div>
               )}
             </div>
           </div>

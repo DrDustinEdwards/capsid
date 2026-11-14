@@ -100,6 +100,8 @@ export interface Ctx {
   now: number;
   view: ViewId;
   open: (ref: string) => void;
+  // The address open(ref) goes to, for a row drawn as a link.
+  href: (ref: string) => string;
   go: (view: ViewId) => void;
   filters: Filters;
   setFilters: (f: Partial<Filters>) => void;
@@ -310,6 +312,19 @@ export function placePath(id: string): string {
 /** One site's own page, at a tab when one is named. */
 export function sitePath(namespace: string, tab?: SiteTab): string {
   return `/sites/${encodeURIComponent(namespace)}${tab && tab !== SITE_TABS[0].id ? `?tab=${tab}` : ""}`;
+}
+
+/** The address an OpenRef opens from a page: "view:<id>" its page or section, "site:<ns>" the
+ *  site's page, and a job, an agent or an audit row the drawer over `view` (and `site`). */
+export function refPath(ref: string, view: ViewId, site?: string | null): string {
+  const i = ref.indexOf(":");
+  const type = ref.slice(0, i);
+  const id = ref.slice(i + 1);
+  if (type === "view") return placePath(id);
+  if (type === "site") return sitePath(id);
+  if ((DRAWER_TYPES as readonly string[]).includes(type))
+    return routePath(view, { type: type as DrawerType, id }, site);
+  return routePath(view, null, site);
 }
 
 export function routePath(

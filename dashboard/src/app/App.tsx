@@ -45,7 +45,7 @@ import {
   parseRoute,
   placePath,
   routePath,
-  sitePath,
+  refPath,
   type ConfirmRequest,
   type Ctx,
   type Filters,
@@ -265,33 +265,35 @@ function PortalApp() {
     [navigate],
   );
 
+  // The address a row opens: a page, a site's page, or the drawer over this page, keeping
+  // its filters.
+  const href = useCallback(
+    (ref: string) => {
+      const type = ref.slice(0, ref.indexOf(":"));
+      const to = refPath(ref, route.view, route.site);
+      return type === "view" || type === "site" ? to : to + qs;
+    },
+    [route.view, route.site, qs],
+  );
+
   const open = useCallback(
     (ref: string) => {
-      const i = ref.indexOf(":");
-      const type = ref.slice(0, i);
-      const id = ref.slice(i + 1);
-      // A page, or a retired view id that placePath maps to its page and section.
-      if (type === "view") {
-        const to = placePath(id);
-        const anchor = to.split("#")[1];
-        navigate(to);
-        // The location effect above scrolls to a section on another page; on this one,
-        // the location does not change, so it is scrolled to here.
-        if (anchor) requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView());
-        else window.scrollTo(0, 0);
+      const type = ref.slice(0, ref.indexOf(":"));
+      const to = href(ref);
+      // A job, an agent or an audit row opens in the drawer over the page you are on.
+      if (type !== "view" && type !== "site") {
+        if (to !== routePath(route.view, null, route.site) + qs) navigate(to);
         return;
       }
-      // A site is a page of its own; a job, an agent or an audit row opens in the drawer over
-      // the page you are on.
-      if (type === "site") {
-        navigate(sitePath(id));
-        window.scrollTo(0, 0);
-        return;
-      }
-      if (type === "job" || type === "agent" || type === "audit")
-        navigate(routePath(route.view, { type, id }, route.site) + qs);
+      // A page (a retired view id maps to its page and section), or a site's own page.
+      navigate(to);
+      const anchor = type === "view" ? to.split("#")[1] : undefined;
+      // The location effect above scrolls to a section on another page; on this one,
+      // the location does not change, so it is scrolled to here.
+      if (anchor) requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView());
+      else window.scrollTo(0, 0);
     },
-    [navigate, route.view, route.site, qs],
+    [href, navigate, route.view, route.site, qs],
   );
 
   const closeDrawer = useCallback(
@@ -373,14 +375,16 @@ function PortalApp() {
   // document order, so the selection is the focused row: no index to go stale when the
   // feed changes, and Enter opens it (onRowActivate). A row that is not in the tab order
   // is made focusable by script only (tabIndex -1).
+  // Capsomer's row lists (Problems) take part through each row's title link or button.
+  const ROW = "[data-row], .cap-row-title > :is(a, button)";
   const rows = () =>
-    Array.from(mainRef.current?.querySelectorAll<HTMLElement>("[data-row]") ?? []).filter(
+    Array.from(mainRef.current?.querySelectorAll<HTMLElement>(ROW) ?? []).filter(
       (el) => el.getClientRects().length > 0,
     );
   const step = (dir: 1 | -1) => {
     const r = rows();
     if (!r.length) return;
-    const cur = document.activeElement?.closest<HTMLElement>("[data-row]");
+    const cur = document.activeElement?.closest<HTMLElement>(ROW);
     const i = cur ? r.indexOf(cur) : -1;
     const el =
       r[i < 0 ? (dir === 1 ? 0 : r.length - 1) : Math.max(0, Math.min(r.length - 1, i + dir))];
@@ -618,6 +622,7 @@ function PortalApp() {
         now,
         view: route.view,
         open,
+        href,
         go,
         filters,
         setFilters,

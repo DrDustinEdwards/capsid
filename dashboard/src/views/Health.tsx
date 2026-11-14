@@ -1,7 +1,8 @@
 import { Suspense, lazy, type ReactNode } from "react";
 import { Link } from "../lib/router";
-import { HEALTH_TABS, placePath, tabOf, useApp, type HealthTab } from "../app/ctx";
-import { WAITING_KINDS, attentionGroups, siteScripts, type AttentionRow } from "../lib/derive";
+import { arrange } from "capsomer/behavior/attention-list";
+import { HEALTH_TABS, tabOf, useApp, type HealthTab } from "../app/ctx";
+import { WAITING_KINDS, attentionList, siteScripts } from "../lib/derive";
 import { Verdict } from "capsomer/react/verdict";
 import "capsomer/verdict.css";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
@@ -67,15 +68,25 @@ function TabPanel({ tab }: { tab: HealthTab }): ReactNode {
 // where it is fixed (Capsomer's Verdict). The same problems as Needs you's list (what waits on
 // you is not one of them: it is in Waiting for you), so the two pages never disagree.
 function HealthVerdict() {
-  const { feed, now, open } = useApp();
-  const { problems } = attentionGroups(feed, now, WAITING_KINDS);
+  const { feed, now, open, href } = useApp();
+  const { items, groups } = attentionList(feed, now, href, WAITING_KINDS);
+  // Every problem, none held back behind "more": the verdict names the first few itself.
+  const { problems } = arrange(items, { groups, rows: Infinity });
   return (
     <Verdict
-      problems={problems.map((p) => ({
-        key: p.key,
-        tone: p.sev === "crit" ? "crit" : "warn",
-        label: <ProblemLink row={p} />,
-      }))}
+      problems={problems.map((p) =>
+        p.kind === "row"
+          ? {
+              key: p.item.id,
+              tone: p.item.tone === "crit" ? "crit" : "warn",
+              label: <Link href={p.item.href}>{p.item.title}</Link>,
+            }
+          : {
+              key: `group:${p.key}`,
+              tone: p.tone === "crit" ? "crit" : "warn",
+              label: <Link href={p.view?.href ?? p.items[0]!.href}>{p.label}</Link>,
+            },
+      )}
       okNote="Sites, backups and default branches were fine on the last pass."
       named={NAMED}
       more={(rest) => (
@@ -84,18 +95,5 @@ function HealthVerdict() {
         </button>
       )}
     />
-  );
-}
-
-// A problem names a page, a tab or a drawer; a group names the view that lists them all.
-function ProblemLink({ row }: { row: AttentionRow }) {
-  const { open } = useApp();
-  const ref = row.view ? `view:${row.view.id}` : row.open;
-  const to = ref.startsWith("view:") ? placePath(ref.slice(5)) : null;
-  if (to && !to.includes("#")) return <Link href={to}>{row.title}</Link>;
-  return (
-    <button type="button" className="cap-link-btn" onClick={() => open(ref)}>
-      {row.title}
-    </button>
   );
 }

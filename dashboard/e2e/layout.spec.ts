@@ -66,7 +66,11 @@ for (const d of DRAWERS) {
   test(`at 1024 px the ${d.type} drawer does not scroll sideways`, async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 900 });
     await visit(page, d.from);
-    await page.locator(`main [data-open^="${d.type}:"]`).first().click();
+    // A row that opens a drawer: a table row's data-open, or a Capsomer row's title link.
+    await page
+      .locator(`main :is([data-open^="${d.type}:"], .cap-row-title a[href*="/${d.type}/"])`)
+      .first()
+      .click();
     const drawer = page.locator("dialog.drawer[open]");
     await expect(drawer).toBeVisible();
     // The drawer slides in; measure once it has arrived.

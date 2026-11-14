@@ -1,4 +1,7 @@
 import { Banner } from "capsomer/react/banner";
+import { RowList } from "capsomer/react/row-list";
+import "capsomer/row-list.css";
+import { JobRow } from "./shared";
 import { trendChart } from "./charts";
 import { Suspense } from "react";
 import { Spinner } from "capsomer/react/skeleton";
@@ -85,38 +88,27 @@ export function Tonight() {
                   {lane.planned_minutes} min{lane.heavy ? " · heavy, shares the budget" : ""}
                 </span>
               </h3>
-              {lane.jobs.map((j) => (
-                <div
-                  className="qrow"
-                  key={j.id}
-                  data-row=""
-                  data-open={`job:${j.id}`}
-                  role="button"
-                  tabIndex={0}
-                >
-                  {j.gated ? (
-                    <Status tone="warn" glyph="blocked">
-                      Gated
-                    </Status>
-                  ) : (
-                    <Status tone="muted" glyph="queued">
-                      Planned
-                    </Status>
-                  )}
-                  <div className="t">
-                    <b>{j.title}</b>
-                    <div>
-                      about {j.estimate_minutes} min, {SOURCE[j.estimate_source]}
-                      {j.gated ? " · its risky step goes in the pull request for the seat" : ""}
-                    </div>
-                  </div>
-                  <div className="m">
-                    <span className="ns">{j.namespace}</span>
-                    <br />
-                    priority {j.priority}
-                  </div>
-                </div>
-              ))}
+              <RowList label={lane.repo}>
+                {lane.jobs.map((j) => (
+                  <JobRow
+                    key={j.id}
+                    job={j}
+                    status={
+                      j.gated ? (
+                        <Status tone="warn" glyph="blocked">
+                          Gated
+                        </Status>
+                      ) : (
+                        <Status tone="muted" glyph="queued">
+                          Planned
+                        </Status>
+                      )
+                    }
+                    detail={`about ${j.estimate_minutes} min, ${SOURCE[j.estimate_source]}${j.gated ? " · its risky step goes in the pull request for the seat" : ""}`}
+                    fact={`priority ${j.priority}`}
+                  />
+                ))}
+              </RowList>
             </div>
           ))}
           {plan.skipped.length > 0 && (
@@ -127,25 +119,16 @@ export function Tonight() {
                   {plan.skipped.length}
                 </span>
               </h3>
-              {plan.skipped.map((j) => (
-                <div
-                  className="qrow"
-                  key={j.id}
-                  data-row=""
-                  data-open={`job:${j.id}`}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <Status tone="nodata">Skipped</Status>
-                  <div className="t">
-                    <b>{j.title}</b>
-                    <div className="why">{j.reason}</div>
-                  </div>
-                  <div className="m">
-                    <span className="ns">{j.namespace}</span>
-                  </div>
-                </div>
-              ))}
+              <RowList label="Skipped">
+                {plan.skipped.map((j) => (
+                  <JobRow
+                    key={j.id}
+                    job={j}
+                    status={<Status tone="nodata">Skipped</Status>}
+                    detail={j.reason}
+                  />
+                ))}
+              </RowList>
             </div>
           )}
           {plan.truncated && (
