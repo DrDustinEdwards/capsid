@@ -61,7 +61,8 @@ main.wide > section {
 h1 {
   max-width: 18ch;
   margin-block: var(--space-6) var(--space-4);
-  font: var(--weight-title) clamp(var(--display-5), 5.2vw, 4.75rem) / 0.95 var(--face);
+  font: var(--weight-title) clamp(var(--display-5), 5.2vw, var(--display-1)) / var(--leading-none)
+    var(--face);
   letter-spacing: var(--tracking-tight);
 }
 h1 code {
@@ -73,10 +74,10 @@ h2:not(.cap-family-footer-heading) {
   margin-block: var(--space-8) var(--space-3);
   font: var(--weight-heading) clamp(var(--title-2-5), 3vw, var(--display-4)) / var(--leading-none)
     var(--face);
-  letter-spacing: -0.03em;
+  letter-spacing: var(--tracking-tight);
 }
 h3 {
-  font-size: 1.1875rem;
+  font-size: var(--fs-h3);
   font-weight: var(--weight-heading);
 }
 /* The system map's headings are labels and card names, as Capsomer sets them; this page's own
@@ -100,7 +101,7 @@ h3 {
 }
 .lead {
   max-width: 54ch;
-  font-size: clamp(1.1875rem, 1.05rem + 0.5vw, var(--title-3));
+  font-size: clamp(var(--fs-h3), 1.05rem + 0.5vw, var(--title-3));
   line-height: var(--leading-compact);
 }
 .section-sub,
@@ -151,8 +152,9 @@ h3 {
 }
 .reading dd {
   margin: 0;
-  font: 650 clamp(var(--title-1-5), 3.4vw, var(--display-3)) / var(--leading-none) var(--face);
-  letter-spacing: -0.03em;
+  font: var(--weight-semibold) clamp(var(--title-1-5), 3.4vw, var(--display-3)) /
+    var(--leading-none) var(--face);
+  letter-spacing: var(--tracking-tight);
 }
 .readings-small {
   margin-block: var(--space-2) var(--space-4);
@@ -249,7 +251,8 @@ h3 {
   color: var(--muted);
 }
 .desk-value {
-  font: var(--weight-medium) clamp(var(--display-3), 6vw, 5.5rem) / 0.95 var(--face);
+  font: var(--weight-medium) clamp(var(--display-3), 6vw, var(--display-1)) / var(--leading-none)
+    var(--face);
   letter-spacing: var(--tracking-tighter);
   font-variant-numeric: tabular-nums;
 }
@@ -306,7 +309,7 @@ html:not(.js) .desk-kinds {
     color-mix(in srgb, var(--lamp) 35%, transparent),
     transparent
   );
-  animation: desk-read 700ms var(--ease-out) both;
+  animation: desk-read var(--dur-wait) var(--ease-out) both;
 }
 @keyframes desk-read {
   from {
@@ -323,7 +326,8 @@ html:not(.js) .desk-kinds {
   padding: var(--space-2) var(--space-3-5);
   border: var(--line-w-bar) solid var(--accent-text);
   color: var(--accent-text);
-  font: var(--weight-bold) clamp(var(--fs-body), 1.3vw, var(--fs-h3)) / 1.1 var(--mono);
+  font: var(--weight-bold) clamp(var(--fs-body), 1.3vw, var(--fs-h3)) / var(--leading-tight)
+    var(--mono);
   letter-spacing: var(--tracking-sign);
   text-transform: uppercase;
   transform: rotate(-8deg);
@@ -338,7 +342,7 @@ html:not(.js) .desk-kinds {
   opacity: 0;
 }
 .desk[data-phase="done"] .desk-stamp {
-  animation: desk-stamp 260ms var(--ease-out) both;
+  animation: desk-stamp var(--dur-base) var(--ease-out) both;
 }
 @keyframes desk-stamp {
   from {
@@ -385,7 +389,7 @@ html:not(.js) .desk-play {
 }
 @media (max-width: 64rem) {
   .cap-hero-title {
-    font-size: clamp(var(--display-3), 14vw, 5.5rem);
+    font-size: clamp(var(--display-3), 14vw, var(--display-1));
   }
 }
 @media (max-width: 40rem) {
@@ -644,7 +648,7 @@ html:not(.js) .breaker {
 .breaker-handle {
   position: absolute;
   inset-inline: var(--space-1-5);
-  inset-block-start: 27px;
+  inset-block-start: var(--space-6-5);
   block-size: 24px;
   background: var(--line-strong);
   transition:
@@ -762,7 +766,7 @@ html:not(.js) .breaker {
   max-width: 12ch;
   margin: 0 0 var(--space-4);
   font-size: clamp(var(--display-5), 5vw, var(--display-1));
-  line-height: 0.95;
+  line-height: var(--leading-none);
   letter-spacing: var(--tracking-tighter);
 }
 .tour-words > .lead {
@@ -812,11 +816,11 @@ html:not(.js) .chapter h3::before {
   max-width: 44ch;
   margin: 0 0 var(--space-3);
   font-size: var(--fs-h3);
-  line-height: 1.55;
+  line-height: var(--leading-normal);
 }
 .chapter h3 {
   margin: 0 0 var(--space-3);
-  font: var(--weight-heading) clamp(var(--title-4), 1.8vw, 1.625rem) / var(--leading-tight)
+  font: var(--weight-heading) clamp(var(--title-4), 1.8vw, var(--title-2-5)) / var(--leading-tight)
     var(--face);
 }
 .chapter .chapter-n {
@@ -972,7 +976,7 @@ html:not(.js) .chapter h3::before {
   flex: 1 1 10rem;
 }
 .readings-facts .reading dd {
-  font: var(--weight-medium) var(--fs-h3) / 1.35 var(--ui);
+  font: var(--weight-medium) var(--fs-h3) / var(--leading-snug-5) var(--ui);
   letter-spacing: 0;
   overflow-wrap: anywhere;
 }
@@ -1278,17 +1282,17 @@ th[aria-sort="ascending"] .sort::after {
   opacity: 0;
   transform: translateY(24px);
   transition:
-    opacity 600ms var(--ease-out),
-    transform 600ms var(--ease-out);
+    opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out);
 }
 .rise[data-delay="1"] {
-  transition-delay: 70ms;
+  transition-delay: var(--dur-fast);
 }
 .rise[data-delay="2"] {
-  transition-delay: 140ms;
+  transition-delay: var(--dur-quick);
 }
 .rise[data-delay="3"] {
-  transition-delay: 210ms;
+  transition-delay: var(--dur-base);
 }
 .rise.is-in {
   opacity: 1;
@@ -1338,7 +1342,8 @@ th[aria-sort="ascending"] .sort::after {
 }
 .step-head {
   margin-block: var(--space-2) var(--space-3);
-  font: var(--weight-semibold) clamp(var(--title-2-5), 3vw, var(--display-5)) / 1.1 var(--prose);
+  font: var(--weight-semibold) clamp(var(--title-2-5), 3vw, var(--display-5)) / var(--leading-tight)
+    var(--prose);
   letter-spacing: var(--tracking-tight);
 }
 /* On a wide screen the step reads beside its drawing, so stepping never sends the eye down the
@@ -1444,9 +1449,9 @@ th[aria-sort="ascending"] .sort::after {
 main h2[data-no] {
   position: relative;
   padding-block-start: var(--space-3);
-  padding-inline-start: 4.5rem;
+  padding-inline-start: var(--space-9);
   border-block-start: var(--line-w) solid var(--text);
-  font-size: clamp(var(--title-4), 1.8vw, 1.625rem);
+  font-size: clamp(var(--title-4), 1.8vw, var(--title-2-5));
   font-weight: var(--weight-heading);
   letter-spacing: var(--tracking-snug);
 }

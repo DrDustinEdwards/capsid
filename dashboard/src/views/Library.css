@@ -14,7 +14,7 @@
   padding: var(--space-4) var(--space-5);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font: var(--fs-detail)/1.55 var(--mono);
+  font: var(--fs-detail)/var(--leading-normal) var(--mono);
 }
 @media (max-width: 820px) {
   .lib-table .c-where {
