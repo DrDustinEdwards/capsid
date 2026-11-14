@@ -41,8 +41,8 @@
     "@modelcontextprotocol/server": "2.4.0",
     "agents": "0.33.0",
     "capsomer": "github:DrDustinEdwards/capsomer#v0.152.1",
-    "jose": "6.2.15",
-    "tldts": "7.4.19",
+    "jose": "6.2.17",
+    "tldts": "7.4.22",
     "yaml": "2.9.1",
     "zod": "4.6.7"
   },
@@ -53,8 +53,8 @@
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/conformance": "0.2.0-alpha.12",
     "@types/node": "24.19.2",
-    "jscpd": "5.4.2",
-    "knip": "6.44.1",
+    "jscpd": "5.4.3",
+    "knip": "6.45.1",
     "oxfmt": "0.77.0",
     "oxlint": "1.92.0",
     "oxlint-tsgolint": "7.0.2006",
@@ -68,11 +68,11 @@
       "@modelcontextprotocol/sdk": "1.32.2"
     },
     "sharp": "0.35.5",
-    "undici": "7.30.1"
+    "undici": "7.30.2"
   },
   "engines": {
     "node": ">=26.11.1",
-    "npm": "12.2.1"
+    "npm": "12.2.2"
   },
   "allowScripts": {
     "core-js-pure": false,
