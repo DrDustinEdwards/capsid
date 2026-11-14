@@ -18,7 +18,12 @@ import { PORTAL_HOST } from "./portal-host";
 // COOP: its one page is the /authorize consent dialog, which MCP clients open in a popup and wait on through
 // window.opener, and same-origin would sever that. No preload on HSTS: that is a vendor-list submission and
 // effectively irreversible.
-const MCP_SET = buildSecurityHeaders({ site: capsidMcp });
+// The MCP host serves no page for search (its one page is the consent dialog), so every response there says noindex, as
+// site-runtime's withMcpHeaders says on the other doors.
+const MCP_SET = {
+  ...buildSecurityHeaders({ site: capsidMcp }),
+  "X-Robots-Tag": "noindex, nofollow",
+};
 const PORTAL_SET = buildSecurityHeaders({ site: capsidPortal });
 
 export const REPORT_PATH = "/csp-report";

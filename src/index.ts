@@ -21,11 +21,12 @@ import { runTask, type TaskResult } from "./task-runs";
 import { isPortalHost, portalHostRequest } from "./portal-host";
 import { handlePortalDemo, isDemoRequest } from "./portal-demo";
 import { portalAsset } from "./portal-app";
-import { hostRefusal, MCP_URL } from "./mcp-host";
+import { hostRefusal, MCP_HOST, MCP_URL } from "./mcp-host";
 import { logEvent, withRequestLog } from "@dustinedwards/site-runtime/log";
 import { maintenanceOn, maintenanceResponse } from "@dustinedwards/site-runtime/maintenance";
 import { countNotFound } from "@dustinedwards/site-runtime/not-found";
 import { securityTxtResponse } from "@dustinedwards/site-runtime/security-txt";
+import { robotsResponse } from "@drdustinedwards/site-helpers/robots";
 import { ADMIN_LIST_PATH, adminListResponse } from "@dustinedwards/site-runtime/access-drift";
 
 const SECURITY_TXT_PATH = "/.well-known/security.txt";
@@ -222,6 +223,13 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
         contact: "security@dustinedwards.info",
         expires: SECURITY_TXT_EXPIRES,
       }),
+      asked,
+    );
+  // The MCP host is machines only: its robots.txt asks every crawler to fetch nothing (Prelum's preview form, Disallow: /),
+  // and every response there says noindex (security-headers.ts).
+  if (asked === "/robots.txt" && hostname === MCP_HOST)
+    return secured(
+      robotsResponse({ origin: `https://${MCP_HOST}`, request: original, preview: true }),
       asked,
     );
   // The admin list, hashed with a fresh salt, for the daily Access drift check
