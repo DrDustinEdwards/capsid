@@ -106,11 +106,6 @@ tr:has(.stretch) {
   transform: rotate(45deg);
 }
 
-.att-more {
-  padding: var(--space-2) var(--space-5) var(--space-3) 116px;
-  font-size: var(--fs-detail);
-}
-
 /* Needs you, Waiting for you: a group per kind, each row its subject, a quiet line and its
    own buttons. On a phone the buttons go full width under the row. */
 .wgroup + .wgroup {
@@ -390,59 +385,6 @@ table.workers-stores .cap-status {
 .qgroup > h3 .disclose .chev {
   margin: 0 var(--space-1) var(--space-1) 0;
 }
-.qrow {
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) auto;
-  gap: var(--space-4);
-  align-items: center;
-  padding: var(--space-2-5) var(--space-5);
-  cursor: pointer;
-}
-.qrow:hover {
-  background: var(--raised);
-}
-.qrow .t {
-  min-width: 0;
-}
-.qrow .t b {
-  font-weight: var(--weight-semibold);
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.qrow .t div {
-  font-size: var(--fs-detail);
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* A stale job's reason is the row's point, so it wraps rather than being cut. */
-.qrow .t div.why {
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.qrow .m {
-  font-size: var(--fs-detail);
-  color: var(--muted);
-  text-align: right;
-  white-space: nowrap;
-}
-.mrow {
-  grid-template-columns: 124px minmax(0, 1fr) auto;
-  cursor: default;
-}
-.mrow[data-open] {
-  cursor: pointer;
-}
-.mrow:not([data-open]):hover {
-  background: none;
-}
-.mrow .t div.why {
-  color: var(--text);
-  font-size: var(--fs-detail);
-}
 .mt-read {
   padding: var(--space-2-5) var(--space-5) var(--space-3-5);
   font-size: var(--fs-detail);
@@ -598,7 +540,6 @@ ul.plain {
 [data-open] {
   cursor: pointer;
 }
-.qrow:focus-visible,
 .frow:focus-visible,
 tr[data-open]:focus-visible {
   outline-offset: calc(-1 * var(--focus-offset));
@@ -624,15 +565,6 @@ main .sev-crit[data-row]:focus-visible {
   text-align: center;
 }
 @media (max-width: 820px) {
-  .att-more {
-    padding-left: var(--space-5);
-  }
-  .qrow {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .qrow .cap-status {
-    grid-column: 1 / -1;
-  }
   .search {
     min-width: 0;
     flex: 1;

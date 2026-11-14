@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, type AnchorHTMLAttributes } from "react";
+import { forwardRef, useCallback, type AnchorHTMLAttributes, type ReactNode } from "react";
 import { Link as RouterLink, useLocation as useRouterLocation, useNavigate } from "react-router";
 import { DEMO_BASE } from "./demo";
 
@@ -48,3 +48,20 @@ export const Link = forwardRef<
   const base = pageBase(useRouterLocation().pathname);
   return <RouterLink ref={ref} to={withBase(base, href)} {...rest} />;
 });
+
+/** A Capsomer row's title link (row-list's and attention-list's renderLink), through the router. */
+export function rowLink({
+  href,
+  children,
+  ...rest
+}: {
+  href: string;
+  "aria-describedby"?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Link href={href} {...rest}>
+      {children}
+    </Link>
+  );
+}

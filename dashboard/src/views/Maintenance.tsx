@@ -1,4 +1,7 @@
 import { Banner } from "capsomer/react/banner";
+import { Row as CapRow, RowList } from "capsomer/react/row-list";
+import "capsomer/row-list.css";
+import { rowLink } from "../lib/router";
 import { AwayLink } from "capsomer/react/link";
 import { useState } from "react";
 import { Empty } from "capsomer/react/empty";
@@ -90,11 +93,13 @@ export function Maintenance() {
         </div>
       ) : items.length ? (
         <>
-          {shown.map((i, n) => (
-            <Row key={`${i.rule}|${n}`} item={i} opens={i.job !== null && open.has(i.job)} />
-          ))}
+          <RowList label="Maintenance">
+            {shown.map((i, n) => (
+              <Row key={`${i.rule}|${n}`} item={i} opens={i.job !== null && open.has(i.job)} />
+            ))}
+          </RowList>
           {(hidden > 0 || more) && (
-            <div className="att-more">
+            <div className="mt-read">
               <button
                 type="button"
                 className="cap-link-btn"
@@ -125,27 +130,26 @@ export function Maintenance() {
   );
 }
 
+// A rule's finding: it opens its job when the job is still live, and is read, not opened,
+// otherwise. Its pull request is a link of its own beside it.
 function Row({ item, opens }: { item: OpsMaintenanceItem; opens: boolean }) {
+  const { href } = useApp();
   const rule = RULE[item.rule];
-  const target = opens ? { "data-row": "", "data-open": `job:${item.job}`, tabIndex: 0 } : {};
   return (
-    <div
-      className={rule.kind === "crit" ? "qrow mrow sev-crit" : "qrow mrow"}
-      data-rule={item.rule}
-      {...target}
-    >
-      <Status {...KIND_STATUS[rule.kind]}>{rule.label}</Status>
-      <div className="t">
-        <div className="why">{item.line}</div>
-        {item.pr && (
+    <CapRow
+      tone={rule.kind === "crit" ? "crit" : undefined}
+      status={<Status {...KIND_STATUS[rule.kind]}>{rule.label}</Status>}
+      title={item.line}
+      href={opens && item.job ? href(`job:${item.job}`) : undefined}
+      meta={<span className="ns">{item.namespace}</span>}
+      actions={
+        item.pr ? (
           <AwayLink href={item.pr} newTab>
             {item.pr.replace(/^https:\/\/github\.com\//, "")}
           </AwayLink>
-        )}
-      </div>
-      <div className="m">
-        <span className="ns">{item.namespace}</span>
-      </div>
-    </div>
+        ) : undefined
+      }
+      renderLink={rowLink}
+    />
   );
 }

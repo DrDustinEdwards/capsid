@@ -1,4 +1,7 @@
 import { Alert } from "capsomer/react/banner";
+import { Row, RowList } from "capsomer/react/row-list";
+import "capsomer/row-list.css";
+import { rowLink } from "../lib/router";
 import {
   Fragment,
   useEffect,
@@ -182,7 +185,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
 }
 
 function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
-  const { feed, now } = useApp();
+  const { feed, now, href } = useApp();
   const a = feed.live.agents.find((x) => x.name === name);
   if (!a) return <Missing what={`Agent ${name}`} onClose={onClose} />;
   const st = agentState(a, now);
@@ -251,15 +254,20 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
         <div>
           <p className="section-title">Holding now</p>
           {mine.length ? (
-            mine.map((j) => (
-              <div className="qrow" key={j.id} data-open={`job:${j.id}`} role="button" tabIndex={0}>
-                <Status {...KIND_STATUS[JOB[j.status].kind]}>{JOB[j.status].label}</Status>
-                <div className="t">
-                  <b>{j.title}</b>
-                </div>
-                <div className="m">{ago(parse(j.updated_at), now)}</div>
-              </div>
-            ))
+            <RowList label="Holding now">
+              {mine.map((j) => (
+                <Row
+                  key={j.id}
+                  status={
+                    <Status {...KIND_STATUS[JOB[j.status].kind]}>{JOB[j.status].label}</Status>
+                  }
+                  title={j.title}
+                  href={href(`job:${j.id}`)}
+                  meta={ago(parse(j.updated_at), now)}
+                  renderLink={rowLink}
+                />
+              ))}
+            </RowList>
           ) : (
             <div className="cap-text" data-tone="dim">
               Nothing claimed or blocked.

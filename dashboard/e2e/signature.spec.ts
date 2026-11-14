@@ -6,7 +6,7 @@ import { visit } from "./views.ts";
 
 async function openJob(page: import("@playwright/test").Page, id: string) {
   await visit(page, "queue");
-  await page.locator(`main [data-open="job:${id}"]`).first().click();
+  await page.locator(`main .cap-row-title a[href$="/job/${id}"]`).first().click();
   const drawer = page.locator("dialog.drawer[open]");
   await expect(drawer).toBeVisible();
   return drawer;

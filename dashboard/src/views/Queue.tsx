@@ -1,4 +1,6 @@
 import { Banner } from "capsomer/react/banner";
+import { RowList } from "capsomer/react/row-list";
+import "capsomer/row-list.css";
 import { AnchorBar } from "capsomer/react/anchor-bar";
 import "capsomer/anchor-bar.css";
 import { trendChart } from "./charts";
@@ -17,7 +19,7 @@ import { Status } from "capsomer/react/status";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
-import { FilterEmpty, NsChips, PageHead, QueueRows, useNsFilter } from "./shared";
+import { FilterEmpty, JobRow, NsChips, PageHead, QueueRows, useNsFilter } from "./shared";
 import { Tonight } from "./Overnight";
 
 // Chart 3, whether the queue is growing or draining, from GET /portal/api/trends. Lazy, so
@@ -81,34 +83,23 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
           <Spinner label="Reading the stale jobs..." />
         </div>
       ) : rows.length ? (
-        rows.map((j) => {
-          const k = JOB[j.status as OpsJob["status"]] ?? {
-            kind: "nodata" as const,
-            label: j.status,
-          };
-          return (
-            <div
-              className="qrow"
-              key={j.id}
-              data-row=""
-              data-open={`job:${j.id}`}
-              data-rule={j.rule}
-              role="button"
-              tabIndex={0}
-            >
-              <Status {...KIND_STATUS[k.kind]}>{k.label}</Status>
-              <div className="t">
-                <b>{j.title}</b>
-                <div className="why">{j.reason}</div>
-              </div>
-              <div className="m">
-                <span className="ns">{j.namespace}</span>
-                <br />
-                {STALE_RULE[j.rule]}
-              </div>
-            </div>
-          );
-        })
+        <RowList label="Stuck jobs">
+          {rows.map((j) => {
+            const k = JOB[j.status as OpsJob["status"]] ?? {
+              kind: "nodata" as const,
+              label: j.status,
+            };
+            return (
+              <JobRow
+                key={j.id}
+                job={j}
+                status={<Status {...KIND_STATUS[k.kind]}>{k.label}</Status>}
+                detail={j.reason}
+                fact={STALE_RULE[j.rule]}
+              />
+            );
+          })}
+        </RowList>
       ) : data ? (
         <Empty
           kind="all-clear"

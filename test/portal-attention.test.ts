@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { OpsFeed } from "../src/ops-types/feed.ts";
 
-// The Overview's Needs attention list, grouped and tiered (dashboard/src/lib/derive.ts,
-// attentionGroups and blockedOrder; capsid/research/audit-ui-patterns.md, rulings 3 and
+// The Problems list's rows, tiered (dashboard/src/lib/derive.ts, attentionList and
+// blockedOrder; the folding is Capsomer's arrange, tested there; capsid/research/audit-ui-patterns.md, rulings 3 and
 // 10). Built on the dashboard's own sample feed (fake data), reshaped per test.
-const { attentionGroups, blockedOrder, GROUP_CHILDREN, STALE_BLOCKED_MS, WAITING_KINDS } =
+const { attentionList, blockedOrder, STALE_BLOCKED_MS, WAITING_KINDS } =
   await import("../dashboard/src/lib/derive.ts");
 
 const SAMPLE = readFileSync(
@@ -21,63 +21,15 @@ function feed(): { f: OpsFeed; now: number } {
   return { f, now: Date.parse(f.live.generated) };
 }
 
-function prs(f: OpsFeed, n: number): void {
-  const a0 = f.live.awaiting_seat[0];
-  assert.ok(a0, "the sample feed has a pull request awaiting the seat");
-  f.live.awaiting_seat = Array.from({ length: n }, (_, i) => ({
-    ...a0,
-    repo: "example-org/sample-info",
-    namespace: "sample-info",
-    number: 29 + i,
-    at: new Date(Date.parse(a0.at) + i * 60_000).toISOString(),
-  }));
-}
-
-test("PLANT: four pull requests awaiting the seat are one row that holds all four", () => {
-  const { f, now } = feed();
-  prs(f, 4);
-  const g = attentionGroups(f, now);
-  const rows = g.problems.filter((r) => r.kind === "PR");
-  assert.equal(rows.length, 1, rows.map((r) => r.title).join(" | "));
-  const row = rows[0]!;
-  assert.equal(row.title, "4 pull requests await the seat");
-  assert.equal(row.sub, "example-org/sample-info");
-  assert.equal(row.total, 4);
-  assert.deepEqual(
-    row.children?.map((c) => c.title),
-    [
-      "example-org/sample-info #32 awaits the seat",
-      "example-org/sample-info #31 awaits the seat",
-      "example-org/sample-info #30 awaits the seat",
-      "example-org/sample-info #29 awaits the seat",
-    ],
-  );
-  assert.deepEqual(row.view, { id: "prs", label: "Pull requests" });
-});
-
-test("a group shows at most five children and counts the rest", () => {
-  const { f, now } = feed();
-  prs(f, 7);
-  const row = attentionGroups(f, now).problems.find((r) => r.kind === "PR");
-  assert.equal(GROUP_CHILDREN, 5);
-  assert.equal(row?.children?.length, 5);
-  assert.equal(row?.total, 7);
-});
-
-test("one pull request stays a row of its own", () => {
-  const { f, now } = feed();
-  f.live.awaiting_seat = f.live.awaiting_seat.slice(0, 1);
-  const rows = attentionGroups(f, now).problems.filter((r) => r.kind === "PR");
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0]?.children, undefined);
-  assert.equal(rows[0]?.title, "example-org/sample-c #32 awaits the seat");
-});
+const list = (f: OpsFeed, now: number, skip?: ReadonlySet<string>) =>
+  attentionList(f, now, (ref) => `/open/${ref}`, skip);
 
 test("PLANT: with WAITING_KINDS skipped, Problems hold nothing Needs you lists with its buttons", () => {
   const { f, now } = feed();
-  const all = attentionGroups(f, now).problems.map((r) => r.kind);
+  const kind = (d?: string) => d?.split(" · ")[0] ?? "";
+  const all = list(f, now).items.map((r) => kind(r.detail));
   for (const k of ["Queue", "PR"]) assert.ok(all.includes(k), `the sample has a ${k} row to skip`);
-  const left = attentionGroups(f, now, WAITING_KINDS).problems.map((r) => r.kind);
+  const left = list(f, now, WAITING_KINDS).items.map((r) => kind(r.detail));
   assert.deepEqual(
     left.filter((k) => WAITING_KINDS.has(k)),
     [],
@@ -85,15 +37,11 @@ test("PLANT: with WAITING_KINDS skipped, Problems hold nothing Needs you lists w
   assert.ok(left.length > 0, "the other problems stay");
 });
 
-test("PLANT: problems hold no notice; missing data, a check that could not run, unread CI, drift and silent drivers are notices", () => {
+test("PLANT: missing data, a check that could not run, unread CI, drift and silent drivers are notices", () => {
   const { f, now } = feed();
-  const g = attentionGroups(f, now);
-  assert.ok(g.problems.length >= 4);
-  assert.deepEqual(
-    g.problems.filter((r) => r.sev === "nodata").map((r) => r.title),
-    [],
-  );
-  const titles = g.notices.map((r) => r.title);
+  const { items } = list(f, now);
+  assert.ok(items.filter((r) => r.tone !== "nodata").length >= 4);
+  const titles = items.filter((r) => r.tone === "nodata").map((r) => r.title);
   // The sample feed has each kind once.
   assert.ok(titles.includes("Sample G: no Cloudflare data"), titles.join(" | "));
   assert.ok(
@@ -105,17 +53,10 @@ test("PLANT: problems hold no notice; missing data, a check that could not run, 
     titles.some((t) => t.startsWith("Site map drift")),
     titles.join(" | "),
   );
-  assert.ok(
-    titles.some((t) => t.startsWith("sample-d-driver has been silent")),
-    titles.join(" | "),
-  );
-  assert.equal(g.noticeCount, g.notices.length);
-  // Worst first: every critical row before every warning.
-  const sevs = g.problems.map((r) => r.sev);
-  assert.deepEqual(
-    sevs,
-    [...sevs].sort((a, b) => (a === b ? 0 : a === "crit" ? -1 : 1)),
-  );
+  // A silent driver opens that agent, and folds with the others into one notice.
+  const silent = items.find((r) => r.title.startsWith("sample-d-driver has been silent"));
+  assert.equal(silent?.href, "/open/agent:sample-d-driver");
+  assert.equal(silent?.group, "silent");
 });
 
 test("health not read and the Amazon copy not read stay warnings, not notices", () => {
@@ -123,30 +64,14 @@ test("health not read and the Amazon copy not read stay warnings, not notices", 
   assert.ok(f.snapshot);
   f.snapshot.health = null;
   f.snapshot.offaccount = null;
-  const g = attentionGroups(f, now);
-  const warn = g.problems.filter((r) => r.sev === "warn").map((r) => r.title);
+  const warn = list(f, now)
+    .items.filter((r) => r.tone === "warn")
+    .map((r) => r.title);
   assert.ok(warn.includes("Capsid health was not read on the last pass"), warn.join(" | "));
   assert.ok(
     warn.includes("The Amazon backup copy's report was not read on the last pass"),
     warn.join(" | "),
   );
-  assert.equal(g.notices.filter((r) => /was not read on the last pass/.test(r.title)).length, 0);
-});
-
-test("silent drivers are one notice", () => {
-  const { f, now } = feed();
-  let n = 0;
-  for (const a of f.live.agents)
-    if (a.kind === "driver" && !a.revoked_at)
-      a.last_seen = new Date(now - (8 + n++) * DAY).toISOString();
-  assert.ok(n >= 3);
-  const g = attentionGroups(f, now);
-  const rows = g.notices.filter((r) => r.kind === "Agent");
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0]?.title, `${n} drivers have been silent for over 7 days`);
-  assert.equal(rows[0]?.total, n);
-  // The notice count counts drivers, not rows.
-  assert.equal(g.noticeCount, g.notices.length - 1 + n);
 });
 
 test("PLANT: blocked jobs are ordered by priority, then newest; over 7 days they are Stale", () => {
@@ -171,14 +96,6 @@ test("PLANT: blocked jobs are ordered by priority, then newest; over 7 days they
   assert.deepEqual(
     o.stale.map((j) => j.id.slice(-1)),
     ["5", "6", "7"],
-  );
-  // The Overview's blocked group lists its children in the same order, Stale after.
-  const row = attentionGroups(f, now).problems.find((r) => r.kind === "Queue");
-  assert.equal(row?.title, "7 jobs are waiting on you");
-  assert.equal(row?.total, 7);
-  assert.deepEqual(
-    row?.children?.map((c) => c.open),
-    ["4", "2", "3", "1", "5"].map((d) => `job:job_00000000000${d}`),
   );
 });
 
