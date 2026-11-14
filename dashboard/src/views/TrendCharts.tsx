@@ -17,6 +17,7 @@ import type {
   ClaimsAgreement,
   ClaimsGroup,
   ClaimsWaitRow,
+  PortalPackageHistory,
   PortalPlan,
   PortalTrends,
   SiteSnapshot,
@@ -116,7 +117,8 @@ function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
 
 const MOST_CLASSES = 10;
 
-const hours = (v: number) => (v >= 1 ? `${v.toFixed(1)} h` : `${Math.round(v * 60)} min`);
+const hours = (v: number) =>
+  v >= 1 ? `${v.toFixed(1)} h` : `${Math.round(v * 60)} min`;
 
 // The gate classes and who ended a wait, in words (Dustin's review of 2026-10-11: the chart
 // showed needs_human and push_branch). A compound command's classes are joined with "+"
@@ -134,7 +136,8 @@ const ENDED_BY_WORDS: Record<string, string> = {
   policy: "The signed policy",
   seat: "A session acting for you",
 };
-const words = (code: string) => code.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+const words = (code: string) =>
+  code.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 
 export function gateWords(gate: string): string {
   return gate
@@ -158,11 +161,17 @@ export function waitRows(waits: ClaimsWaitRow[]): {
   const byClass = new Map<string, Map<string, number>>();
   for (const w of waits) {
     const ends = byClass.get(w.gate_class) ?? new Map<string, number>();
-    ends.set(w.ended_by, (ends.get(w.ended_by) ?? 0) + w.waited_ms_total / HOUR);
+    ends.set(
+      w.ended_by,
+      (ends.get(w.ended_by) ?? 0) + w.waited_ms_total / HOUR,
+    );
     byClass.set(w.gate_class, ends);
   }
-  const sum = (m: Map<string, number>) => [...m.values()].reduce((a, b) => a + b, 0);
-  const ranked = [...byClass].sort(([, a], [, b]) => sum(b) - sum(a)).slice(0, MOST_CLASSES);
+  const sum = (m: Map<string, number>) =>
+    [...m.values()].reduce((a, b) => a + b, 0);
+  const ranked = [...byClass]
+    .sort(([, a], [, b]) => sum(b) - sum(a))
+    .slice(0, MOST_CLASSES);
   const rows = ranked.flatMap(([gate, ends]) =>
     [...ends].map(([endedBy, h]) => ({
       gate: gateWords(gate),
@@ -209,7 +218,9 @@ export function WaitingChart() {
         No wait ended in the last 14 days.
       </p>
     );
-  const top = rows.filter((r) => r.gate === rows[0]!.gate).reduce((a, r) => a + r.hours, 0);
+  const top = rows
+    .filter((r) => r.gate === rows[0]!.gate)
+    .reduce((a, r) => a + r.hours, 0);
   const opts = {
     data: rows,
     x: "gate",
@@ -291,7 +302,8 @@ export interface ProjectCounts {
  *  bar, the counts in the figure's table. Status colors through Capsomer's color pairs. */
 export function ProjectChart({ counts }: { counts: ProjectCounts[] }) {
   if (!counts.length) return null;
-  const sum = (k: "blocked" | "running" | "queued") => counts.reduce((a, c) => a + c[k], 0);
+  const sum = (k: "blocked" | "running" | "queued") =>
+    counts.reduce((a, c) => a + c[k], 0);
   const rows = counts.flatMap((c) => [
     { project: c.project, state: "Blocked", jobs: c.blocked },
     { project: c.project, state: "Running", jobs: c.running },
@@ -317,12 +329,19 @@ export function ProjectChart({ counts }: { counts: ProjectCounts[] }) {
     alt: `Live jobs per project, ${counts.length} ${counts.length === 1 ? "project" : "projects"}: ${sum("blocked")} blocked, ${sum("running")} running, ${sum("queued")} queued.`,
     source: { name: "D1 jobs, the live window" },
   } as const;
-  return <ChartFrame draw={(width, fit) => barChart({ ...opts, width, ...fit })} />;
+  return (
+    <ChartFrame draw={(width, fit) => barChart({ ...opts, width, ...fit })} />
+  );
 }
 
 // ---- 5. Does each agent's claim match what was verified? -----------------------------------
 
-const AGREEMENTS: readonly ClaimsAgreement[] = ["agree", "disagree", "unclaimed", "unchecked"];
+const AGREEMENTS: readonly ClaimsAgreement[] = [
+  "agree",
+  "disagree",
+  "unclaimed",
+  "unchecked",
+];
 
 /** Agreement counts per agent, summed over the checks. An agent with no check is left out. */
 export function agreementRows(
@@ -429,7 +448,8 @@ export function CostChart() {
     height: 240,
     title: "What does the work cost?",
     alt: `Model spend per week for the last ${weeks.length} weeks${now.usd === null ? ", none recorded this week" : `, ${formatMoney(now.usd, "usd", { scale: 0 })} this week`}. Weeks with no recorded cost are gaps.`,
-    caption: "A week with no job outcome carrying a cost is a gap, not a free week.",
+    caption:
+      "A week with no job outcome carrying a cost is a gap, not a free week.",
     source: { name: "Job outcomes, telemetry cost, an estimate" },
   } as const;
   return (
@@ -471,7 +491,8 @@ export function MergesChart() {
       pulls: w[k],
     })),
   );
-  const total = (k: (typeof MERGE_KINDS)[number]) => weeks.reduce((a, w) => a + w[k], 0);
+  const total = (k: (typeof MERGE_KINDS)[number]) =>
+    weeks.reduce((a, w) => a + w[k], 0);
   const merged = total("auto") + total("approved") + total("seat");
   const opts = {
     data: rows,
@@ -556,7 +577,9 @@ export function DeploysTable() {
                     </span>
                   ) : null}
                 </td>
-                <td data-label="Change failure rate">{pct(r.change_failure_rate, 0)}</td>
+                <td data-label="Change failure rate">
+                  {pct(r.change_failure_rate, 0)}
+                </td>
                 <td data-label="Median time to restore">
                   {restoreWords(r.restore_median_seconds)}
                 </td>
@@ -597,12 +620,18 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     );
   const e = cf.errors24;
   if (!e.length)
-    return <ChartFrame noData={{ title, reason: "the analytics read returned no hours" }} />;
+    return (
+      <ChartFrame
+        noData={{ title, reason: "the analytics read returned no hours" }}
+      />
+    );
   const rates = e.map((x) => (x.requests ? (x.errors / x.requests) * 100 : 0));
   const peak = Math.max(...rates);
   const t0 = parse(e[0]!.hour);
   const t1 = parse(e[e.length - 1]!.hour) + HOUR;
-  const inWindow = cf.deploys.filter((d) => parse(d.created_on) >= t0 && parse(d.created_on) <= t1);
+  const inWindow = cf.deploys.filter(
+    (d) => parse(d.created_on) >= t0 && parse(d.created_on) <= t1,
+  );
   const tot = errorTotals(e);
   const opts = {
     data: e.map((x, i) => ({
@@ -641,7 +670,13 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
 /** Health's Deploys tab: each deploy a point, each run of failed probes or of missing watcher
  *  passes a span, one lane per site. Enarratio gives way to a plain list where the room is
  *  narrow, so a phone reads the events instead of scrolling a drawing. */
-export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: number }) {
+export function DeployTimeline({
+  sites,
+  days,
+}: {
+  sites: SiteSnapshot[];
+  days: number;
+}) {
   const { now } = useApp();
   const t0 = now - days * DAY;
   const events: TimelineEvent[] = [];
@@ -652,7 +687,7 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
   for (const s of sites) {
     const ring = padRing(s.ring, RING_SLOTS);
     // Consecutive slots of one kind make one span.
-    for (let k = 0; k < ring.length;) {
+    for (let k = 0; k < ring.length; ) {
       const c = ring[k];
       let end = k + 1;
       while (end < ring.length && ring[end] === c) end++;
@@ -688,7 +723,9 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
     }
   }
   const notes = [
-    ...(days > 7 ? ["The probe ring holds 7 days; older downtime is not shown."] : []),
+    ...(days > 7
+      ? ["The probe ring holds 7 days; older downtime is not shown."]
+      : []),
     ...(noData.length ? [`Deploys not read for ${noData.join("; ")}.`] : []),
   ];
   const opts = {
@@ -776,7 +813,12 @@ export function BackupSlots() {
   const { data, error, loading } = useTrends();
   const b = data?.backups;
   return (
-    <Panel flush title="Retention slots" src="backup bucket, complete runs" id="backup-slots">
+    <Panel
+      flush
+      title="Retention slots"
+      src="backup bucket, complete runs"
+      id="backup-slots"
+    >
       <div className="body cap-stack" data-gap="4">
         {b && <Stale error={error} />}
         {!b ? (
@@ -824,12 +866,15 @@ export function BackupSlots() {
 // Green 0, red 1, no run yet as no value: a heat strip's two ends on the family ramp, so red
 // reads as the strong end and a day with no verdict is drawn as missing, never as green.
 function ciValues(r: TrendCiRepo): (number | null)[] {
-  return r.days.map((d) => (d.state === "none" ? null : d.state === "red" ? 1 : 0));
+  return r.days.map((d) =>
+    d.state === "none" ? null : d.state === "red" ? 1 : 0,
+  );
 }
 
 function redStreak(r: TrendCiRepo): number {
   let n = 0;
-  for (let i = r.days.length - 1; i >= 0 && r.days[i]!.state === "red"; i--) n++;
+  for (let i = r.days.length - 1; i >= 0 && r.days[i]!.state === "red"; i--)
+    n++;
   return n;
 }
 
@@ -856,8 +901,13 @@ export function CiHistory() {
               // A branch with no verdict in the window has nothing to draw; its line says so.
               if (!r.days.some((d) => d.state !== "none")) {
                 return (
-                  <div className="slot-row slot-head" key={r.namespace} data-ci={r.namespace}>
-                    <b>{r.namespace}</b> <Status tone="nodata">no run in 14 days</Status>
+                  <div
+                    className="slot-row slot-head"
+                    key={r.namespace}
+                    data-ci={r.namespace}
+                  >
+                    <b>{r.namespace}</b>{" "}
+                    <Status tone="nodata">no run in 14 days</Status>
                   </div>
                 );
               }
@@ -870,25 +920,119 @@ export function CiHistory() {
                   ? `red for ${streak === r.days.length ? "at least " : ""}${streak} ${streak === 1 ? "day" : "days"}`
                   : "green",
                 label: `${r.namespace} default branch, red or green by day`,
-                notes: r.truncated ? "Over 100 runs; early days may be missing some." : undefined,
+                notes: r.truncated
+                  ? "Over 100 runs; early days may be missing some."
+                  : undefined,
                 height: 20,
                 cellLabels: r.days.map((d) => d.day),
                 formatValue: (v: number) => (v >= 1 ? "red" : "green"),
               };
               return (
-                <div className="slot-row" key={r.namespace} data-ci={r.namespace}>
-                  <ChartFrame inline draw={(width, fit) => heatStrip({ ...opts, width, ...fit })} />
+                <div
+                  className="slot-row"
+                  key={r.namespace}
+                  data-ci={r.namespace}
+                >
+                  <ChartFrame
+                    inline
+                    draw={(width, fit) => heatStrip({ ...opts, width, ...fit })}
+                  />
                 </div>
               );
             })}
             {ci.not_read.map((n) => (
               <div className="slot-row slot-head" key={n.namespace}>
-                <b>{n.namespace}</b> <Status tone="nodata">{`not read: ${n.error}`}</Status>
+                <b>{n.namespace}</b>{" "}
+                <Status tone="nodata">{`not read: ${n.error}`}</Status>
               </div>
             ))}
           </>
         )}
       </div>
     </Panel>
+  );
+}
+
+// Downloads as an area, one series per name the package has had (the Packages page). Over WEEKLY_AFTER days
+// the days are summed by week (from Monday, UTC): a point a day for a year and a half
+// was 194 kB of drawing, over the charts' 100 kB budget (live chart check, 2026-11-03).
+const WEEKLY_AFTER = 120;
+
+/** The Monday (UTC) that starts a day's week, as YYYY-MM-DD. */
+function weekOf(day: string): string {
+  const t = Date.parse(`${day}T00:00:00Z`);
+  const back = (new Date(t).getUTCDay() + 6) % 7;
+  return new Date(t - back * 86_400_000).toISOString().slice(0, 10);
+}
+
+const plusDays = (day: string, n: number) =>
+  new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
+/** The days (in order) summed by week and name, keeping only the weeks inside the history: a week
+ *  npm has not finished counting, or one cut at the history's start, would read as a fall. */
+function byWeek(
+  days: PortalPackageHistory["days"],
+): PortalPackageHistory["days"] {
+  const start = days[0]!.day;
+  const end = days[days.length - 1]!.day;
+  const sums = new Map<string, PortalPackageHistory["days"][number]>();
+  for (const d of days) {
+    const day = weekOf(d.day);
+    if (day < start || plusDays(day, 6) > end) continue;
+    const key = `${day} ${d.name}`;
+    const row = sums.get(key);
+    if (row) row.downloads += d.downloads;
+    else sums.set(key, { day, downloads: d.downloads, name: d.name });
+  }
+  return [...sums.values()];
+}
+
+export function DownloadsChart({ data }: { data: PortalPackageHistory }) {
+  if (!data.days.length)
+    return (
+      <ChartFrame
+        noData={{
+          title: `Daily downloads of ${data.name}`,
+          reason: "npm has counted no downloads for this package yet.",
+        }}
+      />
+    );
+  const weekly =
+    Date.parse(data.days[data.days.length - 1]!.day) -
+      Date.parse(data.days[0]!.day) >
+    WEEKLY_AFTER * 86_400_000;
+  const rows = weekly ? byWeek(data.days) : data.days;
+  const total = rows.reduce((a, d) => a + d.downloads, 0);
+  const first = rows[0]!.day;
+  const last = weekly
+    ? plusDays(rows[rows.length - 1]!.day, 6)
+    : rows[rows.length - 1]!.day;
+  const max = Math.max(...rows.map((d) => d.downloads));
+  const per = weekly ? "week" : "day";
+  const opts = {
+    data: rows,
+    x: "day",
+    y: "downloads",
+    series: "name",
+    xLabel: null,
+    yLabel: `Downloads a ${per}`,
+    height: 200,
+    title: `${weekly ? "Weekly" : "Daily"} downloads of ${data.name}`,
+    alt: `${weekly ? "Weekly" : "Daily"} downloads of ${data.name}${data.formerly ? ` and its former name ${data.formerly}` : ""}, ${first} to ${last}: ${shortCount(total)} in all, at most ${shortCount(max)} in a ${per}.`,
+    ...(weekly
+      ? {
+          caption:
+            "Each point is a week's downloads, Monday to Sunday (UTC), at the Monday it starts; a week not yet over is left out.",
+        }
+      : {}),
+    source: {
+      name: "npm downloads API",
+      href: `https://www.npmjs.com/package/${encodeURIComponent(data.name)}`,
+    },
+  } as const;
+  return (
+    <ChartFrame draw={(width, fit) => areaChart({ ...opts, width, ...fit })} />
   );
 }
