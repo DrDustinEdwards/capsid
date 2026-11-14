@@ -74,5 +74,6 @@ export function searchPage(asOf) {
     path: "/search/",
     body,
     asOf,
+    noindex: true,
   });
 }

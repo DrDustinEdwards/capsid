@@ -125,8 +125,9 @@ const ICON_LINKS = iconLinks()
  * data, not script, so the policy does not apply to it. The head's tags are Prelum's, with the
  * production origin, so the 404 says noindex and claims no canonical. `title` is the page's own, before
  * ", Capsid"; `parent` is the page between its section and it in its breadcrumb trail. A wide page's
- * sections set their own width, for the front page's full-bleed parts; any other page is one column.
- * @param {{ title: string, description: string, path: string, body: string, asOf: string, wide?: boolean, data?: Record<string, unknown>[], fullTitle?: boolean, parent?: [string, string] }} page
+ * sections set their own width, for the front page's full-bleed parts; any other page is one column. `noindex` keeps a
+ * page out of search (the search page: its results are this site's own pages, already listed).
+ * @param {{ title: string, description: string, path: string, body: string, asOf: string, wide?: boolean, data?: Record<string, unknown>[], fullTitle?: boolean, parent?: [string, string], noindex?: boolean }} page
  */
 export function layout({
   title,
@@ -138,6 +139,7 @@ export function layout({
   data = [],
   fullTitle,
   parent,
+  noindex = false,
 }) {
   const here = navSection(path);
   const missing = path === "/404";
@@ -152,7 +154,7 @@ export function layout({
     title,
     fullTitle,
     description,
-    noindex: missing,
+    noindex: missing || noindex,
     keepTrailingSlash: true,
     breadcrumbs: path === "/" ? false : trail,
     pageType,
