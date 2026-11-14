@@ -561,7 +561,7 @@ dialog {
 }
 /* The padded block inside a flush Capsomer Panel, beside a table or feed that runs to its edges. */
 .body {
-  padding: 14px var(--space-5);
+  padding: var(--space-4-5) var(--space-5);
 }
 .src.hot,
 .cap-mono.hot,
@@ -620,7 +620,7 @@ main .sev-crit[data-row]:focus-visible {
     inset 0 0 0 var(--line-w) var(--accent-line);
 }
 .loading {
-  padding: 40px 0;
+  padding: var(--space-7-5) 0;
   text-align: center;
 }
 @media (max-width: 820px) {

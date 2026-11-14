@@ -61,7 +61,7 @@ main.wide > section {
 h1 {
   max-width: 18ch;
   margin-block: var(--space-6) var(--space-4);
-  font: var(--weight-title) clamp(2.5rem, 5.2vw, 4.75rem) / 0.95 var(--face);
+  font: var(--weight-title) clamp(var(--display-5), 5.2vw, 4.75rem) / 0.95 var(--face);
   letter-spacing: var(--tracking-tight);
 }
 h1 code {
@@ -71,7 +71,8 @@ h1 code {
 }
 h2:not(.cap-family-footer-heading) {
   margin-block: var(--space-8) var(--space-3);
-  font: var(--weight-heading) clamp(1.75rem, 3vw, 2.75rem) / var(--leading-none) var(--face);
+  font: var(--weight-heading) clamp(var(--title-2-5), 3vw, var(--display-4)) / var(--leading-none)
+    var(--face);
   letter-spacing: -0.03em;
 }
 h3 {
@@ -135,7 +136,7 @@ h3 {
 .readings {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-5) clamp(20px, 2.5vw, 40px);
+  gap: var(--space-5) clamp(var(--space-5-5), 2.5vw, var(--space-7-5));
   margin: var(--space-7) 0 0;
 }
 .reading {
@@ -150,14 +151,14 @@ h3 {
 }
 .reading dd {
   margin: 0;
-  font: 650 clamp(2rem, 3.4vw, 3rem) / var(--leading-none) var(--face);
+  font: 650 clamp(var(--title-1-5), 3.4vw, var(--display-3)) / var(--leading-none) var(--face);
   letter-spacing: -0.03em;
 }
 .readings-small {
   margin-block: var(--space-2) var(--space-4);
 }
 .readings-small .reading dd {
-  font-size: 1.75rem;
+  font-size: var(--title-2-5);
 }
 
 /* The opening: what Capsid is, beside one claim checked against GitHub. It starts at the top of
@@ -248,7 +249,7 @@ h3 {
   color: var(--muted);
 }
 .desk-value {
-  font: var(--weight-medium) clamp(3rem, 6vw, 5.5rem) / 0.95 var(--face);
+  font: var(--weight-medium) clamp(var(--display-3), 6vw, 5.5rem) / 0.95 var(--face);
   letter-spacing: var(--tracking-tighter);
   font-variant-numeric: tabular-nums;
 }
@@ -384,7 +385,7 @@ html:not(.js) .desk-play {
 }
 @media (max-width: 64rem) {
   .cap-hero-title {
-    font-size: clamp(3rem, 14vw, 5.5rem);
+    font-size: clamp(var(--display-3), 14vw, 5.5rem);
   }
 }
 @media (max-width: 40rem) {
@@ -401,7 +402,7 @@ html:not(.js) .desk-play {
     padding: var(--space-3);
   }
   .desk-value {
-    font-size: 2.5rem;
+    font-size: var(--display-5);
   }
 }
 
@@ -669,7 +670,8 @@ html:not(.js) .breaker {
 }
 .board-count {
   margin: 0;
-  font: var(--weight-bold) clamp(var(--fs-h3), 1.4vw, var(--fs-h2)) / 1.25 var(--face);
+  font: var(--weight-bold) clamp(var(--fs-h3), 1.4vw, var(--fs-h2)) / var(--leading-tight-5)
+    var(--face);
 }
 /* The circuits: a ruled row each, hung under the breaker that feeds them, so a switch lights
    its own column. */
@@ -737,7 +739,7 @@ html:not(.js) .breaker {
   align-self: center;
   font-size: var(--fs-lead);
   font-weight: var(--weight-semibold);
-  line-height: 1.25;
+  line-height: var(--leading-tight-5);
 }
 /* On a phone the three columns stack, each breaker over its own tools. */
 @media (max-width: 40rem) {
@@ -759,7 +761,7 @@ html:not(.js) .breaker {
 .tour-title {
   max-width: 12ch;
   margin: 0 0 var(--space-4);
-  font-size: clamp(2.5rem, 5vw, 4.5rem);
+  font-size: clamp(var(--display-5), 5vw, var(--display-1));
   line-height: 0.95;
   letter-spacing: var(--tracking-tighter);
 }
@@ -1336,7 +1338,7 @@ th[aria-sort="ascending"] .sort::after {
 }
 .step-head {
   margin-block: var(--space-2) var(--space-3);
-  font: var(--weight-semibold) clamp(1.75rem, 3vw, 2.5rem) / 1.1 var(--prose);
+  font: var(--weight-semibold) clamp(var(--title-2-5), 3vw, var(--display-5)) / 1.1 var(--prose);
   letter-spacing: var(--tracking-tight);
 }
 /* On a wide screen the step reads beside its drawing, so stepping never sends the eye down the
@@ -1571,7 +1573,7 @@ main .cap-pill {
 /* A flow's steps on the flight plan's time line: a ruled scale down the left, ticked between
    steps, each step's number at its mark. */
 .bands {
-  margin-inline-start: 1.25rem;
+  margin-inline-start: var(--space-5-5);
   border-inline-start: var(--line-w) solid var(--text);
   background: repeating-linear-gradient(var(--line-strong) 0 1px, transparent 1px 10px) 0 0 / 6px
     100% no-repeat;
@@ -1678,7 +1680,7 @@ main .cap-pill {
 }
 .flow-card > .cap-patch {
   position: absolute;
-  inset-block-start: calc(var(--space-4) + 5rem);
+  inset-block-start: calc(var(--space-4) + var(--space-9-5));
   inset-inline-end: 0;
 }
 .flow-card > .bands {
@@ -1725,5 +1727,5 @@ main .cap-pill {
 .cap-cue .flow-touches :is(a, li > span:first-child, .touch-in > span) {
   display: inline-block;
   min-block-size: 24px;
-  line-height: 24px;
+  line-height: var(--line-box-6);
 }

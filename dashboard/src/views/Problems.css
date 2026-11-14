@@ -84,7 +84,7 @@
 .att-row:has(.rowlink:focus-visible) {
   outline: var(--focus-width) solid var(--accent);
   outline-offset: calc(-1 * var(--focus-offset));
-  border-radius: 4px;
+  border-radius: var(--radius-s-5);
 }
 .att-row:has([aria-expanded="true"]) .chev {
   transform: rotate(45deg);
