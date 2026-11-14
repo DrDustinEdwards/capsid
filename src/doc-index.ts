@@ -46,7 +46,7 @@ export const INDEX_QUERY = `SELECT id, title, substr(body, 1, 63000) AS content,
     OR substr(path, 1, 8) = 'rulings/')) THEN 1 ELSE 0 END AS meta_canon
 FROM documents`;
 
-// Title and content only: the default "labelled" template also writes every meta_ column
+// Title and content only: the default labeled template also writes every meta_ column
 // into the text, where it would be embedded and matched as if it were the document's.
 const INDEX_TEMPLATE = "content_only";
 
