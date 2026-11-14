@@ -7,7 +7,7 @@ import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchDigest, fetchPlan } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
-import { ago } from "../lib/format";
+import { DAY, ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import { useSinceLastVisit } from "capsomer/react/state-hooks";
 import type { PortalDigest, PortalPlan } from "../types";
@@ -170,16 +170,10 @@ export function Tonight() {
 // When this browser last opened Needs you. A per-viewer convenience: with no record, or
 // storage blocked, the strip reports the last 24 hours, the digest's own default.
 const LAST_LOOKED_PREF = "wf-last-looked";
-const DAY = 86_400_000;
-
-/** The digest's default window: the 24 hours before `now`. */
-export function digestSince(now: number): string {
-  return new Date(now - DAY).toISOString();
-}
 
 export function SinceLastLooked() {
   const { now } = useApp();
-  // The server renders the last 24 hours (server/prefetch.ts reads the same digest, digestSince);
+  // The server renders the last 24 hours (server/prefetch.ts reads the same digest, lib/api's digestSince);
   // this browser's own last look is read after hydration, once, and the next visit reports from now.
   const since = useSinceLastVisit(LAST_LOOKED_PREF, now, DAY);
   const load = useAnswer<PortalDigest>([LIVE, "digest", since], () => fetchDigest(since));
