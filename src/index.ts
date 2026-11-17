@@ -190,10 +190,13 @@ function providerFor(env: Env): OAuthProvider<Env> {
     }) => {
       const why = registrationRefusal(allowed, clientMetadata);
       if (!why) return undefined;
+      // A refusal is the allowlist working: the client gets a 400, and the live gate's own
+      // unlisted-redirect probe draws one on every deploy. Warn, as site-runtime logs every
+      // 4xx, so it is in the logs but never a Sentry error report (CAPSID-1).
       logEvent(
         "DCR_REDIRECT_REFUSED",
         { message: `DCR_REDIRECT_REFUSED ${why}` },
-        { level: "error" },
+        { level: "warn" },
       );
       return { code: "invalid_redirect_uri", description: why };
     },
