@@ -1,6 +1,7 @@
 import { Banner } from "capsomer/react/banner";
 import { RowList } from "capsomer/react/row-list";
 import "capsomer/row-list.css";
+import "capsomer/group.css";
 import { AnchorBar } from "capsomer/react/anchor-bar";
 import "capsomer/anchor-bar.css";
 import { trendChart } from "./charts";

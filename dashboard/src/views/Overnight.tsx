@@ -1,4 +1,5 @@
 import { Banner } from "capsomer/react/banner";
+import { Group } from "capsomer/react/disclosure";
 import { RowList } from "capsomer/react/row-list";
 import "capsomer/row-list.css";
 import { JobRow } from "./shared";
@@ -81,54 +82,58 @@ export function Tonight() {
             </Suspense>
           )}
           {plan.lanes.map((lane) => (
-            <div className="qgroup" key={lane.repo} data-lane={lane.repo}>
-              <h3>
-                <span className="cap-mono">{lane.repo}</span>{" "}
-                <span className="cap-text cap-num" data-tone="dim">
-                  {lane.planned_minutes} min{lane.heavy ? " · heavy, shares the budget" : ""}
-                </span>
-              </h3>
-              <RowList label={lane.repo}>
-                {lane.jobs.map((j) => (
-                  <JobRow
-                    key={j.id}
-                    job={j}
-                    status={
-                      j.gated ? (
-                        <Status tone="warn" glyph="blocked">
-                          Gated
-                        </Status>
-                      ) : (
-                        <Status tone="muted" glyph="queued">
-                          Planned
-                        </Status>
-                      )
-                    }
-                    detail={`about ${j.estimate_minutes} min, ${SOURCE[j.estimate_source]}${j.gated ? " · its risky step goes in the pull request for the seat" : ""}`}
-                    fact={`priority ${j.priority}`}
-                  />
-                ))}
-              </RowList>
+            <div key={lane.repo} data-lane={lane.repo}>
+              <Group
+                label={`${lane.repo}, ${lane.planned_minutes} min${lane.heavy ? ", heavy, shares the budget" : ""}`}
+                count={lane.jobs.length}
+                defaultExpanded
+                headingLevel={3}
+                body="list"
+              >
+                <RowList label={lane.repo}>
+                  {lane.jobs.map((j) => (
+                    <JobRow
+                      key={j.id}
+                      job={j}
+                      status={
+                        j.gated ? (
+                          <Status tone="warn" glyph="blocked">
+                            Gated
+                          </Status>
+                        ) : (
+                          <Status tone="muted" glyph="queued">
+                            Planned
+                          </Status>
+                        )
+                      }
+                      detail={`about ${j.estimate_minutes} min, ${SOURCE[j.estimate_source]}${j.gated ? " · its risky step goes in the pull request for the seat" : ""}`}
+                      fact={`priority ${j.priority}`}
+                    />
+                  ))}
+                </RowList>
+              </Group>
             </div>
           ))}
           {plan.skipped.length > 0 && (
-            <div className="qgroup" data-group="skipped">
-              <h3>
-                Skipped{" "}
-                <span className="cap-text cap-num" data-tone="dim">
-                  {plan.skipped.length}
-                </span>
-              </h3>
-              <RowList label="Skipped">
-                {plan.skipped.map((j) => (
-                  <JobRow
-                    key={j.id}
-                    job={j}
-                    status={<Status tone="nodata">Skipped</Status>}
-                    detail={j.reason}
-                  />
-                ))}
-              </RowList>
+            <div data-group="skipped">
+              <Group
+                label="Skipped"
+                count={plan.skipped.length}
+                defaultExpanded
+                headingLevel={3}
+                body="list"
+              >
+                <RowList label="Skipped">
+                  {plan.skipped.map((j) => (
+                    <JobRow
+                      key={j.id}
+                      job={j}
+                      status={<Status tone="nodata">Skipped</Status>}
+                      detail={j.reason}
+                    />
+                  ))}
+                </RowList>
+              </Group>
             </div>
           )}
           {plan.truncated && (

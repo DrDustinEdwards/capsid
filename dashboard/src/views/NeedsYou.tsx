@@ -19,10 +19,15 @@ import {
 import type { InboxApp, InboxItem, OpsAwaitingSeat, OpsJob, PortalNamespace } from "../types";
 import { Status, type GlyphName, type Tone } from "capsomer/react/status";
 import { Empty } from "capsomer/react/empty";
-import { indeterminate, useSelection, type Selection } from "capsomer/react/state-hooks";
+import { BulkBar, useBulkSelection, type BulkSelection } from "capsomer/react/bulk-bar";
+import { Group } from "capsomer/react/disclosure";
+import { AwayLink } from "capsomer/react/link";
 import { Panel } from "capsomer/react/panel";
-import { RowReply } from "capsomer/react/row-list";
+import { Row, RowList, RowReply, type RowLinkProps } from "capsomer/react/row-list";
 import "capsomer/row-list.css";
+import "capsomer/bulk-bar.css";
+import "capsomer/group.css";
+import "capsomer/check.css";
 import { PageHead } from "./shared";
 import { Problems } from "./Problems";
 
@@ -133,72 +138,37 @@ function Waiting() {
   );
 }
 
-// One kind's rows under its heading. With batch, the heading carries a "select all" box and,
-// once a row is ticked, the button that decides the ticked rows together.
-function Group({
+// One kind's rows: a Capsomer group row in a heading, open, holding a row list. `after`
+// sits under the list (the PR group's bulk bar).
+function WaitGroup({
   id,
   title,
   count,
-  batch,
+  after,
   children,
 }: {
   id: string;
   title: string;
   count: number;
-  batch?: ReactNode;
+  after?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section className="wgroup" aria-labelledby={`${id}-h`} data-group={id}>
-      <div className="wgroup-head">
-        <h3 id={`${id}-h`}>
-          {title}{" "}
-          <span className="cap-text cap-num" data-tone="dim">
-            {count}
-          </span>
-        </h3>
-        {batch}
-      </div>
-      <ul className="wlist">{children}</ul>
-    </section>
+    <div data-group={id}>
+      <Group label={title} count={count} defaultExpanded headingLevel={3} body="list">
+        <RowList label={title}>{children}</RowList>
+        {after}
+      </Group>
+    </div>
   );
 }
 
-function SelectAll({ label, ticks }: { label: string; ticks: Selection }) {
-  return (
-    <label className="wselect">
-      <input
-        type="checkbox"
-        checked={ticks.all}
-        ref={indeterminate(ticks.some)}
-        onChange={(e) => ticks.setAll(e.target.checked)}
-      />
-      <span>{label}</span>
-    </label>
-  );
-}
-
-function Tick({ label, on, flip }: { label: string; on: boolean; flip: () => void }) {
-  return (
-    <label className="wtick">
-      <input type="checkbox" checked={on} onChange={flip} />
-      <span className="cap-sr-only">{label}</span>
-    </label>
-  );
-}
-
-// Where the row came from and how long it has waited, in one quiet line.
-function Meta({ children }: { children: ReactNode }) {
-  return <div className="wmeta">{children}</div>;
-}
-
-function GitHub({ href }: { href: string }) {
-  return (
-    <a className="wlink" href={href} target="_blank" rel="noreferrer noopener">
-      Open on GitHub
-    </a>
-  );
-}
+// A link out of the Portal, opened in a new tab: a row's title when it lives on GitHub.
+const newTab = ({ children, ...props }: RowLinkProps) => (
+  <a {...props} target="_blank" rel="noreferrer noopener">
+    {children}
+  </a>
+);
 
 // ---- pull requests
 
@@ -206,31 +176,30 @@ function PrGroup({ entries }: { entries: Entry[] }) {
   const { feed, confirm } = useApp();
   const rows = entries.map((e) => ({ ...e, seat: seatFor(feed, e.item.link) }));
   const approvable = rows.flatMap((r) => (r.seat && canApprove(r.seat) ? [r.seat] : []));
-  const keys = approvable.map(prAnchor);
-  const ticks = useSelection(keys);
+  const batch = approvable.length > 1;
+  const ticks = useBulkSelection(approvable.map((a) => ({ id: prAnchor(a) })));
   const chosen = approvable.filter((a) => ticks.has(prAnchor(a)));
   return (
-    <Group
+    <WaitGroup
       id="w-prs"
       title="Pull requests"
       count={entries.length}
-      batch={
-        approvable.length > 1 && (
-          <div className="wbatch">
-            <SelectAll label="Select all" ticks={ticks} />
-            {chosen.length > 0 && (
-              <button
-                type="button"
-                className="cap-btn"
-                data-variant="primary"
-                onClick={() =>
-                  confirm({ ...approveAllRequest(chosen), onDone: () => ticks.setAll(false) })
-                }
-              >
-                Approve {chosen.length} selected
-              </button>
-            )}
-          </div>
+      after={
+        batch && (
+          <BulkBar
+            label="Approve pull requests together"
+            items={chosen.map((a) => ({ id: prAnchor(a), label: prName(a) }))}
+            total={approvable.length}
+            onSelectAll={ticks.toggleAll}
+            onClear={ticks.clear}
+            actions={[
+              {
+                id: "approve",
+                label: "Approve selected",
+                handOff: () => confirm({ ...approveAllRequest(chosen), onDone: ticks.clear }),
+              },
+            ]}
+          />
         )
       }
     >
@@ -240,12 +209,14 @@ function PrGroup({ entries }: { entries: Entry[] }) {
           app={app}
           item={item}
           seat={seat}
-          ticks={approvable.length > 1 ? ticks : null}
+          ticks={batch ? ticks : null}
         />
       ))}
-    </Group>
+    </WaitGroup>
   );
 }
+
+const prName = (a: OpsAwaitingSeat) => `${a.repo} #${a.number}`;
 
 function PrRow({
   app,
@@ -256,61 +227,66 @@ function PrRow({
   app: InboxApp;
   item: InboxItem;
   seat: OpsAwaitingSeat | undefined;
-  ticks: Selection | null;
+  ticks: BulkSelection | null;
 }) {
   const { now, confirm } = useApp();
-  const name = seat ? `${seat.repo} #${seat.number}` : item.title;
+  const name = seat ? prName(seat) : item.title;
   const ok = seat && canApprove(seat) ? seat : null;
   return (
-    <li className="wrow" data-row="" data-kind="pr" id={seat ? `w-${prAnchor(seat)}` : undefined}>
-      {ticks && ok ? (
-        <Tick
-          label={`Select ${name}`}
-          on={ticks.has(prAnchor(ok))}
-          flip={() => ticks.toggle(prAnchor(ok))}
-        />
-      ) : ticks ? (
-        <span className="wtick" />
-      ) : null}
-      <div className="wmain">
-        <b>{item.title}</b>
-        <Meta>
-          {app.name} · waiting {age(parse(item.since), now)}
-          {seat?.why ? ` · ${seat.why}` : ""}
-        </Meta>
-        {item.link && <GitHub href={item.link} />}
-      </div>
-      <div className="wact">
-        {ok && (
-          <button
-            type="button"
-            className="cap-btn"
-            data-variant="primary"
-            aria-label={`Approve ${name}`}
-            onClick={() => confirm(approveRequest(ok))}
-          >
-            Approve
-          </button>
-        )}
-        {seat && (
-          <button
-            type="button"
-            className="cap-btn"
-            aria-label={`Close ${name}`}
-            onClick={() => confirm(closeRequest(seat))}
-          >
-            Close
-          </button>
-        )}
-        {seat && !ok && (
-          <span className="cap-text wnote" data-tone="dim">
-            {seat.class === "typed"
-              ? "Approve it by typing its number in chat."
-              : "Not approvable here."}
-          </span>
-        )}
-      </div>
-    </li>
+    <Row
+      title={item.title}
+      href={item.link ?? undefined}
+      renderLink={newTab}
+      media={
+        ticks ? (
+          ok ? (
+            <label className="cap-check">
+              <input
+                type="checkbox"
+                checked={ticks.has(prAnchor(ok))}
+                onChange={() => ticks.toggle(prAnchor(ok))}
+              />
+              <span className="cap-sr-only">Select {name}</span>
+            </label>
+          ) : (
+            <span />
+          )
+        ) : undefined
+      }
+      detail={`${app.name} · waiting ${age(parse(item.since), now)}${seat?.why ? ` · ${seat.why}` : ""}`}
+      actions={
+        <>
+          {ok && (
+            <button
+              type="button"
+              className="cap-btn"
+              data-variant="primary"
+              aria-label={`Approve ${name}`}
+              onClick={() => confirm(approveRequest(ok))}
+            >
+              Approve
+            </button>
+          )}
+          {seat && (
+            <button
+              type="button"
+              className="cap-btn"
+              aria-label={`Close ${name}`}
+              onClick={() => confirm(closeRequest(seat))}
+            >
+              Close
+            </button>
+          )}
+          {seat && !ok && (
+            <span className="cap-text" data-tone="dim" data-size="small">
+              {seat.class === "typed"
+                ? "Approve it by typing its number in chat."
+                : "Not approvable here."}
+            </span>
+          )}
+        </>
+      }
+    />
   );
 }
 
@@ -318,11 +294,11 @@ function PrRow({
 
 function JobGroup({ entries }: { entries: Entry[] }) {
   return (
-    <Group id="w-jobs" title="Questions and blocked jobs" count={entries.length}>
+    <WaitGroup id="w-jobs" title="Questions and blocked jobs" count={entries.length}>
       {entries.map(({ app, item }, i) => (
         <JobRow key={`${item.job ?? item.title}|${i}`} app={app} item={item} />
       ))}
-    </Group>
+    </WaitGroup>
   );
 }
 
@@ -344,38 +320,46 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
       onDone: () => setReplying(false),
     });
   };
+  const said = j?.waits_on ? (question ? `Asks: ${asks(j)}` : `Waits on: ${j.waits_on}`) : null;
+  const from = `${app.name} · waiting ${age(parse(item.since), now)}${j?.claimed_by ? ` · ${agentLabel(j.claimed_by)}` : ""}`;
   return (
-    <li
-      className="wrow"
-      data-row=""
-      data-kind={question ? "question" : "blocked-job"}
-      data-job={item.job}
-    >
-      <div className="wmain">
+    <Row
+      status={
         <Status tone="warn" glyph={question ? "question" : "blocked"}>
           {question ? "Question" : "Blocked"}
         </Status>
-        <b>{item.title}</b>
-        {j?.waits_on && (
-          <p className="wask">{question ? `Asks: ${asks(j)}` : `Waits on: ${j.waits_on}`}</p>
-        )}
-        <Meta>
-          {app.name} · waiting {age(parse(item.since), now)}
-          {j?.claimed_by ? ` · ${agentLabel(j.claimed_by)}` : ""}
-        </Meta>
-        <span className="wlinks">
-          {j && (
+      }
+      // The title opens the job's panel; the job id is there (D11).
+      title={item.title}
+      onOpen={j ? () => open(`job:${j.id}`) : undefined}
+      href={!j && item.link ? item.link : undefined}
+      renderLink={newTab}
+      detail={said ? `${said} · ${from}` : from}
+      actions={
+        <>
+          {j && item.link && (
+            <AwayLink href={item.link} newTab>
+              GitHub
+            </AwayLink>
+          )}
+          {blocked && !replying && (
             <button
               type="button"
-              className="cap-link-btn wlink"
-              onClick={() => open(`job:${j.id}`)}
+              className="cap-btn"
+              data-variant="primary"
+              aria-label={`${verb} ${item.title}`}
+              onClick={() => setReplying(true)}
             >
-              More about this job
+              {verb}
             </button>
           )}
-          {item.link && <GitHub href={item.link} />}
-        </span>
-        {replying && (
+          {!blocked && j && (
+            <span className="cap-text" data-tone="dim" data-size="small">{`Now ${j.status}.`}</span>
+          )}
+        </>
+      }
+      reply={
+        replying ? (
           <RowReply
             label={
               question
@@ -386,25 +370,9 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
             onSend={send}
             onCancel={() => setReplying(false)}
           />
-        )}
-      </div>
-      <div className="wact">
-        {blocked && !replying && (
-          <button
-            type="button"
-            className="cap-btn"
-            data-variant="primary"
-            aria-label={`${verb} ${item.title}`}
-            onClick={() => setReplying(true)}
-          >
-            {verb}
-          </button>
-        )}
-        {!blocked && j && (
-          <span className="cap-text wnote" data-tone="dim">{`Now ${j.status}.`}</span>
-        )}
-      </div>
-    </li>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -413,18 +381,14 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
 function StopGroup({ list, onReset }: { list: PortalNamespace[]; onReset: () => void }) {
   const { confirm } = useApp();
   return (
-    <Group id="w-stops" title="Paused after repeated failures" count={list.length}>
+    <WaitGroup id="w-stops" title="Paused after repeated failures" count={list.length}>
       {list.map((n) => (
-        <li className="wrow" data-row="" key={n.namespace} data-stop={n.namespace}>
-          <div className="wmain">
-            <Status tone="crit">Paused</Status>
-            <b>{n.namespace}</b>
-            <Meta>
-              {n.breaker.failed} jobs failed since {n.breaker.since} UTC. No job here starts until
-              you reset it.
-            </Meta>
-          </div>
-          <div className="wact">
+        <Row
+          key={n.namespace}
+          status={<Status tone="crit">Paused</Status>}
+          title={n.namespace}
+          detail={`${n.breaker.failed} jobs failed since ${n.breaker.since} UTC. No job here starts until you reset it.`}
+          actions={
             <button
               type="button"
               className="cap-btn"
@@ -441,10 +405,10 @@ function StopGroup({ list, onReset }: { list: PortalNamespace[]; onReset: () => 
             >
               Reset
             </button>
-          </div>
-        </li>
+          }
+        />
       ))}
-    </Group>
+    </WaitGroup>
   );
 }
 
@@ -453,33 +417,28 @@ function StopGroup({ list, onReset }: { list: PortalNamespace[]; onReset: () => 
 function OtherGroup({ entries }: { entries: Entry[] }) {
   const { now } = useApp();
   return (
-    <Group id="w-other" title="Also waiting" count={entries.length}>
+    <WaitGroup id="w-other" title="Also waiting" count={entries.length}>
       {entries.map(({ app, item }, i) => {
         const k = KIND[item.kind] ?? {
           label: item.kind,
           tone: "warn" as const,
         };
         return (
-          <li className="wrow" key={`${item.kind}|${item.title}|${i}`} data-kind={item.kind}>
-            <div className="wmain">
+          <Row
+            key={`${item.kind}|${item.title}|${i}`}
+            status={
               <Status tone={k.tone} glyph={k.glyph}>
                 {k.label}
               </Status>
-              {item.link ? (
-                <a className="wtitle" href={item.link} target="_blank" rel="noreferrer noopener">
-                  {item.title}
-                </a>
-              ) : (
-                <b>{item.title}</b>
-              )}
-              <Meta>
-                {app.name} · {ago(parse(item.since), now)}
-              </Meta>
-            </div>
-          </li>
+            }
+            title={item.title}
+            href={item.link ?? undefined}
+            renderLink={newTab}
+            meta={`${app.name} · ${ago(parse(item.since), now)}`}
+          />
         );
       })}
-    </Group>
+    </WaitGroup>
   );
 }
 
@@ -502,36 +461,31 @@ function WeeklyDigest() {
       count={open.length}
       src="watcher findings that post no job"
     >
-      {sites.map((site) => (
-        <section
-          className="wgroup"
-          key={site}
-          aria-label={`Weekly digest, ${site}`}
-          data-digest-site={site}
-        >
-          <div className="wgroup-head">
-            <h3>
-              {site}
-              <span className="cap-text cap-num" data-tone="dim">
-                {" "}
-                {open.filter((f) => f.namespace === site).length} open
-              </span>
-            </h3>
+      {sites.map((site) => {
+        const mine = open.filter((f) => f.namespace === site);
+        return (
+          <div key={site} data-digest-site={site}>
+            <Group
+              label={`${site}, open`}
+              count={mine.length}
+              defaultExpanded
+              headingLevel={3}
+              body="list"
+            >
+              <RowList label={`Weekly digest, ${site}`}>
+                {mine.map((f) => (
+                  <Row
+                    key={f.fingerprint}
+                    title={f.headline}
+                    detail={f.evidence.join(" · ") || undefined}
+                    meta={`since ${ago(parse(f.first_seen), now)}`}
+                  />
+                ))}
+              </RowList>
+            </Group>
           </div>
-          <ul className="wlist">
-            {open
-              .filter((f) => f.namespace === site)
-              .map((f) => (
-                <li className="wrow" key={f.fingerprint} title={f.evidence.join("\n")}>
-                  <span className="wmain">
-                    <b>{f.headline}</b>
-                    <span className="wmeta">since {ago(parse(f.first_seen), now)}</span>
-                  </span>
-                </li>
-              ))}
-          </ul>
-        </section>
-      ))}
+        );
+      })}
     </Panel>
   );
 }
