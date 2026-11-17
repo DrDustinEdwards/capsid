@@ -23,6 +23,7 @@ import { handlePortalDemo, isDemoRequest } from "./portal-demo";
 import { portalAsset } from "./portal-app";
 import { hostRefusal, MCP_HOST, MCP_URL } from "./mcp-host";
 import { logEvent, withRequestLog } from "@dustinedwards/site-runtime/log";
+import { withSiteSentry } from "@dustinedwards/site-runtime/sentry";
 import { maintenanceOn, maintenanceResponse } from "@dustinedwards/site-runtime/maintenance";
 import { countNotFound } from "@dustinedwards/site-runtime/not-found";
 import { securityTxtResponse } from "@dustinedwards/site-runtime/security-txt";
@@ -305,7 +306,8 @@ async function withEveryScope(response: Response): Promise<Response> {
 // counted per path, referring host and UTC day in page_404_daily (site-runtime
 // countNotFound, migrations/0053; area 8, N1), written in waitUntil so it never holds the
 // answer. The backup prunes the counts at 90 days (src/backup.ts).
-export default {
+// Errors go to Sentry (site-runtime ./sentry): a throw, and every error-level log line.
+export default withSiteSentry({
   fetch: withRequestLog(
     async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
       const response = await serve(request, env, ctx);
@@ -396,4 +398,4 @@ export default {
       );
     }
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env>);
