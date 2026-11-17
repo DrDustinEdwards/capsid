@@ -11,7 +11,7 @@
   // nothing. scripts/bindings.mjs carries the same date and
   // test/cloudflare-platform.test.ts fails if the two drift.
   "compatibility_date": "2026-09-06",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public", "enable_request_signal"],
   "keep_vars": true,
   // keep_names stays at its default (true), so stack traces and source maps keep function names.
   "minify": true,
