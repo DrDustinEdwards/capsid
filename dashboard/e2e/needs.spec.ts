@@ -41,11 +41,11 @@ test("PLANT: the home is Needs you, the list comes first by kind, and the charts
 }) => {
   await page.goto("./");
   await expect(page.getByRole("heading", { level: 1, name: "Needs you" })).toBeVisible();
-  await expect(waiting(page).locator(".wgroup h3")).toHaveText([
-    /^Pull requests 2/,
-    /^Questions and blocked jobs 3/,
-    /^Paused after repeated failures 1/,
-    /^Also waiting 2/,
+  await expect(waiting(page).locator(".cap-group-heading")).toHaveText([
+    /^Pull requests, ?2/,
+    /^Questions and blocked jobs, ?3/,
+    /^Paused after repeated failures, ?1/,
+    /^Also waiting, ?2/,
   ]);
   // The list is above Problems and Trends, and nothing above it waits on a chart.
   const order = await page.evaluate(() =>
@@ -66,10 +66,10 @@ test("PLANT: the home is Needs you, the list comes first by kind, and the charts
   await expect(
     page.locator("nav.cap-admin-menu").getByRole("link", { name: /^Needs you/ }),
   ).toHaveAccessibleName("Needs you");
-  // A pull request's GitHub page is a small secondary link, not the row's action.
-  await expect(
-    group(page, "w-prs").getByRole("link", { name: "Open on GitHub" }).first(),
-  ).toHaveAttribute("href", "https://github.com/example-org/sample-c/pull/32");
+  // A pull request's title links to its GitHub page, in a new tab; the row's buttons decide it.
+  const title = group(page, "w-prs").locator(".cap-row-title a").first();
+  await expect(title).toHaveAttribute("href", "https://github.com/example-org/sample-c/pull/32");
+  await expect(title).toHaveAttribute("target", "_blank");
   // Problems leave out what the list above decides.
   await expect(page.getByRole("heading", { level: 2, name: "Problems" })).toBeVisible();
   await expect(
@@ -81,7 +81,7 @@ test("PLANT: the list does not move once the page has loaded, and Trends draws i
   page,
 }) => {
   await page.goto("./");
-  const h = page.locator('[data-group="w-prs"] h3');
+  const h = page.locator('[data-group="w-prs"] .cap-group-heading');
   await expect(h).toBeVisible();
   const before = await h.evaluate((el) => el.getBoundingClientRect().top);
   await page.waitForTimeout(1500);
@@ -175,9 +175,13 @@ test("PLANT: ticking two pull requests approves both in one confirm, each previe
   const done = await performsLeaveFeed(page, "Approved one.");
   await visit(page, "needs");
   const prs = group(page, "w-prs");
-  await expect(prs.getByRole("button", { name: /selected$/ })).toHaveCount(0);
-  await prs.getByRole("checkbox", { name: "Select all" }).check();
-  await prs.getByRole("button", { name: "Approve 2 selected" }).click();
+  await expect(prs.getByRole("region", { name: "Approve pull requests together" })).toBeHidden();
+  await prs.getByRole("checkbox", { name: "Select example-org/sample-c #32" }).check();
+  const bar = prs.getByRole("region", { name: "Approve pull requests together" });
+  await expect(bar.getByRole("status")).toHaveText("1 selected");
+  await bar.getByRole("button", { name: "Select all 2 in view" }).click();
+  await expect(bar.getByRole("status")).toHaveText("2 selected");
+  await bar.getByRole("button", { name: "Approve selected" }).click();
   await expect(
     dialog(page).getByRole("heading", { name: "Approve 2 pull requests" }),
   ).toBeVisible();
@@ -199,7 +203,7 @@ test("PLANT: Answer opens a reply box on the row, and Send previews resume_job w
 }) => {
   const sent = previews(page);
   await visit(page, "needs");
-  const row = group(page, "w-jobs").locator('[data-job="job_91b3c0de5a24"]');
+  const row = group(page, "w-jobs").locator(".cap-row", { hasText: "Asks: Read the design" });
   await expect(row).toContainText("Asks: Read the design");
   await row.getByRole("button", { name: /^Answer / }).click();
   const box = row.getByLabel("Your answer, sent to its driver");
@@ -226,12 +230,14 @@ test("PLANT: Answer opens a reply box on the row, and Send previews resume_job w
   await dialog(page).getByRole("button", { name: "Cancel" }).click();
 });
 
-test("Resume on a blocked job row previews resume_job; More about this job opens its panel", async ({
+test("Resume on a blocked job row previews resume_job; its title opens its panel", async ({
   page,
 }) => {
   const sent = previews(page);
   await visit(page, "needs");
-  const row = group(page, "w-jobs").locator('[data-job="job_15e10168e61c"]');
+  const row = group(page, "w-jobs").locator(".cap-row", {
+    hasText: "Sync the score block onto the open scorer PR",
+  });
   await row.getByRole("button", { name: /^Resume / }).click();
   await row.getByLabel("What you did or approved, sent to its driver").fill("merged #15");
   await row.getByRole("button", { name: "Send" }).click();
@@ -243,7 +249,7 @@ test("Resume on a blocked job row previews resume_job; More about this job opens
     },
   ]);
   await dialog(page).getByRole("button", { name: "Cancel" }).click();
-  await row.getByRole("button", { name: "More about this job" }).click();
+  await row.getByRole("button", { name: "Sync the score block onto the open scorer PR" }).click();
   await expect(page.locator("dialog.drawer[open]")).toBeVisible();
 });
 
@@ -252,7 +258,7 @@ test("PLANT: a stopped queue is here with Reset, which previews reset_breaker fo
 }) => {
   const sent = previews(page);
   await visit(page, "needs");
-  const row = group(page, "w-stops").locator('[data-stop="sample-b"]');
+  const row = group(page, "w-stops").locator(".cap-row", { hasText: "sample-b" });
   await expect(row).toContainText("No job here starts until you reset it.");
   await row.getByRole("button", { name: "Reset sample-b" }).click();
   await expect(dialog(page).getByRole("button", { name: "Reset and resume" })).toBeVisible();
@@ -261,24 +267,28 @@ test("PLANT: a stopped queue is here with Reset, which previews reset_breaker fo
   await dialog(page).getByRole("button", { name: "Cancel" }).click();
 });
 
-test("on a phone each row's buttons are full width and at least 44 px tall, and the first is on the first screen", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 412, height: 915 });
-  await visit(page, "needs");
-  const approve = group(page, "w-prs").getByRole("button", {
-    name: "Approve example-org/sample-c #32",
-    exact: true,
+test.describe("on a touch phone", () => {
+  // A coarse pointer: Capsomer's --target is 44 px there.
+  test.use({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true });
+
+  test("on a phone each row's buttons are touch targets of 44 px, and the first is on the first screen", async ({
+    page,
+  }) => {
+    await visit(page, "needs");
+    const approve = group(page, "w-prs").getByRole("button", {
+      name: "Approve example-org/sample-c #32",
+      exact: true,
+    });
+    const close = group(page, "w-prs").getByRole("button", {
+      name: "Close example-org/sample-c #32",
+      exact: true,
+    });
+    const a = (await approve.boundingBox())!;
+    const c = (await close.boundingBox())!;
+    expect(a.height).toBeGreaterThanOrEqual(44);
+    expect(c.height).toBeGreaterThanOrEqual(44);
+    expect(a.y + a.height).toBeLessThan(915);
   });
-  const close = group(page, "w-prs").getByRole("button", {
-    name: "Close example-org/sample-c #32",
-    exact: true,
-  });
-  const a = (await approve.boundingBox())!;
-  const c = (await close.boundingBox())!;
-  expect(a.height).toBeGreaterThanOrEqual(44);
-  expect(a.width + c.width).toBeGreaterThan(300);
-  expect(a.y + a.height).toBeLessThan(915);
 });
 
 test("with nothing waiting it says so, and every app is named as quiet", async ({ page }) => {
@@ -288,7 +298,7 @@ test("with nothing waiting it says so, and every app is named as quiet", async (
     .addCookies([{ name: "wf-mock", value: "quiet", url: "http://localhost:4174/" }]);
   await visit(page, "needs");
   await expect(waiting(page).getByText("Nothing needs you.")).toBeVisible();
-  await expect(waiting(page).locator(".wgroup")).toHaveCount(0);
+  await expect(waiting(page).locator(".cap-group")).toHaveCount(0);
   await expect(waiting(page).getByText(/^Nothing waiting: /)).toContainText("Sample A");
 });
 
@@ -309,8 +319,9 @@ test("a preview refused for one ticked row still lists the others, and names the
   });
   await visit(page, "needs");
   const prs = group(page, "w-prs");
-  await prs.getByRole("checkbox", { name: "Select all" }).check();
-  await prs.getByRole("button", { name: "Approve 2 selected" }).click();
+  await prs.getByRole("checkbox", { name: "Select example-org/sample-c #32" }).check();
+  await prs.getByRole("checkbox", { name: "Select example-org/sample-c #33" }).check();
+  await prs.getByRole("button", { name: "Approve selected" }).click();
   await expect(dialog(page).locator('[data-batch-item="example-org/sample-c #33"]')).toContainText(
     "#33 moved",
   );

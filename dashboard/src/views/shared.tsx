@@ -2,10 +2,11 @@ import { trendChart } from "./charts";
 import { Empty } from "capsomer/react/empty";
 import { Meter } from "capsomer/react/meter";
 import { Panel } from "capsomer/react/panel";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import { rowLink, useLocation, useSearch } from "../lib/router";
 // Row-list's stylesheet comes with the view that draws QueueRows (Queue), not with this
 // module, which every page imports.
+import { Group } from "capsomer/react/disclosure";
 import { Row, RowList } from "capsomer/react/row-list";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
@@ -423,43 +424,23 @@ export function JobRow({
 
 export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
   const { now, feed } = useApp();
-  const [open, setOpen] = useState<Record<string, boolean>>({});
   return (
     <>
       {GROUPS.map((g) => {
         const list = g.pick(jobs, now);
         if (g.hideEmpty && !list.length) return null;
-        // A collapsed group is a disclosure (APG): a button that says whether it is open.
-        const shown = !g.collapsed || open[g.id] === true;
-        const bodyId = `qg-${g.id}`;
+        // Each group is a Capsomer group row in a heading: live ones open, the last day's
+        // finished and failed ones folded away.
         return (
-          <div className="qgroup" key={g.id} data-group={g.id}>
-            <h3>
-              {g.collapsed ? (
-                <button
-                  type="button"
-                  className="disclose"
-                  aria-expanded={shown}
-                  aria-controls={bodyId}
-                  onClick={() => setOpen((o) => ({ ...o, [g.id]: !shown }))}
-                >
-                  <span className="chev" aria-hidden="true" />
-                  {g.label}{" "}
-                  <span className="cap-text cap-num" data-tone="dim">
-                    {list.length}
-                  </span>
-                </button>
-              ) : (
-                <>
-                  {g.label}{" "}
-                  <span className="cap-text cap-num" data-tone="dim">
-                    {list.length}
-                  </span>
-                </>
-              )}
-            </h3>
-            <div id={bodyId} hidden={!shown}>
-              {!shown ? null : list.length ? (
+          <div key={g.id} data-group={g.id}>
+            <Group
+              label={g.label}
+              count={list.length}
+              defaultExpanded={!g.collapsed}
+              headingLevel={3}
+              body="list"
+            >
+              {list.length ? (
                 <RowList label={g.label}>
                   {list.map((j) => {
                     const pr = feed.live.prs.find((p) => p.job_id === j.id);
@@ -498,7 +479,7 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                   None
                 </div>
               )}
-            </div>
+            </Group>
           </div>
         );
       })}
