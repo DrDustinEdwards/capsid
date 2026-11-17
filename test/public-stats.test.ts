@@ -44,6 +44,8 @@ const ALLOWED = [
   "jobs.failed_30d",
   "jobs.completed_by_week",
   "jobs.failed_by_week",
+  "jobs.cleared_30d",
+  "jobs.cleared_by_week",
   "jobs.open",
   "jobs.blocked",
   "jobs.median_duration_minutes_30d",
@@ -103,18 +105,21 @@ test("the document carries exactly the listed keys, and no string but the date a
 
 test("windows are whole UTC days ending at midnight: today's activity is not counted yet", () => {
   const finished = [
-    { status: "done", updated_at: daysAgo(0, 0.01) }, // today, after midnight: excluded
-    { status: "done", updated_at: daysAgo(1) }, // yesterday
-    { status: "done", updated_at: daysAgo(8) }, // 8 days ago: outside the 7-day window
-    { status: "done", updated_at: daysAgo(29) },
-    { status: "failed", updated_at: daysAgo(3) },
-    { status: "done", updated_at: daysAgo(50) }, // week 8
+    { status: "done", updated_at: daysAgo(0, 0.01), result_summary: null }, // today, after midnight: excluded
+    { status: "done", updated_at: daysAgo(1), result_summary: null }, // yesterday
+    { status: "done", updated_at: daysAgo(8), result_summary: null }, // 8 days ago: outside the 7-day window
+    { status: "done", updated_at: daysAgo(29), result_summary: null },
+    { status: "failed", updated_at: daysAgo(3), result_summary: null },
+    { status: "failed", updated_at: daysAgo(4), result_summary: "cleared" }, // a watcher finding closing itself
+    { status: "failed", updated_at: daysAgo(5), result_summary: "cleared: CI is green again" },
+    { status: "done", updated_at: daysAgo(50), result_summary: null }, // week 8
   ];
   const doc = summarize(rows({ finished }), NOW);
   assert.equal(doc.as_of, "2026-10-11");
   assert.equal(doc.jobs.completed_7d, 1);
   assert.equal(doc.jobs.completed_30d, 3);
-  assert.equal(doc.jobs.failed_30d, 1);
+  assert.equal(doc.jobs.failed_30d, 1, "a watcher finding that cleared is not a failure");
+  assert.equal(doc.jobs.cleared_30d, 2);
   assert.deepEqual(doc.jobs.completed_by_week, [1, 0, 0, 1, 0, 0, 1, 1]);
   assert.equal(
     doc.jobs.completed_by_week.reduce((a, b) => a + b, 0),
@@ -178,9 +183,9 @@ test("the weekly series count each of the eight whole weeks, and a week's agreem
     { actor_kind: "human", waited_ms: 1, at: daysAgo(40) },
   ];
   const finished = [
-    { status: "failed", updated_at: daysAgo(3) },
-    { status: "failed", updated_at: daysAgo(50) },
-    { status: "done", updated_at: daysAgo(3) },
+    { status: "failed", updated_at: daysAgo(3), result_summary: null },
+    { status: "failed", updated_at: daysAgo(50), result_summary: null },
+    { status: "done", updated_at: daysAgo(3), result_summary: null },
   ];
   const doc = summarize(rows({ evaluations, waits, finished }), NOW);
   assert.deepEqual(doc.verification.agreement_by_week, [

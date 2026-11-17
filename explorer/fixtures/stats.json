@@ -7,6 +7,8 @@
     "failed_30d": 3,
     "completed_by_week": [5, 9, 11, 8, 14, 10, 12, 12],
     "failed_by_week": [0, 1, 0, 1, 0, 0, 1, 0],
+    "cleared_30d": 14,
+    "cleared_by_week": [2, 3, 4, 1, 5, 2, 3, 4],
     "open": 6,
     "blocked": 2,
     "median_duration_minutes_30d": 95
