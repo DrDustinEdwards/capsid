@@ -3,7 +3,9 @@ import { test } from "node:test";
 import {
   blockSettled,
   blockedJobItem,
+  heldJobItem,
   migrationsNamed,
+  STALE_CLAIM_MS,
   prHoldTitle,
   restrictInbox,
   severityOf,
@@ -324,4 +326,38 @@ test("one report per minute per key, and an unreadable counter refuses", async (
   } as unknown as KVNamespace;
   const down = await spendReportRate(broken, "agent:sample-app");
   assert.equal(down.ok ? 0 : down.status, 503, "the counter failed open");
+});
+
+test("a claim quiet for a day is a stale-claim item, timed from its newest audit row, claim or change, and a due parked job is shown only after two ticks", () => {
+  const now = new Date("2026-11-17T12:00:00.000Z");
+  const claimed = {
+    id: "job_a",
+    title: "Build it",
+    status: "claimed",
+    claimed_by: "agent:driver",
+    claimed_at: "2026-11-15T09:00:00.000Z",
+    updated_at: "2026-11-15T09:00:00.000Z",
+    parked_until: null,
+    // D1's own format, as audit_log writes it.
+    last_audit: "2026-11-16 11:00:00",
+  };
+  const item = heldJobItem(claimed, now);
+  assert.equal(item?.kind, "stale-claim");
+  assert.equal(item?.job, "job_a");
+  assert.equal(item?.since, "2026-11-16T11:00:00.000Z");
+  assert.match(item!.title, /agent:driver with no activity for 25 hours: Build it/);
+  assert.equal(severityOf([item!]), "needs-you");
+  // One audit row inside the window and the claim is not stale.
+  const recent = new Date(now.getTime() - STALE_CLAIM_MS + 60_000).toISOString();
+  assert.equal(heldJobItem({ ...claimed, last_audit: recent }, now), null);
+  // A queued job is never a stale claim.
+  assert.equal(heldJobItem({ ...claimed, status: "queued" }, now), null);
+
+  const parked = { ...claimed, status: "parked", claimed_by: null, last_audit: null };
+  assert.equal(heldJobItem({ ...parked, parked_until: "2026-11-17T11:55:00.000Z" }, now), null);
+  assert.equal(
+    heldJobItem({ ...parked, parked_until: "2026-11-17T11:45:00.000Z" }, now)?.kind,
+    "parked-due",
+  );
+  assert.equal(heldJobItem(parked, now), null, "a parked job with no due date waits for unpark");
 });

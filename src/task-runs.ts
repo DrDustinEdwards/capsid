@@ -21,6 +21,7 @@ export type TaskId =
   | "watcher"
   | "outcome-sweep"
   | "merge-resume"
+  | "park-due"
   | "maintenance"
   | "site-repair"
   | "site-backup"
@@ -73,6 +74,9 @@ export const TASKS: ReadonlyArray<{
   { id: "auto-merge", label: "Auto-merge step", period_ms: null },
   { id: "outcome-sweep", label: "Merge-state sweep", period_ms: null },
   { id: "merge-resume", label: "Stale-job merge resume", period_ms: null },
+  // Parked jobs whose due date passed, back to the queue (src/jobs-park.ts), on the tick;
+  // recorded only when one was due.
+  { id: "park-due", label: "Parked jobs coming back", period_ms: null },
   { id: "maintenance", label: "Daily maintenance pass", period_ms: DAY_MS },
   // One row per call to a site's operator API (src/site-repair.ts), from the watcher or a
   // person, so its runs come and go with the drift.

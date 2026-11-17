@@ -91,7 +91,7 @@ resume: returns a blocked job to claimed for its blocker, or to the caller with 
 supersede: end a job replaced before work began; needs reason. Any writer on a queued job; the holder or the seat on a claimed job with no work recorded.
 release: the seat returns a job another credential holds to the queue; needs reason.
 edit: the seat changes title, body, priority or gate_required of a queued or blocked job; the old version is kept.
-park / unpark: the seat sets a queued job aside with a one-line reason, or returns it to queued. A parked job is never claimed or planned and holds no title slot.
+park / unpark: the seat sets a queued job aside with a one-line reason, or returns it to queued. A parked job is never claimed or planned and holds no title slot. park with until returns the job to the queue on its own once that time passes (the five-minute tick).
 block and complete act only on a job this caller holds, except as stated above.`,
       inputSchema: {
         action: z
@@ -177,6 +177,11 @@ block and complete act only on a job this caller holds, except as stated above.`
           .optional()
           .describe(
             "For fail and block: why. For resume: what was approved, in one line; recorded in the audit row and returned as resume_note. For supersede: why the job was replaced or withdrawn. For park: one line saying when the job comes back. For release: why the holder is not coming back.",
+          ),
+        until: bounded(40)
+          .optional()
+          .describe(
+            "For park: when the job comes back on its own, a date (2026-12-01, the start of that UTC day) or a time with its zone (2026-12-01T15:00:00Z), after now and within a year. The five-minute tick returns it to the queue then; without it the job waits for unpark.",
           ),
         note: bounded(MAX_RESUME_NOTE)
           .optional()
@@ -472,7 +477,7 @@ block and complete act only on a job this caller holds, except as stated above.`
           }
           case "park": {
             if (!args.id) return fail("park needs the job id.");
-            return reply(await parkJob(env, agent, now, args.id, args.reason));
+            return reply(await parkJob(env, agent, now, args.id, args.reason, args.until));
           }
           case "unpark": {
             if (!args.id) return fail("unpark needs the job id.");

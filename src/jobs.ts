@@ -38,7 +38,7 @@ export {
   supersedeJob,
 } from "./jobs-seat";
 export { editJob, jobVersions } from "./jobs-edit";
-export { parkJob, unparkJob } from "./jobs-park";
+export { parkJob, returnDueParked, unparkJob } from "./jobs-park";
 export { beginJob } from "./jobs-begin";
 export type { JobResult } from "./jobs-transition";
 

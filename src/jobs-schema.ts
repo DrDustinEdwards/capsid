@@ -102,6 +102,9 @@ export interface JobRow {
   // somebody begins the job.
   started_at?: string | null;
   started_by?: string | null;
+  // When a parked job comes back on its own (migrations/0064, src/jobs-park.ts): an ISO
+  // time, or NULL for a job parked until somebody unparks it and for every other status.
+  parked_until?: string | null;
   created_at: string;
   updated_at: string;
 }
