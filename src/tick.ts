@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { autoMergeTick } from "./auto-merge-tick";
 import { mergeResumeTick } from "./merge-resume";
+import { returnDueParked } from "./jobs";
 import { sweepIfDue } from "./outcome-prs";
 import { offaccountDispatchTick } from "./offaccount-dispatch";
 import { runTask, type TaskResult } from "./task-runs";
@@ -117,6 +118,21 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       return { outcome: "ok", reason: report.note };
     },
     { tag: "MERGE_RESUME_THREW:", rethrow: false },
+  );
+
+  // Parked jobs whose due date passed go back to the queue (src/jobs-park.ts). Recorded
+  // only when one was due; a due job kept parked (its title is taken) is a refusal on the
+  // ledger, and the inbox shows it until the seat acts.
+  await runTask(
+    env,
+    "park-due",
+    () => returnDueParked(env, now),
+    (report): TaskResult | null => {
+      if (report.returned.length === 0 && report.kept.length === 0) return null;
+      logEvent("PARK_DUE", { message: `PARK_DUE ${report.note}` });
+      return { outcome: report.kept.length ? "refused" : "ok", reason: report.note };
+    },
+    { tag: "PARK_DUE_THREW:", rethrow: false },
   );
 
   // The nightly Amazon copy (capsid-backups' offaccount.yml), started from here when GitHub's

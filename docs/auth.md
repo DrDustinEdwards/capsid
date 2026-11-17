@@ -161,7 +161,7 @@ MCP and sign-in:
 
 Agents (`/ops/`):
 
-- `GET /ops/inbox` what needs Dustin, per app: blocked jobs and questions, pull requests auto-merge declined, failing CI, a site that is down. Read by an app's server with a bearer key; a key scoped to one namespace sees that app only, a key on every namespace sees every app, and the response carries no CORS headers (docs/portal.md)
+- `GET /ops/inbox` what needs Dustin, per app: blocked jobs and questions, pull requests auto-merge declined, failing CI, a site that is down, a claim with no activity for 24 hours, a parked job past its due date. Read by an app's server with a bearer key; a key scoped to one namespace sees that app only, a key on every namespace sees every app, and the response carries no CORS headers (docs/portal.md)
 - `POST /ops/inbox/report` what an app reports about itself to the inbox (Carrel's drafts waiting), with its own key and the write grant on its namespace; replaced whole, expires after 6 hours, one per minute per key (docs/portal.md)
 
 Backups and the paired comparison (signed, no bearer):

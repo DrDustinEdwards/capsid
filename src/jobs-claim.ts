@@ -277,6 +277,7 @@ const JOB_LIST_COLUMNS = [
   "effort_recommended",
   "started_at",
   "started_by",
+  "parked_until",
 ] as const;
 
 export type JobListRow = Pick<JobRow, (typeof JOB_LIST_COLUMNS)[number]>;

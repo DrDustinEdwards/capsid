@@ -220,6 +220,8 @@ export interface CompletenessView {
 // question, so the Portal opens the job's panel when there is no link.
 export type { InboxSeverity } from "capsomer/behavior/attention-list";
 // "proposal": a merge unit promotion, demotion or suspension (src/merge-units.ts).
+// "stale-claim": a claimed job with no audit activity for STALE_CLAIM_MS; "parked-due": a
+// parked job past its due date that the tick could not return (both src/inbox.ts).
 export type InboxKind =
   | "blocked-job"
   | "question"
@@ -227,7 +229,9 @@ export type InboxKind =
   | "ci"
   | "site-down"
   | "report"
-  | "proposal";
+  | "proposal"
+  | "stale-claim"
+  | "parked-due";
 export type InboxItem = CapsomerInboxItem<InboxKind>;
 export type InboxApp = CapsomerInboxApp<InboxKind>;
 export type Inbox = CapsomerInbox<InboxKind>;

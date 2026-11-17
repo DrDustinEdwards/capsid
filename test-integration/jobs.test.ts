@@ -11,11 +11,13 @@ import {
   listJobs,
   parkJob,
   postJob,
+  returnDueParked,
   releaseJob,
   resumeJob,
   supersedeJob,
   unparkJob,
 } from "../src/jobs";
+import { gatherInbox } from "../src/inbox";
 import { capsidStatus } from "../src/status";
 import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
@@ -1979,5 +1981,42 @@ describe("park", () => {
     expect(out.ok).toBe(false);
     expect(out.refusal).toContain(repost.job!.id);
     expect((await jobRow(parkedId))?.status).toBe("parked");
+  });
+
+  it("a due date returns the job on the tick, and a due job whose title was taken stays parked once, shown in the inbox", async () => {
+    const DUE = "2026-09-11T00:00:00.000Z";
+    const dueId = (await post({ title: "comes back tomorrow" })).job!.id;
+    expect((await parkJob(jobsEnv(), SEAT_AGENT, LATER, dueId, WHY, "2026-09-10")).refusal).toMatch(
+      /already passed/,
+    );
+    expect((await parkJob(jobsEnv(), SEAT_AGENT, LATER, dueId, WHY, "2026-09-11")).ok).toBe(true);
+    expect((await jobRow(dueId))?.parked_until).toBe(DUE);
+    // Not due yet: the tick leaves it.
+    expect((await returnDueParked(jobsEnv(), at("2026-09-10T23:59:00.000Z"))).returned).toEqual([]);
+
+    const takenId = (await post({ title: "taken while parked" })).job!.id;
+    expect((await parkJob(jobsEnv(), SEAT_AGENT, LATER, takenId, WHY, DUE)).ok).toBe(true);
+    const repost = (await post({ title: "taken while parked" })).job!.id;
+
+    const tick = at("2026-09-11T00:05:00.000Z");
+    const report = await returnDueParked(jobsEnv(), tick);
+    expect(report.returned).toEqual([dueId]);
+    expect(report.kept.map((k) => k.id)).toEqual([takenId]);
+    expect(report.kept[0]?.why).toContain(repost);
+    const back = await jobRow(dueId);
+    expect(back?.status).toBe("queued");
+    expect(back?.parked_until).toBeNull();
+    expect(back?.result_summary).toBeNull();
+    expect(await auditActions(dueId)).toContain("job-unparked");
+    expect((await jobRow(takenId))?.status).toBe("parked");
+    expect(await auditActions(takenId)).toContain("job-park-due-kept");
+
+    // The kept job is not tried again on the next tick, and the inbox shows it as due.
+    const next = await returnDueParked(jobsEnv(), at("2026-09-11T00:20:00.000Z"));
+    expect(next.kept).toEqual([]);
+    const inbox = await gatherInbox(jobsEnv(), at("2026-09-11T00:20:00.000Z"), ["capsid"]);
+    const items = inbox.apps.flatMap((a) => a.items);
+    expect(items.find((i) => i.job === takenId)?.kind).toBe("parked-due");
+    expect(items.find((i) => i.job === dueId)).toBeUndefined();
   });
 });

@@ -10,6 +10,9 @@ import { checkWords } from "./check-words";
 import { prsSettled, readStaleCache, type StalePrCache } from "./stale-jobs";
 import { readStepCache, stepsSeen, type StaleStepCache } from "./manual-steps";
 import { severityOf as worstOf } from "capsomer/behavior/attention-list";
+import { plural } from "@drdustinedwards/site-helpers/text";
+import { JOB_DOC_PREFIX } from "./jobs-schema";
+import { HOUR_MS, MINUTE_MS, timeMs } from "./time";
 
 // "WHAT NEEDS DUSTIN, PER APP" (job_84e901d8eb71, Dustin 2026-10-06). The shared admin
 // shell shows a badge per app and a combined inbox count; Capsid answers it once, so no
@@ -43,7 +46,65 @@ const WAITING_ON_PERSON: ReadonlySet<InboxKind> = new Set([
   "pr",
   "report",
   "proposal",
+  "stale-claim",
+  "parked-due",
 ]);
+
+// A claim never expires and nothing releases one on its own (migrations/0044 and 0061: no
+// leases). A claimed job whose audit trail has been quiet this long is shown to the seat,
+// who decides whether its holder is gone (release) or still working (Dustin, 2026-11-17:
+// "a notice, never an auto-release"). Longer than an overnight run, which can work a job
+// for 8 hours without a transition.
+export const STALE_CLAIM_MS = 24 * HOUR_MS;
+// The tick returns a due parked job within five minutes (src/jobs-park.ts). One still
+// parked two ticks after its due date was kept parked, or the tick is not running.
+const PARKED_DUE_GRACE_MS = 10 * MINUTE_MS;
+const MAX_HELD = 200;
+
+/** A claimed job quiet for STALE_CLAIM_MS, or a parked job past its due date, as an
+ *  inbox item; null when neither holds. Its newest activity is the latest of its newest
+ *  audit row, its claim and its last change. */
+export function heldJobItem(
+  job: {
+    id: string;
+    title: string;
+    status: string;
+    claimed_by: string | null;
+    claimed_at: string | null;
+    updated_at: string;
+    parked_until: string | null;
+    last_audit: string | null;
+  },
+  now: Date,
+): InboxItem | null {
+  const nowMs = now.getTime();
+  if (job.status === "parked" && job.parked_until) {
+    const due = timeMs(job.parked_until);
+    if (!Number.isFinite(due) || nowMs - due < PARKED_DUE_GRACE_MS) return null;
+    return {
+      title: `Due back on ${job.parked_until} but still parked: ${job.title}`,
+      kind: "parked-due",
+      link: null,
+      since: job.parked_until,
+      job: job.id,
+    };
+  }
+  if (job.status !== "claimed") return null;
+  const times = [job.last_audit, job.claimed_at, job.updated_at]
+    .map((t) => timeMs(t))
+    .filter((t) => Number.isFinite(t));
+  if (times.length === 0) return null;
+  const last = Math.max(...times);
+  if (nowMs - last < STALE_CLAIM_MS) return null;
+  const hours = Math.floor((nowMs - last) / HOUR_MS);
+  return {
+    title: `Claimed by ${job.claimed_by ?? "(nobody)"} with no activity for ${plural(hours, "hour")}: ${job.title}`,
+    kind: "stale-claim",
+    link: null,
+    since: new Date(last).toISOString(),
+    job: job.id,
+  };
+}
 
 /** The worst severity of a set of items (Capsomer's severityOf, with Capsid's kinds). */
 export function severityOf(items: readonly Pick<InboxItem, "kind">[]): InboxSeverity {
@@ -170,6 +231,22 @@ export async function gatherInbox(
   const applied = await appliedMigrations(env.DB);
   for (const job of blocked.results ?? []) {
     if (!blockSettled(job, stale, applied, steps)) add(job.namespace, blockedJobItem(job));
+  }
+
+  // Claimed jobs gone quiet and parked jobs past their due date (heldJobItem). Both are
+  // few, so one read with each job's newest audit row (audit_log_doc serves it).
+  const held = await env.DB.prepare(
+    `SELECT j.id, j.namespace, j.title, j.status, j.claimed_by, j.claimed_at, j.updated_at, j.parked_until,
+            (SELECT MAX(a.at) FROM audit_log a WHERE a.namespace = j.namespace AND a.path = ?1 || j.id || '.md') AS last_audit
+       FROM jobs j
+      WHERE j.status = 'claimed' OR (j.status = 'parked' AND j.parked_until <= ?2)
+      ORDER BY j.updated_at LIMIT ?3`,
+  )
+    .bind(JOB_DOC_PREFIX, now.toISOString(), MAX_HELD)
+    .all<Parameters<typeof heldJobItem>[0] & { namespace: string }>();
+  for (const job of held.results ?? []) {
+    const item = heldJobItem(job, now);
+    if (item) add(job.namespace, item);
   }
 
   // The pull requests auto-merge declined, rewritten whole by its tick. An unreadable

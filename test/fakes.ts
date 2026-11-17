@@ -486,6 +486,7 @@ const jobDefaults = (): Row => ({
   min_record: null,
   started_at: null,
   started_by: null,
+  parked_until: null,
   created_at: sqliteNow(),
   updated_at: sqliteNow(),
 });

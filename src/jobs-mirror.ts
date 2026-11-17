@@ -164,6 +164,9 @@ function renderJobDoc(job: JobRow, notes: ResumeNote[], dropped = 0): string {
   // The started label (src/jobs-begin.ts), once somebody began the job.
   if (job.started_by)
     lines.push(`- started by: ${job.started_by} at ${job.started_at ?? "(no time recorded)"}`);
+  // A parked job's due date (src/jobs-park.ts): the tick returns it to the queue then.
+  if (job.status === "parked" && job.parked_until)
+    lines.push(`- parked until: ${job.parked_until}, when it returns to the queue`);
   // Only once it has happened, so a job that never hit a gate carries no line of zeroes.
   if (job.blocked_count > 0)
     lines.push(`- gates hit: ${job.blocked_count}, resumed: ${job.resumed_count}`);

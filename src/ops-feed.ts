@@ -75,7 +75,8 @@ import { MINUTE_MS, DAY_MS } from "./time";
 //        one batch (src/task-runs.ts, TASKS)
 //     1  watcher_findings: the open findings that post no job (src/watcher-digest.ts)
 //     1  ops_uptime_daily: each site's last 90 days, by month (siteUptime below)
-//     3  gatherInbox (src/inbox.ts): the blocked jobs, the applied migrations (a block
+//     4  gatherInbox (src/inbox.ts): the blocked jobs, the claimed and due parked jobs
+//        with their newest audit rows, the applied migrations (a block
 //        on a migration already applied is settled) and the site configuration again,
 //        so Needs you counts exactly what GET /ops/inbox answers with
 //   KV, 10 gets: gatherInbox's own
@@ -92,8 +93,8 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-// D1 statements: one per task, and 14 more, one of them the signed policy's read (liveMergePolicy).
-export const OPS_FEED_READS = { d1: 13 + TASKS.length, kv: 10 } as const;
+// D1 statements: one per task, and 15 more, one of them the signed policy's read (liveMergePolicy).
+export const OPS_FEED_READS = { d1: 14 + TASKS.length, kv: 10 } as const;
 
 // The uptime target the Portal shows each site against (area 8, U4).
 const UPTIME_TARGET = 0.999;
