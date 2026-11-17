@@ -80,6 +80,9 @@ export function numbersHtml(stats) {
         data: days.flatMap((/** @type {string} */ week, /** @type {number} */ i) => [
           { week, outcome: "Completed", jobs: j.completed_by_week[i] },
           { week, outcome: "Failed", jobs: j.failed_by_week[i] },
+          ...(j.cleared_by_week
+            ? [{ week, outcome: "Finding cleared", jobs: j.cleared_by_week[i] }]
+            : []),
         ]),
         x: "week",
         y: "jobs",
@@ -88,10 +91,11 @@ export function numbersHtml(stats) {
         title: "Jobs finished per week",
         xLabel: "week ending",
         yLabel: "jobs",
-        caption: "A job counts in the week it finished, completed or failed.",
+        caption:
+          "A job counts in the week it finished. Finding cleared is a watcher alert that closed itself when the problem went away; it is not a failed job.",
         source,
         width,
-        alt: `Jobs finished in each of the last eight whole weeks, oldest first. Completed: ${j.completed_by_week.join(", ")}. Failed: ${j.failed_by_week.join(", ")}.`,
+        alt: `Jobs finished in each of the last eight whole weeks, oldest first. Completed: ${j.completed_by_week.join(", ")}. Failed: ${j.failed_by_week.join(", ")}.${j.cleared_by_week ? ` Watcher findings that cleared themselves: ${j.cleared_by_week.join(", ")}.` : ""}`,
       })
     : drawn("bar", {
         id: "jobs-per-week",
@@ -208,6 +212,9 @@ export function numbersHtml(stats) {
     ["Jobs completed, last 7 days", j.completed_7d],
     ["Jobs completed, last 30 days", j.completed_30d],
     ["Jobs failed, last 30 days", j.failed_30d],
+    ...(j.cleared_30d === undefined
+      ? []
+      : [["Watcher findings that cleared themselves, last 30 days", j.cleared_30d]]),
     ["Jobs open today", j.open],
     ["Jobs waiting on a person today", j.blocked],
     ["Median time a job takes, last 30 days", minutes(j.median_duration_minutes_30d)],
@@ -228,9 +235,9 @@ export function numbersHtml(stats) {
     ["Capsid's commit", stats.capsid.sha7],
   ];
   return `<section class="numbers">
-<dl class="cap-form-boxes readings-row" data-variant="tones">${readingBox(String(j.completed_30d), "jobs completed, 30 days", "#jobs")}${readingBox(percent(v.agreement_rate_90d), "claims matching GitHub", "#verification")}${readingBox(minutes(g.median_wait_minutes_30d), "median approval wait", "#gates")}${readingBox(percent(stats.sites.uptime_7d), "uptime, 7 days", "#sites")}</dl>
+<dl class="cap-form-boxes readings-row" data-variant="tones">${readingBox(String(j.completed_30d), "jobs completed, 30 days", "#jobs")}${readingBox(percent(v.agreement_rate_90d), "checked claims matching GitHub, 90 days", "#verification")}${readingBox(minutes(g.median_wait_minutes_30d), "median approval wait", "#gates")}${readingBox(percent(stats.sites.uptime_7d), "uptime, 7 days", "#sites")}</dl>
 <section class="numbers-part" id="jobs" aria-labelledby="jobs-title"><h2 id="jobs-title">Jobs</h2>
-<p class="measure">In the last 30 days, ${j.completed_30d} jobs finished and ${j.failed_30d} failed. ${j.open} are open today, and ${j.blocked} of those are waiting on a person. The median job took ${minutes(j.median_duration_minutes_30d)} from first claim to done.</p>
+<p class="measure">In the last 30 days, ${j.completed_30d} jobs completed and ${j.failed_30d} failed. ${j.cleared_30d === undefined ? "" : `The watcher also opened and closed ${j.cleared_30d} findings of its own as the problems they named went away; those are alerts that cleared, not failed jobs. `}${j.open} are open today, and ${j.blocked} of those are waiting on a person. The median job took ${minutes(j.median_duration_minutes_30d)} from first claim to done.</p>
 <div class="charts">${jobsChart}</div></section>
 <section class="numbers-part" id="verification" aria-labelledby="verification-title"><h2 id="verification-title">Claims checked against GitHub</h2>
 <p class="measure">When a job finishes, the Worker reads its pull requests, commits and CI from GitHub and saves each claim next to what GitHub says. A rate counts only the fields the Worker checked.</p>
