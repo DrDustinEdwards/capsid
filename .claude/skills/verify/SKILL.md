@@ -122,8 +122,9 @@ REPO=$PWD OUT=<scratchpad> PW_CHROMIUM=/opt/pw-browsers/chromium \
   the next thread to re-run instead of fix.
 - Never edit an existing spec to make it agree with new behavior unless the
   change is meant to alter that behavior, and say so in the pull request.
-- Leave nothing behind: stop the server, and keep the scripts and screenshots in
-  the scratchpad. Nothing from this skill is committed.
+- Leave nothing behind: stop the server by the process id you started (never
+  `pkill` by name, which can kill another session's server), and keep the scripts
+  and screenshots in the scratchpad. Nothing from this skill is committed.
 
 ## The report
 
