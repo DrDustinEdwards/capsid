@@ -111,7 +111,7 @@ export interface JobEnd {
   updated_at: string;
 }
 
-const clearedByWatcher = (job: JobEnd) =>
+export const clearedByWatcher = (job: JobEnd) =>
   job.status === "failed" &&
   (job.result_summary === CLEARED_SUMMARY ||
     (job.result_summary?.startsWith(`${CLEARED_SUMMARY}: `) ?? false));

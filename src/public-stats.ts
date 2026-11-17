@@ -3,6 +3,7 @@ import { median } from "capsomer/behavior/format";
 import type { Env } from "./env";
 import { bounded } from "./limits";
 import { readSnapshot } from "./ops-snapshot";
+import { clearedByWatcher } from "./watcher-findings";
 import { MINUTE_MS, DAY_MS } from "./time";
 
 // The public aggregate numbers (ruling capsid/rulings/system-explorer-2026-10-10.md,
@@ -25,12 +26,17 @@ export const PublicStatsSchema = z.strictObject({
   jobs: z.strictObject({
     completed_7d: Count,
     completed_30d: Count,
+    // Failed means a job that ended failed and was not a watcher finding closing itself:
+    // the watcher closes a finding as failed, summary "cleared", when its condition goes away.
     failed_30d: Count,
+    // Those self-closed watcher findings, counted apart so they are not read as failures.
+    cleared_30d: Count.optional(),
     // Eight whole weeks, oldest first, each ending at a midnight.
     completed_by_week: z.array(Count).length(8),
     // The same eight weeks. The three weekly series added on 2026-10-23 are optional only so the
     // explorer still parses a document the public build wrote before they existed.
     failed_by_week: z.array(Count).length(8).optional(),
+    cleared_by_week: z.array(Count).length(8).optional(),
     open: Count,
     blocked: Count,
     median_duration_minutes_30d: Count.nullable(),
@@ -64,7 +70,7 @@ export type PublicStats = z.infer<typeof PublicStatsSchema>;
 /** The rows the numbers are computed from, each already limited to its window. */
 export interface StatsRows {
   /** Jobs that finished (done or failed) in the last 56 days: status and when. */
-  finished: Array<{ status: string; updated_at: string }>;
+  finished: Array<{ status: string; updated_at: string; result_summary: string | null }>;
   /** Open jobs by status, read at the build. */
   open: Array<{ status: string; n: number }>;
   /** job_outcomes in the last 90 days. */
@@ -129,10 +135,10 @@ export function summarize(rows: StatsRows, now: Date): PublicStats {
     });
   const done = rows.finished.filter((r) => r.status === "done");
   const byWeek = weekly(done, (r) => r.updated_at).map((w) => w.length);
-  const failedByWeek = weekly(
-    rows.finished.filter((r) => r.status === "failed"),
-    (r) => r.updated_at,
-  ).map((w) => w.length);
+  const cleared = rows.finished.filter(clearedByWatcher);
+  const failed = rows.finished.filter((r) => r.status === "failed" && !clearedByWatcher(r));
+  const failedByWeek = weekly(failed, (r) => r.updated_at).map((w) => w.length);
+  const clearedByWeek = weekly(cleared, (r) => r.updated_at).map((w) => w.length);
 
   const outcomes30 = rows.outcomes.filter((o) => inWindow(o.recorded_at, 30));
   const outcomes90 = rows.outcomes.filter((o) => inWindow(o.recorded_at, 90));
@@ -172,10 +178,11 @@ export function summarize(rows: StatsRows, now: Date): PublicStats {
     jobs: {
       completed_7d: done.filter((r) => inWindow(r.updated_at, 7)).length,
       completed_30d: done.filter((r) => inWindow(r.updated_at, 30)).length,
-      failed_30d: rows.finished.filter((r) => r.status === "failed" && inWindow(r.updated_at, 30))
-        .length,
+      failed_30d: failed.filter((r) => inWindow(r.updated_at, 30)).length,
+      cleared_30d: cleared.filter((r) => inWindow(r.updated_at, 30)).length,
       completed_by_week: byWeek,
       failed_by_week: failedByWeek,
+      cleared_by_week: clearedByWeek,
       open: openOf("queued") + openOf("claimed") + openOf("blocked"),
       blocked: openOf("blocked"),
       median_duration_minutes_30d: floorMedian(
@@ -220,7 +227,7 @@ export async function readStatsRows(
   const db = env.DB;
   const finished = await db
     .prepare(
-      "SELECT status, updated_at FROM jobs WHERE status IN ('done', 'failed') AND updated_at >= ?1 AND updated_at < ?2",
+      "SELECT status, updated_at, result_summary FROM jobs WHERE status IN ('done', 'failed') AND updated_at >= ?1 AND updated_at < ?2",
     )
     .bind(since(end, 56), endIso)
     .all<StatsRows["finished"][number]>();
