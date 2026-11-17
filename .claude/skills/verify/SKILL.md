@@ -51,8 +51,10 @@ page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 page.on("pageerror", (e) => errors.push(String(e)));
 const log = [];
 async function step(name, fn) {
-  try { await fn(); log.push(`ok   ${name}`); }
-  catch (e) {
+  try {
+    await fn();
+    log.push(`ok   ${name}`);
+  } catch (e) {
     log.push(`FAIL ${name}: ${e.message.split("\n")[0]}`);
     await page.screenshot({ path: "fail.png", fullPage: true });
     throw e;
