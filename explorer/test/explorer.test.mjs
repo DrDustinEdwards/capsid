@@ -377,7 +377,7 @@ test("an external container is listed outside the system, never as one of its pa
   assert.match(page, /Its 3 parts, .*, plus the one outside system it works with\./);
   assert.match(
     readFileSync(join(out, "s", "hub", "index.html"), "utf8"),
-    /its 3 parts as a table, and every line between them/,
+    /<a href="\/s\/hub\/containers\/">Inside Hub<\/a>/,
   );
 });
 
