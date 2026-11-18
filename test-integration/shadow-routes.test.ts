@@ -42,6 +42,12 @@ beforeEach(async () => {
     if (url === `${ISSUER}/.well-known/openid-configuration`)
       return Response.json({ issuer: ISSUER, jwks_uri: `${ISSUER}/.well-known/jwks` });
     if (url === `${ISSUER}/.well-known/jwks`) return Response.json({ keys: [jwk] });
+    // The workflow file's blob: the default branch's, and the same at the run's commit
+    // unless the pull request rewrote it.
+    if (url.includes(`/repos/${REPO}/contents/.github/workflows/shadow-test.yml`))
+      return Response.json({
+        sha: url.includes(`ref=${"e".repeat(40)}`) ? "blob-edited" : "blob-main",
+      });
     if (url.endsWith(`/repos/${REPO}/pulls/7`))
       return Response.json({ body: `Closes ${jobId}.`, head: { sha: "a".repeat(40) } });
     return new Response("not stubbed", { status: 404 });
@@ -56,6 +62,7 @@ const token = (claims: Record<string, string>) =>
     event_name: "pull_request",
     ref: "refs/pull/7/merge",
     workflow_ref: `${REPO}/.github/workflows/shadow-test.yml@refs/pull/7/merge`,
+    workflow_sha: "c".repeat(40),
     ...claims,
   })
     .setProtectedHeader({ alg: "RS256", kid: "k1" })
@@ -72,12 +79,14 @@ const get = async (claims: Record<string, string> = {}) =>
     env as never,
   );
 
-it("only the shadow workflow on a pull request reads the job it names, and its result is kept", async () => {
+it("only the default branch's shadow workflow on a pull request reads the job it names, and its result is kept", async () => {
   expect(
     (await get({ workflow_ref: `${REPO}/.github/workflows/other.yml@refs/pull/7/merge` })).status,
   ).toBe(403);
   expect((await get({ repository: "example/elsewhere" })).status).toBe(403);
   expect((await get({ event_name: "push", ref: "refs/heads/master" })).status).toBe(403);
+  // PLANT: a pull request that rewrote the workflow file reads nothing.
+  expect((await get({ workflow_sha: "e".repeat(40) })).status).toBe(403);
 
   const read = await get();
   expect(read.status).toBe(200);

@@ -1,8 +1,13 @@
 // The shadow test (docs/work-queue.md, "The shadow test"; src/shadow.ts). Run by
-// .github/workflows/shadow-test.yml on a capsid pull request, from the head's checkout,
-// after npm ci there.
+// .github/workflows/shadow-test.yml on a capsid pull request, in three jobs:
 //
-//   node scripts/shadow-test.mjs <base-sha>
+//   node scripts/shadow-test.mjs write    on the base's checkout, with an OIDC token
+//   node scripts/shadow-test.mjs head     on the head's checkout, with none
+//   node scripts/shadow-test.mjs report   on the base's checkout, with an OIDC token
+//
+// The head's code never runs in a job that can mint a token, so a pull request cannot
+// read a job or record a result except through this file as the default branch has it
+// (Capsid security review, round 4, finding 7). The jobs hand the test on as a job output.
 //
 // Capsid hands over the job the pull request names, proven by this workflow's OIDC token.
 // A model reads the job and the code at the base, unpacked with no git history, so the
@@ -23,6 +28,7 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 const CAPSID = process.env.CAPSID_URL ?? "https://mcp.dustinedwards.info";
 const PATHS = ["test-integration/shadow.test.ts", "test/shadow.test.ts"];
 const MAX_TURNS = "40";
+const RESULTS = ["failed", "passed", "error", "not-run"];
 
 function summary(line) {
   console.log(line);
@@ -67,29 +73,38 @@ function prompt(job, base) {
   ].join("\n");
 }
 
-async function main() {
-  const base = process.argv[2];
-  if (!/^[0-9a-f]{40}$/.test(base ?? ""))
-    throw new Error("usage: node scripts/shadow-test.mjs <base-sha>");
-  const token = await oidcToken();
-  const auth = { Authorization: `Bearer ${token}` };
+// A job output, for the next job (docs.github.com, "Passing information between jobs").
+function output(name, value) {
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
+}
+
+// The test the write job hands on: base64 of its JSON, so it is one output line.
+function handed() {
+  const raw = process.env.SHADOW_TEST ?? "";
+  if (!raw) return null;
+  return JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
+}
+
+async function write() {
+  const auth = { Authorization: `Bearer ${await oidcToken()}` };
   const read = await fetch(`${CAPSID}/shadow/job`, { headers: auth });
   if (read.status === 404) return summary(`Nothing to do: ${await read.text()}.`);
   if (!read.ok) return summary(`Capsid answered ${read.status}: ${await read.text()}`);
   const job = await read.json();
+  const base = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 
   // The base, unpacked from git with no history and no .git, and its dependencies.
   const baseDir = mkdtempSync(path.join(tmpdir(), "shadow-base-"));
-  execSync(`git archive ${base} | tar -x -C ${baseDir}`);
+  execSync(`git archive HEAD | tar -x -C ${baseDir}`);
   execFileSync("npm", ["ci", "--no-audit", "--no-fund"], { cwd: baseDir, stdio: "inherit" });
 
   let written = job.test;
   if (!written) {
     if (!process.env.CLAUDE_CODE_OAUTH_TOKEN)
       return summary("Not run: the repository secret CLAUDE_CODE_OAUTH_TOKEN is not set.");
-    // --restricted keeps the file tools inside the base directory, so the head's checkout
-    // (the diff) cannot be read, and with dontAsk any call not allowed here is denied, so
-    // the only commands the model runs are the two test runs (code.claude.com/docs/en/cli-reference).
+    // --restricted keeps the file tools inside the base directory, and with dontAsk any
+    // call not allowed here is denied, so the only commands the model runs are the two
+    // test runs (code.claude.com/docs/en/cli-reference).
     const allowed = [
       "Read",
       "Glob",
@@ -124,18 +139,41 @@ async function main() {
   } else {
     writeFileSync(path.join(baseDir, written.path), written.test);
   }
-
   const onBase = resultOf(baseDir, written.path);
-  writeFileSync(written.path, written.test);
-  const onHead = resultOf(process.cwd(), written.path);
+  const handOn = { job_id: job.job_id, kept: Boolean(job.test), ...written, base: onBase };
+  output("test", Buffer.from(JSON.stringify(handOn)).toString("base64"));
+  summary(`${job.job_id}: ${written.path} ${onBase} on the base.`);
+}
+
+function head() {
+  const t = handed();
+  if (!t) return summary("Not run: no test was handed on.");
+  writeFileSync(t.path, t.test);
+  const onHead = resultOf(process.cwd(), t.path);
+  output("head", onHead);
+  summary(`${t.job_id}: ${t.path} ${onHead} on the head.`);
+}
+
+async function report() {
+  const t = handed();
+  if (!t) return summary("Not recorded: no test was handed on.");
+  const onHead = RESULTS.includes(process.env.SHADOW_HEAD) ? process.env.SHADOW_HEAD : "not-run";
   const sent = await fetch(`${CAPSID}/shadow/result`, {
     method: "POST",
-    headers: { ...auth, "Content-Type": "application/json" },
-    body: JSON.stringify({ path: written.path, test: written.test, base: onBase, head: onHead }),
+    headers: { Authorization: `Bearer ${await oidcToken()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ path: t.path, test: t.test, base: t.base, head: onHead }),
   });
   summary(
-    `${job.job_id}: ${written.path} ${onBase} on the base and ${onHead} on the head${job.test ? " (the test kept from an earlier push)" : ""}. Capsid answered ${sent.status}.`,
+    `${t.job_id}: ${t.path} ${t.base} on the base and ${onHead} on the head${t.kept ? " (the test kept from an earlier push)" : ""}. Capsid answered ${sent.status}.`,
   );
 }
 
-main().catch((err) => summary(`Not finished: ${errorMessage(err)}`));
+const MODES = { write, head, report };
+const mode = MODES[process.argv[2]];
+if (!mode) {
+  summary("usage: node scripts/shadow-test.mjs write | head | report");
+} else {
+  Promise.resolve()
+    .then(mode)
+    .catch((err) => summary(`Not finished: ${errorMessage(err)}`));
+}

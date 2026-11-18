@@ -21,6 +21,12 @@ import { auditStatement } from "./store-guards";
 // repo, its workflow this file, its event a pull request, and the job it reads the one
 // that pull request's description names, in the capsid namespace.
 //
+// On a pull request GitHub runs the workflow file from the pull request's own merge
+// commit, so a branch could rewrite it. The file at the token's workflow_sha must be the
+// default branch's, byte for byte (the same blob), or the call is refused (Capsid
+// security review, round 4, finding 7). That file keeps the two jobs that hold an OIDC
+// token on the base's code and runs the head's code only in a job that has none.
+//
 //   GET  /shadow/job     the job's title and body, and the test already written for it
 //   POST /shadow/result  the test (kept for the job's later pushes) and its two results
 
@@ -88,6 +94,18 @@ async function caller(request: Request, env: Env): Promise<Caller> {
     );
   }
   const [owner, name] = repo.split("/");
+  const sha = claim("workflow_sha");
+  if (!/^[0-9a-f]{40}$/.test(sha))
+    return refuse(403, "the OIDC token names no workflow_sha, so its workflow file is unknown");
+  const [ran, main] = await Promise.all([
+    workflowBlob(env, owner, name, sha),
+    workflowBlob(env, owner, name, null),
+  ]);
+  if (!ran || !main || ran !== main)
+    return refuse(
+      403,
+      `${WORKFLOW} at ${sha.slice(0, 7)} is not the default branch's, so this run may not read a job`,
+    );
   const resp = await ghFetch(env, owner, name, `/repos/${owner}/${name}/pulls/${pr}`);
   if (!resp.ok) return refuse(502, `GitHub answered ${resp.status} for pull request ${pr}`);
   const pull = (await resp.json()) as { body?: string | null; head?: { sha?: string } };
@@ -96,6 +114,25 @@ async function caller(request: Request, env: Env): Promise<Caller> {
   const job = await readJob(env.DB, jobId);
   if (!job || job.namespace !== NAMESPACE) return refuse(404, `${jobId} is not a ${NAMESPACE} job`);
   return { ok: true, pr: Number(pr), jobId, headSha: pull.head?.sha ?? "" };
+}
+
+/** The blob sha of the workflow file at a commit, or on the default branch (ref null). */
+async function workflowBlob(
+  env: Env,
+  owner: string,
+  name: string,
+  ref: string | null,
+): Promise<string | null> {
+  const query = ref ? `?ref=${ref}` : "";
+  const resp = await ghFetch(
+    env,
+    owner,
+    name,
+    `/repos/${owner}/${name}/contents/${WORKFLOW}${query}`,
+  );
+  if (!resp.ok) return null;
+  const blob = ((await resp.json()) as { sha?: unknown }).sha;
+  return typeof blob === "string" ? blob : null;
 }
 
 export async function handleShadowJob(request: Request, env: Env): Promise<Response> {
