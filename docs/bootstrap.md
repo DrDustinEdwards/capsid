@@ -43,7 +43,7 @@ npx wrangler secret put ACCESS_SAAS_CLIENT_ID    # the Access for SaaS app "Caps
 npx wrangler secret put ACCESS_SAAS_CLIENT_SECRET
 npx wrangler secret put ADMIN_EMAIL              # the primary owner's email, admitted by both logins, exactly
 npx wrangler secret put CO_OWNER_EMAILS          # optional: co-owners, comma separated, admitted like ADMIN_EMAIL (docs/auth.md, "Co-owner")
-npx wrangler secret put COOKIE_ENCRYPTION_KEY    # openssl rand -hex 32; signs the login state and the Portal cookie and confirm tokens
+npx wrangler secret put COOKIE_ENCRYPTION_KEY    # openssl rand -hex 32; the root of the keys that sign the login state, the Portal cookie and confirm tokens
 npx wrangler secret put IMPROVE_SCORE_SECRET     # root of the job, policy and backup credential HMAC keys
 ```
 
