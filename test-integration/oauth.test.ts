@@ -85,17 +85,20 @@ describe("tightened dynamic client registration", () => {
     expect(await clients()).toBe(before);
   });
 
-  it("a refused registration spends none of the limit, so the live gate's probe cannot use it up", async () => {
-    // Five an hour per address: six refusals from one address all answer 400, never 429
-    // (run 41245505021 rolled a deploy back when the gate's probes had spent the day's 30).
-    for (let i = 0; i < 6; i++) {
-      const response = await register(
-        ["https://client.example.com/callback"],
-        "capsid.test",
-        "198.51.100.30",
-      );
-      expect(response.status, `refusal ${i + 1}`).toBe(400);
+  it("refused registrations never spend the day's 30, so the live gate's probe cannot use it up", async () => {
+    // Run 41245505021 rolled a deploy back when the gate's probes had spent the day's 30. A refusal
+    // counts only toward its own address's five an hour (site-runtime registrationLimited).
+    for (let n = 0; n < 7; n++) {
+      for (let i = 0; i < 5; i++) {
+        const response = await register(
+          ["https://client.example.com/callback"],
+          "capsid.test",
+          `198.51.100.${30 + n}`,
+        );
+        expect(response.status, `address ${n}, refusal ${i + 1}`).toBe(400);
+      }
     }
+    expect((await register([GROK], "capsid.test", "198.51.100.40")).status).toBe(201);
   });
 
   it("PLANT: Grok's callback registers, and the registration grants nothing: the client meets the consent page", async () => {
