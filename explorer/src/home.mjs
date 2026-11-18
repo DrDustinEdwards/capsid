@@ -217,7 +217,6 @@ function hero(stats) {
         ),
         h("a", { key: "tour", className: "hero-link", href: "#tour" }, "See how a job runs"),
       ],
-      note: "This site runs on a live Capsid server. The tools, steps and numbers come from it and update every day.",
       aside: h("div", {
         className: "desk",
         "data-ui": "",

@@ -605,7 +605,7 @@ function PortalApp() {
   // The top bar says how fresh the page is and holds Refresh.
   // Signed out is its own page (Capsomer's SignedOutPage), with no shell around it.
   const shell = signedOut ? (
-    <SignedOutPage app="Capsid Portal" signIn={APP_URL} byChoice={leftByChoice} access />
+    <SignedOutPage app="Capsid Portal" signIn={APP_URL} byChoice={leftByChoice} />
   ) : (
     <AdminShell
       app="portal"

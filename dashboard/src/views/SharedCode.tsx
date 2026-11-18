@@ -33,9 +33,13 @@ export function SharedCode() {
           <Status tone="crit">Could not read the shared packages: {load.error}</Status>
         </p>
       ) : !data || !data.configured ? (
-        <Empty kind="nothing-yet" title="No shared package is configured.">
-          {data?.error}
-        </Empty>
+        data?.error ? (
+          <Empty kind="failed" title="No shared package is configured.">
+            {data.error}
+          </Empty>
+        ) : (
+          <Empty kind="nothing-yet" title="No shared package is configured." />
+        )
       ) : (
         <>
           {data.packages.map((p) => (

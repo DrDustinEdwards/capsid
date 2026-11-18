@@ -70,30 +70,26 @@ export function SitePage() {
   const p = snap ? PROBE[snap.state] : null;
   return (
     <div className="cap-admin-page">
-      <PageHead
-        title={name}
-        lead={
-          <span className="site-lead">
-            {p ? (
-              <Pill {...KIND_STATUS[p.kind]}>{p.label}</Pill>
-            ) : (
-              <Status tone="nodata">Not probed yet</Status>
-            )}
-            {origin ? (
-              <AwayLink href={origin} newTab>
-                {hostOf(origin)}
-              </AwayLink>
-            ) : (
-              <span className="cap-text" data-tone="dim">
-                serves no site
-              </span>
-            )}
-            <span className="cap-text cap-mono" data-tone="dim">
-              {ns}
-            </span>
+      <PageHead title={name} />
+      <div className="site-lead">
+        {p ? (
+          <Pill {...KIND_STATUS[p.kind]}>{p.label}</Pill>
+        ) : (
+          <Status tone="nodata">Not probed yet</Status>
+        )}
+        {origin ? (
+          <AwayLink href={origin} newTab>
+            {hostOf(origin)}
+          </AwayLink>
+        ) : (
+          <span className="cap-text" data-tone="dim">
+            serves no site
           </span>
-        }
-      />
+        )}
+        <span className="cap-text cap-mono" data-tone="dim">
+          {ns}
+        </span>
+      </div>
       <PageTabs
         label={name}
         path={`/sites/${encodeURIComponent(ns)}`}

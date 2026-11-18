@@ -213,10 +213,12 @@ function NotRead({ load }: { load: ReturnType<typeof useResources> }) {
     );
   }
   if (!doc || !doc.read_at) {
-    return (
-      <Empty kind="nothing-yet" title="The Workers have not been read yet.">
-        {doc?.problems[0]}
+    return doc?.problems[0] ? (
+      <Empty kind="failed" title="The Workers have not been read yet.">
+        {doc.problems[0]}
       </Empty>
+    ) : (
+      <Empty kind="nothing-yet" title="The Workers have not been read yet." />
     );
   }
   return null;
