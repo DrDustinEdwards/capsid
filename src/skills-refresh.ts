@@ -142,6 +142,8 @@ export interface RefreshOutcome {
   checked: number;
   changed: string[];
   posted: string[];
+  // Guides that moved while last week's job for them is still open: waiting, not failing.
+  pending: string[];
   refused: { slug: string; reason: string }[];
 }
 
@@ -176,6 +178,7 @@ export async function runSkillsRefresh(env: Env, now: Date): Promise<RefreshOutc
     checked: 0,
     changed: [],
     posted: [],
+    pending: [],
     refused: [],
   };
 
@@ -195,6 +198,7 @@ export async function runSkillsRefresh(env: Env, now: Date): Promise<RefreshOutc
 
   const changed: string[] = [];
   const posted: string[] = [];
+  const pending: string[] = [];
   const refused: { slug: string; reason: string }[] = [];
   const agent = skillsRefreshAgent();
 
@@ -221,13 +225,16 @@ export async function runSkillsRefresh(env: Env, now: Date): Promise<RefreshOutc
       posted.push(slug);
       await env.APP_KV.put(guideKey(slug), hash);
     } else {
-      // A duplicate open job means last week's refresh is unfinished. Record the hash
-      // so the next real change is what re-posts.
+      // A duplicate open job means last week's refresh is unfinished. That is the human
+      // gate working, not a failure: record the hash so the next real change is what
+      // re-posts, and report it as pending so the run ledger does not mark the cron failing.
       const reason = result.refusal ?? "refused";
-      refused.push({ slug, reason });
-      if (/already has an open job/i.test(reason)) await env.APP_KV.put(guideKey(slug), hash);
+      if (/already has an open job/i.test(reason)) {
+        pending.push(slug);
+        await env.APP_KV.put(guideKey(slug), hash);
+      } else refused.push({ slug, reason });
     }
   }
 
-  return { ran: true, skipped: null, checked: slugs.length, changed, posted, refused };
+  return { ran: true, skipped: null, checked: slugs.length, changed, posted, pending, refused };
 }
