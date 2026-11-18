@@ -15,6 +15,9 @@ import { adminAgentForEmail } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
 import { COMPOSITES } from "../src/tools/surface.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
+import { buildAdminServer } from "../src/server.ts";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The one thing that mints policy authority: the counterpart to verifySignedBody. The
 // tests are mostly refusals, because a signer's value is in what it declines to sign.
@@ -292,7 +295,7 @@ test("signing snapshots the prior body and writes an audit row, in one batch", a
 
 // admin only
 
-test("sign_policy is admin only in the scope table, and the refusal says why", () => {
+test("sign_policy is admin only, never signs the auto-merge policy, and signs only the body read", async () => {
   // Served as capsid_admin_manage_switches action "sign_policy", an admin tool in
   // TOOL_GRANTS, and enforced by the registrar. The driver's capsid_read_status serves
   // status and the versions model, two reads, so no driver tool can name sign_policy.
@@ -322,6 +325,31 @@ test("sign_policy is admin only in the scope table, and the refusal says why", (
   assert.ok(refusal, "a driver holding every grant was allowed to sign a policy");
   assert.match(refusal, /admin only/);
   assert.match(refusal, /widen/i, "the refusal should say why, not only that it refused");
+
+  // PLANT: even the admin's raw switch never signs the auto-merge policy, and signs another
+  // policy only when it names the sha256 of the body it read.
+  const { env } = envWith([
+    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
+    { namespace: "capsid", path: "policy/gates.md", title: "g", body: "# Gates\n\n- version: 2\n" },
+  ]);
+  const server = buildAdminServer(env, adminAgentForEmail("admin@example.com"));
+  const client = new Client({ name: "t", version: "1.0.0" });
+  const [c, sv] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(c), server.connect(sv)]);
+  const sign = (path: string, sha256: string) =>
+    client.callTool({
+      name: "capsid_admin_manage_switches",
+      arguments: { action: "sign_policy", namespace: "capsid", path, sha256 },
+    }) as Promise<{ isError?: boolean; content: Array<{ text: string }> }>;
+  const merge = await sign(AUTO_MERGE_POLICY_PATH, await sha256Hex(POLICY_BODY));
+  assert.equal(merge.isError, true, "the raw switch signed the auto-merge policy");
+  assert.match(merge.content[0].text, /does not sign policy\/auto-merge\.md/);
+  const stale = await sign("policy/gates.md", "0".repeat(64));
+  assert.equal(stale.isError, true, "the switch signed a body its caller did not read");
+  assert.match(stale.content[0].text, /not the body you read/);
+  const read = await sign("policy/gates.md", await sha256Hex("# Gates\n\n- version: 2\n"));
+  assert.ok(!read.isError, read.content[0]?.text);
+  await client.close();
 });
 
 // Anti-rollback. Every signed version stays in document_versions and still verifies,

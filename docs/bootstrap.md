@@ -276,7 +276,7 @@ Optional parts stay hidden or inert until configured:
 
 One switch, off by default.
 
-- **Auto-merge and pre-approved gates** run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards with `capsid_admin_manage_switches` action `sign_policy`, which is admin only. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
+- **Auto-merge and pre-approved gates** run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards, which is admin only: the auto-merge policy with the `sign_policy_change` or `sign_policy_from_repo` control, the gate policy with `capsid_admin_manage_switches` action `sign_policy`. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
 
 Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13 and auto-merge on 2026-09-16.
 

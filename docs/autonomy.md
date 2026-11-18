@@ -66,7 +66,10 @@ class matched and what it matched on.
 
 **Signing is admin only.** `capsid_admin_manage_switches` action `sign_policy` signs the body already
 stored rather than any body the caller supplies, only in the `capsid` namespace and
-only under `policy/`. A minted agent is refused outright. Turning a policy on is
+only under `policy/`, and only when the caller names the sha256 of the body it read. It
+never signs `policy/auto-merge.md`: that is signed only by the `sign_policy_change` and
+`sign_policy_from_repo` controls, which show the change first (security review round 4,
+finding 5). A minted agent is refused outright. Turning a policy on is
 two acts: editing the document, which is on the ordinary write tool's refusal list and
 needs `allow_improve_paths` plus `can_touch_protected`, and signing it again afterwards.
 
