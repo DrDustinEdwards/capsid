@@ -274,12 +274,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
               if (!busy) void runPreview(reasonNow());
             }}
           >
-            <Field
-              label="Reason"
-              required
-              error={fieldError}
-              announce
-            >
+            <Field label="Reason" required error={fieldError} announce>
               <textarea
                 ref={reasonRef}
                 className="cap-input"
