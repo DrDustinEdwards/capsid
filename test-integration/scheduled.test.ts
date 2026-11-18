@@ -124,7 +124,9 @@ describe("the three cron expressions", () => {
     expect(await ledger("skills-refresh")).toEqual([]);
   });
 
-  it("the skills refresh on its weekday posts a real job and records the guide it saw", async () => {
+  // One run of the refresh on its weekday with the docs stubbed: the overview names one
+  // model and its guide reads `guide()`.
+  async function refreshOnItsDay(guide: () => string) {
     await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')")
       .bind(SKILLS_NAMESPACE)
       .run();
@@ -136,7 +138,7 @@ describe("the three cron expressions", () => {
       const url = String(input instanceof Request ? input.url : input);
       if (url.endsWith("/models/overview.md"))
         return new Response("Models: claude-fable-5-1 is the newest.");
-      if (url.endsWith("/prompting-claude-fable-5-1.md")) return new Response("guide text");
+      if (url.endsWith("/prompting-claude-fable-5-1.md")) return new Response(guide());
       return new Response("not stubbed", { status: 500 });
     });
     try {
@@ -144,37 +146,21 @@ describe("the three cron expressions", () => {
     } finally {
       fetchSpy.mockRestore();
     }
+  }
+
+  it("the skills refresh on its weekday posts a real job and records the guide it saw", async () => {
+    await refreshOnItsDay(() => "guide text");
     expect((await skillsJobs())?.n).toBe(1);
     expect(await env.APP_KV.get(guideKey("fable-5-1"))).toMatch(/^[0-9a-f]{64}$/);
     expect((await ledger("skills-refresh")).map((r) => r.outcome)).toEqual(["ok"]);
   });
 
   it("a guide that moves while its job is still open is pending, not a failing run", async () => {
-    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')")
-      .bind(SKILLS_NAMESPACE)
-      .run();
-    await env.APP_KV.put(
-      SCHEDULE_KEY,
-      JSON.stringify({ enabled: true, dayUtc: new Date().getUTCDay() }),
-    );
-    let guide = "first text";
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = String(input instanceof Request ? input.url : input);
-      if (url.endsWith("/models/overview.md"))
-        return new Response("Models: claude-fable-5-1 is the newest.");
-      if (url.endsWith("/prompting-claude-fable-5-1.md")) return new Response(guide);
-      return new Response("not stubbed", { status: 500 });
-    });
-    try {
-      await env.APP_KV.delete(guideKey("fable-5-1"));
-      await fire(SKILLS_REFRESH_CRON);
-      const jobs = (await skillsJobs())?.n;
-      guide = "second text";
-      await fire(SKILLS_REFRESH_CRON);
-      expect((await skillsJobs())?.n).toBe(jobs);
-    } finally {
-      fetchSpy.mockRestore();
-    }
+    await env.APP_KV.delete(guideKey("fable-5-1"));
+    await refreshOnItsDay(() => "first text");
+    const jobs = (await skillsJobs())?.n;
+    await refreshOnItsDay(() => "second text");
+    expect((await skillsJobs())?.n).toBe(jobs);
     const outcomes = (await ledger("skills-refresh")).map((r) => r.outcome);
     expect(outcomes.at(-1)).toBe("ok");
     expect(outcomes).not.toContain("refused");
