@@ -64,7 +64,7 @@ function Archive() {
   const rows = archiveAgents(feed.live.agents);
   return (
     <div className="cap-stack">
-      <Panel flush title="Archive" src="agents · agents_archive">
+      <Panel flush title="Archive">
         {rows.length === 0 ? (
           <div className="cap-text body" data-tone="dim">
             No agent has been revoked.
@@ -138,11 +138,7 @@ const OWNER_PAGES = [
 function Access() {
   return (
     <div className="cap-stack">
-      <Panel flush title="AI access" src="each MCP server's owner page">
-        <div className="cap-text body" data-tone="dim">
-          Grants you gave AI clients, with Revoke, and every tool call. Each opens on its server
-          after a sign-in.
-        </div>
+      <Panel flush title="AI access">
         <div className="cap-table-wrap">
           <table className="cap-table">
             <thead>
@@ -175,7 +171,7 @@ function Roster() {
   const live = feed.live;
   return (
     <div className="cap-stack">
-      <Panel flush title="Roster" src="live agents · job outcomes">
+      <Panel flush title="Roster">
         <div className="cap-table-wrap" data-reflow="wide">
           <table className="cap-table">
             <thead>

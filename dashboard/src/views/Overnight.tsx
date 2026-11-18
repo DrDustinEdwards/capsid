@@ -58,7 +58,7 @@ export function Tonight() {
       src={
         plan
           ? `planned ${ago(parse(plan.generated), now)} · ${plan.budget_minutes} min budget`
-          : "jobs list view plan"
+          : undefined
       }
     >
       <Failed what="the plan" error={load.error} />
@@ -106,7 +106,7 @@ export function Tonight() {
                           </Status>
                         )
                       }
-                      detail={`about ${j.estimate_minutes} min, ${SOURCE[j.estimate_source]}${j.gated ? " · its risky step goes in the pull request for the seat" : ""}`}
+                      detail={`about ${j.estimate_minutes} min, ${SOURCE[j.estimate_source]}`}
                       fact={`priority ${j.priority}`}
                     />
                   ))}
@@ -138,17 +138,13 @@ export function Tonight() {
           )}
           {plan.truncated && (
             <div className="cap-text body" data-tone="dim">
-              More jobs are queued than the plan reads; the rest wait for another night.
+              More are queued than shown.
             </div>
           )}
         </>
       ) : plan ? (
         <Empty kind="all-clear" title="Nothing is queued for tonight." />
-      ) : (
-        <div className="cap-text body" data-tone="dim">
-          No read yet.
-        </div>
-      )}
+      ) : null}
     </Panel>
   );
 }
@@ -168,11 +164,7 @@ export function SinceLastLooked() {
   const d = load.data;
   const merged = d?.pull_requests_merged ?? 0;
   return (
-    <Panel
-      title="Since you last looked"
-      id="since"
-      src={`since ${ago(parse(since), now)} · jobs list view digest`}
-    >
+    <Panel title="Since you last looked" id="since" src={`since ${ago(parse(since), now)}`}>
       <Failed what="the digest" error={load.error} />
       {!d && load.loading ? (
         <div className="loading" role="status">
@@ -231,11 +223,7 @@ export function SinceLastLooked() {
             </p>
           )}
         </div>
-      ) : (
-        <div className="cap-text" data-tone="dim">
-          No read yet.
-        </div>
-      )}
+      ) : null}
     </Panel>
   );
 }

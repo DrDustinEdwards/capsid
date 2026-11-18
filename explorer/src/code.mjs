@@ -398,7 +398,6 @@ export function riskiest(id, maps) {
     .slice(0, 5);
   if (!fns.length) return "";
   return `<section aria-labelledby="risk-title"><h2 id="risk-title">Its riskiest functions</h2>
-<p class="section-sub">CRAP is a risk score: a function's complexity weighed against how much of it the tests run. Over ${CRAP_CRIT} is critical, and a complex function no test runs scores highest.</p>
 ${scroller("risk", `<table class="cap-table code-table"><caption>The five functions with the highest CRAP</caption><thead><tr><th scope="col">Function</th><th scope="col">Module</th><th scope="col">Complexity</th><th scope="col">Covered</th><th scope="col">CRAP</th></tr></thead><tbody>${fns.map((/** @type {any} */ f) => riskRow(f)).join("")}</tbody></table>`, "Riskiest functions table")}
 <p><a class="arrow" href="${codePath(id)}">Every module</a></p></section>`;
 }

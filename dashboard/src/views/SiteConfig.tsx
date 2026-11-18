@@ -151,7 +151,7 @@ export function SiteForm({
         )
       }
     >
-      <Field label="Project" help="A registered project (its namespace). One row each.">
+      <Field label="Project">
         {(control) =>
           adding ? (
             <>
@@ -176,7 +176,7 @@ export function SiteForm({
           )
         }
       </Field>
-      <Field label="Name" help="Shown in the Portal. Blank uses the namespace.">
+      <Field label="Name" help="Blank uses the namespace.">
         <input
           ref={adding ? undefined : first}
           id={f("name")}
@@ -192,7 +192,7 @@ export function SiteForm({
           checked={d.noSite}
           onChange={(e) => set({ noSite: e.target.checked })}
         />{" "}
-        Serves no site. The watcher probes nothing for this namespace.
+        Serves no site
       </label>
       <Field label="Origin" help="https:// and a hostname only.">
         <input
@@ -200,16 +200,12 @@ export function SiteForm({
           className="cap-input cap-mono"
           value={d.noSite ? "" : d.origin}
           disabled={d.noSite}
-          placeholder="https://example.com"
           autoComplete="off"
           spellCheck={false}
           onChange={(e) => set({ origin: e.target.value })}
         />
       </Field>
-      <Field
-        label="Health path"
-        help="Starts with /. Blank probes the root, which shows liveness only."
-      >
+      <Field label="Health path" help="Starts with /. Blank probes the root.">
         <input
           id={f("health")}
           className="cap-input cap-mono"
@@ -237,10 +233,7 @@ export function SiteForm({
           </div>
         )}
       </Field>
-      <Field
-        label="Worker script"
-        help="Cloudflare only. Blank finds it from the account's custom domains."
-      >
+      <Field label="Worker script" help="Cloudflare only. Blank finds it.">
         <input
           id={f("script")}
           className="cap-input cap-mono"

@@ -65,9 +65,7 @@ function AllSites() {
         </Suspense>
       )}
       {!configured.some((s) => s.origin !== null) ? (
-        <Banner tone="neutral">
-          No site is configured, so the watcher probes nothing. Add a site to start.
-        </Banner>
+        <Banner tone="neutral">No site configured.</Banner>
       ) : !snap ? (
         <NoSnapshot />
       ) : (
@@ -81,7 +79,7 @@ function AllSites() {
       )}
       {waiting.length > 0 && (
         <Banner tone="neutral">
-          Added and waiting for the watcher's next pass:{" "}
+          Waiting for the next pass:{" "}
           {waiting.map((s, i) => (
             <span key={s.namespace}>
               {i > 0 ? ", " : ""}

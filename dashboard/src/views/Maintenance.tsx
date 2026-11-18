@@ -89,7 +89,7 @@ export function Maintenance() {
         </div>
       ) : data && !data.generated ? (
         <div className="cap-text body" data-tone="dim">
-          The daily pass has not run yet. It runs once a day after 11:00 UTC.
+          Not run yet.
         </div>
       ) : items.length ? (
         <>
@@ -121,11 +121,7 @@ export function Maintenance() {
             {readLine}
           </div>
         </>
-      ) : (
-        <div className="cap-text body" data-tone="dim">
-          No read yet.
-        </div>
-      )}
+      ) : null}
     </Panel>
   );
 }

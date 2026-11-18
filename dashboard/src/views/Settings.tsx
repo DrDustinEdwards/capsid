@@ -55,8 +55,7 @@ function Display() {
             onCheckedChange={setSingleKeys}
           />
           <span className="cap-text" data-tone="dim">
-            g then a letter, j, k, r, t and the rest. Turn them off if they clash with a screen
-            reader.
+            Turn off if they clash with a screen reader.
           </span>
         </div>
       </div>

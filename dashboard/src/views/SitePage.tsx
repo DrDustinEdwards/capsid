@@ -62,9 +62,7 @@ export function SitePage() {
               All sites
             </Link>
           }
-        >
-          No site is configured for the project {ns}. It may have been removed.
-        </Empty>
+        />
       </div>
     );
   }
@@ -163,22 +161,13 @@ function SiteUptime({ s }: { s: SiteSnapshot }) {
 function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
   const { now } = useApp();
   if (!snap) {
-    return (
-      <Empty kind="nothing-yet" title="Not probed yet.">
-        The watcher probes this site from its next pass.
-      </Empty>
-    );
+    return <Empty kind="nothing-yet" title="Not probed yet." />;
   }
   const s = snap;
   const p = PROBE[s.state];
   const cf = cfOk(s);
   const detail =
-    s.error ??
-    (s.state === "liveness"
-      ? "No health route; a root 200 is liveness only."
-      : s.state !== "ok"
-        ? p.label
-        : null);
+    s.error ?? (s.state === "liveness" ? "Liveness only." : s.state !== "ok" ? p.label : null);
   const healthUrl = s.health_path
     ? s.health_path.startsWith("https://")
       ? s.health_path
@@ -192,7 +181,7 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
         </Banner>
       )}
       <div className="cap-panes" data-even data-gap="5">
-        <Panel flush title="Probe" src={`watcher pass · checked ${ago(parse(s.checked_at), now)}`}>
+        <Panel flush title="Probe" src={`checked ${ago(parse(s.checked_at), now)}`}>
           <div className="body">
             <dl className="cap-detail-record">
               <dt>Checked</dt>
@@ -246,11 +235,7 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
             </dl>
           </div>
         </Panel>
-        <Panel
-          flush
-          title="Uptime and errors"
-          src="the watcher's probes and Cloudflare's analytics"
-        >
+        <Panel flush title="Uptime and errors">
           <div className="body cap-stack" data-gap="4">
             <SiteUptime s={s} />
             <ChartSlot>
@@ -270,17 +255,8 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
   const { now } = useApp();
   const cf = snap ? cfOk(snap) : null;
   return (
-    <Panel
-      flush
-      title="Deploys"
-      count={cf?.deploys.length}
-      src="Cloudflare's record, at most 10, newest first"
-    >
-      {!snap ? (
-        <div className="cap-text body" data-tone="dim">
-          Not probed yet: deploys are read with the watcher's next pass.
-        </div>
-      ) : !cf ? (
+    <Panel flush title="Deploys" count={cf?.deploys.length} src="at most 10">
+      {!snap ? null : !cf ? (
         <div className="body">
           <Status tone="nodata" reason={cfNoData(snap.cloudflare) ?? ""}>
             No data
@@ -407,7 +383,7 @@ function Setup({
                 {row.script ??
                   (snap && cfOk(snap) ? (
                     <span className="cap-text" data-tone="dim">
-                      {cfOk(snap)!.script}, found from the custom domains
+                      {cfOk(snap)!.script} (auto)
                     </span>
                   ) : (
                     none
@@ -440,18 +416,13 @@ function Setup({
           </div>
         ) : (
           <div className="cap-text body" data-tone="dim">
-            This site has no settings row: it is in the watcher's last pass only. It leaves the
-            Portal on the next pass.
+            No settings row.
           </div>
         )}
       </Panel>
       {row?.operator && <SiteSecrets ns={ns} />}
       {row?.operator && (
-        <Panel
-          title="Operator key"
-          id="operator-key"
-          src="the key Carrel and the admin tools call the site's operator API with"
-        >
+        <Panel title="Operator key" id="operator-key">
           <div className="cap-cluster" data-gap="3">
             <button
               type="button"
@@ -467,9 +438,6 @@ function Setup({
             >
               Rotate key
             </button>
-            <span className="cap-text note" data-tone="dim" data-size="small">
-              A new key is minted and set on the site's Worker, then on Carrel. It is never shown.
-            </span>
           </div>
         </Panel>
       )}

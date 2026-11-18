@@ -199,21 +199,15 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
           )}
           {data.outcome === null && (
             <p className="cap-text" data-tone="dim">
-              No outcome recorded: the job has not completed or failed.
+              No outcome recorded.
             </p>
           )}
         </div>
       </Panel>
-      <Panel
-        flush
-        title="Claim against verified"
-        count={data.claims.length}
-        src="each claim as the agent sent it, and each check the Worker ran on it"
-      >
+      <Panel flush title="Claim against verified" count={data.claims.length}>
         {data.claims.length === 0 ? (
           <div className="cap-text body" data-tone="dim">
-            No claim recorded for this job: it has not reached complete, fail or block since claims
-            were recorded.
+            No claim recorded.
           </div>
         ) : (
           data.claims.map((c) => {
@@ -243,11 +237,9 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
                 </div>
                 {checks.length ? (
                   <EvaluationTable rows={checks} />
-                ) : (
+                ) : c.action === "block" ? null : (
                   <div className="cap-text body" data-tone="dim">
-                    {c.action === "block"
-                      ? "A block is a claim with no check: nothing is verified until the job ends."
-                      : "No check recorded for this claim."}
+                    No check recorded for this claim.
                   </div>
                 )}
               </div>
@@ -256,15 +248,10 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
         )}
         {orphans.length > 0 && <EvaluationTable rows={orphans} label="Checks with no claim" />}
       </Panel>
-      <Panel
-        flush
-        title="Touch log"
-        count={data.touches.length}
-        src="every time a human, or a policy acting for one, touched this job, oldest first"
-      >
+      <Panel flush title="Touch log" count={data.touches.length}>
         {data.touches.length === 0 ? (
           <div className="cap-text body" data-tone="dim">
-            No touch recorded: nobody gated, resumed, released or reviewed this job.
+            No touch recorded.
           </div>
         ) : (
           <div className="cap-table-wrap" data-reflow="wide">

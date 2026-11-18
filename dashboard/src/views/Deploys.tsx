@@ -52,11 +52,7 @@ export function Deploys() {
         id="timeline"
         section="Timeline"
         days={days}
-        src={
-          days > 7
-            ? "the probe ring holds 7 days; older downtime is not shown"
-            : "deploys and probe failures"
-        }
+        src={days > 7 ? "the probe ring holds 7 days; older downtime is not shown" : undefined}
       />
       {snap ? (
         <>
@@ -67,7 +63,7 @@ export function Deploys() {
             id="every-deploy"
             section="Every deploy"
             count={list.length}
-            src="at most 10 per site, newest first"
+            src="at most 10 per site"
           >
             <div className="cap-table-wrap">
               <table className="cap-table">

@@ -43,13 +43,7 @@ export function PullRequests() {
   return (
     <div className="cap-admin-page">
       <PageHead title="Pull requests" />
-      <Panel
-        flush
-        title="Waiting for you"
-        id="waiting-prs"
-        count={live.awaiting_seat.length}
-        src="auto-merge left these for a person"
-      >
+      <Panel flush title="Waiting for you" id="waiting-prs" count={live.awaiting_seat.length}>
         {live.awaiting_seat.length ? (
           <RowList label="Pull requests waiting for you">
             {live.awaiting_seat.map((a) => (
@@ -66,7 +60,7 @@ export function PullRequests() {
         {/* The signed auto-merge policy (src/auto-merge-policy.ts): whether the Worker loads it,
             and the control that writes it from docs/policy/auto-merge.md and signs it
             (sign_policy_from_repo). The version is typed in the dialog. */}
-        <Panel title="Auto-merge policy" src="signed policy · loadMergePolicy">
+        <Panel title="Auto-merge policy">
           <div className="cap-stack" data-gap="4">
             {live.merge_policy.loads ? (
               <p>
@@ -106,7 +100,6 @@ export function PullRequests() {
             title="Auto-merge, last 7 days"
             id="merge-safety"
             count={live.merge_safety.namespaces.length}
-            src="the tick's safety meter"
           >
             <div className="cap-table-wrap" data-reflow="wide">
               <table className="cap-table">
@@ -190,12 +183,7 @@ export function PullRequests() {
         )}
         <MergeUnits />
       </div>
-      <Panel
-        flush
-        title="Pull requests, last 7 days"
-        src="recorded against jobs"
-        count={live.prs.length}
-      >
+      <Panel flush title="Pull requests, last 7 days" count={live.prs.length}>
         <div className="cap-table-wrap" data-reflow="wide">
           <table className="cap-table">
             <thead>
@@ -261,7 +249,7 @@ export function PullRequests() {
               {!live.prs.length && (
                 <tr>
                   <td colSpan={5} className="cap-text" data-tone="dim">
-                    No pull requests recorded in the last 7 days.
+                    None in 7 days.
                   </td>
                 </tr>
               )}
@@ -373,10 +361,7 @@ function MergeUnits() {
                       <Status {...KIND_STATUS[st.kind]}>{st.label}</Status>
                     </td>
                     <td className="cap-muted" data-label="Why">
-                      {r.why ||
-                        (r.state === "auto"
-                          ? "merges with no human when every other check passes"
-                          : "")}
+                      {r.why}
                     </td>
                     <td>
                       <span className="cap-cluster" data-gap="3">
@@ -426,7 +411,7 @@ function MergeUnits() {
           </table>
         </div>
       ) : (
-        <Empty kind="all-clear" title="No unit is promoted, suspended or ready to promote." />
+        <Empty kind="all-clear" title="No units." />
       )}
     </Panel>
   );
@@ -480,11 +465,9 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
           >
             Close
           </button>
-          {!canApprove(a) && (
+          {!canApprove(a) && a.class === "typed" && (
             <span className="cap-text" data-tone="dim" data-size="small">
-              {a.class === "typed"
-                ? "Approve it by typing its number in chat."
-                : "Not approvable here."}
+              Approve in chat
             </span>
           )}
         </>
@@ -512,7 +495,7 @@ function VisualLook({ visual }: { visual: NonNullable<OpsAwaitingSeat["visual"]>
       ))}
       {!visual.preview && !visual.shots.length && (
         <span className="cap-text" data-tone="dim">
-          The pull request names no preview or screenshots; open it on GitHub.
+          No preview.
         </span>
       )}
     </span>

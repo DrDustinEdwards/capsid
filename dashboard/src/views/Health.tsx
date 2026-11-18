@@ -87,7 +87,6 @@ function HealthVerdict() {
               label: <Link href={p.view?.href ?? p.items[0]!.href}>{p.label}</Link>,
             },
       )}
-      okNote="Sites, backups and default branches were fine on the last pass."
       named={NAMED}
       more={(rest) => (
         <button type="button" className="cap-link-btn" onClick={() => open("view:needs#attention")}>

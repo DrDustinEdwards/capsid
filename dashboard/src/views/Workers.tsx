@@ -127,9 +127,6 @@ function StoresPanel({ doc }: { doc: ResourcesDoc }) {
       title="Stores"
       id="worker-stores"
       section="Stores"
-      src={
-        <>{`${doc.databases.length} D1 · ${doc.kv_namespaces.length} KV · ${doc.buckets.length} R2`}</>
-      }
       footer={
         <span className="cap-text" data-tone="dim">
           {unbound ? `${unbound} bound by no Worker` : "Every store is bound"}
@@ -218,8 +215,7 @@ function NotRead({ load }: { load: ReturnType<typeof useResources> }) {
   if (!doc || !doc.read_at) {
     return (
       <Empty kind="nothing-yet" title="The Workers have not been read yet.">
-        {doc?.problems[0] ??
-          "The nightly build reads every Worker from Cloudflare after 06:00 UTC."}
+        {doc?.problems[0]}
       </Empty>
     );
   }
@@ -232,7 +228,7 @@ function ReadNote({ doc }: { doc: ResourcesDoc }) {
     <p
       className="cap-text shared-read"
       data-tone="dim"
-    >{`Read from Cloudflare ${ago(parse(doc.read_at), now)}, nightly. Names only: no secret or variable value is ever read.`}</p>
+    >{`Read ${ago(parse(doc.read_at), now)}, nightly.`}</p>
   );
 }
 
@@ -295,11 +291,6 @@ export function UnownedResources({ siteScripts }: { siteScripts: ReadonlyArray<s
       {rest.map((w) => (
         <WorkerPanel key={w.script} w={w} />
       ))}
-      {rest.length === 0 && (
-        <p className="cap-text" data-tone="dim">
-          Every Worker belongs to a site; each is on its site's Setup tab.
-        </p>
-      )}
       <StoresPanel doc={doc} />
       <ReadNote doc={doc} />
     </div>

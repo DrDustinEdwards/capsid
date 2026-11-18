@@ -124,7 +124,7 @@ function Search({ ns }: { ns: string }) {
   const d = load.data;
   return (
     <div className="cap-panes" data-even data-gap="5">
-      <Panel flush title="Google Search" src="Search Console, 28 days ending 3 days ago">
+      <Panel flush title="Google Search" src="28 days ending 3 days ago">
         <ReadState what="Search Console" loading={load.loading} error={load.error} hasData={!!d}>
           {d && (
             <Source src={d.google}>
@@ -162,7 +162,7 @@ function Search({ ns }: { ns: string }) {
           )}
         </ReadState>
       </Panel>
-      <Panel flush title="Bing Search" src="Bing Webmaster, the same window">
+      <Panel flush title="Bing Search" src="same window">
         <ReadState what="Bing Webmaster" loading={load.loading} error={load.error} hasData={!!d}>
           {d && (
             <Source src={d.bing}>
@@ -268,7 +268,7 @@ function Vitals({ v }: { v: TrafficWebVitals }) {
   return (
     <>
       <p className="cap-text body" data-tone="dim">
-        {shortCount(v.page_views_measured)} page views measured by Cloudflare's browser insights.
+        {shortCount(v.page_views_measured)} page views measured.
       </p>
       <div className="cap-table-wrap">
         <table className="cap-table">
@@ -321,7 +321,7 @@ function Vitals({ v }: { v: TrafficWebVitals }) {
 function Traffic({ ns }: { ns: string }) {
   const load = useAnswer<PortalSiteTraffic>(["site-traffic", ns], () => fetchSiteTraffic(ns));
   const d = load.data;
-  const edge = `Cloudflare's edge, ${d?.days ?? 7} days, sampled`;
+  const edge = `${d?.days ?? 7} days`;
   return (
     <div className="cap-panes" data-even data-gap="5">
       <Panel flush title="Missing pages" src={edge}>
@@ -415,7 +415,7 @@ function Traffic({ ns }: { ns: string }) {
           )}
         </ReadState>
       </Panel>
-      <Panel flush title="Web vitals" src={`Cloudflare's browser insights, ${d?.days ?? 7} days`}>
+      <Panel flush title="Web vitals" src={`${d?.days ?? 7} days`}>
         <ReadState what="the web vitals" loading={load.loading} error={load.error} hasData={!!d}>
           {d && <Source src={d.web_vitals}>{(v) => <Vitals v={v} />}</Source>}
         </ReadState>
@@ -524,11 +524,7 @@ function BuildLog({ build }: { build: string }) {
   });
   const d = load.data;
   return (
-    <Panel
-      flush
-      title={`Build log ${shortId(build)}`}
-      src="Cloudflare Workers Builds, the last 500 lines"
-    >
+    <Panel flush title={`Build log ${shortId(build)}`} src="last 500 lines">
       <ReadState what="the build log" loading={load.loading} error={load.error} hasData={!!d}>
         {d && (
           <Source src={d.log}>
@@ -562,7 +558,7 @@ export function SiteBuilds({ ns }: { ns: string }) {
         flush
         title="Builds"
         count={d?.builds.ok ? d.builds.data.builds.length : undefined}
-        src={`Cloudflare Workers Builds${d?.script ? ` for ${d.script}` : ""}, newest first`}
+        src={d?.script}
       >
         <ReadState what="the builds" loading={load.loading} error={load.error} hasData={!!d}>
           {d && (

@@ -5,7 +5,6 @@ import { Suspense, lazy, useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
-import { hasSites } from "../lib/derive";
 import { age, agentLabel, ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import {
@@ -64,12 +63,11 @@ const MinutesTile = trendChart("MinutesTile");
 const WaitingChart = trendChart("WaitingChart");
 
 export function NeedsYou() {
-  const { feed } = useApp();
   return (
     <div className="cap-admin-page">
       <PageHead title="Needs you" />
       <Waiting />
-      <Problems sitesOn={hasSites(feed)} />
+      <Problems />
       <Suspense fallback={null}>
         <SinceLastLooked />
       </Suspense>
@@ -99,7 +97,7 @@ function useStops(): {
 }
 
 function Waiting() {
-  const { feed, now } = useApp();
+  const { feed } = useApp();
   const inbox = feed.live.inbox;
   const { stops, error, reread } = useStops();
   const all: Entry[] = inbox.apps.flatMap((app) => app.items.map((item) => ({ app, item })));
@@ -114,7 +112,6 @@ function Waiting() {
       title="Waiting for you"
       id="waiting"
       count={total}
-      src={`read ${ago(parse(inbox.generated), now)}`}
       footer={
         quiet.length > 0 ? (
           <span className="cap-text" data-tone="dim">
@@ -277,11 +274,9 @@ function PrRow({
               Close
             </button>
           )}
-          {seat && !ok && (
+          {seat && !ok && seat.class === "typed" && (
             <span className="cap-text" data-tone="dim" data-size="small">
-              {seat.class === "typed"
-                ? "Approve it by typing its number in chat."
-                : "Not approvable here."}
+              Approve in chat
             </span>
           )}
         </>
@@ -454,13 +449,7 @@ function WeeklyDigest() {
   if (open.length === 0) return null;
   const sites = [...new Set(open.map((f) => f.namespace))].sort();
   return (
-    <Panel
-      title="Weekly digest"
-      id="weekly-digest"
-      section="Weekly digest"
-      count={open.length}
-      src="watcher findings that post no job"
-    >
+    <Panel title="Weekly digest" id="weekly-digest" section="Weekly digest" count={open.length}>
       {sites.map((site) => {
         const mine = open.filter((f) => f.namespace === site);
         return (
@@ -500,10 +489,7 @@ function Trends() {
     <details className="trends" id="trends">
       <summary>
         <span className="chev" aria-hidden="true" />
-        Trends{" "}
-        <span className="cap-text" data-tone="dim" data-size="small">
-          your time per week, and where waiting goes
-        </span>
+        Trends
       </summary>
       <div className="trends-body chart-row">
         <ChartSlot>

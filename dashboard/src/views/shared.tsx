@@ -149,8 +149,7 @@ export function FilterEmpty({
 export function NoSnapshot() {
   return (
     <Empty kind="nothing-yet" title={<Status tone="nodata">No data</Status>}>
-      The watcher has not written its first pass yet. Sites, deploys, errors, backups and CI appear
-      after it does.
+      No watcher pass yet.
     </Empty>
   );
 }
@@ -541,7 +540,7 @@ export function TimelinePanel({
 }: {
   title: string;
   days: number;
-  src: string;
+  src?: string;
   id?: string;
   section?: string;
 }) {
@@ -551,7 +550,7 @@ export function TimelinePanel({
     <Panel flush title={title} src={src} id={id} section={section}>
       {!hasSites(feed) ? (
         <div className="cap-text body" data-tone="dim">
-          No site is configured, so there is no probe to chart. Add one on Sites.
+          No site configured.
         </div>
       ) : sites.length ? (
         <div className="body">

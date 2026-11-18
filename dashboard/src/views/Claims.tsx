@@ -134,10 +134,7 @@ export function Claims() {
         </Banner>
       )}
       {data && data.truncated.length > 0 && (
-        <Banner tone="warn">
-          This read hit its bound on: {data.truncated.join(", ")}. Narrow the filter, or read every
-          row through the claims tool's export.
-        </Banner>
+        <Banner tone="warn">Cut short on: {data.truncated.join(", ")}. Narrow the filter.</Banner>
       )}
       {data && <ClaimsExport data={data} />}
       <Panel
@@ -219,11 +216,7 @@ export function Claims() {
           <div className="cap-text body" data-tone="dim">
             {filtered ? "No claims match these filters." : "No claim has been recorded yet."}
           </div>
-        ) : (
-          <div className="cap-text body" data-tone="dim">
-            No read yet.
-          </div>
-        )}
+        ) : null}
       </Panel>
       {data && data.groups.length > 0 && (
         <Suspense fallback={null}>
@@ -231,7 +224,7 @@ export function Claims() {
         </Suspense>
       )}
       {checks.length > 0 && (
-        <Panel flush title="By check" count={checks.length} src="every agent above, summed">
+        <Panel flush title="By check" count={checks.length}>
           <div className="cap-table-wrap" data-reflow="wide">
             <table className="cap-table">
               <thead>

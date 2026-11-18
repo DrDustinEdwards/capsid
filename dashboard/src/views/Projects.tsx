@@ -78,8 +78,7 @@ function Row({
             <>
               <Status tone="crit">Paused after repeated failures</Status>
               <div className="src wrap">
-                {n.breaker.failed} jobs failed since {n.breaker.since} UTC; it pauses at{" "}
-                {n.breaker.threshold}. No job is handed out until it is reset.
+                {n.breaker.failed} jobs failed since {n.breaker.since} UTC.
               </div>
             </>
           )}
@@ -228,11 +227,7 @@ function Roster() {
           <div className="cap-text body" data-tone="dim">
             The roster has no projects.
           </div>
-        ) : (
-          <div className="cap-text body" data-tone="dim">
-            No read yet.
-          </div>
-        )}
+        ) : null}
       </Panel>
     </>
   );

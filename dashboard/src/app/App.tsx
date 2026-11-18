@@ -71,31 +71,6 @@ const ShortcutSheet = lazy(() =>
   import("./ShortcutSheet").then((m) => ({ default: m.ShortcutSheet })),
 );
 
-// What each view is for, in a line, under its "g" shortcut in the sheet (design D13 moved
-// the views' intro sentences there). Jobs, Pull requests and the rest that need none have none.
-const ABOUT: Partial<Record<ViewId, string>> = {
-  needs:
-    "The home: every decision waiting for you, with its buttons, then every problem worst first.",
-  health:
-    "One line on whether anything is broken, the tiles, then a tab each for problems, backups, CI, scheduled tasks and the Cloudflare resources no site owns.",
-  sites:
-    "Every site in one table: status, uptime, last deploy, errors and backup age. Each site has its own page: overview, deploys, search and traffic, sync and repairs, and setup.",
-  queue:
-    "Every job by state. A blocked job shows what it waits on; open it to answer or resume it. Checks sets what each agent said beside what the Worker verified.",
-  prs: "The pull requests waiting for you, with Approve and Close, then auto-merge and those recorded against jobs.",
-  projects:
-    "Each project's driver, its jobs and its integrity, with Reset for one paused after repeated failures.",
-  activity: "The audit log, newest first: who did what, where.",
-  agents:
-    "Every credential and when it was last seen, the archive of revoked ones, and the AI access granted on each server.",
-  packages:
-    "Published: each npm package, added and changed here. Shared: the tag each app pins, who is behind, and the local copies left. Completeness: every shared area on every site.",
-  library:
-    "The knowledge store, read-only: decisions, rulings and research, a search, and each document with its links and jobs.",
-  settings:
-    "Your preferences: the overnight run, phone alerts, the daily digest and this browser's display. Every change is previewed first.",
-};
-
 // The phone tab bar (the Portal UX audit's sitemap, 2026-10): Needs you, Health and Pull
 // requests, the three pages a person opens most. The header's menu button opens every page
 // (Capsomer has no Menu tab yet), Settings among them.
@@ -414,7 +389,6 @@ function PortalApp() {
         register({
           key: `g ${v.key}`,
           label: v.label,
-          about: ABOUT[v.id],
           group: "Go to",
           run: () => a().go(v.id),
         }),

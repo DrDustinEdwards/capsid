@@ -126,7 +126,7 @@ export function PackageForm({
           onChange={(e) => setD({ ...d, repo: e.target.value })}
         />
       </Field>
-      <Field label="Formerly" help="Its download history is shown joined to this one.">
+      <Field label="Formerly">
         <input
           id={f("formerly")}
           className="cap-input cap-mono"

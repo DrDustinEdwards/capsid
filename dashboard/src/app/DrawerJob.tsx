@@ -24,7 +24,7 @@ export function Head({
 }: {
   label: string;
   title: string;
-  sub: string;
+  sub?: string;
   badge?: ReactNode;
   onClose: () => void;
 }) {
@@ -39,7 +39,7 @@ export function Head({
             </h2>
             {badge}
           </div>
-          <p className="cap-detail-id">{sub}</p>
+          {sub && <p className="cap-detail-id">{sub}</p>}
         </div>
       </header>
       <button
@@ -82,8 +82,8 @@ function supersedable(j: OpsJob): boolean {
   );
 }
 
-// A drawer's one primary control, with what it does beneath it.
-function ChangeIt({ label, req, hint }: { label: string; req: ConfirmRequest; hint: string }) {
+// A drawer's one primary control.
+function ChangeIt({ label, req, hint }: { label: string; req: ConfirmRequest; hint?: string }) {
   const { confirm } = useApp();
   return (
     <div>
@@ -98,9 +98,11 @@ function ChangeIt({ label, req, hint }: { label: string; req: ConfirmRequest; hi
           {label}
         </button>
       </div>
-      <p className="cap-text hint" data-tone="dim" data-size="small">
-        {hint}
-      </p>
+      {hint && (
+        <p className="cap-text hint" data-tone="dim" data-size="small">
+          {hint}
+        </p>
+      )}
     </div>
   );
 }
@@ -130,7 +132,6 @@ function JobControls({ j }: { j: OpsJob }) {
             },
           },
         }}
-        hint="Unpark puts it back in the queue at its priority. The result offers Undo."
       />
     );
   }
@@ -188,19 +189,7 @@ function JobControls({ j }: { j: OpsJob }) {
   ];
   return (
     <div className="cap-stack" data-gap="4" data-job-controls="">
-      <ChangeIt
-        label={primary.label}
-        req={primary.req}
-        hint={`${
-          blocked
-            ? j.question
-              ? "Answer sends your reply to its driver as the resume note."
-              : "Resume sends it back to its driver."
-            : claimed
-              ? "Release takes it from its holder and puts it back in the queue."
-              : "Park keeps it out of the queue until you unpark it; its reason says when it comes back."
-        } Each asks for a reason and shows what changes first.`}
-      />
+      <ChangeIt label={primary.label} req={primary.req} />
       {more.length > 0 && (
         <details className="more-actions">
           <summary className="cap-btn">
@@ -219,14 +208,6 @@ function JobControls({ j }: { j: OpsJob }) {
               </button>
             ))}
           </div>
-          <p className="cap-text hint" data-tone="dim" data-size="small">
-            {blocked
-              ? "Close as shipped ends it as done when its work already landed, credited to the driver. "
-              : ""}
-            {supersedable(j)
-              ? "Supersede ends a job replaced before any work was done, with no outcome against anybody."
-              : ""}
-          </p>
         </details>
       )}
       <DangerZone note="Ends it as failed, against its holder.">
@@ -265,7 +246,7 @@ export function AgentControls({ a }: { a: OpsAgent }) {
           hint="Its key works only once you activate it. If you did not ask for it, revoke it."
         />
       )}
-      <DangerZone note="Ends this credential. The preview lists what else it changes.">
+      <DangerZone note="Ends this credential.">
         <button
           type="button"
           className="cap-btn"
@@ -311,10 +292,6 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             <Alert tone="warn">
               {(j.waits_on ?? "No question was recorded.").replace(/^QUESTION:\s*/, "")}
             </Alert>
-            <p className="cap-text hint" data-tone="dim" data-size="small">
-              Answer it with the button below: your reason and note go to its driver as the resume
-              note.
-            </p>
           </div>
         )}
         {j.status === "blocked" && !j.question && (
@@ -357,9 +334,6 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             <div>
               <p className="section-title">Or resume it from chat</p>
               <CopyBlock id="resumeText" text={resumeCall(j)} label="Copy for a chat session" />
-              <p className="cap-text hint" data-tone="dim" data-size="small">
-                Resume it with the button below, or paste this into a chat session.
-              </p>
             </div>
           </>
         )}

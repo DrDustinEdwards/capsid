@@ -106,11 +106,7 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
           kind="all-clear"
           title={ns === "all" ? "No job looks stuck." : `No job in ${ns} looks stuck.`}
         />
-      ) : (
-        <div className="cap-text body" data-tone="dim">
-          No read yet.
-        </div>
-      )}
+      ) : null}
     </Panel>
   );
 }
@@ -172,13 +168,7 @@ function JobsTab() {
       </div>
       <StaleJobs load={stale.load} reread={stale.reread} />
       <div className="cap-panes" data-even data-gap="5">
-        <Panel
-          flush
-          title="All jobs"
-          id="jobs"
-          section="All jobs"
-          src="live · D1 jobs, read on each refresh"
-        >
+        <Panel flush title="All jobs" id="jobs" section="All jobs">
           {!jobs.length && all.length ? (
             <FilterEmpty onShowAll={() => (setFilters({ q: "" }), setNs("all"))}>
               No job {q ? `matches the text "${filters.q.trim()}"` : "is listed"}
