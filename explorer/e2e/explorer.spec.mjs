@@ -46,7 +46,7 @@ async function watch(page, expect404 = false) {
   page.on("console", (m) => {
     if (
       m.type() === "error" &&
-      !(expect404 && /404 \(Not Found\)/.test(m.text()) && m.location().url.endsWith("/nope"))
+      !(expect404 && /status of 404/.test(m.text()) && m.location().url.endsWith("/nope"))
     )
       problems.push(m.text());
   });
