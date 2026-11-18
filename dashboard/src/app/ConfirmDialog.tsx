@@ -274,13 +274,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
               if (!busy) void runPreview(reasonNow());
             }}
           >
-            <Field
-              label="Reason"
-              required
-              help="Recorded with the change."
-              error={fieldError}
-              announce
-            >
+            <Field label="Reason" required error={fieldError} announce>
               <textarea
                 ref={reasonRef}
                 className="cap-input"
@@ -299,10 +293,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
               />
             </Field>
             {takesNote && (
-              <Field
-                label="Note for the driver (optional)"
-                help="The driver reads it on its next claim."
-              >
+              <Field label="Note for the driver (optional)">
                 <textarea
                   ref={noteRef}
                   className="cap-input"
