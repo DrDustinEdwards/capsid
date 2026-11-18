@@ -47,6 +47,8 @@ interface PublicAgent {
   created_at: string;
   revoked_at: string | null;
   last_seen: string | null;
+  // Minted and not yet activated in the Portal: its key resolves nothing.
+  pending: boolean;
 }
 
 function publicAgent(row: AgentRow): PublicAgent {
@@ -60,6 +62,7 @@ function publicAgent(row: AgentRow): PublicAgent {
     created_at: row.created_at,
     revoked_at: row.revoked_at,
     last_seen: row.last_seen,
+    pending: row.pending === 1,
   };
 }
 
@@ -245,11 +248,12 @@ export async function mintAgent(
     created_at: new Date().toISOString(),
     revoked_at: null,
     last_seen: null,
+    pending: 1,
   };
   await db.batch([
     db
       .prepare(
-        "INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at, pending) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1)",
       )
       .bind(row.id, row.name, row.kind, row.key_hash, row.scopes, row.created_by, row.created_at),
     agentAudit(db, actor, "agent-minted", name, {
@@ -265,7 +269,7 @@ export async function mintAgent(
     agent: publicAgent(row),
     key,
     scopes,
-    note: "This key is shown ONCE and is stored nowhere: the table holds its sha256. Save it now. If it is lost, revoke this agent and mint another.",
+    note: "This key is shown ONCE and is stored nowhere: the table holds its sha256. Save it now. If it is lost, revoke this agent and mint another. It resolves nothing until Dustin clicks Activate on the agent in the Portal (https://portal.dustinedwards.info, Agents), so a mint a session was talked into reaches nothing.",
   };
 }
 
@@ -312,6 +316,27 @@ export async function revokeAgent(
     action: "revoke",
     agent: { ...publicAgent(row), revoked_at: new Date().toISOString() },
   };
+}
+
+/** Activation (the activate_agent control, Portal only): the minted key starts resolving. */
+export async function activateAgent(
+  db: D1Database,
+  actor: string,
+  name: string,
+): Promise<AgentResult> {
+  const won = await db
+    .prepare(
+      "UPDATE agents SET pending = 0 WHERE name = ?1 AND revoked_at IS NULL AND pending = 1 RETURNING *",
+    )
+    .bind(name)
+    .first<AgentRow>();
+  if (!won)
+    return refuse(
+      "activate",
+      `no live agent named '${name}' is waiting for activation. Call action list to see the inventory.`,
+    );
+  await db.batch([agentAudit(db, actor, "agent-activated", name, { id: won.id })]);
+  return { ok: true, action: "activate", agent: publicAgent(won) };
 }
 
 export async function updateAgentScopes(

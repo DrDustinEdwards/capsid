@@ -72,6 +72,8 @@ export type PortalAction =
   | "namespace_add"
   | "namespace_edit"
   | "namespace_remove"
+  // A newly minted agent's key starts resolving (src/agents-admin.ts activateAgent). Portal only.
+  | "activate_agent"
   // Mint a new site key and set it on the site's Worker and on Carrel (src/site-key.ts).
   // Portal only. The value is never shown.
   | "site_key_rotate";

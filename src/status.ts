@@ -87,6 +87,8 @@ export interface AgentSummary {
   flags: string[];
   last_seen: string | null;
   revoked_at: string | null;
+  // Minted and not yet activated in the Portal (migrations/0065): its key resolves nothing.
+  pending: boolean;
   // When the watcher pass moved it to agents_archive (src/agents-archive.ts), or null
   // for a row still in agents. An archived agent is always revoked.
   archived_at: string | null;
@@ -105,9 +107,9 @@ const SUMMARY_ARCHIVE_LIMIT = 50;
 export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
   const { results } = await db
     .prepare(
-      `SELECT name, kind, scopes, last_seen, revoked_at, NULL AS archived_at FROM agents
+      `SELECT name, kind, scopes, last_seen, revoked_at, pending, NULL AS archived_at FROM agents
        UNION ALL
-       SELECT * FROM (SELECT name, kind, scopes, last_seen, revoked_at, archived_at FROM agents_archive ORDER BY archived_at DESC, name LIMIT ?1)`,
+       SELECT * FROM (SELECT name, kind, scopes, last_seen, revoked_at, 0 AS pending, archived_at FROM agents_archive ORDER BY archived_at DESC, name LIMIT ?1)`,
     )
     .bind(SUMMARY_ARCHIVE_LIMIT)
     .all<{
@@ -116,6 +118,7 @@ export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
       scopes: string;
       last_seen: string | null;
       revoked_at: string | null;
+      pending: number | null;
       archived_at: string | null;
     }>();
   // Live first, then revoked, then archived; by name within each.
@@ -134,6 +137,7 @@ export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
       flags: SCOPE_FLAGS.filter((flag) => scopes.flags[flag]),
       last_seen: row.last_seen,
       revoked_at: row.revoked_at,
+      pending: row.pending === 1,
       archived_at: row.archived_at,
     };
   });

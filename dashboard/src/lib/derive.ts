@@ -631,6 +631,7 @@ export function archiveAgents(agents: readonly OpsAgent[]): OpsAgent[] {
 export function agentState(a: OpsAgent, now: number): { kind: Kind; label: string } {
   if (a.archived_at) return { kind: "nodata", label: "Archived" };
   if (a.revoked_at) return { kind: "crit", label: "Revoked" };
+  if (a.pending) return { kind: "warn", label: "Waiting for activation" };
   if (!a.last_seen) return { kind: "nodata", label: "Never seen" };
   const d = now - parse(a.last_seen);
   if (d < HOUR) return { kind: "ok", label: "Active" };

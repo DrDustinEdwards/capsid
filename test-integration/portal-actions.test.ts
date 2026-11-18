@@ -517,6 +517,23 @@ const CASES: Record<string, Case> = {
       expect(row?.revoked_at).not.toBeNull();
     },
   },
+  activate_agent: {
+    params: async () => {
+      await env.DB.prepare(
+        `INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at, pending)
+         VALUES ('agent_minted00001', 'sample-new-driver', 'driver', ?1, '{}', 'access:admin@example.com', '2026-09-11 00:00:00', 1)`,
+      )
+        .bind("d".repeat(64))
+        .run();
+      return { name: "sample-new-driver" };
+    },
+    after: async () => {
+      const row = await env.DB.prepare(
+        "SELECT pending FROM agents WHERE name = 'sample-new-driver'",
+      ).first<{ pending: number }>();
+      expect(row?.pending).toBe(0);
+    },
+  },
   site_add: {
     params: async () => ({
       namespace: "sample",

@@ -65,6 +65,7 @@
     "0061_drop_jobs_lease_review.sql": "e70ced7019718d531465a57d562660050fdd15ebf93234f9e6c24ee5091ad04b",
     "0062_drop_session_tables.sql": "1f22857d3d0d98131b2269fd33b130f7ca4fb0efa96a598b642e1805e4f63596",
     "0063_audit_log_client.sql": "cbbae6f30361ce9197d366a381fedd3920478585c3db03e4077efbb15283569c",
-    "0064_jobs_parked_until.sql": "f7bbd56fae740d2e42f81503f7aa9739ee302b56ed6ae4897110b16d5b019d7d"
+    "0064_jobs_parked_until.sql": "f7bbd56fae740d2e42f81503f7aa9739ee302b56ed6ae4897110b16d5b019d7d",
+    "0065_agents_pending.sql": "c262e4d963ae575fc54095b669aa190ffcb1eb5be06467b4e7c86457a65c05d8"
   }
 }

@@ -61,6 +61,8 @@ export interface OpsAgent {
   flags: string[];
   last_seen: string | null;
   revoked_at: string | null;
+  // Minted and waiting for Activate on its drawer (activate_agent): its key resolves nothing.
+  pending: boolean;
   // When the watcher pass moved it to the archive (src/agents-archive.ts); null while
   // its row is in agents. The Agents roster lists rows with neither date set.
   archived_at: string | null;

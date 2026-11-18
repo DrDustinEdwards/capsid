@@ -236,6 +236,18 @@ function world(opts: { adminEmail?: string; coOwners?: string } = {}): {
         revoked_at: null,
         last_seen: null,
       },
+      {
+        id: "agent_minted00001",
+        name: "capsid-new-driver",
+        kind: "driver",
+        key_hash: "e".repeat(64),
+        scopes: DRIVER_SCOPES,
+        created_by: "access:admin@example.com",
+        created_at: "2026-09-02 00:00:00",
+        revoked_at: null,
+        last_seen: null,
+        pending: 1,
+      },
     ],
     jobs: [
       {
@@ -466,6 +478,7 @@ const EVERY_ACTION = [
   ["pr_close", { namespace: "capsid", number: "41", reason: "replaced by #42" }],
   ["approve_pr", { namespace: "capsid", prs: "41", shas: "a".repeat(40) }],
   ["revoke_agent", { name: "capsid-driver" }],
+  ["activate_agent", { name: "capsid-new-driver" }],
   [
     "site_add",
     { namespace: "capsid-new", origin: "https://new.example.com", platform: "cloudflare" },

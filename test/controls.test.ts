@@ -225,6 +225,7 @@ test("a switch without a reason, or a Portal-only control from chat, is refused 
       ["sign_policy_change", { change: "promote", unit: "capsid/tests", confirm: "11" }],
       ["sign_policy_from_repo", { confirm: "11" }],
       ["site_key_rotate", { namespace: "sample" }],
+      ["activate_agent", { name: "sample-driver" }],
     ] as const) {
       const chat = await call({ action: "preview", control, params });
       assert.equal(chat.isError, true, `${control} was previewed from chat`);

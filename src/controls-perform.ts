@@ -1,5 +1,5 @@
 import { adminAgentForEmail } from "./agents";
-import { revokeAgent } from "./agents-admin";
+import { activateAgent, revokeAgent } from "./agents-admin";
 import {
   type ActionParams,
   type Surface,
@@ -524,6 +524,17 @@ export async function performAction(
           return { ok: false, refusal: result.refusal ?? `revoking ${name} was refused.` };
         committed = true;
         summary = `Revoked the agent ${name}.`;
+        await auditClick(null, { name });
+        break;
+      }
+      case "activate_agent": {
+        const name = required(params, "name");
+        if (!name) return { ok: false, refusal: "activate_agent needs an agent name." };
+        const result = await activateAgent(env.DB, actor, name);
+        if (!result.ok)
+          return { ok: false, refusal: result.refusal ?? `activating ${name} was refused.` };
+        committed = true;
+        summary = `Activated the agent ${name}.`;
         await auditClick(null, { name });
         break;
       }

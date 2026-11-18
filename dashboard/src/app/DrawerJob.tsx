@@ -82,6 +82,29 @@ function supersedable(j: OpsJob): boolean {
   );
 }
 
+// A drawer's one primary control, with what it does beneath it.
+function ChangeIt({ label, req, hint }: { label: string; req: ConfirmRequest; hint: string }) {
+  const { confirm } = useApp();
+  return (
+    <div>
+      <p className="section-title">Change it</p>
+      <div className="cap-cluster" data-gap="3">
+        <button
+          type="button"
+          className="cap-btn"
+          data-variant="primary"
+          onClick={() => confirm(req)}
+        >
+          {label}
+        </button>
+      </div>
+      <p className="cap-text hint" data-tone="dim" data-size="small">
+        {hint}
+      </p>
+    </div>
+  );
+}
+
 // The controls a job's status allows. Each opens the confirm dialog, which asks for a
 // reason and shows what changes before anything is written.
 function JobControls({ j }: { j: OpsJob }) {
@@ -92,36 +115,23 @@ function JobControls({ j }: { j: OpsJob }) {
   const queued = j.status === "queued";
   if (j.status === "parked") {
     return (
-      <div>
-        <p className="section-title">Change it</p>
-        <div className="cap-cluster" data-gap="3">
-          <button
-            type="button"
-            className="cap-btn"
-            data-variant="primary"
-            onClick={() =>
-              confirm({
-                action: "unpark_job",
-                params,
-                title: `Unpark job: ${j.title}`,
-                undo: {
-                  action: "park_job",
-                  params: {
-                    id: j.id,
-                    reason: j.parked_reason ?? "parked again",
-                    undo: "true",
-                  },
-                },
-              })
-            }
-          >
-            Unpark
-          </button>
-        </div>
-        <p className="cap-text hint" data-tone="dim" data-size="small">
-          Unpark puts it back in the queue at its priority. The result offers Undo.
-        </p>
-      </div>
+      <ChangeIt
+        label="Unpark"
+        req={{
+          action: "unpark_job",
+          params,
+          title: `Unpark job: ${j.title}`,
+          undo: {
+            action: "park_job",
+            params: {
+              id: j.id,
+              reason: j.parked_reason ?? "parked again",
+              undo: "true",
+            },
+          },
+        }}
+        hint="Unpark puts it back in the queue at its priority. The result offers Undo."
+      />
     );
   }
   const failable = blocked || claimed || queued;
@@ -178,29 +188,19 @@ function JobControls({ j }: { j: OpsJob }) {
   ];
   return (
     <div className="cap-stack" data-gap="4" data-job-controls="">
-      <div>
-        <p className="section-title">Change it</p>
-        <div className="cap-cluster" data-gap="3">
-          <button
-            type="button"
-            className="cap-btn"
-            data-variant="primary"
-            onClick={() => confirm(primary.req)}
-          >
-            {primary.label}
-          </button>
-        </div>
-        <p className="cap-text hint" data-tone="dim" data-size="small">
-          {blocked
+      <ChangeIt
+        label={primary.label}
+        req={primary.req}
+        hint={`${
+          blocked
             ? j.question
               ? "Answer sends your reply to its driver as the resume note."
               : "Resume sends it back to its driver."
             : claimed
               ? "Release takes it from its holder and puts it back in the queue."
-              : "Park keeps it out of the queue until you unpark it; its reason says when it comes back."}{" "}
-          Each asks for a reason and shows what changes first.
-        </p>
-      </div>
+              : "Park keeps it out of the queue until you unpark it; its reason says when it comes back."
+        } Each asks for a reason and shows what changes first.`}
+      />
       {more.length > 0 && (
         <details className="more-actions">
           <summary className="cap-btn">
@@ -253,22 +253,35 @@ export function AgentControls({ a }: { a: OpsAgent }) {
   const { confirm } = useApp();
   if (a.revoked_at) return null;
   return (
-    <DangerZone note="Ends this credential. The preview lists what else it changes.">
-      <button
-        type="button"
-        className="cap-btn"
-        data-variant="danger"
-        onClick={() =>
-          confirm({
-            action: "revoke_agent",
+    <div className="cap-stack" data-gap="4">
+      {a.pending && (
+        <ChangeIt
+          label="Activate"
+          req={{
+            action: "activate_agent",
             params: { name: a.name },
-            title: `Revoke agent ${a.name}`,
-          })
-        }
-      >
-        Revoke
-      </button>
-    </DangerZone>
+            title: `Activate agent ${a.name}`,
+          }}
+          hint="Its key works only once you activate it. If you did not ask for it, revoke it."
+        />
+      )}
+      <DangerZone note="Ends this credential. The preview lists what else it changes.">
+        <button
+          type="button"
+          className="cap-btn"
+          data-variant="danger"
+          onClick={() =>
+            confirm({
+              action: "revoke_agent",
+              params: { name: a.name },
+              title: `Revoke agent ${a.name}`,
+            })
+          }
+        >
+          Revoke
+        </button>
+      </DangerZone>
+    </div>
   );
 }
 
