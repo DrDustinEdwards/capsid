@@ -133,7 +133,6 @@ const login = loginHandler<Env>({
   admit: async (env, user) =>
     isAdminEmail(env, user.email) ? { signed_in_at: Date.now() } : false,
   admits: {
-    consent: "Only Capsid's administrator and its co-owners are accepted.",
     refusal: "This account is not an administrator of Capsid (ADMIN_EMAIL or CO_OWNER_EMAILS).",
   },
   audit: { name: SERVER_INFO.name, version: SERVER_INFO.version },

@@ -75,10 +75,12 @@ export function Completeness() {
     );
   }
   if (!data || data.error) {
-    return (
-      <Empty kind="nothing-yet" title="No scoreboard to show.">
-        {data?.error}
+    return data?.error ? (
+      <Empty kind="failed" title="No scoreboard to show.">
+        {data.error}
       </Empty>
+    ) : (
+      <Empty kind="nothing-yet" title="No scoreboard to show." />
     );
   }
   const columns: Column[] = [{ id: "package", name: "Package" }, ...data.sites];

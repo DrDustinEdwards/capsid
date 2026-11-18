@@ -147,11 +147,7 @@ export function FilterEmpty({
 }
 
 export function NoSnapshot() {
-  return (
-    <Empty kind="nothing-yet" title={<Status tone="nodata">No data</Status>}>
-      No watcher pass yet.
-    </Empty>
-  );
+  return <Empty kind="nothing-yet" title={<Status tone="nodata">No watcher pass yet</Status>} />;
 }
 
 // ---- fleet table -------------------------------------------------------------------------
