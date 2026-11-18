@@ -64,6 +64,8 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
         : `Approve pull request ${params.prs ?? ""} in ${ns} at the head you reviewed. Nothing merges now: the executor merges an approved pull request once CI is green on that exact sha, and a new push, red CI or 7 days voids the approval.`;
     case "revoke_agent":
       return `Revoke the agent ${params.name ?? ""}. Its key stops resolving immediately. The row stays, so its audit history still reads, and the name can never be minted again.`;
+    case "activate_agent":
+      return `Activate the agent ${params.name ?? ""}. Its key starts resolving on the next request, with the scopes it was minted with.`;
     case "site_add":
       return params.origin
         ? `Add ${ns} to the sites Capsid Portal watches. The watcher probes it from its next pass.`
@@ -125,6 +127,7 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   pr_close: ["namespace", "repo", "number", "reason"],
   approve_pr: ["namespace", "repo", "prs", "shas", "confirm", "reason", "undo"],
   revoke_agent: ["name"],
+  activate_agent: ["name"],
   site_add: ["namespace", "name", "origin", "health_path", "platform", "script", "operator"],
   site_edit: [
     "namespace",

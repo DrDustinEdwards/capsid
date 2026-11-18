@@ -86,6 +86,10 @@ test("mint returns the key ONCE and stores only its hash", async () => {
   const stored = insert.params.map(String);
   assert.ok(!stored.includes(key), "THE PLAINTEXT KEY REACHED THE DATABASE");
   assert.ok(stored.includes(await sha256Hex(key)), "the row does not carry the key's sha256");
+  // It waits for a click in the Portal (security review round 4, finding 1).
+  assert.match(insert.sql, /pending\)\s*VALUES \([^)]*, 1\)/i, "a minted key was born active");
+  assert.equal((body.agent as { pending: boolean }).pending, true);
+  assert.match(String(body.note), /Activate/);
 
   // Audit-logged with the scopes, and with the hash rather than the key.
   const audit = statements(d1).find((r) => /INSERT INTO audit_log/i.test(r.sql));

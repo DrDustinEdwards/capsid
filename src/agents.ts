@@ -137,12 +137,13 @@ export interface ResolvedAgent {
   touch: () => Promise<void>;
 }
 
-// An indexed equality on the digest, confirmed with a constant-time compare. The
+// A minted key resolves only once a person activated it in the Portal (pending = 0,
+// migrations/0065). An indexed equality on the digest, confirmed with a constant-time compare. The
 // index keeps the lookup O(1) as the table grows; the compare keeps the guarantee if
 // the query is ever loosened (a LIKE, a case fold, a fake in a test).
 async function liveAgentByHash(db: D1Database, hash: string): Promise<AgentRow | null> {
   const row = await db
-    .prepare("SELECT * FROM agents WHERE key_hash = ?1 AND revoked_at IS NULL")
+    .prepare("SELECT * FROM agents WHERE key_hash = ?1 AND revoked_at IS NULL AND pending = 0")
     .bind(hash)
     .first<AgentRow>();
   if (!row) return null;

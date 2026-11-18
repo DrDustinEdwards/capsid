@@ -1,6 +1,6 @@
 import { adminAgentForEmail } from "./agents";
 import { archivedAgentByName } from "./agents-archive";
-import { agentActor } from "./agents-schema";
+import { agentActor, parseScopes, SCOPE_FLAGS } from "./agents-schema";
 import {
   type Surface,
   AUTOMERGE_RESUME_REASON,
@@ -743,6 +743,32 @@ export async function planAction(
                 .join("; ")}.`,
         ],
         audit: [`agent-revoked by ${actor}`, click],
+      };
+    }
+    case "activate_agent": {
+      if (!p.name) return refused("activate_agent needs an agent name.");
+      const agent = await env.DB.prepare(
+        "SELECT name, kind, scopes, created_by, created_at FROM agents WHERE name = ?1 AND revoked_at IS NULL AND pending = 1",
+      )
+        .bind(p.name)
+        .first<{
+          name: string;
+          kind: string;
+          scopes: string;
+          created_by: string;
+          created_at: string;
+        }>();
+      if (!agent) return refused(`no live agent named '${p.name}' is waiting for activation.`);
+      const scopes = parseScopes(agent.scopes);
+      const flags = SCOPE_FLAGS.filter((f) => scopes.flags[f]);
+      const reach = scopes.namespaces === "*" ? "every namespace" : scopes.namespaces.join(", ");
+      return {
+        ok: true,
+        changes: [
+          `agent ${agent.name} (${agent.kind}): waiting -> active. Its key resolves from the next request.`,
+          `Minted by ${agent.created_by} at ${agent.created_at}, for ${reach} with ${scopes.grants.join(", ") || "no grants"}${flags.length ? ` and the flags ${flags.join(", ")}` : ""}. If you did not ask for this key, revoke it instead.`,
+        ],
+        audit: [`agent-activated by ${actor}`, click],
       };
     }
   }

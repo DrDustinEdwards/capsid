@@ -198,6 +198,7 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   pr_close: "Close pull request",
   approve_pr: (p) => (p.undo === "true" ? "Undo approval" : "Approve"),
   revoke_agent: "Revoke agent",
+  activate_agent: "Activate agent",
   site_add: "Add site",
   site_edit: "Save changes",
   site_remove: "Remove site",

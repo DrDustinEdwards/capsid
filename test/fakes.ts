@@ -725,11 +725,19 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     // applied so a revoke is visible to the next read. The CAS itself is proven
     // against real SQLite in test-integration.
     if (/^UPDATE agents SET/i.test(flat)) {
-      const id = params[0];
+      const key = params[0];
+      const byName = /WHERE name = \?1/i.test(flat);
       const row = rows.agents.find(
-        (a) => a.id === id && (!/revoked_at IS NULL/i.test(flat) || a.revoked_at == null),
+        (a) =>
+          (byName ? a.name : a.id) === key &&
+          (!/revoked_at IS NULL/i.test(flat) || a.revoked_at == null) &&
+          pendingMatches(flat, a),
       );
       if (!row) return null;
+      if (/SET pending = 0/i.test(flat)) {
+        row.pending = 0;
+        return { ...row };
+      }
       if (/SET revoked_at/i.test(flat)) row.revoked_at = "2026-09-11 02:00:00";
       if (/SET scopes/i.test(flat)) row.scopes = params[1];
       if (/SET last_seen/i.test(flat)) row.last_seen = "2026-09-11 02:00:00";
@@ -750,6 +758,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       const byName = /name = \?1/i.test(flat);
       const match = rows.agents.find((a) => {
         if (live && a.revoked_at != null) return false;
+        if (!pendingMatches(flat, a)) return false;
         if (byHash) return a.key_hash === params[0];
         if (byId) return a.id === params[0];
         if (byName) return a.name === params[0];
@@ -1027,7 +1036,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     if (/FROM agents/i.test(flat)) {
       const live = /revoked_at IS NULL/i.test(flat);
       return rows.agents
-        .filter((a) => !live || a.revoked_at == null)
+        .filter((a) => (!live || a.revoked_at == null) && pendingMatches(flat, a))
         .map((a) => project(flat, { ...a }));
     }
     if (/FROM document_versions WHERE namespace/i.test(flat)) {
@@ -1434,4 +1443,11 @@ export function fakeFindingMemory(
     },
   };
   return { memory, rows, writes };
+}
+
+// migrations/0065: a minted key waits for activation. `pending = 0` and `pending = 1` after a
+// statement's WHERE filter as SQLite would; a row with no pending column is an older, active one.
+function pendingMatches(flat: string, a: { pending?: number }): boolean {
+  const want = flat.slice(flat.search(/\bWHERE\b/i)).match(/pending = ([01])/i);
+  return !want || (a.pending ?? 0) === Number(want[1]);
 }

@@ -57,9 +57,11 @@ test("a minted key resolves to its agent row, with that row's scopes and audit i
   for (const flag of SCOPE_FLAGS) assert.equal(resolved.agent.scopes.flags[flag], false);
 });
 
-test("a revoked agent does not resolve", async () => {
+test("a revoked agent, or one not yet activated in the Portal, does not resolve", async () => {
   const { env } = await envWithAgent({}, { revoked_at: "2026-09-11 01:00:00" });
   assert.equal(await resolveAgent(bearer(KEY), env), null);
+  const waiting = await envWithAgent({}, { pending: 1 });
+  assert.equal(await resolveAgent(bearer(KEY), waiting.env), null, "a pending key resolved");
 });
 
 test("no bearer, or a bearer nothing knows, resolves to nothing at all", async () => {
