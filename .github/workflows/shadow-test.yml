@@ -22,6 +22,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Holds an OIDC token, so it runs the base's code only: the checkout is the base, and
+  # the model is confined to an unpacked copy of it. Capsid refuses a run whose copy of
+  # this file is not the default branch's (src/shadow.ts), so a pull request cannot move
+  # the head's code into a job that holds a token.
   shadow-test:
     permissions:
       contents: read
@@ -29,14 +33,15 @@ jobs:
     name: shadow-test
     if: github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, 'job_')
     runs-on: ubuntu-latest
-    # A model turn budget of 40 plus two npm installs and two test runs.
-    timeout-minutes: 45
+    # A model turn budget of 40 plus an npm install and a test run.
+    timeout-minutes: 40
+    outputs:
+      test: ${{ steps.write.outputs.test }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.sha }}
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
@@ -49,8 +54,67 @@ jobs:
       - name: Install Claude Code
         run: curl -fsSL https://claude.ai/install.sh | bash
 
-      - name: Write and run the shadow test
+      - name: Write the shadow test and run it on the base
+        id: write
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: PATH="$HOME/.local/bin:$PATH" node scripts/shadow-test.mjs "$BASE_SHA"
+        run: PATH="$HOME/.local/bin:$PATH" node scripts/shadow-test.mjs write
+
+  # The head's code, with no OIDC token: nothing here can reach Capsid. The result it
+  # reports is the head's word, as it always was: the head's code is what is under test.
+  shadow-head:
+    needs: shadow-test
+    if: needs.shadow-test.outputs.test != ''
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      head: ${{ steps.run.outputs.head }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run the shadow test on the head
+        id: run
+        env:
+          SHADOW_TEST: ${{ needs.shadow-test.outputs.test }}
+        run: node scripts/shadow-test.mjs head
+
+  # Holds an OIDC token again, on the base's code, to record both results and the test.
+  shadow-report:
+    needs: [shadow-test, shadow-head]
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Record the results
+        env:
+          SHADOW_TEST: ${{ needs.shadow-test.outputs.test }}
+          SHADOW_HEAD: ${{ needs.shadow-head.outputs.head }}
+        run: node scripts/shadow-test.mjs report
