@@ -55,7 +55,8 @@ const REVIEW_WORKFLOWS = [
 // Dustin's GitHub account id. Owner ids never change; a login can be renamed and reused.
 export const REVIEW_OWNER_ID = "204601333";
 const RENOVATE = /^renovate(\[bot\])?$/i;
-// A verdict per head commit, so a re-run of the same push asks the model nothing.
+// One verdict per pull request, kept for its life: a later push gets the first verdict (its head_sha names the commit
+// it read) and asks the model nothing. Reviewing every push cost 1.16 million Workers AI neurons in three days, 2026-11-05.
 const CACHE_TTL_S = 14 * 24 * 3600;
 // The diff the model reads, at most. About 75,000 tokens, under a cent of input.
 const MAX_DIFF_CHARS = 300_000;
@@ -439,10 +440,10 @@ export async function handleReviewRun(request: Request, env: Env): Promise<Respo
   } catch (err) {
     return textResponse(`could not read ${full}#${who.pr}: ${errorMessage(err)}`, 502);
   }
-  // A review is kept per head; an error is not kept, so the next push or a re-run asks again.
+  // A review is kept per pull request; an error is not kept, so the next push or a re-run asks again.
   const result = await kvCached(
     env.APP_KV,
-    `review:${full.toLowerCase()}:${who.pr}:${pull.head}`,
+    `review:${full.toLowerCase()}:${who.pr}`,
     { ttl: CACHE_TTL_S, keep: (r) => r.status !== "error" },
     () => reviewPull(env, who, pull, full),
   );
