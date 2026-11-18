@@ -77,7 +77,7 @@ beforeEach(async () => {
 });
 
 describe("canon", () => {
-  it("PLANT: a namespace key's write is refused and leaves the document as it was", async () => {
+  it("PLANT: a namespace key's and the portfolio-wide key's writes of canon and a ruling are refused and change nothing", async () => {
     const result = await call(driver(), "capsid_write_doc", {
       action: "write",
       namespace: NS,
@@ -88,9 +88,6 @@ describe("canon", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/is canon/);
     expect(await body("core.md"), "the canon document changed").toBe(CORE);
-  });
-
-  it("PLANT: the portfolio-wide key is refused canon and a ruling", async () => {
     const wide = await call(driver({}, "*"), "capsid_write_doc", {
       action: "write",
       namespace: NS,
