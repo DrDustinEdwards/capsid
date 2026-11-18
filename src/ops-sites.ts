@@ -75,7 +75,7 @@ function configFrom(row: SiteRow): OpsSiteConfig {
     self_probe: row.self_probe === 1,
     revision: row.revision,
     updated_at: row.updated_at,
-    ...operatorFrom(row.operator),
+    ...operatorFrom(row.operator, row.namespace),
   };
 }
 
@@ -83,9 +83,10 @@ function configFrom(row: SiteRow): OpsSiteConfig {
  *  no longer passes (a ceiling tightened since) is not used, and the reason is shown. */
 function operatorFrom(
   raw: string | null | undefined,
+  namespace: string,
 ): Pick<OpsSiteConfig, "operator" | "operator_problem"> {
   if (raw === null || raw === undefined) return { operator: null, operator_problem: null };
-  const parsed = parseOperator(raw);
+  const parsed = parseOperator(raw, namespace);
   return parsed.ok
     ? { operator: parsed.operator, operator_problem: null }
     : { operator: null, operator_problem: parsed.refusal };
@@ -252,7 +253,7 @@ export function validateSite(p: Record<string, string | undefined>): Validated {
   let operator: string | null | undefined;
   if (p.operator === "none") operator = null;
   else if (p.operator !== undefined) {
-    const parsed = parseOperator(p.operator);
+    const parsed = parseOperator(p.operator, namespace);
     if (!parsed.ok) return refuse(parsed.refusal);
     operator = JSON.stringify(parsed.operator);
   }
@@ -367,6 +368,20 @@ export async function addSite(db: D1Database, actor: string, site: SiteInput): P
 
 /** Replace a row's fields, only if it is still at `revision`. An origin change clears
  *  the in-process probe, which is right for Capsid's own origin only. */
+/** The refusal for an edit that moves a row's origin while it names an operator token,
+ *  or null. Moving the origin would send the token to the new host on the watcher's next
+ *  pass (Capsid security review, round 4, finding 2): clear the operator configuration
+ *  first, or in the same edit. */
+export function originMoveRefusal(before: OpsSiteConfig, site: SiteInput): string | null {
+  if (before.origin === site.origin) return null;
+  const operatorAfter =
+    site.operator === undefined
+      ? before.operator !== null || before.operator_problem !== null
+      : site.operator !== null;
+  if (!operatorAfter) return null;
+  return `${site.namespace}'s origin cannot change while it names an operator token: the token would go to the new host. Clear the operator configuration (operator: none) in the same edit or first, then set it again once the new origin is right.`;
+}
+
 export async function editSite(
   db: D1Database,
   actor: string,
@@ -376,6 +391,8 @@ export async function editSite(
   const before = await readSiteRow(db, site.namespace);
   if (!before)
     return { ok: false, refusal: `${site.namespace} has no row to edit. Add it instead.` };
+  const moved = originMoveRefusal(before, site);
+  if (moved) return { ok: false, refusal: moved };
   const selfProbe = before.self_probe && before.origin === site.origin ? 1 : 0;
   const won = await db
     .prepare(

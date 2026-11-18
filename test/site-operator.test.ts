@@ -54,7 +54,7 @@ test("the migration's dustinedwards configuration passes the same rules an edit 
   );
   const json = /SET operator = '([^']+)'/.exec(sql)?.[1];
   assert.ok(json, "the migration seeds no configuration");
-  const parsed = parseOperator(json);
+  const parsed = parseOperator(json, "dustinedwards");
   assert.ok(parsed.ok, parsed.ok ? "" : parsed.refusal);
   assert.equal(parsed.operator.auth_var, "DUSTINEDWARDS_OPERATOR_TOKEN");
   assert.ok(!allowedTools(parsed.operator).includes("run_job"));
@@ -83,12 +83,22 @@ test("PLANT: a configuration naming run_job, a write tool or sync_status as a re
       /must name a Capsid Worker secret ending in _OPERATOR_TOKEN/,
     ],
     ["a path off the origin", { path: "https://elsewhere.example.com/x" }, /path must be a path/],
+    // Another site's token on this row would go to this row's origin.
+    ["another site's token", { auth_var: "OTHER_OPERATOR_TOKEN" }, /is not sample's token/],
+    [
+      "a token whose name only starts like this site's",
+      { auth_var: "SAMPLEX_OPERATOR_TOKEN" },
+      /is not sample's token/,
+    ],
     ["an unknown key", { url: "x" }, /'url' is not one of them/],
   ] as const) {
-    const got = parseOperator(JSON.stringify({ ...base, ...extra }));
+    const got = parseOperator(JSON.stringify({ ...base, ...extra }), "sample");
     assert.equal(got.ok, false, `${label} was accepted`);
     if (!got.ok) assert.match(got.refusal, pattern, label);
   }
+  // A further host of a namespace may use that namespace's token, as carrel-mcp does.
+  assert.ok(parseOperator(JSON.stringify(base), "sample-mcp").ok);
+  assert.equal(parseOperator(JSON.stringify(base), "other-sample").ok, false);
   assert.equal(repairToolRefusal("sync_media"), null);
   assert.equal(repairToolRefusal("refresh_citations"), null);
 });

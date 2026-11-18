@@ -32,7 +32,13 @@ import { MAX_RESUME_NOTE } from "./limits";
 import { planResume } from "./merge-safety";
 import { planLift } from "./merge-units";
 import { validatePackage, readPackageRow, describePackage } from "./ops-packages";
-import { validateSite, readSiteRow, describeSite, type SiteInput } from "./ops-sites";
+import {
+  validateSite,
+  readSiteRow,
+  describeSite,
+  originMoveRefusal,
+  type SiteInput,
+} from "./ops-sites";
 import type { PortalAction } from "./ops-types/portal";
 import {
   overnightValueRefusal,
@@ -511,6 +517,8 @@ export async function planAction(
       if (site.operator !== undefined && site.operator !== beforeOperator)
         diffs.push(`operator: ${shown(beforeOperator)} -> ${shown(site.operator)}`);
       if (diffs.length === 0) return refused(`the edit changes nothing in ${site.namespace}.`);
+      const moved = originMoveRefusal(before, site);
+      if (moved) return refused(moved);
       const changes = [
         `ops_sites ${site.namespace}, revision ${revision} -> ${revision + 1}:`,
         ...diffs.map((d) => `  ${d}`),
