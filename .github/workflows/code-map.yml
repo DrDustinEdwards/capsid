@@ -25,7 +25,7 @@ jobs:
     concurrency:
       group: code-map
       cancel-in-progress: false
-    uses: DrDustinEdwards/devkit/.github/workflows/code-map.yml@0a33b382def5404f806696de8fbe93c2670da696 # v0.51.2
+    uses: DrDustinEdwards/devkit/.github/workflows/code-map.yml@6b0656ca6e6072ccdd73b85647d5c16ff85ea98f # v0.53.0
     with:
       # Both installs, as ci.yml runs them: test/portal-stops.test.ts imports dashboard/src/lib/stops.ts, which imports
       # capsomer from the Watch Floor app's own package, so the root install alone leaves that test unable to load.
