@@ -205,7 +205,7 @@ test("a token is for the administrator it was issued to, and expires", async () 
   }
 });
 
-test("a switch without a reason is refused at preview, with the reason it needs", async () => {
+test("a switch without a reason, or a Portal-only control from chat, is refused at preview, with the reason", async () => {
   const { env, d1, kv } = world();
   const { call, close } = await connect(env, admin());
   try {
@@ -219,6 +219,18 @@ test("a switch without a reason is refused at preview, with the reason it needs"
       params: { value: "off", reason: "x", site: "y" },
     });
     assert.equal(stray.isError, true, "a param the control does not take was carried");
+    // Signing the auto-merge policy and setting a site key take a click in the Portal
+    // (security review round 4, finding 1).
+    for (const [control, params] of [
+      ["sign_policy_change", { change: "promote", unit: "capsid/tests", confirm: "11" }],
+      ["sign_policy_from_repo", { confirm: "11" }],
+      ["site_key_rotate", { namespace: "sample" }],
+    ] as const) {
+      const chat = await call({ action: "preview", control, params });
+      assert.equal(chat.isError, true, `${control} was previewed from chat`);
+      assert.match(chat.content[0].text, /runs only from a click in the Portal/);
+    }
+    assert.deepEqual([d1.recorded, kv.puts], [[], []]);
   } finally {
     await close();
   }

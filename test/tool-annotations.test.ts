@@ -72,8 +72,6 @@ const DESTRUCTIVE = [
   // The controls' perform: it can revoke an agent, fail a job or remove a site, through
   // the mutators src/controls-perform.ts calls.
   /\bperformControl\(/,
-  // set_site_key replaces a site's key on its Worker and on Carrel (src/site-key.ts).
-  /\bsetSiteKey\(/,
 ];
 
 const matches = (body: string, res: RegExp[]) => res.some((re) => re.test(body));
@@ -187,7 +185,7 @@ test("PLANT: every mutating tool is served with destructiveHint true", async () 
   const served = await servedAnnotations();
   const mutating = TOOLS.filter(destructiveTool);
   assert.ok(
-    mutating.length >= 10,
+    mutating.length >= 9,
     `the destructive scan found only ${mutating.length} mutating tools; it is broken`,
   );
   const understated = mutating.filter((name) => served.get(name)?.destructiveHint !== true);
@@ -381,11 +379,6 @@ const OPEN_WORLD_THROUGH: Record<
       { file: "site-operator.ts", pattern: /\boperatorCall\(/ },
     ],
   },
-  set_site_key: {
-    reason: "sets a secret on two Workers through the Cloudflare API",
-    via: /\bsetSiteKey\(/,
-    evidence: [{ file: "site-key.ts", pattern: /\bfetchImpl\(/ }],
-  },
   site_check: {
     reason: "fetches the site's health route, a page and the 401 probe path",
     via: /\bsiteCheck\(/,
@@ -558,7 +551,6 @@ const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }>
     idempotent: false,
     reason: "sign_policy snapshots and audit-logs the policy on every call",
   },
-  capsid_admin_set_site_key: { idempotent: false, reason: "every call mints a different key" },
 };
 
 // What creates something new on every call, matched in the block by what it does. An

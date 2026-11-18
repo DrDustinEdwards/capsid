@@ -55,6 +55,20 @@ const UNDO_INFIX = "undo-";
 // from chat.
 export type Surface = "portal" | "chat";
 const CHAT_AUDIT_PREFIX = "control-";
+// The controls a person must click in the Portal (security review round 4, finding 1; Dustin,
+// 2026-11-18): signing the auto-merge policy decides what merges with no person, and a site
+// key opens a site's API. Every project thread is the admin, so chat could be talked into
+// either by text it read; a click in a signed-in browser is a person.
+const PORTAL_ONLY: ReadonlySet<PortalAction> = new Set<PortalAction>([
+  "sign_policy_change",
+  "sign_policy_from_repo",
+  "site_key_rotate",
+]);
+export const portalOnlyRefusal = (action: PortalAction, surface: Surface): string | null =>
+  surface === "chat" && PORTAL_ONLY.has(action)
+    ? `'${action}' runs only from a click in the Portal (https://portal.dustinedwards.info: the Pull requests page for the auto-merge policy, a site's Setup tab for its key), so text a session read can never sign the policy or set a key. Nothing was done.`
+    : null;
+
 export const auditPrefix = (surface: Surface) =>
   surface === "portal" ? CLICK_AUDIT_PREFIX : CHAT_AUDIT_PREFIX;
 

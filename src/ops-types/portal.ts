@@ -72,8 +72,8 @@ export type PortalAction =
   | "namespace_add"
   | "namespace_edit"
   | "namespace_remove"
-  // Mint a new site key and set it on the site's Worker and on Carrel, as
-  // capsid_admin_set_site_key does (src/site-key.ts). The value is never shown.
+  // Mint a new site key and set it on the site's Worker and on Carrel (src/site-key.ts).
+  // Portal only. The value is never shown.
   | "site_key_rotate";
 
 // params by action:

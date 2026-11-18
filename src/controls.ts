@@ -7,6 +7,7 @@ import { mintConfirm, redeemConfirm } from "@dustinedwards/site-runtime/confirm-
 import {
   type ActionParams,
   PORTAL_ACTIONS,
+  portalOnlyRefusal,
   type Surface,
   SWITCHES,
   UNKNOWN_ACTION,
@@ -238,6 +239,8 @@ export async function previewControl(
       status: 400,
       refusal: UNKNOWN_ACTION(typeof name === "string" ? name : ""),
     };
+  const portalOnly = portalOnlyRefusal(control.name, surface);
+  if (portalOnly) return { ok: false, status: 403, refusal: portalOnly };
   const parsed = paramsFrom(control.name, rawParams);
   if (!parsed.ok) return { ok: false, status: 400, refusal: parsed.refusal };
   const plan = await control.plan(env, email, parsed.params, surface);
@@ -294,6 +297,8 @@ export async function performControl(
   const { action, params } = redeemed.claims;
   const control = controlNamed(action);
   if (!control) return { ok: false, status: 400, refusal: UNKNOWN_ACTION(String(action)) };
+  const portalOnly = portalOnlyRefusal(control.name, surface);
+  if (portalOnly) return { ok: false, status: 403, refusal: portalOnly };
   if (!isStringRecord(params))
     return {
       ok: false,

@@ -447,7 +447,6 @@ export const SINGLE_TOOLS: Record<string, { op: string; title: string }> = {
   capsid_admin_manage_agents: { op: "agents", title: "Manage agents" },
   capsid_admin_read_claims: { op: "claims", title: "Read claims" },
   capsid_admin_run_controls: { op: "controls", title: "Run a control" },
-  capsid_admin_set_site_key: { op: "set_site_key", title: "Set a site key" },
 };
 
 export const COMPOSITES: readonly CompositeSpec[] = [
@@ -514,7 +513,6 @@ export const CAPSID_ADMIN_TOOLS = [
   "capsid_admin_read_ops",
   "capsid_admin_run_controls",
   "capsid_admin_manage_switches",
-  "capsid_admin_set_site_key",
 ] as const;
 
 // `readOnly`: the caller holds the read grant and not write, so the tools whose action
@@ -646,16 +644,5 @@ export function registerCapsidAdminTools(server: McpServer, ops: Operations): vo
     "capsid_admin_manage_switches",
     compositeConfig(ops, MANAGE_SWITCHES),
     compositeHandler(ops, MANAGE_SWITCHES),
-  );
-  server.registerTool(
-    "capsid_admin_set_site_key",
-    singleConfig(
-      ops,
-      "capsid_admin_set_site_key",
-      "Set a site key",
-      "set_site_key",
-      "Admin only, and needs a recent sign-in from a signed-in session.",
-    ),
-    singleHandler(ops, "capsid_admin_set_site_key", "set_site_key"),
   );
 }

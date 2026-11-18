@@ -8,13 +8,12 @@ import {
   listBuilds,
   LOG_LINES_MAX,
 } from "../workers-builds";
-import { setSiteKey, SITE_SECRET } from "../site-key";
 import { readSiteBackups } from "../site-backup";
 import { whatsNext } from "../whats-next";
 import { fail, ok, type ToolCtx } from "./docs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The operations Capsid Admin added: what needs the seat, Workers Builds, and a site's key. Each is served on the admin
+// The operations Capsid Admin added: what needs the seat, and Workers Builds. Each is served on the admin
 // server only (src/tools/surface.ts), and each tool is admin only in TOOL_GRANTS.
 
 const run = async (fn: () => Promise<unknown>) => {
@@ -70,14 +69,5 @@ export function defineAdminOperations(_server: McpServer, ctx: ToolCtx): void {
       inputSchema: { build_uuid: bounded(36) },
     },
     ({ build_uuid }) => run(() => buildLogs(env, { build_uuid })),
-  );
-
-  ctx.ops.define(
-    "set_site_key",
-    {
-      description: `Mint a new key for the namespace's site API and set it as a secret on both sides: the site's Worker as ${SITE_SECRET}, and Carrel as SITE_<NAMESPACE>_KEY. The value is never returned, logged or audited. The site first, then Carrel; when only the site takes it, the answer says the two differ and that calling again mints a fresh key and sets both. Needs CF_SECRETS_TOKEN with Workers Scripts Edit, and from a signed-in session a sign-in or step-up action in the last 2 hours (at most 12 hours after the sign-in).`,
-      inputSchema: { namespace: nsName },
-    },
-    ({ namespace }) => run(() => setSiteKey(env, ctx.actor, namespace)),
   );
 }

@@ -6,8 +6,8 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { base64url } from "@dustinedwards/site-runtime/encoding";
 import { callSignal } from "./call-signal";
 
-// SET A SITE KEY (create a site key and set it on both sides, never shown), served as
-// capsid_admin_set_site_key and as the site_key_rotate control (src/controls.ts).The site key is the site API's key
+// SET A SITE KEY (create a site key and set it on both sides, never shown), served only as
+// the site_key_rotate control, from a click in the Portal (src/controls-base.ts PORTAL_ONLY). The site key is the site API's key
 // (DrDustinEdwards/site-api): the site's Worker holds it as CARREL_SITE_KEY, and Carrel
 // holds the same value as SITE_<NAMESPACE>_KEY to call that site. This mints a new one
 // and sets it as a secret on both Workers through the Cloudflare API.
@@ -16,8 +16,7 @@ import { callSignal } from "./call-signal";
 // error. It exists in this invocation's memory and in the two secrets, and nowhere else.
 //
 // The token is CF_SECRETS_TOKEN, apart from the watcher's read token because it can
-// write: Workers Scripts Edit on the account. Unset, nothing is minted. A step-up (a
-// recent sign-in) is required for an OAuth session (src/scope.ts STEP_UP).
+// write: Workers Scripts Edit on the account. Unset, nothing is minted.
 //
 // ORDER. The site first, then Carrel. When the site takes the new key and Carrel does
 // not, Carrel's calls to the site are refused until the two match; the answer says so

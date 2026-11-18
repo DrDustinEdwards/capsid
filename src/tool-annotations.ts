@@ -93,7 +93,6 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // breaker_reset and overnight overwrite their switches. Only this Worker's own stores.
   capsid_admin_manage_switches: destructive({ idempotent: false, openWorld: false }),
   // Replaces a site's key on the site Worker and on Carrel through the Cloudflare API.
-  capsid_admin_set_site_key: destructive({ idempotent: false, openWorld: true }),
 };
 
 // A tool whose action decides its grant (capsid_work_jobs, capsid_lint_namespace) is

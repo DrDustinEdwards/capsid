@@ -41,9 +41,9 @@ export interface Env extends Omit<
   // Unset, the instance keeps whatever gateway it has.
   AI_GATEWAY_ID?: string;
   CF_ACCOUNT_ID?: string;
-  // Capsid Admin's capsid_admin_set_site_key (src/site-key.ts): a token with Workers Scripts Edit, to
+  // The Portal's site_key_rotate control (src/site-key.ts): a token with Workers Scripts Edit, to
   // set a site's key as a secret on its Worker and on Carrel. Apart from CF_OPS_TOKEN
-  // because it writes. Unset, capsid_admin_set_site_key mints nothing and says why.
+  // because it writes. Unset, the control mints nothing and says why.
   CF_SECRETS_TOKEN?: string;
   // Google Search Console's read (src/search-console.ts): a service account's whole JSON
   // key, the account added as a Full user on each site's property. Unset,
