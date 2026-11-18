@@ -313,7 +313,7 @@ test("THE INNOCENT DIRECTION: capsid's own driver still lists everything in caps
   await carrel.close();
 });
 
-test("capsid_start_session for any namespace names the portfolio documents to read first", async () => {
+test("PLANT: capsid_start_session names the rule documents to read first, and no ruling among them", async () => {
   const { call, close } = await connect(driver("carrel"));
   const r = await call("capsid_start_session", { namespace: "carrel" });
   assert.ok(!r.isError, r.text);
@@ -326,7 +326,11 @@ test("capsid_start_session for any namespace names the portfolio documents to re
     };
   };
   assert.equal(out.portfolio_documents.namespace, "capsid");
-  assert.deepEqual(out.portfolio_documents.read_first, [...ALLOWED].sort());
+  // Rulings are records, not rules (Dustin, 2026-11-18): readable, never read first.
+  assert.deepEqual(
+    out.portfolio_documents.read_first,
+    ALLOWED.filter((p) => !p.startsWith("rulings/")).sort(),
+  );
   assert.deepEqual(out.portfolio_documents.allowlist, [
     "conventions.md",
     "core.md",

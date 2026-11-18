@@ -55,7 +55,7 @@ interface NamespaceStatus {
 }
 
 export interface StatusReport {
-  // The canon documents a key scoped to some namespaces may not change (src/canon.ts),
+  // The canon documents and rulings an agent key may not change (src/canon.ts),
   // so a driver knows before it writes.
   canon_paths: ReturnType<typeof servedCanonPaths>;
   // The version a driver passes as approved_by_policy, served here because a

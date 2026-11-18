@@ -24,7 +24,6 @@ test("which documents are rule documents, and their caps", () => {
     ["sample", "decisions.md", RULE_DOC_CAP_BYTES],
     ["capsid", "conventions.md", RULE_DOC_CAP_BYTES],
     ["capsid", "conventions-web.md", RULE_DOC_CAP_BYTES],
-    ["capsid", "rulings/testing-2026-10-04.md", RULE_DOC_CAP_BYTES],
   ];
   const records: Array<[string, string]> = [
     ["capsid", "archive/decisions-vol-7.md"],
@@ -34,6 +33,8 @@ test("which documents are rule documents, and their caps", () => {
     ["capsid", "audits/CLOSED-2026-09.md"],
     ["capsid", "jobs/job_0123456789ab.md"],
     ["capsid", "rulings/old/one.md"],
+    // Dustin's rulings are records, not rules (Dustin, 2026-11-18).
+    ["capsid", "rulings/testing-2026-10-04.md"],
     ["sample", "conventions.md"],
     ["sample", "schema.md"],
     // Reference notes, not rules (Dustin, 2026-10-18: conventions and each repo's CLAUDE.md only).
@@ -121,12 +122,13 @@ test("a write may cut an over-cap document or leave an old stale name, never mak
   );
   const old = "a merge stays with manage_pr.\n";
   assert.equal(
-    ruleDocWriteRefusal("capsid", "rulings/sample.md", old, `${old}A new line.\n`),
+    ruleDocWriteRefusal("capsid", "conventions-sample.md", old, `${old}A new line.\n`),
     null,
     "an append beside an old stale name",
   );
   assert.match(
-    ruleDocWriteRefusal("capsid", "rulings/sample.md", old, `${old}Call \`jobs.post\`.\n`) ?? "",
+    ruleDocWriteRefusal("capsid", "conventions-sample.md", old, `${old}Call \`jobs.post\`.\n`) ??
+      "",
     /does not serve/,
     "a second stale name",
   );
@@ -156,7 +158,7 @@ test("the truth report names both checks, judged over the rule documents only", 
     now: new Date("2026-10-11T00:00:00Z"),
     docs: [
       doc("decisions.md", "x".repeat(RULE_DOC_CAP_BYTES + 1)),
-      doc("rulings/sample.md", "Use `register_namespace`."),
+      doc("conventions-sample.md", "Use `register_namespace`."),
       doc("conventions.md", "fine"),
       doc("research/r.md", "manage_pr"),
     ],
@@ -173,7 +175,7 @@ test("the truth report names both checks, judged over the rule documents only", 
   );
   assert.deepEqual(
     names.findings.map((f) => f.subject),
-    ["capsid/rulings/sample.md"],
+    ["capsid/conventions-sample.md"],
   );
 });
 
@@ -202,7 +204,7 @@ test("PLANT: capsid_write_doc refuses a stale tool name in a rule document and w
     documents: [
       {
         namespace: "capsid",
-        path: "rulings/sample.md",
+        path: "conventions-sample.md",
         title: "Sample ruling",
         body: "clean",
         type: "procedural",
@@ -212,7 +214,7 @@ test("PLANT: capsid_write_doc refuses a stale tool name in a rule document and w
   try {
     const out = await call(client, {
       namespace: "capsid",
-      path: "rulings/sample.md",
+      path: "conventions-sample.md",
       mode: "append",
       body: "\nUse the `register_namespace` tool.",
     });
@@ -221,7 +223,7 @@ test("PLANT: capsid_write_doc refuses a stale tool name in a rule document and w
     assert.equal(recorded.length, 0, "a refused write still touched the store");
     const fine = await call(client, {
       namespace: "capsid",
-      path: "rulings/sample.md",
+      path: "conventions-sample.md",
       mode: "append",
       body: "\nUse `capsid_admin_manage_namespaces` action `register`.",
     });
@@ -308,7 +310,7 @@ test("a move of a rule document to the archive, and a restore that recreates one
         action: "move",
         namespace: "capsid",
         path: "research/big.md",
-        new_path: "rulings/sample.md",
+        new_path: "conventions-sample.md",
         confirm: true,
       },
     })) as { isError?: boolean; content: Array<{ text: string }> };
