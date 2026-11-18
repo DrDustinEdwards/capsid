@@ -1636,6 +1636,11 @@ function plan(
         apply: () => {},
       };
     }
+    // A control the Worker serves before the mock models it is refused here, as an action the
+    // mock does not take, so the Worker's control list can grow first and the mock follow in a
+    // change of its own (devkit-no-bloat counts this file as a Knip plugin input).
+    default:
+      throw new Refusal(400, `The mock does not model ${String(action)} yet.`);
   }
 }
 
