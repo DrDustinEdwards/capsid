@@ -264,7 +264,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/owner/*":
     "the owner page's POSTs /owner/revoke and /owner/sign-out (site-runtime ./owner-page): the same Access for SaaS sign-in and admission as consent (ADMIN_EMAIL and CO_OWNER_EMAILS), a state bound to the browser, a hashed 30-minute session in OAUTH_KV; a revoke needs a same-origin Origin and the session's CSRF token and reaches only the signed-in person's own grants",
   "/register":
-    "tightened Dynamic Client Registration for Grok and Gemini (site-runtime registrationLimited and registrationRefusal, src/index.ts): rate limited per address (5 an hour) and overall (30 a day), failing closed, every redirect URI matched exactly against the allowlist; it writes a client record and grants nothing, since the client still meets the consent page and the Access sign-in",
+    "tightened Dynamic Client Registration for Grok and Gemini (site-runtime registrationLimited and registrationRefusal, src/index.ts): rate limited per address (5 an hour) and, for a registration the allowlist allows, overall (30 a day), failing closed, every redirect URI matched exactly against the allowlist; it writes a client record and grants nothing, since the client still meets the consent page and the Access sign-in",
   "/portal/callback":
     "Capsid Portal's Access for SaaS callback, which validates state before issuing a session",
   "/portal/api/ops":

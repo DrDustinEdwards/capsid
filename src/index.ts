@@ -140,23 +140,6 @@ function dcrAllowlist(env: Env): string {
   return [...DCR_CALLBACKS, env.DCR_REDIRECT_URIS ?? ""].join(",");
 }
 
-// A registration the allowlist refuses writes nothing, so it spends none of the limit: the
-// provider's callback still answers it 400 invalid_redirect_uri. Counting refusals let the
-// live gate's own unlisted-redirect probe, one per deploy, use up the daily 30 and roll a
-// deploy back on a 429 (run 41245505021). Only a registration that would be written counts.
-async function registrationWouldBeRefused(request: Request, env: Env): Promise<boolean> {
-  try {
-    const metadata = (await request.clone().json()) as Record<string, unknown>;
-    return (
-      metadata !== null &&
-      typeof metadata === "object" &&
-      registrationRefusal(dcrAllowlist(env), metadata) !== null
-    );
-  } catch {
-    return false;
-  }
-}
-
 function providerFor(env: Env): OAuthProvider<Env> {
   // The callbacks every user shares (Grok, ChatGPT, Gemini) and the per-connector ones the
   // seat lists in DCR_REDIRECT_URIS, each matched exactly.
@@ -271,12 +254,10 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
     const foreign = mcpOriginRefusal(request, ["https://claude.ai"]);
     if (foreign) return secured(foreign, pathname);
   }
-  if (
-    pathname === "/register" &&
-    request.method === "POST" &&
-    !(await registrationWouldBeRefused(request, env))
-  ) {
-    const limited = await registrationLimited(request, env.OAUTH_KV);
+  if (pathname === "/register" && request.method === "POST") {
+    // A registration the allowlist refuses counts only per address, never toward the daily 30
+    // (site-runtime 0.165.0), so the live gate's unlisted-redirect probe cannot spend it (run 41245505021).
+    const limited = await registrationLimited(request, env.OAUTH_KV, dcrAllowlist(env));
     if (limited) return secured(limited, pathname);
   }
   const response = await providerFor(env).fetch(request, env, ctx);
