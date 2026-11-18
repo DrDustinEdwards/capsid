@@ -4,6 +4,7 @@ import { z } from "zod";
 import { bounded, MAX_DOC_STATUS, nsName } from "../limits";
 import { capsidStatus } from "../status";
 import { signPolicyDocument } from "../policy-sign";
+import { AUTO_MERGE_POLICY_PATH } from "../auto-merge-policy";
 import { resetBreaker } from "../job-breaker";
 import { fail, ok, type ToolCtx } from "./docs";
 
@@ -17,7 +18,7 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "admin_control",
     {
-      description: `The administrator's switches. action "breaker_reset" closes the queue's circuit breaker for namespace, so jobs its drivers failed before now stop counting toward the threshold (default 3 holder fails in 24 hours), and with threshold sets that threshold for every namespace; audit-logged and read back. action "overnight" sets the overnight run's switch (value "off" | "api" | "subscription", and a reason, both required): off unless set, with a "Runs on" choice of API key or subscription; choosing subscription records Dustin's decision, its date and its reasoning with the switch; audit-logged and read back. action "sign_policy" signs the policy document already stored at path (namespace "capsid", path under "policy/"), never a body the caller supplies; the prior body is snapshotted and the signing is audit-logged. Admin only.`,
+      description: `The administrator's switches. action "breaker_reset" closes the queue's circuit breaker for namespace, so jobs its drivers failed before now stop counting toward the threshold (default 3 holder fails in 24 hours), and with threshold sets that threshold for every namespace; audit-logged and read back. action "overnight" sets the overnight run's switch (value "off" | "api" | "subscription", and a reason, both required): off unless set, with a "Runs on" choice of API key or subscription; choosing subscription records Dustin's decision, its date and its reasoning with the switch; audit-logged and read back. action "sign_policy" signs the policy document already stored at path (namespace "capsid", path under "policy/"), never a body the caller supplies, and only when sha256 is the sha256 of the body below its frontmatter as the caller read it; the prior body is snapshotted and the signing is audit-logged. It never signs policy/auto-merge.md: that is signed by the sign_policy_change and sign_policy_from_repo controls. Admin only.`,
       inputSchema: {
         action: z.enum(["sign_policy", "breaker_reset", "overnight"]),
         namespace: nsName
@@ -44,16 +45,29 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
           .describe(
             'For action "sign_policy": the path of the stored policy document to sign, under "policy/" in the capsid namespace.',
           ),
+        sha256: z
+          .string()
+          .regex(/^[0-9a-fA-F]{64}$/)
+          .optional()
+          .describe(
+            'For action "sign_policy": the sha256 of the policy body below its frontmatter, as you read it. A body that differs is not signed.',
+          ),
       },
     },
-    async ({ action, namespace, value, reason, path, threshold }) => {
+    async ({ action, namespace, value, reason, path, threshold, sha256 }) => {
       try {
         // Admin only, stated in TOOL_GRANTS (src/scope.ts) and enforced by the registrar
         // before this handler runs.
         if (action === "sign_policy") {
-          if (!namespace || !path)
-            return fail("sign_policy needs the namespace and the path of the policy document.");
-          const signed = await signPolicyDocument(env, ctx.actor, namespace, path);
+          if (!namespace || !path || !sha256)
+            return fail(
+              "sign_policy needs the namespace, the path of the policy document and the sha256 of the body you read.",
+            );
+          if (path === AUTO_MERGE_POLICY_PATH)
+            return fail(
+              `sign_policy does not sign ${AUTO_MERGE_POLICY_PATH}: its author allowlist and Auto units decide what merges with no person, so it is signed only by the sign_policy_change and sign_policy_from_repo controls, which show the change first. Nothing was signed.`,
+            );
+          const signed = await signPolicyDocument(env, ctx.actor, namespace, path, sha256);
           return signed.ok ? ok(signed) : fail(signed.error);
         }
         if (action === "overnight")

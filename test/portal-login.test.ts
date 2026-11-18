@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { stubAccess } from "@dustinedwards/devkit/access";
 import { forgetKeys } from "@dustinedwards/site-runtime/access-login";
+import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 import {
   handlePortalCallback,
   portalSessionCookie,
@@ -389,6 +390,20 @@ test("a co-owner completes the login: the cookie carries her email and verifies 
     new Date(),
   );
   assert.deepEqual(session, { email: "co@example.com" });
+  // PLANT: the same payload signed with the root secret itself, as before the session had
+  // its own derived key, does not verify: the root secret signs nothing.
+  const value = setCookies(res)[0].split(";")[0];
+  const encoded = value.slice(value.indexOf(".") + 1);
+  const rootSigned = `${value.slice(0, value.indexOf("=") + 1)}${await hmacSha256Hex(SECRET, encoded)}.${encoded}`;
+  assert.equal(
+    await readPortalSession(
+      new Request(`${ORIGIN}/portal/`, { headers: { Cookie: rootSigned } }),
+      e,
+      new Date(),
+    ),
+    null,
+    "a cookie signed with COOKIE_ENCRYPTION_KEY itself verified",
+  );
   // The same cookie stops verifying when she is taken off the list.
   const removed = await readPortalSession(
     new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }),

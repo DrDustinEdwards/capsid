@@ -12,7 +12,7 @@ import {
   startAccessLogin,
 } from "./access-login";
 import { isAdminEmail } from "@dustinedwards/site-runtime/access";
-import { capsidCookie } from "./auth";
+import { capsidCookie, confirmKeys } from "./auth";
 import { readCookie } from "@dustinedwards/site-runtime/headers";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { logEvent, OWASP_EVENTS } from "@dustinedwards/site-runtime/log";
@@ -94,6 +94,14 @@ interface SessionPayload extends PortalUser {
   exp: number;
 }
 
+// The session's signing key: COOKIE_ENCRYPTION_KEY under its own label (confirmKeys), as
+// the confirmations and the idle cookie each have, so the root secret signs nothing
+// itself (Capsid security review, round 4, finding 8). A new label signs every Portal
+// session out once.
+const SESSION_LABEL = "portal-session";
+const sessionKey = async (secret: string): Promise<string> =>
+  (await confirmKeys({ COOKIE_ENCRYPTION_KEY: secret }, SESSION_LABEL))[0];
+
 export async function portalSessionCookie(
   user: PortalUser,
   secret: string,
@@ -108,7 +116,7 @@ export async function portalSessionCookie(
     exp: Math.floor(now.getTime() / 1000) + PORTAL_SESSION_TTL_SECONDS,
   };
   const encoded = base64url(JSON.stringify(payload));
-  const sig = await hmacSha256Hex(secret, encoded);
+  const sig = await hmacSha256Hex(await sessionKey(secret), encoded);
   return capsidCookie(
     PORTAL_SESSION_COOKIE,
     `${sig}.${encoded}`,
@@ -145,7 +153,8 @@ async function verifySession(request: Request, env: Env): Promise<SessionPayload
   if (dot === -1) return null;
   const sig = raw.slice(0, dot);
   const encoded = raw.slice(dot + 1);
-  if (!(await safeEqual(sig, await hmacSha256Hex(env.COOKIE_ENCRYPTION_KEY, encoded)))) return null;
+  const key = await sessionKey(env.COOKIE_ENCRYPTION_KEY);
+  if (!(await safeEqual(sig, await hmacSha256Hex(key, encoded)))) return null;
   let payload: SessionPayload;
   try {
     payload = JSON.parse(fromBase64urlText(encoded)) as SessionPayload;

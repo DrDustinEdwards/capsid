@@ -43,7 +43,7 @@ npx wrangler secret put ACCESS_SAAS_CLIENT_ID    # the Access for SaaS app "Caps
 npx wrangler secret put ACCESS_SAAS_CLIENT_SECRET
 npx wrangler secret put ADMIN_EMAIL              # the primary owner's email, admitted by both logins, exactly
 npx wrangler secret put CO_OWNER_EMAILS          # optional: co-owners, comma separated, admitted like ADMIN_EMAIL (docs/auth.md, "Co-owner")
-npx wrangler secret put COOKIE_ENCRYPTION_KEY    # openssl rand -hex 32; signs the login state and the Portal cookie and confirm tokens
+npx wrangler secret put COOKIE_ENCRYPTION_KEY    # openssl rand -hex 32; the root of the keys that sign the login state, the Portal cookie and confirm tokens
 npx wrangler secret put IMPROVE_SCORE_SECRET     # root of the job, policy and backup credential HMAC keys
 ```
 
@@ -260,7 +260,7 @@ The sections above explain each part. This is the order to do them in. The host 
    - Then set the secrets `ACCESS_TEAM_DOMAIN`, `ACCESS_SAAS_CLIENT_ID`, `ACCESS_SAAS_CLIENT_SECRET`, `ADMIN_EMAIL` and `COOKIE_ENCRYPTION_KEY` (section 3).
 6. Create the GitHub App (section 4), install it on the repositories you want reachable, note its Client ID, generate a private key (`.pem`), put the Client ID in `wrangler.jsonc` vars as `GITHUB_APP_CLIENT_ID` and set `GITHUB_APP_PRIVATE_KEY`. Only the private key mints installation tokens; the App client secret is not needed. The installation id is not configured: it resolves from GitHub per owner and repo and is cached for a day, because one pinned id cannot be correct for two owners.
 7. `IMPROVE_SCORE_SECRET`, the root the job-signing, policy-signing and backup credential keys are derived from. Without it the work queue refuses to post a job and no signed policy loads.
-8. Optional secrets and vars, each inert until set: `CO_OWNER_EMAILS` (docs/auth.md, "Co-owner"); `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read); `CF_SECRETS_TOKEN` (Workers Scripts Edit, for `capsid_admin_set_site_key`; docs/portal.md, "Site keys"); `ACCESS_DRIFT_AUD` (the drift check's admin list, docs/auth.md, "Access drift check"); `VAPID_PRIVATE_KEY` (phone alerts, docs/portal.md); `DCR_REDIRECT_URIS` (docs/auth.md); and the `R2_*` credential-minting secrets for the Amazon backup copy.
+8. Optional secrets and vars, each inert until set: `CO_OWNER_EMAILS` (docs/auth.md, "Co-owner"); `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read); `CF_SECRETS_TOKEN` (Workers Scripts Edit, for the Portal's `site_key_rotate` control; docs/portal.md, "Site keys"); `ACCESS_DRIFT_AUD` (the drift check's admin list, docs/auth.md, "Access drift check"); `VAPID_PRIVATE_KEY` (phone alerts, docs/portal.md); `DCR_REDIRECT_URIS` (docs/auth.md); and the `R2_*` credential-minting secrets for the Amazon backup copy.
 9. Type check and deploy with `npm run check` and `npm run deploy`. Deploy builds the Portal first and stops if the build or its size budget fails.
 10. Connect claude.ai: Settings, Connectors, Add custom connector, URL `https://<your MCP host>/mcp`. The connector registers itself and walks you through the Cloudflare Access sign-in. Only the `ADMIN_EMAIL` identity and any `CO_OWNER_EMAILS` identity get in (docs/auth.md). Add Capsid Admin the same way at `https://<your MCP host>/mcp/admin`, then mint the first agents (section 7). To test the flow first, run `npx @modelcontextprotocol/inspector`, set the transport to Streamable HTTP, set the URL to the same address, open the Auth tab and run Quick OAuth Flow.
 
@@ -276,7 +276,7 @@ Optional parts stay hidden or inert until configured:
 
 One switch, off by default.
 
-- **Auto-merge and pre-approved gates** run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards with `capsid_admin_manage_switches` action `sign_policy`, which is admin only. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
+- **Auto-merge and pre-approved gates** run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards, which is admin only: the auto-merge policy with the `sign_policy_change` or `sign_policy_from_repo` control, the gate policy with `capsid_admin_manage_switches` action `sign_policy`. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
 
 Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13 and auto-merge on 2026-09-16.
 

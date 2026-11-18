@@ -863,7 +863,7 @@ test("a site down on two probes in a row, and a Worker over the error rate, reac
 });
 
 // scanner-rule: Cloudflare is read in the watcher pass, never per feed request; from the Portal only a site page's tabs read it
-test("only the watcher, the admin capsid_admin_read_ops and capsid_admin_set_site_key calls, the capsid_inspect_repo traffic call, a site page's reads and the site key control import the Cloudflare read, so the feed cannot call Cloudflare", () => {
+test("only the watcher, the admin capsid_admin_read_ops calls, the capsid_inspect_repo traffic call, a site page's reads and the site key control import the Cloudflare read, so the feed cannot call Cloudflare", () => {
   const importersOf = (module: string) =>
     sourceFiles()
       // A static import, a bare side-effect import, or a dynamic import().
@@ -894,14 +894,9 @@ test("only the watcher, the admin capsid_admin_read_ops and capsid_admin_set_sit
   assert.deepEqual(importersOf("ops-cloudflare-config"), ["tools/cloudflare.ts"]);
   // The Workers Builds reads (capsid_admin_read_ops builds and build_logs) run per call of the
   // admin tool and per open of a site page's Deploys tab. The site key's secret write runs per
-  // call of capsid_admin_set_site_key and per perform of the site_key_rotate control (its
-  // preview reads only the site row).
+  // perform of the site_key_rotate control (its preview reads only the site row).
   assert.deepEqual(importersOf("workers-builds"), ["portal-site.ts", "tools/admin.ts"]);
-  assert.deepEqual(importersOf("site-key"), [
-    "controls-perform.ts",
-    "controls-plan.ts",
-    "tools/admin.ts",
-  ]);
+  assert.deepEqual(importersOf("site-key"), ["controls-perform.ts", "controls-plan.ts"]);
   // The 404 report (capsid_inspect_repo traffic) reads per call of that MCP tool and per open
   // of a site page's traffic tab, and the watcher reads the returned 5xx once a pass (readServerErrors).
   assert.deepEqual(importersOf("site-traffic"), [

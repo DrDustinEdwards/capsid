@@ -119,7 +119,7 @@ D1 Time Travel provides 30-day point-in-time recovery. In addition, the daily ba
 
 ## MCP tools
 
-Capsid serves 19 tools over two MCP servers. The count is derived from `TOOL_GRANTS` by `src/counts.ts`, and the registrations are in `src/tools/surface.ts`. Most tools take an `action` argument that selects one operation.
+Capsid serves 18 tools over two MCP servers. The count is derived from `TOOL_GRANTS` by `src/counts.ts`, and the registrations are in `src/tools/surface.ts`. Most tools take an `action` argument that selects one operation.
 
 **Capsid** (`/mcp`, `/ops/mcp`): 11 tools for project work.
 
@@ -137,7 +137,7 @@ Capsid serves 19 tools over two MCP servers. The count is derived from `TOOL_GRA
 | `capsid_work_jobs`      | per action | The work queue lifecycle.                                                                                                           |
 | `capsid_read_status`    | read       | Capsid status per namespace: queue, breaker, maintenance and items awaiting the owner. The name is retained from a removed feature. |
 
-**Capsid Admin** (`/mcp/admin`): 8 tools, available to the administrator identity only.
+**Capsid Admin** (`/mcp/admin`): 7 tools, available to the administrator identity only.
 
 | Tool                             | Grant      | Function                                                                          |
 | -------------------------------- | ---------- | --------------------------------------------------------------------------------- |
@@ -148,7 +148,6 @@ Capsid serves 19 tools over two MCP servers. The count is derived from `TOOL_GRA
 | `capsid_admin_read_ops`          | admin read | Watcher state, Cloudflare Access and Email Routing configuration, Workers Builds. |
 | `capsid_admin_run_controls`      | admin      | Preview and perform administrative controls with a single-use token.              |
 | `capsid_admin_manage_switches`   | admin      | Operator keys, policy signing, the job breaker and the overnight switch.          |
-| `capsid_admin_set_site_key`      | admin      | Mint a site key and install it on the site Worker.                                |
 
 Adding a tool requires a recorded ruling (CLAUDE.md, rule 1).
 

@@ -14,7 +14,9 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 // the path class the units count in.
 //
 // The admin identity alone may name an approval: a driver key's session is not Dustin,
-// so a row it wrote would claim a yes nobody gave. The row is written after the merge
+// so a row it wrote would claim a yes nobody gave. Every project thread is the admin
+// identity, though, so the row is still the session's word: it is a record, and the
+// merge units never count it as evidence for unattended merging (src/merge-units.ts). The row is written after the merge
 // and never fails it: the merge already happened.
 
 const LINK = /^https:\/\/claude\.ai\/\S+$/;

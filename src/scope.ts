@@ -118,8 +118,6 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   // reopens a namespace's queue and overnight starts unattended sessions. None of those
   // is a driver's work.
   capsid_admin_manage_switches: "admin",
-  // Mints a site key and sets it on the site Worker and on Carrel.
-  capsid_admin_set_site_key: "admin",
 };
 
 // Fail closed: a tool with no entry requires the write grant, so a tool added without
@@ -502,7 +500,6 @@ export const STEP_UP: Record<string, readonly string[] | "*"> = {
   capsid_admin_manage_agents: ["mint", "revoke", "update_scopes"],
   capsid_admin_run_controls: ["perform"],
   capsid_admin_manage_switches: "*",
-  capsid_admin_set_site_key: "*",
 };
 
 export function needsStepUp(tool: string, action: string | undefined): boolean {
@@ -606,8 +603,6 @@ const ADMIN_REASON: Record<string, string> = {
     "It runs the administrator's controls (revoke an agent, resume or fail a job, edit the sites and packages the Portal watches), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
   capsid_admin_manage_switches:
     "It holds the administrator's switches: sign_policy decides whether this Worker may merge without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_read_status.",
-  capsid_admin_set_site_key:
-    "It mints a site's operator key and sets it as a secret on the site's Worker and on Carrel, so a caller that could use it could hand itself a site's key.",
 };
 
 function adminReason(tool: string): string {

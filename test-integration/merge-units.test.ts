@@ -53,10 +53,18 @@ describe("merge units against D1", () => {
     expect(audit.results.length).toBeGreaterThan(0);
   });
 
-  it("finds an approved merge's unit through pr_approvals, reads the new columns, and suspends nothing", async () => {
+  it("PLANT: finds an approved merge's unit through pr_approvals, counts no chat approval, and suspends nothing", async () => {
     await env.DB.prepare(
       `INSERT INTO pr_approvals (repo, pr, head_sha, class, status, approved_by, surface, approved_at, closed_at, namespace, path_class)
        VALUES ('example/capsid', 42, ?1, 'approve', 'merged', 'access:admin@example.com', 'portal', '2026-10-09T10:00:00Z', '2026-10-09T10:05:00Z', 'capsid', 'tests')`,
+    )
+      .bind(A)
+      .run();
+    // A chat approval is the session's word that Dustin said yes, so it is no evidence
+    // for promoting a unit to unattended merging.
+    await env.DB.prepare(
+      `INSERT INTO pr_approvals (repo, pr, head_sha, class, status, approved_by, surface, reason, approved_at, closed_at, close_reason, namespace, path_class)
+       VALUES ('example/capsid', 43, ?1, 'chat', 'merged', 'access:admin@example.com', 'chat', 'https://claude.ai/chat/x', '2026-10-09T11:00:00Z', '2026-10-09T11:00:00Z', 'merged', 'capsid', 'tests')`,
     )
       .bind(A)
       .run();

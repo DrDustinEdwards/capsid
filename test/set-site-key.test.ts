@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { defaultScopes } from "../src/agents-schema.ts";
-import { adminAgentForEmail, type Agent } from "../src/agents.ts";
-import { STEP_UP } from "../src/scope.ts";
-import { buildAdminServer } from "../src/server.ts";
 import {
   CARREL_SCRIPT,
   SITE_SECRET,
@@ -12,10 +7,10 @@ import {
   mintSiteKey,
   setSiteKey,
 } from "../src/site-key.ts";
-import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
+import { fakeEnv } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
-// Set a site key (src/site-key.ts), served as capsid_admin_set_site_key. A new key is
+// Set a site key (src/site-key.ts), served as the Portal-only site_key_rotate control. A new key is
 // minted and set on the site's Worker, then on Carrel. Its value is never returned,
 // logged or audited, on success or on failure.
 
@@ -23,7 +18,6 @@ const ACCOUNT = "0123456789abcdef0123456789abcdef";
 const TOKEN = "sample-secrets-token";
 const SECRETS = (script: string) =>
   `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/workers/scripts/${script}/secrets`;
-const MINUTE = 60 * 1000;
 
 interface Audit {
   actor: unknown;
@@ -310,103 +304,6 @@ test("PLANT: a site row with no Cloudflare script mints nothing and fetches noth
     /no key was minted/,
   );
   assert.equal(cf.calls.length, 0);
-});
-
-// Served: capsid_admin_set_site_key, admin only and stepped up
-
-assert.equal(
-  STEP_UP.capsid_admin_set_site_key,
-  "*",
-  "capsid_admin_set_site_key is no longer stepped up; the tests below assume it is",
-);
-
-function driver(): Agent {
-  const scopes = defaultScopes(["sample"]);
-  scopes.grants = ["read", "write"];
-  return {
-    id: "agent_0123456789ab",
-    name: "sample-driver",
-    kind: "driver",
-    actor: "agent:sample-driver",
-    scopes,
-    admin: false,
-    row: null,
-  };
-}
-
-async function callAs(agent: Agent, db: unknown) {
-  const server = buildAdminServer(fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, ...ENV }), agent);
-  const client = new Client({ name: "set-site-key", version: "1.0.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  try {
-    const result = (await client.callTool({
-      name: "capsid_admin_set_site_key",
-      arguments: { namespace: "sample" },
-    })) as { isError?: boolean; content: Array<{ text: string }> };
-    return { isError: result.isError === true, text: result.content.map((c) => c.text).join("\n") };
-  } finally {
-    await client.close();
-    await server.close();
-  }
-}
-
-const ROUTES = {
-  [`PUT /client/v4/accounts/${ACCOUNT}/workers/scripts/sample-site/secrets`]: {
-    body: { success: true, errors: [], result: {} },
-  },
-  [`PUT /client/v4/accounts/${ACCOUNT}/workers/scripts/${CARREL_SCRIPT}/secrets`]: {
-    body: { success: true, errors: [], result: {} },
-  },
-};
-
-test("PLANT: a non-admin is refused capsid_admin_set_site_key before its handler runs", async () => {
-  const { db, audits } = siteDb();
-  await withFetch(ROUTES, async (calls) => {
-    const r = await callAs(driver(), db);
-    assert.equal(r.isError, true, `a driver was not refused: ${r.text}`);
-    assert.match(
-      r.text,
-      /^unauthorized: 'capsid_admin_set_site_key' is admin only and agent:sample-driver is not the admin/,
-    );
-    assert.equal(calls.length, 0, "a refused caller reached Cloudflare");
-    assert.equal(audits.length, 0);
-  });
-});
-
-test("PLANT: an admin whose sign-in is older than the step-up window is refused, and nothing is set", async () => {
-  const { db, audits } = siteDb();
-  await withFetch(ROUTES, async (calls) => {
-    const r = await callAs(
-      adminAgentForEmail("admin@example.com", Date.now() - 13 * 60 * MINUTE),
-      db,
-    );
-    assert.equal(r.isError, true);
-    assert.match(r.text, /step-up required: 'capsid_admin_set_site_key'/);
-    assert.match(r.text, /Nothing was done\./);
-    assert.equal(calls.length, 0, "a stale sign-in reached Cloudflare");
-    assert.equal(audits.length, 0);
-  });
-});
-
-test("THE INNOCENT DIRECTION: an admin signed in within the window sets the key on both sides, and the value is not in the answer", async () => {
-  const { db, audits } = siteDb();
-  await withFetch(ROUTES, async (calls) => {
-    const r = await callAs(adminAgentForEmail("admin@example.com", Date.now() - MINUTE), db);
-    assert.equal(r.isError, false, r.text);
-    assert.match(r.text, /"matched": ?true/);
-    assert.deepEqual(
-      calls.map((c) => c.path),
-      [
-        `/client/v4/accounts/${ACCOUNT}/workers/scripts/sample-site/secrets`,
-        `/client/v4/accounts/${ACCOUNT}/workers/scripts/${CARREL_SCRIPT}/secrets`,
-      ],
-    );
-    const key = (calls[0].body as { text: string }).text;
-    assert.equal(r.text.includes(key), false, "the minted value is in the tool's answer");
-    assert.equal(audits.length, 1);
-    assert.equal(audits[0].actor, "access:admin@example.com");
-  });
 });
 
 // Who is the admin is deployment configuration: ADMIN_EMAIL (the primary owner) and

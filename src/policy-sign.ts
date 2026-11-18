@@ -34,6 +34,12 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 //   3. It signs what is already stored. There is no body argument, so this cannot sign
 //      arbitrary bytes.
 //   4. It re-signs rather than nesting: existing frontmatter is stripped first.
+//   5. The raw switch (capsid_admin_manage_switches action sign_policy) signs only the
+//      bytes its caller read: it names their sha256, and a body that differs is refused.
+//      It never signs the auto-merge policy, whose author allowlist and Auto units widen
+//      unattended merging: that is signed only by sign_policy_change and
+//      sign_policy_from_repo, which show the change first (Capsid security review,
+//      round 4, finding 5).
 //
 // The write snapshots the prior row and appends to audit_log in one batch
 // (test/write-invariants.test.ts).
@@ -73,6 +79,9 @@ export async function signPolicyDocument(
   actor: string,
   namespace: string,
   path: string,
+  // The sha256 of the body below the frontmatter, as the caller read it. The switch
+  // always passes it; the tests of the signing machinery leave it out.
+  readSha256?: string,
 ): Promise<PolicySignResult | PolicySignRefusal> {
   const refuse = (error: string): PolicySignRefusal => ({
     ok: false,
@@ -109,6 +118,13 @@ export async function signPolicyDocument(
     return refuse(
       `${namespace}/${path} has an empty body below its frontmatter. An empty policy authorizes nothing and is not signed.`,
     );
+  }
+  if (readSha256 !== undefined) {
+    const now = await sha256Hex(body);
+    if (now !== readSha256.toLowerCase())
+      return refuse(
+        `${namespace}/${path} is not the body you read: its sha256 below the frontmatter is ${now}, not ${readSha256}. Nothing was signed. Read it again and sign the bytes you checked.`,
+      );
   }
   const committed = await commitSigned(
     env,

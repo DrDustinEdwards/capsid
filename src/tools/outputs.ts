@@ -511,7 +511,6 @@ const OUTPUTS: Record<string, Shape> = {
     truncated: bool,
     note: str.optional(),
   },
-  set_site_key: { namespace: str, matched: bool, note: str, site: obj, carrel: obj },
   agents: mergeOutputs([agentResult, { ok: bool, action: str, archived: rows }]),
   claims: mergeOutputs([
     { filter: obj, groups: rows, waits: rows, usage: rows, truncated: strs },

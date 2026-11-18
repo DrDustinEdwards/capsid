@@ -261,11 +261,11 @@ async function adminToken(): Promise<string> {
 }
 
 describe(`${ADMIN_MCP_ROUTE}, for the administrator's OAuth session`, () => {
-  it("the admin's token reaches /mcp/admin and lists exactly the 8 Capsid Admin tools; on /mcp it lists Capsid's 11", async () => {
+  it("the admin's token reaches /mcp/admin and lists exactly the 7 Capsid Admin tools; on /mcp it lists Capsid's 11", async () => {
     const token = await adminToken();
     const admin = await listTools(ADMIN_MCP_ROUTE, token);
     expect(admin.server).toBe("capsid-admin");
-    expect(admin.tools).toHaveLength(8);
+    expect(admin.tools).toHaveLength(7);
     expect(sorted(admin.tools)).toEqual(sorted(CAPSID_ADMIN_TOOLS));
 
     const capsid = await listTools("/mcp", token);
