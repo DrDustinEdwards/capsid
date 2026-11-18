@@ -119,7 +119,7 @@ describe("the writes", () => {
     );
   });
 
-  it("PLANT: edit and remove refuse a revision that is not the row's, and write nothing", async () => {
+  it("PLANT: edit and remove refuse a revision that is not the row's, an edit refuses to move a token's origin, and neither writes", async () => {
     await addSite(env.DB, ACTOR, input());
     await env.DB.prepare("DELETE FROM audit_log").run();
     const edited = await editSite(env.DB, ACTOR, input({ health_path: "/healthz" }), 2);
@@ -131,6 +131,21 @@ describe("the writes", () => {
     const row = (await readSiteConfig(env.DB)).find((r) => r.namespace === "sample");
     expect(row?.health_path).toBe("/health");
     expect(row?.revision).toBe(1);
+
+    // An edit that moves the origin while the row names an operator token is refused too:
+    // the token would go to the new host.
+    const operator = JSON.stringify({ path: "/api/operator", auth_var: "SAMPLE_OPERATOR_TOKEN" });
+    expect((await editSite(env.DB, ACTOR, input({ operator }), 1)).ok).toBe(true);
+    await env.DB.prepare("DELETE FROM audit_log").run();
+    const away = input({ origin: "https://elsewhere.example.net" });
+    const moved = await editSite(env.DB, ACTOR, away, 2);
+    expect(moved.ok, "the origin moved with the token still set").toBe(false);
+    expect(moved.ok ? "" : moved.refusal).toMatch(/cannot change while it names an operator token/);
+    expect(await auditRows()).toEqual([]);
+    // Clearing the token in the same edit lets the origin move.
+    const cleared = await editSite(env.DB, ACTOR, { ...away, operator: null }, 2);
+    expect(cleared.ok, cleared.ok ? "" : cleared.refusal).toBe(true);
+    expect(cleared.ok && cleared.site.operator).toBeNull();
   });
 
   it("edit at the right revision moves it on by one and audits both sides", async () => {

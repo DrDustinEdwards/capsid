@@ -51,9 +51,20 @@ const MAX_JSON = 4000;
 
 export type ParsedOperator = { ok: true; operator: SiteOperator } | { ok: false; refusal: string };
 
+/** Whether a token name belongs to this row: `<NAMESPACE>_OPERATOR_TOKEN` for the row's
+ *  own namespace, or for the namespace a further host belongs to (carrel-mcp may use
+ *  CARREL_OPERATOR_TOKEN). Without this, an admin caller could point one site's row at
+ *  another site's token and send it wherever that row's origin says (Capsid security
+ *  review, round 4, finding 2). */
+export function tokenBelongsTo(authVar: string, namespace: string): boolean {
+  const stem = authVar.slice(0, -"_OPERATOR_TOKEN".length).toLowerCase().replaceAll("_", "-");
+  return namespace === stem || namespace.startsWith(`${stem}-`);
+}
+
 /** A site's operator configuration from its stored or edited JSON, checked whole: one bad
- *  entry refuses all of it, so a configuration is never half applied. */
-export function parseOperator(raw: string): ParsedOperator {
+ *  entry refuses all of it, so a configuration is never half applied. `namespace` is the
+ *  row it is for: the token it names must be that site's own. */
+export function parseOperator(raw: string, namespace: string): ParsedOperator {
   const refuse = (refusal: string): ParsedOperator => ({
     ok: false,
     refusal: `operator: ${refusal}`,
@@ -76,6 +87,10 @@ export function parseOperator(raw: string): ParsedOperator {
   if (typeof o.auth_var !== "string" || !SECRET_NAME.test(o.auth_var))
     return refuse(
       "auth_var must name a Capsid Worker secret ending in _OPERATOR_TOKEN, such as DUSTINEDWARDS_OPERATOR_TOKEN.",
+    );
+  if (!tokenBelongsTo(o.auth_var, namespace))
+    return refuse(
+      `auth_var ${o.auth_var} is not ${namespace}'s token. A row may name only its own site's token: ${namespace.toUpperCase().replaceAll("-", "_")}_OPERATOR_TOKEN, or the token of the namespace it is a further host of.`,
     );
   const repairs: Array<[string, string]> = [];
   if (o.repairs !== undefined) {
