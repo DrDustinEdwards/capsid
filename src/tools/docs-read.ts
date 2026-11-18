@@ -16,6 +16,7 @@ import { surfaceOf } from "./surface";
 import { isConventionsDoc, recordConventionsRead } from "../conventions-read";
 import {
   describePortfolioDocs,
+  isPortfolioRecord,
   isPortfolioPath,
   PORTFOLIO_DOCS,
   portfolioDocuments,
@@ -135,7 +136,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "brief",
     {
-      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid paths every driver reads first and may read: conventions, decisions and its volumes, rulings, core), its open task docs (non-archived and not status closed) as stubs with path, title, updated_at, last_actor and last_client (the MCP client behind it; read one with capsid_read_doc), the 3 most recent episodics in full (this is where a handoff written as type episodic shows up), and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if the episodics are cut, the \`trimmed\` field says so. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
+      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid rule documents every driver reads first, conventions, decisions volumes and core, plus the allowlist it may read, which adds Dustin's rulings as reference records, not rules), its open task docs (non-archived and not status closed) as stubs with path, title, updated_at, last_actor and last_client (the MCP client behind it; read one with capsid_read_doc), the 3 most recent episodics in full (this is where a handoff written as type episodic shows up), and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if the episodics are cut, the \`trimmed\` field says so. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
       inputSchema: {
         namespace: nsName,
         thread: z
@@ -314,12 +315,14 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
         recent_episodics: episodicsOut,
         core_links: { outgoing: coreOut, incoming: coreIn },
         // The portfolio rules, by path, for every namespace: a session reads these first.
-        // Every namespace driver may read them in capsid and nothing else there.
+        // Every namespace driver may read them in capsid and nothing else there. Rulings
+        // are on the allowlist but not read first: they are dated records of what Dustin
+        // decided, not rules (Dustin, 2026-11-18).
         portfolio_documents: {
           namespace: PORTFOLIO_DOCS.namespace,
-          read_first: portfolio.map((r) => r.path),
+          read_first: portfolio.filter((r) => !isPortfolioRecord(r.path)).map((r) => r.path),
           allowlist: describePortfolioDocs(),
-          note: `Read each with capsid_read_doc(namespace: "${PORTFOLIO_DOCS.namespace}", path). Any namespace driver may read these, and nothing else in ${PORTFOLIO_DOCS.namespace}.`,
+          note: `Read each with capsid_read_doc(namespace: "${PORTFOLIO_DOCS.namespace}", path). Any namespace driver may read these, and nothing else in ${PORTFOLIO_DOCS.namespace}. Rulings are records of what Dustin decided, not rules: search them when a question needs one.`,
         },
         approx_chars: total,
         ...(coreA ? {} : { warning: `no core.md for namespace ${namespace}` }),

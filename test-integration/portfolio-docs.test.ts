@@ -87,9 +87,11 @@ describe("portfolio documents", () => {
     expect(out.documents.map((d: { path: string }) => d.path).sort()).toEqual(ALLOWED);
   });
 
-  it("brief names the same paths", async () => {
+  it("brief names the same paths to read first, less the rulings, which are records", async () => {
     const out = await ok("capsid_start_session", { namespace: "carrel" });
-    expect(out.portfolio_documents.read_first).toEqual(ALLOWED);
+    expect(out.portfolio_documents.read_first).toEqual(
+      ALLOWED.filter((p) => !p.startsWith("rulings/")),
+    );
   });
 
   it("a read outside the list is refused", async () => {

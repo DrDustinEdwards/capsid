@@ -28,7 +28,7 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
     "restore",
     {
       description:
-        "Restore a document's title and body from one of its retained versions (see capsid_read_doc action versions). The current body is snapshotted first and the restore is audit-logged, so a restore can itself be undone. The stored bytes go back exactly, with no dash normalization; type, status, tags and links are not restored. Restoring a deleted document recreates it. Refused on a canon document for a key scoped to some namespaces (see capsid_write_doc action write). Optional if_match: the sha256 of the body you believe is live; the restore is refused if it changed. Needs the write grant and confirm: true.",
+        "Restore a document's title and body from one of its retained versions (see capsid_read_doc action versions). The current body is snapshotted first and the restore is audit-logged, so a restore can itself be undone. The stored bytes go back exactly, with no dash normalization; type, status, tags and links are not restored. Restoring a deleted document recreates it. Refused on a canon document or a ruling for an agent key (see capsid_write_doc action write). Optional if_match: the sha256 of the body you believe is live; the restore is refused if it changed. Needs the write grant and confirm: true.",
       inputSchema: {
         namespace: nsName,
         path: docPath,
@@ -172,7 +172,7 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
     "delete",
     {
       description:
-        "Delete a document. Snapshots it first and writes an audit log entry. Refused on a canon document for a key scoped to some namespaces (see capsid_write_doc). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
+        "Delete a document. Snapshots it first and writes an audit log entry. Refused on a canon document or a ruling for an agent key (see capsid_write_doc). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
       inputSchema: {
         namespace: nsName,
         path: docPath,
@@ -268,7 +268,7 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
     "move",
     {
       description:
-        "Rename a document path within its namespace, repointing every typed edge that touches it. Audit logged. Refused when either path is a canon document, for a key scoped to some namespaces (see capsid_write_doc action write). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
+        "Rename a document path within its namespace, repointing every typed edge that touches it. Audit logged. Refused when either path is a canon document or a ruling, for an agent key (see capsid_write_doc action write). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
       inputSchema: {
         namespace: nsName,
         path: docPath,

@@ -127,7 +127,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
     "write",
     {
       description:
-        'Create or update a document. Snapshots the prior version and writes an audit log entry. mode selects how body is applied: \'replace\' (default, full body, needs title and body), \'append\' (body is added to the end; no title or confirmation needed), \'patch\' (needs find and replace_with; find must occur EXACTLY ONCE or the write is refused), or \'meta\' (change type, tags, status or title and leave the body byte-identical). Every response carries sha256 and bytes of the resulting body. Optional if_match: the sha256 of the body you believe is stored; when it does not match, the write is REFUSED and the error carries the current sha256. Overwriting with replace or patch needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Optional links: a JSON array of outgoing edges [{"type":"references","to_path":"conventions.md","to_ns":"capsid"}] (types: governs, references, supersedes, replaces, depends-on; to_ns defaults to this namespace) that replaces this document\'s outgoing edges; omit it to keep them, pass [] to clear them. CANON: a write to capsid/conventions*.md, any namespace\'s core.md, or decisions.md and its archived volumes is REFUSED for a key scoped to some namespaces; the admin, the seat and a portfolio-wide key write it like any document. Needs the write grant.',
+        'Create or update a document. Snapshots the prior version and writes an audit log entry. mode selects how body is applied: \'replace\' (default, full body, needs title and body), \'append\' (body is added to the end; no title or confirmation needed), \'patch\' (needs find and replace_with; find must occur EXACTLY ONCE or the write is refused), or \'meta\' (change type, tags, status or title and leave the body byte-identical). Every response carries sha256 and bytes of the resulting body. Optional if_match: the sha256 of the body you believe is stored; when it does not match, the write is REFUSED and the error carries the current sha256. Overwriting with replace or patch needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Optional links: a JSON array of outgoing edges [{"type":"references","to_path":"conventions.md","to_ns":"capsid"}] (types: governs, references, supersedes, replaces, depends-on; to_ns defaults to this namespace) that replaces this document\'s outgoing edges; omit it to keep them, pass [] to clear them. CANON: a write to capsid/conventions*.md, any namespace\'s core.md, decisions.md and its archived volumes, or a capsid/rulings/ record is REFUSED for an agent key; the admin and the seat write it like any document. Needs the write grant.',
       inputSchema: {
         namespace: nsName,
         path: docPath,
@@ -278,8 +278,8 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       const ruleRefusal = ruleDocWriteRefusal(namespace, path, prior?.body ?? null, body as string);
       if (ruleRefusal) return fail(ruleRefusal);
 
-      // Canon write-protection (src/canon.ts): a key scoped to some namespaces may not
-      // change canon.
+      // Canon write-protection (src/canon.ts): only the admin and the seat change canon
+      // or a ruling.
       if (canonGuarded(ctx.agent, namespace, path))
         return fail(canonRefusal("write", namespace, path));
 

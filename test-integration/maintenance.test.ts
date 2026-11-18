@@ -273,7 +273,7 @@ describe("rule documents", () => {
   it("PLANT: lists an over-cap rule document and one naming a stale tool, and leaves records and clean ones alone", async () => {
     const planted: Array<[string, string, string]> = [
       ["sample", "decisions.md", "x".repeat(RULE_DOC_CAP_BYTES + 1)],
-      ["capsid", "rulings/sample-2026-10-20.md", "Use the `register_namespace` tool."],
+      ["capsid", "conventions-sample.md", "Use the `register_namespace` tool."],
       ["sample", "core.md", "Ask `capsid_find_docs` action `namespaces`."],
       ["capsid", "research/old-design.md", "manage_pr ".repeat(3000)],
       ["sample", "archive/decisions-vol-1.md", "x".repeat(RULE_DOC_CAP_BYTES + 1)],
@@ -289,7 +289,7 @@ describe("rule documents", () => {
       const out = await gatherRuleDocItems(env.DB);
       const mine = out.items.filter((i) => i.namespace === "sample" || i.namespace === "capsid");
       expect(mine.map((i) => [i.rule, i.namespace, i.line.split(":")[0]])).toEqual([
-        ["rule-doc", "capsid", "capsid/rulings/sample-2026-10-20.md"],
+        ["rule-doc", "capsid", "capsid/conventions-sample.md"],
         ["rule-doc", "sample", "sample/decisions.md"],
       ]);
       expect(mine[0].line).toContain("register_namespace");

@@ -5,7 +5,8 @@
 //   - stale tool names. A rule document names no tool or action the Worker does not
 //     serve. A session that follows a rule naming a removed tool fails at the call.
 //
-// Dated records (archive/, research/, reports/, audits/, jobs/) are not rule documents:
+// Dated records (archive/, research/, reports/, audits/, jobs/, and Dustin's rulings in
+// capsid/rulings/, Dustin 2026-11-18) are not rule documents:
 // they say what was true when written, and an old tool name there is history.
 //
 // Three places run the checks. capsid_write_doc refuses a write that makes a rule document
@@ -27,15 +28,13 @@ export const RULE_DOC_CAP_BYTES = 20 * 1024;
 
 const CONVENTIONS = /^conventions(-[a-z0-9]+)*\.md$/;
 const DECISIONS = /^decisions\.md$/;
-// One document directly inside rulings/, no deeper (src/portfolio-docs.ts reads it the same way).
-const RULING = /^rulings\/[a-z0-9][a-z0-9._-]*\.md$/;
 
 /** The byte cap of a rule document, or null when the path is not one. */
 export function ruleDocCap(namespace: string, path: string): number | null {
   if (path === "core.md") return CORE_CAP_BYTES;
   if (DECISIONS.test(path)) return RULE_DOC_CAP_BYTES;
   if (namespace !== "capsid") return null;
-  if (CONVENTIONS.test(path) || RULING.test(path)) return RULE_DOC_CAP_BYTES;
+  if (CONVENTIONS.test(path)) return RULE_DOC_CAP_BYTES;
   return null;
 }
 

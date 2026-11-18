@@ -1,9 +1,9 @@
 // The portfolio documents every namespace driver may READ in capsid, and nothing else
 // there.
 //
-// Every repo's CLAUDE.md tells a session to follow capsid/conventions.md and Dustin's
-// rulings, but a driver minted for one namespace was refused all of
-// them, so it worked from its repo's CLAUDE.md and the job bodies alone. This is the
+// Every repo's CLAUDE.md tells a session to follow capsid/conventions.md, and sessions
+// search Dustin's rulings for the record of what he decided, but a driver minted for one
+// namespace was refused all of them, so it worked from its repo's CLAUDE.md and the job bodies alone. This is the
 // one statement of what crosses that boundary. checkScope (src/scope.ts) admits a read
 // of a path matched here, the list, glob and search handlers drop every other capsid
 // row for such a caller, and the session start names the documents that exist. Nothing else in
@@ -17,7 +17,8 @@ export const PORTFOLIO_DOCS = {
   // An archived decisions volume: the prefix, then a volume number, then ".md". The
   // old decisions log is history kept under archive/; new rulings go in rulings/.
   volumes: ["archive/decisions-vol-"],
-  // One document directly inside the folder, no deeper. One ruling per file.
+  // One document directly inside the folder, no deeper. One ruling per file. Records,
+  // not rules: readable, never served as read-first (Dustin, 2026-11-18).
   folders: ["rulings/"],
   // The tool actions that may reach capsid for such a caller, as tool.action. Each
   // requires only the read grant (TOOL_GRANTS). A document's versions and links stay
@@ -53,6 +54,11 @@ export function isPortfolioPath(path: string): boolean {
     if (path.startsWith(folder) && FOLDER_ENTRY.test(path.slice(folder.length))) return true;
   }
   return false;
+}
+
+/** Whether a portfolio path is a record (a ruling) rather than a rule document. */
+export function isPortfolioRecord(path: string): boolean {
+  return PORTFOLIO_DOCS.folders.some((f) => path.startsWith(f));
 }
 
 /** Whether a tool action may reach the portfolio documents for a caller outside capsid. */
