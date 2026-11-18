@@ -81,6 +81,7 @@ const ACTIONS: PortalAction[] = [
   "pr_close",
   "approve_pr",
   "revoke_agent",
+  "activate_agent",
   "site_add",
   "site_edit",
   "site_remove",
@@ -154,6 +155,7 @@ interface MockState {
   overnightReason: string;
   jobs: Map<string, Partial<OpsJob>>;
   revoked: Map<string, string>;
+  activated: Set<string>;
   // The site configuration as it stands, every row, by namespace.
   sites: OpsSiteConfig[];
   // The package configuration as it stands.
@@ -846,8 +848,10 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
     };
   }
   out.live.jobs = out.live.jobs.map((j) => ({ ...j, ...st.jobs.get(j.id) }));
-  for (const a of out.live.agents)
+  for (const a of out.live.agents) {
     if (st.revoked.has(a.name)) a.revoked_at = st.revoked.get(a.name) ?? null;
+    if (st.activated.has(a.name)) a.pending = false;
+  }
   out.live.sites = st.sites.map((s) => ({ ...s }));
   out.live.packages = st.packages.map((p) => ({ ...p }));
   out.live.awaiting_seat = out.live.awaiting_seat.filter(
@@ -1185,6 +1189,18 @@ function plan(
           ...held.map((j) => `Job ${j.id} it holds stays claimed until the seat releases it.`),
         ],
         apply: (st) => void st.revoked.set(name, now),
+      };
+    }
+    case "activate_agent": {
+      const name = need(params, "name", "The agent name");
+      const a = f.live.agents.find((x) => x.name === name);
+      if (!a || a.revoked_at || !a.pending)
+        throw new Refusal(400, `No live agent ${name} is waiting for activation.`);
+      return {
+        summary: `Activate the agent ${name}.`,
+        done: `Activated ${name}.`,
+        changes: [`agents.${name}: waiting -> active`, "Its key resolves from the next request."],
+        apply: (st) => void st.activated.add(name),
       };
     }
     case "site_add": {
@@ -2804,6 +2820,7 @@ export function mockHandler(): (
     overnightReason: "",
     jobs: new Map(),
     revoked: new Map(),
+    activated: new Set(),
     sites: seedSites(),
     packages: seedPackages(),
     activity: seedActivity(),
