@@ -56,7 +56,7 @@ export type ParsedOperator = { ok: true; operator: SiteOperator } | { ok: false;
  *  CARREL_OPERATOR_TOKEN). Without this, an admin caller could point one site's row at
  *  another site's token and send it wherever that row's origin says (Capsid security
  *  review, round 4, finding 2). */
-export function tokenBelongsTo(authVar: string, namespace: string): boolean {
+function tokenBelongsTo(authVar: string, namespace: string): boolean {
   const stem = authVar.slice(0, -"_OPERATOR_TOKEN".length).toLowerCase().replaceAll("_", "-");
   return namespace === stem || namespace.startsWith(`${stem}-`);
 }
