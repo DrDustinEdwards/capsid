@@ -200,7 +200,7 @@ capsid is included in one-tap approval. Its protection is the live gate and the 
 
 **Evidence, per unit, over 90 days.** These are the same windows the `models` view uses:
 
-- approved merges from `pr_approvals`;
+- approved merges from `pr_approvals`, never a chat one (surface `chat` is the session's word that Dustin said yes; security review round 4, finding 6);
 - approvals voided by CHANGES or a reviewer BLOCK;
 - rollbacks and reverts from `deploy_outcomes`;
 - the CI-green share from `job_outcomes`.

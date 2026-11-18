@@ -12,7 +12,9 @@ import { DAY_MS } from "./time";
 // to class approve (src/auto-merge-tick.ts reads the suspensions).
 //
 // Evidence per unit, over 90 days:
-//   - approved merges, from pr_approvals (namespace and path_class, migrations/0043);
+//   - approved merges, from pr_approvals (namespace and path_class, migrations/0043),
+//     never a chat one: any admin session can write that row with any claude.ai link, so
+//     it is the session's word, not Dustin's (Capsid security review, round 4, finding 6);
 //   - approvals voided for anything but a new push (an undo, red CI);
 //   - rollbacks, from deploy_outcomes, joined to the pull request's unit through the
 //     tick's auto-merged audit row or its approval;
@@ -238,7 +240,7 @@ export async function readUnitEvidence(
 ): Promise<{ approvals: ApprovalEvidence[]; rollbacks: RollbackEvidence[] }> {
   const since = new Date(now.getTime() - WINDOW_MS).toISOString();
   const approvals = await env.DB.prepare(
-    `SELECT namespace, path_class, status, close_reason, closed_at FROM pr_approvals WHERE approved_at >= ?1 AND namespace IS NOT NULL ORDER BY id LIMIT 2000`,
+    `SELECT namespace, path_class, status, close_reason, closed_at FROM pr_approvals WHERE approved_at >= ?1 AND namespace IS NOT NULL AND surface <> 'chat' ORDER BY id LIMIT 2000`,
   )
     .bind(since)
     .all<ApprovalEvidence>();
