@@ -189,10 +189,7 @@ function JobControls({ j }: { j: OpsJob }) {
   ];
   return (
     <div className="cap-stack" data-gap="4" data-job-controls="">
-      <ChangeIt
-        label={primary.label}
-        req={primary.req}
-      />
+      <ChangeIt label={primary.label} req={primary.req} />
       {more.length > 0 && (
         <details className="more-actions">
           <summary className="cap-btn">

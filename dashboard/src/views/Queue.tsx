@@ -168,12 +168,7 @@ function JobsTab() {
       </div>
       <StaleJobs load={stale.load} reread={stale.reread} />
       <div className="cap-panes" data-even data-gap="5">
-        <Panel
-          flush
-          title="All jobs"
-          id="jobs"
-          section="All jobs"
-        >
+        <Panel flush title="All jobs" id="jobs" section="All jobs">
           {!jobs.length && all.length ? (
             <FilterEmpty onShowAll={() => (setFilters({ q: "" }), setNs("all"))}>
               No job {q ? `matches the text "${filters.q.trim()}"` : "is listed"}

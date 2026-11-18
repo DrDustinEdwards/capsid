@@ -231,9 +231,7 @@ function SiteBackups() {
         ) : (
           <>
             {data.not_configured.length > 0 && (
-              <Alert tone="neutral">
-                Not checked: {data.not_configured.join(", ")}.
-              </Alert>
+              <Alert tone="neutral">Not checked: {data.not_configured.join(", ")}.</Alert>
             )}
             <table className="cap-table">
               <thead>

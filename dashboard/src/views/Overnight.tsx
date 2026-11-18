@@ -55,7 +55,11 @@ export function Tonight() {
       id="tonight"
       section="Tonight"
       count={plan ? planned : undefined}
-      src={plan ? `planned ${ago(parse(plan.generated), now)} · ${plan.budget_minutes} min budget` : undefined}
+      src={
+        plan
+          ? `planned ${ago(parse(plan.generated), now)} · ${plan.budget_minutes} min budget`
+          : undefined
+      }
     >
       <Failed what="the plan" error={load.error} />
       {plan && plan.policy !== "document" && (
@@ -160,11 +164,7 @@ export function SinceLastLooked() {
   const d = load.data;
   const merged = d?.pull_requests_merged ?? 0;
   return (
-    <Panel
-      title="Since you last looked"
-      id="since"
-      src={`since ${ago(parse(since), now)}`}
-    >
+    <Panel title="Since you last looked" id="since" src={`since ${ago(parse(since), now)}`}>
       <Failed what="the digest" error={load.error} />
       {!d && load.loading ? (
         <div className="loading" role="status">

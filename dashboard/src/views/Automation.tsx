@@ -44,11 +44,7 @@ export function Automation() {
   const shownNight = pendingNight ?? (nightOn ? (night.mode as RunsOn) : nightChosen);
 
   return (
-    <Panel
-      flush
-      title="Automation"
-      id="automation"
-    >
+    <Panel flush title="Automation" id="automation">
       <div className="auto">
         <div className="auto-row">
           <div className="what">
@@ -81,11 +77,7 @@ export function Automation() {
                 },
               )
             }
-            note={
-              nightOn
-                ? `Running on ${runsOnLabel(night.mode as RunsOn)}.`
-                : "Off."
-            }
+            note={nightOn ? `Running on ${runsOnLabel(night.mode as RunsOn)}.` : "Off."}
           />
           <div className="runs">
             <fieldset className="cap-seg">

@@ -35,9 +35,7 @@ function Missing({ what, onClose }: { what: string; onClose: () => void }) {
     <>
       <Head label="Not found" title={what} onClose={onClose} />
       <div className="cap-dialog-body cap-detail-body">
-        <Alert tone="neutral">
-Not in the current feed.
-        </Alert>
+        <Alert tone="neutral">Not in the current feed.</Alert>
       </div>
     </>
   );
@@ -79,9 +77,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
       <>
         <Head label="Not found" title={`Audit row #${id}`} onClose={onClose} />
         <div className="cap-dialog-body cap-detail-body">
-          <Alert tone="neutral">
-No audit row with this id.
-          </Alert>
+          <Alert tone="neutral">No audit row with this id.</Alert>
         </div>
       </>
     );

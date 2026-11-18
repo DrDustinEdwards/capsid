@@ -43,12 +43,7 @@ export function PullRequests() {
   return (
     <div className="cap-admin-page">
       <PageHead title="Pull requests" />
-      <Panel
-        flush
-        title="Waiting for you"
-        id="waiting-prs"
-        count={live.awaiting_seat.length}
-      >
+      <Panel flush title="Waiting for you" id="waiting-prs" count={live.awaiting_seat.length}>
         {live.awaiting_seat.length ? (
           <RowList label="Pull requests waiting for you">
             {live.awaiting_seat.map((a) => (
@@ -188,11 +183,7 @@ export function PullRequests() {
         )}
         <MergeUnits />
       </div>
-      <Panel
-        flush
-        title="Pull requests, last 7 days"
-        count={live.prs.length}
-      >
+      <Panel flush title="Pull requests, last 7 days" count={live.prs.length}>
         <div className="cap-table-wrap" data-reflow="wide">
           <table className="cap-table">
             <thead>

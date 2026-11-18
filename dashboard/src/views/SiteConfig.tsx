@@ -205,10 +205,7 @@ export function SiteForm({
           onChange={(e) => set({ origin: e.target.value })}
         />
       </Field>
-      <Field
-        label="Health path"
-        help="Starts with /. Blank probes the root."
-      >
+      <Field label="Health path" help="Starts with /. Blank probes the root.">
         <input
           id={f("health")}
           className="cap-input cap-mono"
@@ -236,10 +233,7 @@ export function SiteForm({
           </div>
         )}
       </Field>
-      <Field
-        label="Worker script"
-        help="Cloudflare only. Blank finds it."
-      >
+      <Field label="Worker script" help="Cloudflare only. Blank finds it.">
         <input
           id={f("script")}
           className="cap-input cap-mono"

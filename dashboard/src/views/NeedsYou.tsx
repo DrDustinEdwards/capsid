@@ -449,12 +449,7 @@ function WeeklyDigest() {
   if (open.length === 0) return null;
   const sites = [...new Set(open.map((f) => f.namespace))].sort();
   return (
-    <Panel
-      title="Weekly digest"
-      id="weekly-digest"
-      section="Weekly digest"
-      count={open.length}
-    >
+    <Panel title="Weekly digest" id="weekly-digest" section="Weekly digest" count={open.length}>
       {sites.map((site) => {
         const mine = open.filter((f) => f.namespace === site);
         return (

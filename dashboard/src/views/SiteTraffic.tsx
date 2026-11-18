@@ -524,11 +524,7 @@ function BuildLog({ build }: { build: string }) {
   });
   const d = load.data;
   return (
-    <Panel
-      flush
-      title={`Build log ${shortId(build)}`}
-      src="last 500 lines"
-    >
+    <Panel flush title={`Build log ${shortId(build)}`} src="last 500 lines">
       <ReadState what="the build log" loading={load.loading} error={load.error} hasData={!!d}>
         {d && (
           <Source src={d.log}>

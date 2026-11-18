@@ -134,9 +134,7 @@ export function Claims() {
         </Banner>
       )}
       {data && data.truncated.length > 0 && (
-        <Banner tone="warn">
-          Cut short on: {data.truncated.join(", ")}. Narrow the filter.
-        </Banner>
+        <Banner tone="warn">Cut short on: {data.truncated.join(", ")}. Narrow the filter.</Banner>
       )}
       {data && <ClaimsExport data={data} />}
       <Panel

@@ -121,10 +121,7 @@ export function ProjectForm({
         )
       }
     >
-      <Field
-        label="Project"
-        help="a-z, 0-9 and '-'. Cannot be renamed."
-      >
+      <Field label="Project" help="a-z, 0-9 and '-'. Cannot be renamed.">
         <input
           ref={adding ? first : undefined}
           id={f("ns")}

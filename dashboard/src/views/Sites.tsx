@@ -65,9 +65,7 @@ function AllSites() {
         </Suspense>
       )}
       {!configured.some((s) => s.origin !== null) ? (
-        <Banner tone="neutral">
-          No site configured.
-        </Banner>
+        <Banner tone="neutral">No site configured.</Banner>
       ) : !snap ? (
         <NoSnapshot />
       ) : (

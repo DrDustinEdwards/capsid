@@ -34,9 +34,7 @@ export function Convergence({ ns }: { ns: string }) {
   const data = load.data;
   const sites = data ? data.sites.filter((s) => s.namespace === ns) : [];
   if (data && sites.length === 0) {
-    return (
-      <Empty kind="nothing-yet" title="This site has not opted in." />
-    );
+    return <Empty kind="nothing-yet" title="This site has not opted in." />;
   }
   if (!data) {
     return (
@@ -307,7 +305,8 @@ function Secrets({ secrets }: { secrets: NonNullable<ConvergenceSite["secrets"]>
         </ul>
       )}
       <div className="cap-text" data-tone="dim">
-        Names only{secrets.read_at ? `. Read ${secrets.read_at.slice(0, 16).replace("T", " ")} UTC` : ""}.
+        Names only
+        {secrets.read_at ? `. Read ${secrets.read_at.slice(0, 16).replace("T", " ")} UTC` : ""}.
       </div>
     </div>
   );

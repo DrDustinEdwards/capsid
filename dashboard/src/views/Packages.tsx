@@ -320,11 +320,7 @@ function Published() {
           <PackageForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />
         </Suspense>
       )}
-      {!rows.length && (
-        <Banner tone="neutral">
-          No package yet.
-        </Banner>
-      )}
+      {!rows.length && <Banner tone="neutral">No package yet.</Banner>}
       {rows.length > 0 && !feed.snapshot && <NoSnapshot />}
       {rows.map((cfg) => (
         <PackagePanel

@@ -204,11 +204,7 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
           )}
         </div>
       </Panel>
-      <Panel
-        flush
-        title="Claim against verified"
-        count={data.claims.length}
-      >
+      <Panel flush title="Claim against verified" count={data.claims.length}>
         {data.claims.length === 0 ? (
           <div className="cap-text body" data-tone="dim">
             No claim recorded.
@@ -252,11 +248,7 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
         )}
         {orphans.length > 0 && <EvaluationTable rows={orphans} label="Checks with no claim" />}
       </Panel>
-      <Panel
-        flush
-        title="Touch log"
-        count={data.touches.length}
-      >
+      <Panel flush title="Touch log" count={data.touches.length}>
         {data.touches.length === 0 ? (
           <div className="cap-text body" data-tone="dim">
             No touch recorded.

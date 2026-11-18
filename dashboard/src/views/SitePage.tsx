@@ -161,20 +161,13 @@ function SiteUptime({ s }: { s: SiteSnapshot }) {
 function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
   const { now } = useApp();
   if (!snap) {
-    return (
-      <Empty kind="nothing-yet" title="Not probed yet." />
-    );
+    return <Empty kind="nothing-yet" title="Not probed yet." />;
   }
   const s = snap;
   const p = PROBE[s.state];
   const cf = cfOk(s);
   const detail =
-    s.error ??
-    (s.state === "liveness"
-      ? "Liveness only."
-      : s.state !== "ok"
-        ? p.label
-        : null);
+    s.error ?? (s.state === "liveness" ? "Liveness only." : s.state !== "ok" ? p.label : null);
   const healthUrl = s.health_path
     ? s.health_path.startsWith("https://")
       ? s.health_path
@@ -242,10 +235,7 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
             </dl>
           </div>
         </Panel>
-        <Panel
-          flush
-          title="Uptime and errors"
-        >
+        <Panel flush title="Uptime and errors">
           <div className="body cap-stack" data-gap="4">
             <SiteUptime s={s} />
             <ChartSlot>
@@ -265,12 +255,7 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
   const { now } = useApp();
   const cf = snap ? cfOk(snap) : null;
   return (
-    <Panel
-      flush
-      title="Deploys"
-      count={cf?.deploys.length}
-      src="at most 10"
-    >
+    <Panel flush title="Deploys" count={cf?.deploys.length} src="at most 10">
       {!snap ? null : !cf ? (
         <div className="body">
           <Status tone="nodata" reason={cfNoData(snap.cloudflare) ?? ""}>
@@ -437,10 +422,7 @@ function Setup({
       </Panel>
       {row?.operator && <SiteSecrets ns={ns} />}
       {row?.operator && (
-        <Panel
-          title="Operator key"
-          id="operator-key"
-        >
+        <Panel title="Operator key" id="operator-key">
           <div className="cap-cluster" data-gap="3">
             <button
               type="button"
