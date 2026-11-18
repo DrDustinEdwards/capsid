@@ -149,6 +149,37 @@ describe("the three cron expressions", () => {
     expect((await ledger("skills-refresh")).map((r) => r.outcome)).toEqual(["ok"]);
   });
 
+  it("a guide that moves while its job is still open is pending, not a failing run", async () => {
+    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')")
+      .bind(SKILLS_NAMESPACE)
+      .run();
+    await env.APP_KV.put(
+      SCHEDULE_KEY,
+      JSON.stringify({ enabled: true, dayUtc: new Date().getUTCDay() }),
+    );
+    let guide = "first text";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.endsWith("/models/overview.md"))
+        return new Response("Models: claude-fable-5-1 is the newest.");
+      if (url.endsWith("/prompting-claude-fable-5-1.md")) return new Response(guide);
+      return new Response("not stubbed", { status: 500 });
+    });
+    try {
+      await env.APP_KV.delete(guideKey("fable-5-1"));
+      await fire(SKILLS_REFRESH_CRON);
+      const jobs = (await skillsJobs())?.n;
+      guide = "second text";
+      await fire(SKILLS_REFRESH_CRON);
+      expect((await skillsJobs())?.n).toBe(jobs);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+    const outcomes = (await ledger("skills-refresh")).map((r) => r.outcome);
+    expect(outcomes.at(-1)).toBe("ok");
+    expect(outcomes).not.toContain("refused");
+  });
+
   it("an unrecognized cron expression does no work at all", async () => {
     // The dispatch is on the expression, so a cron added to the config and
     // not to the handler must be inert rather than falling into the backup branch.

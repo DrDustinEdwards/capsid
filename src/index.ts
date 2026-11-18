@@ -362,7 +362,7 @@ export default withSiteSentry({
                     reason: `skipped: ${outcome.skipped ?? "no reason given"}`,
                   };
             }
-            const line = `checked=${outcome.checked} changed=${outcome.changed.join(",") || "none"} posted=${outcome.posted.join(",") || "none"}`;
+            const line = `checked=${outcome.checked} changed=${outcome.changed.join(",") || "none"} posted=${outcome.posted.join(",") || "none"} pending=${outcome.pending.join(",") || "none"}`;
             logEvent("SKILLS_REFRESH", { message: `SKILLS_REFRESH ${line}` });
             for (const r of outcome.refused)
               logEvent(
