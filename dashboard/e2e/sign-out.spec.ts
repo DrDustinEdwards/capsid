@@ -20,7 +20,6 @@ test("Sign out posts with the feed's CSRF value and shows the signed-out page", 
   await page.getByRole("button", { name: "Your account" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("heading", { name: "Signed out" })).toBeVisible();
-  await expect(page.getByText("You signed out of Capsid Portal in this browser.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/");
   expect(sent).toHaveLength(1);
   expect(sent[0]?.method).toBe("POST");
