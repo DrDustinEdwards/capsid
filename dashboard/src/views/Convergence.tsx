@@ -35,10 +35,7 @@ export function Convergence({ ns }: { ns: string }) {
   const sites = data ? data.sites.filter((s) => s.namespace === ns) : [];
   if (data && sites.length === 0) {
     return (
-      <Empty kind="nothing-yet" title="This site has not opted in.">
-        Capsid calls a site's operator API only when the site's row names one (its operator field).
-        Until then there is no sync status to read and no repair to run.
-      </Empty>
+      <Empty kind="nothing-yet" title="This site has not opted in." />
     );
   }
   if (!data) {
@@ -100,8 +97,7 @@ function SitePanel({
         {site.problem && <Alert tone="warn">{site.problem}</Alert>}
         {op && !op.secret_set && (
           <Alert tone="warn">
-            The Capsid Worker secret <span className="cap-mono">{op.auth_var}</span> is not set, so
-            Capsid calls nothing on this site. The seat sets it with wrangler secret put.
+            Secret <span className="cap-mono">{op.auth_var}</span> is not set.
           </Alert>
         )}
         {op && (
@@ -311,9 +307,7 @@ function Secrets({ secrets }: { secrets: NonNullable<ConvergenceSite["secrets"]>
         </ul>
       )}
       <div className="cap-text" data-tone="dim">
-        Names only, from Cloudflare's secrets list on the watcher's pass
-        {secrets.read_at ? ` (${secrets.read_at.slice(0, 16).replace("T", " ")} UTC)` : ""}. A value
-        is never read.
+        Names only{secrets.read_at ? `. Read ${secrets.read_at.slice(0, 16).replace("T", " ")} UTC` : ""}.
       </div>
     </div>
   );

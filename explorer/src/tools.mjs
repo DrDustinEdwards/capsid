@@ -3,7 +3,6 @@
 // registrations (src/surface.mjs), so the catalog cannot drift from what is served. Pure.
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { layout, pageHead, scroller } from "./pages.mjs";
-import { plural } from "@drdustinedwards/site-helpers/text";
 
 /** @param {string} name */
 export const toolPath = (name) => `/tools/${name}/`;
@@ -83,7 +82,7 @@ export function toolsPage(tools, asOf) {
     ["admin", "Admin only"],
     ["outside", "Reaches outside"],
   ];
-  const body = `${pageHead([], "Tools", "Every tool Capsid serves", `${tools.length} tools over MCP, ${tools.filter((t) => t.server === "Capsid").length} on Capsid for project work and ${tools.filter((t) => t.server === "Capsid Admin").length} on Capsid Admin for the admin only. Each entry comes straight from the server's code: the access it needs, what it can change, its actions and its arguments.`)}
+  const body = `${pageHead([], "Tools", "Every tool Capsid serves", `${tools.length} tools.`)}
 <div class="filter-bar" data-filter="tools" hidden>
 <label class="cap-sr-only" for="tool-q">Filter the tools</label>
 <input class="cap-input" id="tool-q" type="search" placeholder="Filter by name, action or argument" autocomplete="off" data-filter-q>
@@ -104,7 +103,6 @@ ${servers
 <a href="${toolPath(t.name)}"><code>${escapeHtml(t.name)}</code><span class="tool-card-title">${escapeHtml(t.title)}</span></a>
 <p>${prose(sentence(t.description))}</p>
 <p class="tool-tags">${pills(t)}</p>
-<p class="hint">${t.actions.length ? `${t.actions.length === 1 ? "One action" : `${t.actions.length} actions`}: ${t.actions.map((/** @type {any} */ a) => escapeHtml(a.name)).join(", ")}` : "One action"}; ${plural(t.params.length, "argument")}.</p>
 </li>`,
       )
       .join("")}</ul>
@@ -165,7 +163,6 @@ export function toolPage(t, tools, asOf) {
     : "<p>None.</p>";
   const actions = t.actions.length
     ? `<section aria-labelledby="actions-title"><h2 id="actions-title">Its ${t.actions.length} actions</h2>
-<p class="section-sub">Chosen by the <code>action</code> argument${t.params.some((/** @type {any} */ p) => p.name === "action" && !p.required) ? ", with a default when it is left out" : ""}.</p>
 <dl class="actions">${t.actions
         .map(
           (/** @type {any} */ a) =>
@@ -184,12 +181,11 @@ export function toolPage(t, tools, asOf) {
     ],
     t.name,
     escapeHtml(t.title),
-    `<code>${escapeHtml(t.name)}</code>, on ${escapeHtml(t.server)}. Needs ${GRANT[/** @type {keyof typeof GRANT} */ (t.grant)] ?? escapeHtml(t.grant)}.`,
+    `Needs ${GRANT[/** @type {keyof typeof GRANT} */ (t.grant)] ?? escapeHtml(t.grant)}.`,
   )}
 <p class="tool-tags">${pills(t)}</p>
 <section aria-labelledby="does-title"><h2 id="does-title">What it does</h2>${rest.map(said).join("")}</section>
 <section aria-labelledby="hints-title"><h2 id="hints-title">What a client is told</h2>
-<p class="section-sub">The MCP hints it carries, so a client can ask before it acts (src/tool-annotations.ts).</p>
 <ul class="hints">${hint(t.hints.readOnlyHint, "Reads only: no action changes anything.", "Writes: some action changes state.")}${hint(t.hints.destructiveHint, "Can overwrite or remove what exists.", "Never overwrites or removes.")}${hint(t.hints.idempotentHint, "Repeating a call changes nothing further.", "A repeat can change things again.")}${hint(t.hints.openWorldHint, "Reaches GitHub, Cloudflare or a live site.", "Stays inside Capsid.")}</ul>
 </section>
 ${actions}

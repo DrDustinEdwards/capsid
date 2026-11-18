@@ -18,7 +18,6 @@ export function NotFound() {
   return (
     <NotFoundReport
       title={`Missing pages, ${days} days`}
-      src="Capsid's page_404_daily"
       probes={d?.probes}
       rows={d?.pages ?? []}
       days={days}

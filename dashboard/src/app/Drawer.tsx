@@ -33,11 +33,10 @@ type Ref = { type: DrawerType; id: string };
 function Missing({ what, onClose }: { what: string; onClose: () => void }) {
   return (
     <>
-      <Head label="Not found" title={what} sub="" onClose={onClose} />
+      <Head label="Not found" title={what} onClose={onClose} />
       <div className="cap-dialog-body cap-detail-body">
         <Alert tone="neutral">
-          It is not in the current feed. It may have ended more than 24 hours ago, or the watcher
-          has not seen it yet.
+Not in the current feed.
         </Alert>
       </div>
     </>
@@ -55,7 +54,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
   if (!load.data && load.loading) {
     return (
       <>
-        <Head label="Audit row" title={`#${id}`} sub="" onClose={onClose} />
+        <Head label="Audit row" title={`#${id}`} onClose={onClose} />
         <div className="cap-dialog-body cap-detail-body">
           <div className="loading" role="status">
             <Spinner label="Reading the row..." />
@@ -67,7 +66,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
   if (!load.data) {
     return (
       <>
-        <Head label="Audit row" title={`#${id}`} sub="" onClose={onClose} />
+        <Head label="Audit row" title={`#${id}`} onClose={onClose} />
         <div className="cap-dialog-body cap-detail-body">
           <Alert tone="crit">Could not read the row: {load.error}</Alert>
         </div>
@@ -78,11 +77,10 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
   if (!r) {
     return (
       <>
-        <Head label="Not found" title={`Audit row #${id}`} sub="" onClose={onClose} />
+        <Head label="Not found" title={`Audit row #${id}`} onClose={onClose} />
         <div className="cap-dialog-body cap-detail-body">
           <Alert tone="neutral">
-            There is no audit row with this id. Rows older than the retention are pruned after the
-            nightly dump.
+No audit row with this id.
           </Alert>
         </div>
       </>
@@ -168,8 +166,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
           </dl>
           {d.unreadable && (
             <p className="cap-text" data-tone="dim">
-              This row's recorded detail is not JSON, so it cannot be shown. Rows this old predate
-              that rule.
+              Detail is not JSON, so it is not shown.
             </p>
           )}
           {d.withheld > 0 && (

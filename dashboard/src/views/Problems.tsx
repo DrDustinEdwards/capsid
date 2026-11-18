@@ -11,7 +11,7 @@ import { attentionList, WAITING_KINDS } from "../lib/derive";
 // fold into one that opens in place, warnings past the first eight wait behind "N more",
 // and the notices are one closed row at the foot. What waits on your decision is in the
 // list above, so it is left out here.
-export function Problems({ sitesOn }: { sitesOn: boolean }) {
+export function Problems() {
   const { feed, now, href } = useApp();
   const { items, groups } = attentionList(feed, now, href, WAITING_KINDS);
   return (
@@ -20,9 +20,7 @@ export function Problems({ sitesOn }: { sitesOn: boolean }) {
         items={items}
         groups={groups}
         title="Problems"
-        read={`From ${sitesOn ? "sites, " : ""}backups, CI, the watcher and agents.`}
         clearText="No problems."
-        noticesDetail="Missing data and quiet agents: nothing to act on now"
         primary={false}
         renderLink={rowLink}
       />

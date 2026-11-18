@@ -430,7 +430,7 @@ export function systemPage(model, id, asOf, maps = [], home) {
   )}
 <dl class="readings readings-facts">${facts.map(([k, v]) => `<div class="reading"><dt>${escapeHtml(k)}</dt><dd>${v}</dd></div>`).join("")}</dl>
 <section aria-labelledby="inside-title"><h2 id="inside-title">How it connects</h2>
-${own.length ? `<p class="section-sub"><a href="${containersPath(id)}">Inside ${escapeHtml(s.name)}: its ${own.length} parts as a table, and every line between them</a>.</p>` : ""}
+${own.length ? `<p class="section-sub"><a href="${containersPath(id)}">Inside ${escapeHtml(s.name)}</a></p>` : ""}
 ${drawing}</section>
 ${flowLinks(model, id)}
 ${maps.length ? riskiest(id, maps) : ""}`;
@@ -529,7 +529,7 @@ export function systemsPage(model, bySystem, asOf) {
     ["private", "Private"],
   ];
   const privates = model.systems.filter((/** @type {any} */ s) => s.private).length;
-  const body = `${pageHead([], "Systems", "The network of systems", `The ${model.systems.length} systems this Capsid server runs and how they connect, with Capsid at the core. Point at a system to light its ties, or open its page.${privates ? ` ${privates} are private.` : ""}`)}
+  const body = `${pageHead([], "Systems", "The network of systems", privates ? `${privates} are private.` : "")}
 <section aria-labelledby="family-title">${map}</section>
 <section aria-labelledby="table-title"><h2 id="table-title">Every system</h2>
 <div class="filter-bar" data-filter="systems" hidden>
@@ -737,26 +737,21 @@ export const bands = (f, brief = false) =>
  * @param {boolean} [play] whether a Play button follows it (the tour steps it by scrolling instead)
  */
 export function flowStage(model, flows, shown, id, play = true) {
-  const home = flowHome(model, shown);
   const map = flowMap(model, shown, 1, id, 2);
   const host = `<div class="map-host flow-map" data-flow="${escapeHtml(shown.id)}" data-step="1" data-steps="${shown.steps.length}" data-player>${map}</div>`;
   if (!play) return host;
   return `${host}
-<p class="hero-play"><button class="cap-btn" type="button" data-autoplay hidden>Play</button><span class="hint">${escapeHtml(shown.name)}, in ${shown.steps.length} steps, over ${escapeHtml(home.name)}'s real parts.</span></p>`;
+<p class="hero-play"><button class="cap-btn" type="button" data-autoplay hidden>Play</button></p>`;
 }
 
 /** Every flow, with what it touches and its first steps. @param {any} model @param {string} asOf */
 export function flowsIndexPage(model, asOf) {
   const flows = flowsOf(model);
-  const names = new Map(model.systems.map((/** @type {any} */ s) => [s.id, s.name]));
-  const body = `${pageHead([], "Flows", "What runs, step by step", `${flows.length} processes Capsid runs, each shown step by step on the parts it uses. Open one to watch it run.`)}
+  const body = `${pageHead([], "Flows", "What runs, step by step")}
 <ul class="flow-cards">${flows
     .map((f, i) => {
-      const systems = [...new Set(f.steps.flatMap((st) => st.touches.map((p) => p.system)))];
-      const parts = [...new Set(f.steps.flatMap((st) => st.touches.map((p) => p.name)))];
       return `<li class="flow-card" data-livery>${patch(f, `${sectionAt("/flows/")?.no}.${i + 1}`)}<h2><a href="${flowPath(f.id)}">${escapeHtml(f.name)}</a></h2>
 <p>${escapeHtml(f.description ?? "")}</p>
-<p class="hint">${f.steps.length} steps over ${parts.length} parts of ${systems.map((x) => escapeHtml(String(names.get(x) ?? x))).join(", ")}.</p>
 ${bands(f, true)}
 <p><a class="cap-btn" data-variant="primary" href="${flowPath(f.id)}">Watch it run</a></p></li>`;
     })

@@ -48,16 +48,11 @@ export function Automation() {
       flush
       title="Automation"
       id="automation"
-      src="each change is recorded in Activity with its reason"
     >
       <div className="auto">
         <div className="auto-row">
           <div className="what">
             <b>Overnight run</b>
-            <span>
-              Runs the per-namespace drivers on this machine overnight, one session per repo, from
-              the overnight plan. Hand-started tabs are unaffected.
-            </span>
           </div>
           <SwitchWithReason
             id="sw-overnight"
@@ -89,7 +84,7 @@ export function Automation() {
             note={
               nightOn
                 ? `Running on ${runsOnLabel(night.mode as RunsOn)}.`
-                : `Off. It runs on ${runsOnLabel(nightChosen)} when turned on.`
+                : "Off."
             }
           />
           <div className="runs">

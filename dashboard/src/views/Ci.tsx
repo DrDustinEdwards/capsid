@@ -19,7 +19,7 @@ export function DefaultBranches() {
   const snap = feed.snapshot;
   return (
     <>
-      <Panel flush title="Default branches" src="watcher ci check · GitHub App">
+      <Panel flush title="Default branches">
         {snap ? (
           <div className="cap-table-wrap">
             <table className="cap-table">

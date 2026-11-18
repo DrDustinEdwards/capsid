@@ -20,7 +20,7 @@ export function Uptime90({ ns }: { ns: string }) {
   const { feed } = useApp();
   const u = feed.uptime;
   const title = u ? `Uptime by month, ${u.days} days` : "Uptime by month, 90 days";
-  const src = u ? `target ${pct(u.target, 1)}, five-minute probes` : "five-minute probes";
+  const src = u ? `target ${pct(u.target, 1)}` : undefined;
   if (u === undefined) return null;
   if (u === null) {
     return (

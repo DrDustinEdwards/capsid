@@ -277,7 +277,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
             <Field
               label="Reason"
               required
-              help="Recorded with the change. Preview shows what will change before anything is written."
+              help="Recorded with the change."
               error={fieldError}
               announce
             >
@@ -301,7 +301,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
             {takesNote && (
               <Field
                 label="Note for the driver (optional)"
-                help="The full approval, when a line is not enough. The driver reads it with the job on its next claim."
+                help="The driver reads it on its next claim."
               >
                 <textarea
                   ref={noteRef}
@@ -337,7 +337,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
                   </ul>
                 ) : (
                   <div className="cap-text" data-tone="dim">
-                    The server lists no change.
+                    None.
                   </div>
                 )}
               </div>
@@ -351,7 +351,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
                   </ul>
                 ) : (
                   <div className="cap-text" data-tone="dim">
-                    The server lists no audit row.
+                    None.
                   </div>
                 )}
               </div>

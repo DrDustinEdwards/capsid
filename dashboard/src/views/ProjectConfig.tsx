@@ -91,7 +91,7 @@ export function ProjectForm({
       onClose={onClose}
       danger={
         !adding && (
-          <DangerZone note="Archived documents, versions, the audit log and finished jobs are kept. The preview lists what it deletes, or what has to end first.">
+          <DangerZone note="Archived documents, versions, the audit log and finished jobs are kept.">
             <label className="check">
               <input
                 type="checkbox"
@@ -123,7 +123,7 @@ export function ProjectForm({
     >
       <Field
         label="Project"
-        help="Its namespace: a lowercase slug of a-z, 0-9 and '-'. It cannot be renamed later."
+        help="a-z, 0-9 and '-'. Cannot be renamed."
       >
         <input
           ref={adding ? first : undefined}
@@ -139,7 +139,7 @@ export function ProjectForm({
       <div className="full">
         <RepeaterField
           legend="Repos"
-          help="What an agent scoped to this project may reach through the repo tools. Exactly one is labeled primary."
+          help="Exactly one is primary."
           rows={rows}
           onChange={(next) => (setRows(next), setHint(null))}
           newRow={() => draftRow()}
@@ -176,12 +176,6 @@ export function ProjectForm({
           )}
         </RepeaterField>
       </div>
-      {adding && (
-        <p className="cap-text full note" data-tone="dim" data-size="small">
-          No driver agent is minted here: a mint hands out a key, so it stays with the admin tools.
-          Add the project's site on Sites.
-        </p>
-      )}
     </ConfigForm>
   );
 }

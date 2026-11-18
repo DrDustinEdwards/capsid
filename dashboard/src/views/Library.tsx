@@ -103,7 +103,6 @@ export function Library() {
           className="search"
           type="search"
           name="q"
-          placeholder="Search the knowledge store"
           aria-label="Search the knowledge store"
           defaultValue={q}
         />

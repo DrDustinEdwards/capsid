@@ -323,7 +323,7 @@ ${more("doc-search", "How search works")}
 <p class="kb-actions"><button type="button" class="cap-btn" data-variant="primary" data-start>Start a session</button><button type="button" class="cap-btn" data-write disabled>Write a note</button></p>
 <ol class="kb-brief">${BRIEF.map(([name, path, kb]) => `<li data-brief><span class="kb-doc"><span class="kb-title">${name}</span><code>${path}</code></span><span class="kb-size">${kb} KB</span></li>`).join("")}<li data-brief data-mine hidden><span class="kb-doc"><span class="kb-title">Your note from last session</span><code>sample/sessions/2026-10-25.md</code></span><span class="kb-size">1 KB</span></li></ol>
 <div class="kb-budget"><div class="cap-meter" data-cap="meter" data-size="sm"><span class="cap-meter-label" id="kb-budget-label">The session's brief</span><span class="cap-meter-value" data-budget-words>${total} KB of the 40 KB limit. Nothing cut.</span><span class="cap-meter-bar" role="meter" aria-labelledby="kb-budget-label" aria-valuemin="0" aria-valuemax="40" aria-valuenow="${total}" aria-valuetext="${total} KB of the 40 KB limit" data-budget><span class="cap-meter-fill"></span></span></div></div>
-<p class="kb-said" role="status" data-session-said>One call gives a new session the project's notes.</p>
+<p class="kb-said" role="status" data-session-said></p>
 ${more("session-start", "How a session starts")}
 </div>
 </div>
@@ -348,7 +348,6 @@ function board(tools) {
   }).join("");
   return `<section class="board cap-page" aria-labelledby="board-title">
 <h2 id="board-title">Agents use only what you allow</h2>
-<p class="lead">Each light is one Capsid tool, grouped by the access it needs. Flip a switch to see which tools an agent with that access can use.</p>
 <div class="board-panel" data-ui data-board data-read>
 <p class="board-count" role="status" data-board-count>A read-only agent ${reachSentence(tools, held)}</p>
 <div class="board-cols">${cols}</div>
@@ -382,7 +381,7 @@ ${kept.length ? `<dl class="readings readings-small">${kept.map(([value, label])
 <div class="tour-grid cap-page">
 <div class="tour-words">
 <h2 class="tour-title" id="tour-title">How a job runs</h2>
-<p class="lead">${escapeHtml(life.description ?? "")} Scroll to move the job through the parts of Capsid it uses.</p>
+<p class="lead">${escapeHtml(life.description ?? "")}</p>
 <ol class="tour-steps">${chapters}</ol>
 </div>
 <div class="tour-stage tour-map" data-ui>${flowStage(model, flows, life, "tour-map", false)}</div>

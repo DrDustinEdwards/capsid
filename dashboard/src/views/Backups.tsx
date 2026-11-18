@@ -39,7 +39,7 @@ export function Backups() {
   return (
     <div className="cap-stack">
       <div className="cap-panes" data-even data-gap="5">
-        <Panel flush title="Primary: Capsid D1" src="/health backup">
+        <Panel flush title="Primary: Capsid D1">
           <div className="body cap-stack" data-gap="4">
             {!h ? (
               <Alert tone="neutral">
@@ -116,7 +116,7 @@ export function Backups() {
             )}
           </div>
         </Panel>
-        <Panel flush title="Off-account: Amazon S3" src="watch.yml report">
+        <Panel flush title="Off-account: Amazon S3">
           <div className="body cap-stack" data-gap="4">
             {!o || !os ? (
               <Alert tone="neutral">
@@ -178,12 +178,6 @@ export function Backups() {
       <Suspense fallback={null}>
         <BackupSlots />
       </Suspense>
-      <p className="cap-text note" data-tone="dim" data-size="small">
-        The primary panel is Capsid's own store. The sites panel is each site's own backups, read
-        live through its operator API; Back up now runs the site's files passes, as its nightly cron
-        does. The Amazon panel is every site's off-account copy, each site's newest complete one, as
-        capsid-backups last reported it.
-      </p>
     </div>
   );
 }
@@ -238,8 +232,7 @@ function SiteBackups() {
           <>
             {data.not_configured.length > 0 && (
               <Alert tone="neutral">
-                Not checked from here yet (no <span className="cap-mono">backup: true</span> in the
-                operator configuration): {data.not_configured.join(", ")}.
+                Not checked: {data.not_configured.join(", ")}.
               </Alert>
             )}
             <table className="cap-table">

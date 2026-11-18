@@ -77,8 +77,8 @@ function HistoryPanel({ name }: { name: string }) {
         <DownloadsChart data={d} />
       </ChartSlot>
       <p className="cap-text note" data-size="small" data-tone="dim">
-        {[...byName].map(([n, total]) => `${n}: ${shortCount(total)}`).join(" · ")} · read from npm{" "}
-        {d.fetched_at.slice(0, 16).replace("T", " ")} UTC, kept six hours
+        {[...byName].map(([n, total]) => `${n}: ${shortCount(total)}`).join(" · ")} · read{" "}
+        {d.fetched_at.slice(0, 16).replace("T", " ")} UTC
       </p>
       {d.notes.map((n) => (
         <p key={n} className="cap-text note" data-size="small">
@@ -145,7 +145,7 @@ function PackagePanel({
       <div className="body cap-stack" data-gap="4" data-package={cfg.name}>
         {!snap ? (
           <p className="cap-text" data-tone="dim">
-            The watcher reads this package on its next pass.
+            Not read yet.
           </p>
         ) : (
           <dl className="cap-detail-record">
@@ -185,7 +185,7 @@ function PackagePanel({
                       </span>
                       {Object.keys(snap.downloads.by_version_last_week).length > 0 && (
                         <div className="cap-text hint" data-size="small" data-tone="dim">
-                          Per version, last 7 days only (npm keeps no per-version history):{" "}
+                          Per version, last 7 days:{" "}
                           {Object.entries(snap.downloads.by_version_last_week)
                             .sort((a, b) => b[1] - a[1])
                             .map(([v, n]) => `${v} ${shortCount(n)}`)
@@ -211,8 +211,7 @@ function PackagePanel({
                 }
               </Part>
               <div className="cap-text hint" data-size="small">
-                Counts from deps.dev, which it calls indicative rather than exact. No public API
-                lists them:{" "}
+                Indicative counts from deps.dev:{" "}
                 <a
                   href={`https://www.npmjs.com/package/${enc}?activeTab=dependents`}
                   target="_blank"
@@ -224,7 +223,6 @@ function PackagePanel({
                 <a href={`https://deps.dev/npm/${enc}`} target="_blank" rel="noopener noreferrer">
                   deps.dev
                 </a>
-                . GitHub offers no API for the repositories that use it.
               </div>
             </dd>
             <dt>Repository</dt>
@@ -324,7 +322,7 @@ function Published() {
       )}
       {!rows.length && (
         <Banner tone="neutral">
-          No package is configured yet. Add one to watch its versions, downloads and dependents.
+          No package yet.
         </Banner>
       )}
       {rows.length > 0 && !feed.snapshot && <NoSnapshot />}

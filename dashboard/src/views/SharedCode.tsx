@@ -34,8 +34,7 @@ export function SharedCode() {
         </p>
       ) : !data || !data.configured ? (
         <Empty kind="nothing-yet" title="No shared package is configured.">
-          {data?.error ??
-            "Shared packages are configuration (shared_packages); none is listed yet."}
+          {data?.error}
         </Empty>
       ) : (
         <>
@@ -49,7 +48,7 @@ export function SharedCode() {
             {data.apps_failed.length
               ? `; ${data.apps_failed.length} could not be read: ${data.apps_failed.map((a) => `${a.namespace} (${a.error})`).join("; ")}`
               : ""}
-            . Read nightly.
+            .
           </p>
         </>
       )}

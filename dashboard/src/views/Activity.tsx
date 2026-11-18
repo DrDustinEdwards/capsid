@@ -108,7 +108,7 @@ export function Activity() {
         count={data?.rows.length}
         src={
           <>
-            {data ? `newest first, at most ${data.limit} rows · ` : ""}
+            {data ? `at most ${data.limit} rows · ` : ""}
             <ReadAgain
               at={data ? parse(data.generated) : undefined}
               now={now}
@@ -175,11 +175,7 @@ export function Activity() {
               ? "No rows match these filters."
               : "The audit log has no rows."}
           </div>
-        ) : (
-          <div className="cap-text body" data-tone="dim">
-            No read yet.
-          </div>
-        )}
+        ) : null}
       </Panel>
     </div>
   );

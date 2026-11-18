@@ -77,7 +77,7 @@ export function Completeness() {
   if (!data || data.error) {
     return (
       <Empty kind="nothing-yet" title="No scoreboard to show.">
-        {data?.error ?? "devkit's live workflow has not published one."}
+        {data?.error}
       </Empty>
     );
   }
@@ -99,7 +99,7 @@ export function Completeness() {
           : ""}.{" "}
         {data.finished
           ? `Every cell is complete and has passed ${CLEAN_DAYS} daily runs in a row.`
-          : `Finished means every cell complete and clean for ${CLEAN_DAYS} daily runs.`}
+          : `Finished: ${CLEAN_DAYS} clean daily runs.`}
       </Alert>
       <Panel
         flush
@@ -108,7 +108,6 @@ export function Completeness() {
         section="Grid"
         src={
           <>
-            From the live checks and the verifiers' verdicts only ·{" "}
             <AwayLink href={BOARD_URL} newTab>
               the board on GitHub
             </AwayLink>
@@ -144,8 +143,7 @@ export function Completeness() {
         <AreaPanel key={a.id} area={a} columns={columns} publicOnly={data.public_token} />
       ))}
       <p className="cap-text shared-read" data-tone="dim">
-        Newest run {data.as_of ? ago(parse(data.as_of), now) : "unknown"}; read{" "}
-        {ago(parse(data.read), now)}. Runs daily at 06:23 UTC. Kept for ten minutes.
+        Newest run {data.as_of ? ago(parse(data.as_of), now) : "unknown"}
       </p>
     </div>
   );

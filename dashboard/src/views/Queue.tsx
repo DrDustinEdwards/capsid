@@ -106,11 +106,7 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
           kind="all-clear"
           title={ns === "all" ? "No job looks stuck." : `No job in ${ns} looks stuck.`}
         />
-      ) : (
-        <div className="cap-text body" data-tone="dim">
-          No read yet.
-        </div>
-      )}
+      ) : null}
     </Panel>
   );
 }
@@ -177,7 +173,6 @@ function JobsTab() {
           title="All jobs"
           id="jobs"
           section="All jobs"
-          src="live · D1 jobs, read on each refresh"
         >
           {!jobs.length && all.length ? (
             <FilterEmpty onShowAll={() => (setFilters({ q: "" }), setNs("all"))}>

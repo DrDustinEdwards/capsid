@@ -64,16 +64,8 @@ export function PhoneAlerts() {
   const devices = data?.devices ?? [];
   return (
     <>
-      <Panel flush title="Phone alerts" count={devices.length} src="Web Push">
+      <Panel flush title="Phone alerts" count={devices.length}>
         <div className="body cap-stack" data-gap="4">
-          <p className="cap-text" data-tone="dim">
-            Six things only: a money pull request waiting over 2 hours, a rollback, a job at the
-            correction cap, a question over 4 hours old on a job with priority 70 or more,
-            auto-merge paused by the safety shutoff, and a visual pull request waiting for your
-            look. Everything else waits for the daily digest and Needs you. An alert names the repo
-            and number, never a title, and a tap opens that item in the Portal; it has no Approve
-            button.
-          </p>
           <PushDevices
             publicKey={data?.public_key ?? null}
             worker={`${BASE}/sw.js`}
@@ -111,11 +103,10 @@ export function PhoneAlerts() {
 // turned on by configuration once Email Routing is on.
 function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: number }) {
   return (
-    <Panel flush title="Daily digest" src="email">
+    <Panel flush title="Daily digest">
       <div className="body cap-stack" data-gap="4">
         <p className="cap-text" data-tone="dim">
-          One email a day after {digest.hour_utc}:00 UTC: pull requests waiting on you by class,
-          questions, blocked jobs, rollbacks, and what finished or became ready since the last one.
+          Daily after {digest.hour_utc}:00 UTC.
         </p>
         {digest.on ? (
           <Banner tone="ok">On. It goes to {digest.to}.</Banner>
@@ -126,15 +117,12 @@ function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: numbe
             tone="warn"
             title="Not set up yet."
             body={
-              <>
-                <p>Nothing is sent until it is.</p>
-                <details>
-                  <summary>What it needs</summary>
-                  <p className="cap-text hint" data-size="small">
-                    {digest.problem}
-                  </p>
-                </details>
-              </>
+              <details>
+                <summary>What it needs</summary>
+                <p className="cap-text hint" data-size="small">
+                  {digest.problem}
+                </p>
+              </details>
             }
           />
         )}

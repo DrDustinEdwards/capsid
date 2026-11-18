@@ -22,7 +22,7 @@ export function Incidents() {
     <div className="cap-stack">
       <NsChips list={all.map((x) => x.ns)} />
       <div className="cap-panes" data-even data-gap="5">
-        <Panel flush title="Findings" src="jobs posted by agent:watcher">
+        <Panel flush title="Findings">
           {emptied ? (
             <FilterEmpty onShowAll={() => setNs("all")}>
               No finding in the project {ns}.
@@ -120,7 +120,7 @@ export function ScheduledTasks() {
   const { feed, now } = useApp();
   const s = feed.scheduled;
   return (
-    <Panel flush title="Scheduled tasks" src="run ledger" id="scheduled">
+    <Panel flush title="Scheduled tasks" id="scheduled">
       {s.error !== null ? (
         <div className="body">
           <Alert tone="neutral">

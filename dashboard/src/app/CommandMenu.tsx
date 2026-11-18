@@ -114,7 +114,7 @@ export function CommandPalette({
       onOpenChange={(o) => !o && onClose()}
       commands={list}
       bindKeys={false}
-      placeholder="Jump to a site, job, agent or view, or stop something"
+      placeholder="Jump to…"
     />
   );
 }
