@@ -533,6 +533,14 @@
       "description": "Copies of the tool-call log, kept after the log prunes them."
     },
     {
+      "id": "admin-mcp-cron",
+      "system": "dustinedwards-mcp",
+      "name": "Scheduled job",
+      "kind": "cron",
+      "technology": "Workers cron triggers",
+      "description": "Daily, copies new tool-call log rows to the bucket, then drops copied rows older than 90 days."
+    },
+    {
       "id": "admin-mcp-github",
       "system": "dustinedwards-mcp",
       "name": "GitHub sign-in",
@@ -1005,6 +1013,14 @@
       "description": "Copies of the tool-call log, kept after the log prunes them."
     },
     {
+      "id": "foxing-mcp-cron",
+      "system": "foxing-mcp",
+      "name": "Scheduled job",
+      "kind": "cron",
+      "technology": "Workers cron triggers",
+      "description": "Daily, copies new tool-call log rows to the bucket, then drops copied rows older than 90 days."
+    },
+    {
       "id": "foxing-mcp-oauth-kv",
       "system": "foxing-mcp",
       "name": "OAUTH_KV",
@@ -1179,6 +1195,14 @@
       "kind": "bucket",
       "technology": "R2",
       "description": "Copies of the tool-call log, kept after the log prunes them."
+    },
+    {
+      "id": "foxhound-mcp-cron",
+      "system": "foxhound-mcp",
+      "name": "Scheduled job",
+      "kind": "cron",
+      "technology": "Workers cron triggers",
+      "description": "Daily, copies new tool-call log rows to the bucket, then drops copied rows older than 90 days."
     },
     {
       "id": "foxhound-mcp-oauth-kv",
@@ -1391,7 +1415,7 @@
     { "from": "admin-mcp-worker", "to": "admin-mcp-probe-kv", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "admin-mcp-rate-limit", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "admin-mcp-tool-log", "kind": "writes" },
-    { "from": "admin-mcp-worker", "to": "admin-mcp-tool-calls", "kind": "writes" },
+    { "from": "admin-mcp-cron", "to": "admin-mcp-tool-calls", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "website-worker", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "website-worker", "kind": "reads" },
     { "from": "admin-mcp-worker", "to": "admin-mcp-github", "kind": "reads" },
@@ -1467,7 +1491,7 @@
     { "from": "foxing-mcp-worker", "to": "foxing-mcp-tool-log", "kind": "writes" },
     { "from": "foxing-mcp-worker", "to": "foxing-worker", "kind": "writes" },
     { "from": "foxing-mcp-worker", "to": "foxing-worker", "kind": "reads" },
-    { "from": "foxing-mcp-worker", "to": "foxing-mcp-tool-calls", "kind": "writes" },
+    { "from": "foxing-mcp-cron", "to": "foxing-mcp-tool-calls", "kind": "writes" },
     { "from": "foxhound-worker", "to": "foxhound-db", "kind": "writes" },
     { "from": "foxhound-worker", "to": "foxhound-money", "kind": "writes" },
     { "from": "foxhound-worker", "to": "foxhound-rate-limiter", "kind": "reads" },
@@ -1491,7 +1515,7 @@
     { "from": "foxhound-mcp-worker", "to": "foxhound-mcp-oauth-kv", "kind": "writes" },
     { "from": "foxhound-mcp-worker", "to": "foxhound-worker", "kind": "writes" },
     { "from": "foxhound-mcp-worker", "to": "foxhound-worker", "kind": "reads" },
-    { "from": "foxhound-mcp-worker", "to": "foxhound-mcp-tool-calls", "kind": "writes" },
+    { "from": "foxhound-mcp-cron", "to": "foxhound-mcp-tool-calls", "kind": "writes" },
     { "from": "txasm-worker", "to": "txasm-db", "kind": "writes" },
     { "from": "txasm-worker", "to": "txasm-uploads", "kind": "writes" },
     { "from": "txasm-worker", "to": "txasm-books", "kind": "writes" },
