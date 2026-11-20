@@ -80,6 +80,20 @@ test("each site is judged on its own copy's age: late at 30 hours, stale at 36, 
   ]);
 });
 
+test("a copy run newer than the report holds the age verdict until the next report", () => {
+  const sites = ["lorem"];
+  const stale = report({ lorem: line(OFFACCOUNT_STALE_HOURS + 0.1) }, 6);
+  const run = (hoursAgo: number, conclusion: string) => ({
+    conclusion,
+    created_at: new Date(NOW.getTime() - hoursAgo * 3_600_000).toISOString(),
+  });
+  const judged = (copyRun: ReturnType<typeof run>) =>
+    offaccountFindings("capsid", sites, stale, copyRun, NOW).map((f) => f.fingerprint);
+  assert.deepEqual(judged(run(3, "success")), []);
+  assert.deepEqual(judged(run(3, "failure")), ["offaccount-stale-lorem"]);
+  assert.deepEqual(judged(run(8, "success")), ["offaccount-stale-lorem"]);
+});
+
 test("a copy under a quarter or over double the median of the copies before it is flagged, given three to compare", () => {
   const history = [100, 104, 96];
   assert.deepEqual(
