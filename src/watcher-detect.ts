@@ -397,6 +397,15 @@ export function offaccountFindings(
   const run = copyRun
     ? `last copy run: ${copyRun.created_at ?? "unknown"} concluded ${copyRun.conclusion ?? "none"}${copyRun.url ? ` (${copyRun.url})` : ""}`
     : "no completed offaccount run was returned for the backups repo";
+  // A copy run that succeeded after the report was written is not in the report yet, so
+  // the report's ages are a copy cycle behind. watch.yml reports every 6 hours and GitHub's
+  // schedule can run it late; the 36 hour window leaves only about an hour and a half
+  // over that, so a late report would call every site stale while the copy had run. The
+  // age is judged once the next report lands, and a report that never lands is its own
+  // finding above.
+  const copyAfterReport =
+    copyRun?.conclusion === "success" &&
+    Date.parse(copyRun.created_at ?? "") > Date.parse(report.received_at);
   for (const site of sites) {
     const line = report.sites[site];
     const newest = line?.newest ?? null;
@@ -413,7 +422,9 @@ export function offaccountFindings(
       continue;
     }
     const hours = (now.getTime() - at.getTime()) / HOUR_MS;
-    if (hours >= OFFACCOUNT_STALE_HOURS) {
+    if (copyAfterReport) {
+      // Waiting for the report that shows the new copy.
+    } else if (hours >= OFFACCOUNT_STALE_HOURS) {
       out.push(
         finding(namespace, `offaccount-stale-${site}`, `the Amazon copy of ${site} is stale`, [
           `newest complete copy: ${newest} (${hours.toFixed(1)} hours old, the window is ${OFFACCOUNT_STALE_HOURS})`,
