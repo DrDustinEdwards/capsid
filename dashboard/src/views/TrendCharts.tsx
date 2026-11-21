@@ -778,6 +778,7 @@ export function BackupSlots() {
               title: name,
               subtitle: `${kept} of ${slots.length} kept`,
               label: `${name} backups, the last ${span}`,
+              source: { name: "backup bucket, complete runs" },
               height: 20,
               cellLabels: slots.map((s) => s.key),
               formatValue: missing,
