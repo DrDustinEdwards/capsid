@@ -80,18 +80,24 @@ test("each site is judged on its own copy's age: late at 30 hours, stale at 36, 
   ]);
 });
 
-test("a copy run newer than the report holds the age verdict until the next report", () => {
+test("a copy run that finished after the report holds the age verdict until the next report", () => {
   const sites = ["lorem"];
   const stale = report({ lorem: line(OFFACCOUNT_STALE_HOURS + 0.1) }, 6);
-  const run = (hoursAgo: number, conclusion: string) => ({
+  const at = (hoursAgo: number) => new Date(NOW.getTime() - hoursAgo * 3_600_000).toISOString();
+  const run = (hoursAgo: number, conclusion: string, finishedHoursAgo = hoursAgo) => ({
     conclusion,
-    created_at: new Date(NOW.getTime() - hoursAgo * 3_600_000).toISOString(),
+    created_at: at(hoursAgo),
+    updated_at: at(finishedHoursAgo),
   });
   const judged = (copyRun: ReturnType<typeof run>) =>
     offaccountFindings("capsid", sites, stale, copyRun, NOW).map((f) => f.fingerprint);
   assert.deepEqual(judged(run(3, "success")), []);
   assert.deepEqual(judged(run(3, "failure")), ["offaccount-stale-lorem"]);
   assert.deepEqual(judged(run(8, "success")), ["offaccount-stale-lorem"]);
+  // Started before the report (received 6 hours ago) and finished after it: the report
+  // listed the bucket mid-upload, so it does not show this copy yet.
+  assert.deepEqual(judged(run(6.5, "success", 5.5)), []);
+  assert.deepEqual(judged(run(6.5, "success", 6.2)), ["offaccount-stale-lorem"]);
 });
 
 test("a copy under a quarter or over double the median of the copies before it is flagged, given three to compare", () => {
