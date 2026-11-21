@@ -849,6 +849,7 @@ export function CiHistory() {
                 notes: r.truncated ? "Over 100 runs; early days may be missing some." : undefined,
                 height: 20,
                 cellLabels: r.days.map((d) => d.day),
+                source: { name: "GitHub Actions, default branch runs" },
                 formatValue: (v: number) => (v >= 1 ? "red" : "green"),
               };
               return (
