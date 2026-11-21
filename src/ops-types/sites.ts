@@ -137,8 +137,6 @@ export interface SiteOperator {
 export interface HealthSnapshot {
   status: "ok" | "degraded";
   sha: string;
-  dirty: boolean;
-  builtAt: string | null;
   schema_version: string | null;
   store: { d1: string; fts: string };
   bindings: { media: string; app_kv: string };

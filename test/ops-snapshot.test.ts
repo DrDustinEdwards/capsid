@@ -85,8 +85,6 @@ const site = (over: Partial<OpsSite>): OpsSite => ({
 const HEALTH: HealthReport = {
   status: "ok",
   sha: "abc1234",
-  dirty: false,
-  builtAt: null,
   schema_version: null,
   store: { d1: "ok", fts: "ok" },
   bindings: { media: "ok", app_kv: "ok" },

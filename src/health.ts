@@ -92,11 +92,7 @@ export interface HealthReport extends HealthSnapshot {
 // /health serializes this and the watcher's pass records it for Capsid Portal, so the
 // Portal shows the same values the live gate asserts.
 export async function healthReport(env: Env): Promise<HealthReport> {
-  const provenance = {
-    sha: env.BUILD_SHA ?? "unknown",
-    dirty: env.BUILD_DIRTY === "true",
-    builtAt: env.BUILT_AT ?? null,
-  };
+  const provenance = { sha: env.BUILD_SHA ?? "unknown" };
 
   let d1 = "unbound";
   let fts = "skipped";
@@ -171,7 +167,7 @@ function taskCheck(env: Env, now: () => Date = () => new Date()): HealthCheck {
  * a check list, no-store, noindex), so the ops audit and every monitor read Capsid as they
  * read the other sites. The store is the fail level, as before: D1 and the FTS probe, so
  * a Worker bound to the wrong database is a 503. The backup, MEDIA, AUDIT_BUCKET, APP_KV, OAUTH_KV and the task
- * ledger warn. The fields the deploy gate and rollback read (sha, dirty, builtAt,
+ * ledger warn. The fields the deploy gate and rollback read (sha,
  * schema_version, store) are kept beside the family fields. The watcher still probes
  * itself in-process through healthReport.
  */
@@ -235,8 +231,6 @@ export async function handleHealth(env: Env): Promise<Response> {
   });
   const body = (await response.json()) as Record<string, unknown>;
   const provenance = {
-    dirty: env.BUILD_DIRTY === "true",
-    builtAt: env.BUILT_AT ?? null,
     schema_version: schemaVersion,
     store,
   };

@@ -178,13 +178,11 @@ test("gate 2b is wired into the run and counted", () => {
   );
 });
 
-test("the credentials the gate needs are supplied to it in CI", () => {
-  // Without these the gate skips silently in CI.
+test("the credentials the gate needs are supplied to the scheduled check in CI", () => {
+  // Without these the gate skips silently in CI. The deploy's gate gets no Cloudflare secret (devkit worker-deploy).
   const workflow = read("../.github/workflows/ci.yml");
-  const step = workflow.slice(
-    workflow.indexOf("- name: verify:live"),
-    workflow.indexOf("- name: Roll back the deploy this run shipped"),
-  );
+  const job = workflow.slice(workflow.indexOf("  scheduled-live:"));
+  const step = job.slice(job.indexOf("- name: verify:live"));
   assert.match(
     step,
     /CLOUDFLARE_API_TOKEN:/,

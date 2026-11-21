@@ -11,15 +11,18 @@ With no id it reverts to the immediately previous deployment. Pass a version id 
 
 ## The automatic rollback in CI
 
-Most rollbacks never need the command above: CI does it. Every push to `master` deploys (`deploy` job in `.github/workflows/ci.yml`), then the `live gate` job runs `npm run verify:live` against `EXPECT_SHA`, the commit that run deployed.
+Most rollbacks never need the command above: CI does it. Every push to `master` deploys through devkit's shared `worker-deploy.yml` (the `deploy` job in `.github/workflows/ci.yml`), as every other site does; devkit's README, "The shared deploy", is the reference.
 
-- **Exit 1 is a refusal.** A gate answered and said no. The step "Roll back the deploy this run shipped" runs only when the deploy in this run succeeded and the gate exited 1.
-- **Exit 3 is "could not run".** No gate got an answer (a reset connection, a timeout). Nothing refused the deploy, so nothing is rolled back; the job fails and says to rerun it. One ECONNRESET rolled back a good deploy on 2026-09-18 before this split.
-- **Only what this run put live.** Before rolling back, the step reads `/health` and asks `scripts/rollback-guard.mjs` whether the live sha is still this run's commit. A rerun of just the live job keeps the first attempt's deploy result, and without the guard a second rollback can move production onto the refused commit (2026-09-18). When `/health` cannot say, the guard rolls back only if the deploy ran in this attempt. A skip is written to the step summary as `rollback_skipped: live=<sha> this_run=<sha>`.
-- **Read back, not assumed.** After `wrangler rollback --name capsid-mcp`, the step polls `/health` up to 20 times, 3 seconds apart, until a readable sha other than this run's is live (`rollback-guard.mjs --after`). On success the summary carries `rollback_from=<sha> rollback_to=<sha>`; if the sha never moves it carries `rollback_did_not_take_effect` and the job fails, because production may still serve the refused deploy and a human decides.
+- **Gradually.** The new version takes 10% of traffic beside the live one. Its `live gate` job reads `/health` until it reports this run's commit, waits 10 minutes, runs `scripts/verify-live.mjs` with `EXPECT_SHA` (every request carries `Cloudflare-Workers-Version-Overrides`, so each gate judges the new version), compares both versions' error rates, then gives the new version all traffic.
+- **Exit 1 is a refusal.** A gate answered and said no, or the new version's error rate is clearly worse: "Roll back the deploy this run shipped" sends traffic back to the version it shared with.
+- **Exit 3 is "could not run".** No gate got an answer (a reset connection, a timeout). Nothing refused the deploy, so nothing is rolled back; the job fails, the split stays as it is, and the run summary has the command that sends everything back. One ECONNRESET rolled back a good deploy on 2026-09-18 before this split.
+- **Only what this run put live**, checked by devkit's rollback guard against `/health`, so a rerun never rolls back a deploy that is no longer live, and the sha is read back afterwards rather than assumed.
+- **A Durable Object migration** (a new `migrations` entry in `wrangler.jsonc.example`) cannot go out gradually: Cloudflare applies it only with `wrangler deploy` and refuses a version upload carrying one. That pull request sets `gradual-percent: 0` for its deploy.
 - **master is not changed.** The bad commit stays on `master`. Land a fix or revert it; the next push deploys again through the same gate.
 
-Capsid remembers each one. The watcher reads the live gate job (named "live gate", or "<caller job> / live gate" when the gate runs in a called workflow such as devkit's worker-deploy.yml) of each new push run, for every repo on `DEPLOY_ROSTER` (`src/deploy-outcomes.ts`: the five app repos plus carrel, julieedwards, txasm, bsw, capsomer, enarratio and prelum), and records it in `deploy_outcomes` (`verified`, `rolled_back`, `rollback_failed`, `rollback_skipped` or `unverified`), with a rollback's time to restore. The Portal's CI page turns the rows into DORA's measures per repo: deploys per week, change failure rate and median time to restore. A rollback, or one that did not take effect, opens a watcher finding. GitHub does not serve the step summary through its API, so the watcher reads the step's `::error::` annotations instead: their wording ("rolled back: was ...", "not rolling back", "the rollback did not take effect") is what `src/deploy-outcomes.ts` matches, and changing it here means changing it there (docs/autonomy.md, "Deploys").
+The six-hourly `scheduled live check` job runs the same script against master head with what the deploy's gate leaves out: gate 2b's read of the OAuth KV canary (the deploy's verify command gets no Cloudflare secret) and gate 1c's backup freshness. It never deploys or rolls back.
+
+Capsid remembers each one. The watcher reads the live gate job (named "live gate", or "<caller job> / live gate" when the gate runs in a called workflow such as devkit's worker-deploy.yml) of each new push run, for every repo on `DEPLOY_ROSTER` (`src/deploy-outcomes.ts`: the five app repos plus carrel, julieedwards, txasm, bsw, capsomer, enarratio and prelum), and records it in `deploy_outcomes` (`verified`, `rolled_back`, `rollback_failed`, `rollback_skipped` or `unverified`), with a rollback's time to restore. The Portal's CI page turns the rows into DORA's measures per repo: deploys per week, change failure rate and median time to restore. A rollback, or one that did not take effect, opens a watcher finding. GitHub does not serve the step summary through its API, so the watcher reads the step's `::error::` annotations instead: their wording ("rolled back: was ...", "not rolling back", "the rollback did not take effect") is what `src/deploy-outcomes.ts` matches, and changing it in devkit means changing it there (docs/autonomy.md, "Deploys").
 
 ## The MCP call (gate 8)
 
@@ -36,12 +39,12 @@ Every other gate stops before the MCP connection: OAuth metadata, `/register`, t
 
 1. Mint the probe agent as the admin with `capsid_admin_manage_agents` action `mint`, using the `live-probe` row of `ROLES` in `scripts/roles.ts` (read grant on `capsid`, the `capsid_read_doc` tool only, no repos, no flags). Save the key it returns once to `~/.capsid/agent-live-probe.key`.
 
-2. Set it as the repo secret the live job reads, from the file, so it never reaches the terminal:
+2. Set it as the repo secret the deploy passes to its live gate (`VERIFY_TOKEN`) and the scheduled check reads, from the file, so it never reaches the terminal:
 
    ```
    gh secret set CAPSID_LIVE_PROBE_KEY --repo DrDustinEdwards/capsid < ~/.capsid/agent-live-probe.key
    ```
 
-Then rerun the live job of the latest master run and look for `PASS  8 MCP call through /ops/mcp`. A lost key is replaced as any agent's is: revoke `live-probe` with the `capsid_admin_manage_agents` tool, mint under a new name, set the secret again.
+Then rerun the scheduled live check (Run workflow on CI) and look for `PASS  8 MCP call through /ops/mcp`. A lost key is replaced as any agent's is: revoke `live-probe` with the `capsid_admin_manage_agents` tool, mint under a new name, set the secret again.
 
-The rollback swaps code and bindings only, as above. It never undoes a D1 migration, which is why a migration is the seat's step. The guard's cases are tested in `test/deploy-pipeline.test.ts` and `test/rollback-guard.test.ts`.
+The rollback swaps code and bindings only, as above. It never undoes a D1 migration: the deploy records the D1 Time Travel bookmark before it migrates, and the run summary has the restore command. The guard's cases are tested in devkit.

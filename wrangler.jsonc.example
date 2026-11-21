@@ -65,7 +65,7 @@
   //   "*/5 * * * *"  the tick: auto-merge, the watcher, maintenance and the rest of
   //                  src/tick.ts.
   "triggers": { "crons": ["0 9 * * *", "*/5 * * * *"] },
-  // CAPSID PORTAL (dashboard/, built by scripts/deploy.mjs): server-rendered pages and their files.
+  // CAPSID PORTAL (dashboard/, built by `npm run build:dashboard` before every deploy): server-rendered pages and their files.
   // The pages are dashboard/build/worker/portal.js, bundled into this Worker under the name
   // src/portal-pages.d.ts declares (the alias below); the files are dashboard/build/client.
   // run_worker_first is REQUIRED, not a preference: with it off, the platform's

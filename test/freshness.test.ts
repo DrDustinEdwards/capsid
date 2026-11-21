@@ -103,10 +103,10 @@ test("verify-live wires the gate, and CI turns the assertion on for scheduled ru
     join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"),
     "utf8",
   );
-  const line = ci.split("\n").find((l) => l.includes("ASSERT_BACKUP_FRESH")) ?? "";
+  const scheduled = ci.slice(ci.indexOf("  scheduled-live:"));
   assert.match(
-    line,
-    /schedule/,
+    scheduled,
+    /ASSERT_BACKUP_FRESH: "1"/,
     "CI never sets ASSERT_BACKUP_FRESH on the scheduled run, so the gate always skips",
   );
 });

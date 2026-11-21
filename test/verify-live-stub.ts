@@ -35,7 +35,7 @@ export function healthy(req: IncomingMessage, res: ServerResponse) {
     res.end(JSON.stringify(body));
   };
   if (url.pathname === "/health")
-    return json(200, { status: "ok", sha: SHA, dirty: false, store: { d1: "ok", fts: "ok" } });
+    return json(200, { status: "ok", sha: SHA, store: { d1: "ok", fts: "ok" } });
   // CIMD, and tightened DCR that refuses the probe's unlisted redirect, and the probe
   // document served here, at the URL the script is pointed at through VERIFY_PROBE_CLIENT_ID.
   if (url.pathname === "/register")
