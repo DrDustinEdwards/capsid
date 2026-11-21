@@ -29,13 +29,13 @@
     },
     "legacy": {},
     "tests": {
-      "files": 266,
-      "cases": 2507
+      "files": 267,
+      "cases": 2508
     },
     "comments": {
-      "lines": 16494,
+      "lines": 16515,
       "code": 134626,
-      "percentage": 10.91
+      "percentage": 10.94
     }
   }
 }

@@ -5,6 +5,7 @@ import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
 import { runSiteRepair, type RepairOutcome } from "./site-repair";
 import { tokenSet, type FetchLike } from "./site-operator";
 import { DAY_MS } from "./time";
+import { mapLimit } from "./map-limit";
 import { failingCheckNames } from "@dustinedwards/site-runtime/health-read";
 import { healthUrl } from "./ops-sites";
 import { callSignal } from "./call-signal";
@@ -39,6 +40,9 @@ const TEXT_MAX = 300;
 // The settle after a converged repair: three re-reads thirty seconds apart.
 const SETTLE_POLLS = 3;
 const SETTLE_MS = 30_000;
+
+// How many sites are watched together (src/map-limit.ts).
+const WATCH_CONCURRENCY = 6;
 
 export type Sleep = (ms: number) => Promise<unknown>;
 const realSleep: Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -289,8 +293,10 @@ export async function watchSites(
   const findings: SiteFinding[] = [];
   const lines: string[] = [];
   let complete = true;
-  for (const site of config) {
-    if (!site.origin || (!site.operator && !site.health_path)) continue;
+  const watched = config.filter((s) => s.origin && (s.operator || s.health_path));
+  // Each site's reads and repairs are its own, so the sites run together; what they found is
+  // joined in the config's order.
+  const results = await mapLimit(watched, WATCH_CONCURRENCY, async (site) => {
     const r = await watchSite(
       env,
       site as OpsSiteConfig & { origin: string },
@@ -299,6 +305,10 @@ export async function watchSites(
       now,
       sleep,
     );
+    const mail = r.read ? await mailOnChange(env, site.namespace, site.name, r.finding, now) : [];
+    return { r, mail };
+  });
+  for (const { r, mail } of results) {
     findings.push(...r.weekly);
     lines.push(...r.lines);
     if (!r.read) {
@@ -306,7 +316,7 @@ export async function watchSites(
       continue;
     }
     if (r.finding) findings.push(r.finding);
-    lines.push(...(await mailOnChange(env, site.namespace, site.name, r.finding, now)));
+    lines.push(...mail);
   }
   return { findings, complete, lines };
 }

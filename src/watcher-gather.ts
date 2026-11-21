@@ -1,3 +1,4 @@
+import { mapLimit } from "./map-limit";
 import { readActionHours, anomalyFindings } from "./anomaly";
 import { DEPLOY_ROSTER, readDeployOutcomes, deployFindings } from "./deploy-outcomes";
 import { registrableDomain, readExpiries, expiryFindings } from "./domain-expiry";
@@ -18,8 +19,7 @@ import {
 } from "./ops-cloudflare";
 import { readPackageConfig, readPackage, npmVersions } from "./ops-packages";
 import { readSiteConfig, type OpsSite, sitesFrom, siteMapDrift } from "./ops-sites";
-import { type SiteProbe, probeSite, readSnapshot } from "./ops-snapshot";
-import type { PackageSnapshot } from "./ops-types/sites";
+import { probeSite, readSnapshot } from "./ops-snapshot";
 import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES } from "./offaccount";
 import { readResources } from "./system-facts-store";
 import { APP_ROSTER } from "./roster";
@@ -61,6 +61,10 @@ import {
 // Every read is wrapped so one failing surface does not stop the others being
 // checked. A watcher that goes silent because GitHub was slow is worse than one that
 // reports three of its four checks, because silence reads as health.
+
+// How many reads of one roster run together: the pass waits on GitHub and Cloudflare, so
+// one at a time spent most of the tick's four minutes (src/map-limit.ts).
+const READ_CONCURRENCY = 6;
 
 async function attempt<T>(what: string, fn: () => Promise<T>): Promise<T | null> {
   try {
@@ -203,11 +207,14 @@ export async function gatherFindings(
   // fingerprint names its namespace, but ownership is per check, not per repo, so a
   // repo that could not be read must not let the others' pass clear its incident.
   let ciRead = 0;
-  for (const namespace of APP_ROSTER) {
-    const runs: CiRun[] | null = await attempt(
+  const ciRuns = await mapLimit(APP_ROSTER, READ_CONCURRENCY, (namespace) =>
+    attempt(
       `ci ${namespace}`,
-      async () => (await ciStatus(env, namespace, undefined, { limit: 5 })).runs,
-    );
+      async (): Promise<CiRun[]> => (await ciStatus(env, namespace, undefined, { limit: 5 })).runs,
+    ),
+  );
+  APP_ROSTER.forEach((namespace, i) => {
+    const runs = ciRuns[i] ?? null;
     if (runs) {
       ciRead++;
       out.push(...ciFindings(namespace, runs, now));
@@ -225,22 +232,28 @@ export async function gatherFindings(
           }
         : null,
     });
-  }
+  });
   if (ciRead === APP_ROSTER.length) ran.add("ci");
 
   // What became of each roster repo's newest deploys (src/deploy-outcomes.ts, the merge
   // pipeline's PR 6): recorded in deploy_outcomes, and a rollback is a finding. The check
   // counts as run only when every repo was read, so a failed read never clears one.
   let deploysRead = 0;
-  for (const { key, namespace, selector, workflow } of DEPLOY_ROSTER) {
+  const deployReads = await mapLimit(
+    DEPLOY_ROSTER,
+    READ_CONCURRENCY,
     // Wrapped, since a repo with no deploy yet reads as null and a failed read does too.
-    const read = await attempt(`deploys ${key}`, async () => ({
-      newest: await readDeployOutcomes(env, namespace, selector, workflow),
-    }));
-    if (!read) continue;
+    ({ key, namespace, selector, workflow }) =>
+      attempt(`deploys ${key}`, async () => ({
+        newest: await readDeployOutcomes(env, namespace, selector, workflow),
+      })),
+  );
+  DEPLOY_ROSTER.forEach(({ key, namespace }, i) => {
+    const read = deployReads[i];
+    if (!read) return;
     deploysRead++;
     if (read.newest) out.push(...deployFindings(namespace, read.newest, key));
-  }
+  });
   if (deploysRead === DEPLOY_ROSTER.length) ran.add("deploys");
 
   // Canon documents a merged pull request left citing a removed, renamed or changed file
@@ -295,9 +308,7 @@ export async function gatherFindings(
   // failure of the check; the check fails only if probing itself throws.
   const probes = sites
     ? await attempt("site probes", async () => {
-        const results: SiteProbe[] = [];
-        for (const site of sites) results.push(await probeSite(site, fetchImpl, now, health));
-        return results;
+        return mapLimit(sites, READ_CONCURRENCY, (site) => probeSite(site, fetchImpl, now, health));
       })
     : null;
   // The previous pass's rings, for "down on two probes in a row". A snapshot that is
@@ -401,14 +412,15 @@ export async function gatherFindings(
   // The secret names of each opted-in site's Worker (src/secret-presence.ts), for the
   // Portal's convergence view: names only, set or not, read here because no Portal request
   // calls Cloudflare. Each site's read stands alone and stores its own reason on failure.
-  for (const site of config ?? []) {
-    if (
-      !site.origin ||
-      !site.operator ||
-      site.operator.secrets.length === 0 ||
-      site.platform !== "cloudflare"
-    )
-      continue;
+  const secretSites = (config ?? []).filter(
+    (site) =>
+      site.origin &&
+      site.operator &&
+      site.operator.secrets.length > 0 &&
+      site.platform === "cloudflare",
+  );
+  await mapLimit(secretSites, READ_CONCURRENCY, async (site) => {
+    if (!site.operator) return;
     const read_at = now.toISOString();
     const expected = site.operator.secrets;
     const cfState = observed.cloudflare?.[site.namespace];
@@ -444,7 +456,7 @@ export async function gatherFindings(
     await attempt(`secret names ${site.namespace}`, () =>
       storeSecrets(env, site.namespace, stored),
     );
-  }
+  });
 
   // Agents acting out of their usual pattern, from audit_log (src/anomaly.ts, OWASP item
   // 6). A finding only, never a suspension (Dustin, D4 of 2026-10-03).
@@ -505,9 +517,9 @@ export async function gatherFindings(
   const packageConfig = await attempt("package config", () => readPackageConfig(env.DB));
   if (packageConfig) {
     const read = await attempt("packages", async () => {
-      const results: PackageSnapshot[] = [];
-      for (const cfg of packageConfig) results.push(await readPackage(env, cfg, fetchImpl, now));
-      return results;
+      return mapLimit(packageConfig, READ_CONCURRENCY, (cfg) =>
+        readPackage(env, cfg, fetchImpl, now),
+      );
     });
     if (read) observed.packages = read;
   }
