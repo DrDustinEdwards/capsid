@@ -1,8 +1,14 @@
 {
-  "model": "opusplan",
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "attribution": {
     "commit": "",
     "pr": ""
+  },
+  "env": {
+    "GIT_AUTHOR_NAME": "Dustin Edwards",
+    "GIT_AUTHOR_EMAIL": "204601333+DrDustinEdwards@users.noreply.github.com",
+    "GIT_COMMITTER_NAME": "Dustin Edwards",
+    "GIT_COMMITTER_EMAIL": "204601333+DrDustinEdwards@users.noreply.github.com"
   },
   "hooks": {
     "SessionStart": [
@@ -35,17 +41,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'cd \"$(git rev-parse --show-toplevel)\" && npm run -s check 2>&1 | tail -20 >&2; s=${PIPESTATUS[0]}; [ \"$s\" -ne 0 ] && exit 2; exit 0'"
-          }
-        ]
-      }
     ]
   },
   "permissions": {
@@ -63,8 +58,14 @@
       "Bash(npm run deploy*)",
       "Bash(npx wrangler deploy*)",
       "Bash(npx wrangler secret*)",
-      "Bash(npx wrangler d1 execute *)"
+      "Bash(npx wrangler d1 migrations apply*)",
+      "Bash(npx wrangler d1 execute *DELETE*)",
+      "Bash(npx wrangler d1 execute *DROP*)"
     ],
-    "deny": ["Bash(rm -rf *)", "Read(./.env*)", "Read(./.dev.vars)", "Read(./wrangler.jsonc)"]
+    "deny": [
+      "Bash(rm -rf *)",
+      "Read(**/.env*)",
+      "Read(**/.dev.vars)"
+    ]
   }
 }
