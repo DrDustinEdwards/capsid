@@ -22,7 +22,7 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 // seat and the maintenance list, and across them the signed policies, the overnight
 // switch, the merge safety meter and, for the admin, the credential inventory. The
 // tool keeps the improve loop's name, which it was served under before the loop was
-// removed (Dustin, 2026-10-19), so no credential's tools list has to change.
+// removed, so no credential's tools list has to change.
 
 interface NamespaceStatus {
   namespace: string;

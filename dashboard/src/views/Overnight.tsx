@@ -35,8 +35,6 @@ function Failed({ what, error }: { what: string; error: string | null }) {
   ) : null;
 }
 
-// ---- Tonight -----------------------------------------------------------------------------
-
 const SOURCE: Record<PortalPlan["lanes"][number]["jobs"][number]["estimate_source"], string> = {
   policy: "from the policy",
   record: "from its record",
@@ -148,8 +146,6 @@ export function Tonight() {
     </Panel>
   );
 }
-
-// ---- Since you last looked -----------------------------------------------------------------
 
 // When this browser last opened Needs you. A per-viewer convenience: with no record, or
 // storage blocked, the strip reports the last 24 hours, the digest's own default.

@@ -15,7 +15,7 @@ export type { ResourcesDoc };
 import type { SystemModel } from "./system-model";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// THE SECRETS AND DATA MODEL (Dustin, 2026-11-03): each Worker's secret names, D1 databases
+// THE SECRETS AND DATA MODEL: each Worker's secret names, D1 databases
 // and their tables, KV namespaces, R2 buckets, Durable Objects and queues, and which
 // systems use each, read from Cloudflare by the nightly build (src/system-facts.ts) so a
 // cleanup never needs a production check to learn who uses what. Private: it is stored in
@@ -381,8 +381,6 @@ export function resourceDrift(
     read: doc.workers.length + doc.databases.length + doc.kv_namespaces.length + doc.buckets.length,
   };
 }
-
-// ---- reading -------------------------------------------------------------------------
 
 function refused(what: string, permission: string) {
   return (err: unknown): string => {

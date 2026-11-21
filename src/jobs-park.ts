@@ -31,7 +31,7 @@ import { DAY_MS } from "./time";
 // posted while a job is parked, so unpark refuses, naming the job, when it would put a
 // second open job under one title.
 //
-// A due date (Dustin, 2026-11-17): park may take `until`, and the five-minute tick
+// A due date: park may take `until`, and the five-minute tick
 // (returnDueParked, from src/tick.ts) returns the job to the queue once that time has
 // passed, as the system actor PARK_DUE_ACTOR, through the same transition unpark makes.
 // It is kept in jobs.parked_until (migrations/0064) and cleared whenever the job leaves

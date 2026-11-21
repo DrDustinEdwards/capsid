@@ -130,8 +130,7 @@ export function requiredGrant(tool: string): ToolRequirement {
 
 // What each action requires, for an "action" tool whose requirement depends on nothing
 // but the action. The registrar reads this table. An unlisted action takes `default`,
-// so a new action is refused to a driver until listed. No served tool needs it today;
-// the improve loop's tool did, before the loop was removed.
+// so a new action is refused to a driver until listed.
 export const TOOL_ACTION_GRANTS: Record<
   string,
   { default: ToolRequirement; actions: Record<string, ToolRequirement> }
@@ -173,7 +172,7 @@ function declaredScope(tool: string, action: string | undefined): string {
 // passed as a `person` and only the scopes decide. A refusal is worded by checkScope, which
 // names the tool axis first and tells a key holder to ask for a wider key rather than to
 // reconnect. An "action" tool (jobs, lint) is left to its handler, which checks the same
-// split after its arguments, as it always has; its OAuth step-up still comes first.
+// split after its arguments; its OAuth step-up still comes first.
 function sharedGrantRefusal(agent: Agent, tool: string, action: string | undefined): string | null {
   if (requiredForAction(tool, action) === "action") return null;
   const scope = declaredScope(tool, action);

@@ -104,16 +104,12 @@ export function siteScripts(feed: OpsFeed, ns?: string): string[] {
   return [...out];
 }
 
-// ---- probe ring -------------------------------------------------------------
-
 export const RING_SLOTS = 336;
 
 // Start time of slot i (0 oldest) of the ring padded to RING_SLOTS (capsomer padRing).
 export function slotStart(s: SiteSnapshot, i: number): number {
   return (s.ring_slot - (RING_SLOTS - 1 - i)) * SLOT_MS;
 }
-
-// ---- jobs -------------------------------------------------------------------
 
 export const JOB: Record<OpsJob["status"], { kind: Kind; label: string }> = {
   queued: { kind: "queued", label: "Queued" },
@@ -144,8 +140,6 @@ export function resumeCall(j: OpsJob): string {
   return `jobs action "resume" id "${j.id}" namespace "${j.namespace}" reason "<what you did>"`;
 }
 
-// ---- CI ---------------------------------------------------------------------
-
 export function ciState(c: CiObservation): { kind: Kind; label: string; red: boolean } {
   const l = c.latest;
   if (!l) return { kind: "nodata", label: "Could not read", red: false };
@@ -159,8 +153,6 @@ export function ciState(c: CiObservation): { kind: Kind; label: string; red: boo
   return { kind, label: o.label, red: kind === "crit" };
 }
 
-// ---- watcher staleness --------------------------------------------------------
-
 // A run's outcome in the run ledger (src/task-runs.ts), as the Portal shows it.
 export const TASK_OUTCOME: Record<OpsTaskRun["outcome"], { kind: Kind; label: string }> = {
   ok: { kind: "ok", label: "Ok" },
@@ -172,8 +164,6 @@ export const TASK_OUTCOME: Record<OpsTaskRun["outcome"], { kind: Kind; label: st
 export function passStale(snap: OpsSnapshot | null, now: number): boolean {
   return !snap || now - parse(snap.pass_at) > 2 * snap.cadence_min * 60_000;
 }
-
-// ---- needs attention ----------------------------------------------------------
 
 type Sev = "crit" | "warn" | "nodata";
 export type OpenRef = string; // "site:<key>" | "job:<id>" | "agent:<name>" | "view:<id>"
@@ -455,7 +445,6 @@ function worstFirst(a: { sev: Sev; at: number }, b: { sev: Sev; at: number }): n
   return RANK[a.sev] - RANK[b.sev] || b.at - a.at;
 }
 
-// ---- needs attention, as Capsomer's attention list (audit ruling 3) --------------------
 //
 // Two tiers. A problem (critical or warning) needs a person; a notice (missing data, a
 // check that could not run, CI that could not be read, site map drift, a silent
@@ -521,7 +510,6 @@ export function attentionList(
   return { items, groups };
 }
 
-// ---- blocked jobs (audit ruling 10) ---------------------------------------------------
 //
 // Priority first (high first), then the newest update first. A job blocked for more than
 // 7 days goes after the rest. all is the two in that order.
@@ -539,8 +527,6 @@ export function blockedOrder(
   const stale = list.filter((j) => now - parse(j.updated_at) > STALE_BLOCKED_MS);
   return { blocked, stale, all: [...blocked, ...stale] };
 }
-
-// ---- incidents ------------------------------------------------------------------
 
 export interface Incident {
   sev: "crit" | "warn";
@@ -592,8 +578,6 @@ export function incidents(feed: OpsFeed): Incident[] {
   return items.sort((a, b) => Number(b.open) - Number(a.open) || b.at - a.at);
 }
 
-// ---- counts ---------------------------------------------------------------------
-
 export function counts(feed: OpsFeed) {
   const sites = hasSites(feed) ? (feed.snapshot?.sites ?? []) : [];
   const jobs = feed.live.jobs;
@@ -607,8 +591,6 @@ export function counts(feed: OpsFeed) {
     ciRed: (feed.snapshot?.ci ?? []).filter((c) => ciState(c).red).length,
   };
 }
-
-// ---- agents -------------------------------------------------------------------------
 
 // The roster is the live credentials only. A revoked agent leaves it at once, and its row
 // leaves the live table 7 days later (docs/auth.md); both are the Archive tab's.

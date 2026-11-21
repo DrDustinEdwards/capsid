@@ -27,7 +27,7 @@ const RETIRED = new Set([
   "capsid_admin_manage_switches.budget",
   "capsid_admin_manage_switches.register_skill",
 ]);
-// Whole tools removed after the regroup (Dustin, 2026-10-31), kept for the same reason.
+// Whole tools removed after the regroup, kept for the same reason.
 const RETIRED_TOOLS = new Set(["capsid_change_repo", "capsid_open_pr", "capsid_run_ci"]);
 
 test("every mapping target is a served tool and action, so no migrated entry names nothing", () => {

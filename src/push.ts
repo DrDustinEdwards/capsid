@@ -432,7 +432,6 @@ async function emailFallback(env: Env, now: Date, why: string): Promise<PushRepo
   return { ran: due.length > 0, note, sent };
 }
 
-// ---------------------------------------------------------------------------
 // The Portal's route: GET lists, POST turns a device on or off or sends a test.
 
 export const PORTAL_PUSH_PATH = "/portal/api/push";

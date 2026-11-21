@@ -281,7 +281,6 @@ export function staleCanonFindings(flags: readonly StaleFlag[]): Finding[] {
   });
 }
 
-// ---------------------------------------------------------------------------
 // The memory, and the merges still to read.
 
 /** The stored memory, or null with the reason when it does not parse. Absent is empty. */
@@ -350,7 +349,6 @@ export function namespacesThisPass(
   return { listed, capped };
 }
 
-// ---------------------------------------------------------------------------
 // The pass.
 
 export interface StaleCanonRead {

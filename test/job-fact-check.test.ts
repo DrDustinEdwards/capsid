@@ -81,8 +81,6 @@ test("a claim carries its line and its words", () => {
   assert.equal(claim.said, "#14 merged");
 });
 
-// ---- Checking against injected readers --------------------------------------------------
-
 function readers(over: Partial<FactReaders> = {}, calls: string[] = []): FactReaders {
   return {
     repos: async () => ({ ok: true, value: ["acme/widget"] }),
@@ -223,8 +221,6 @@ test("the claims and reads one body spends are bounded", async () => {
   assert.equal(bounded.warnings.length, 3);
   assert.match(bounded.warnings[0], /limit of 20 reads/);
 });
-
-// ---- Wiring --------------------------------------------------------------------------
 
 test("edit refuses a body whose pull request GitHub shows open", async () => {
   const env = fakeEnv({

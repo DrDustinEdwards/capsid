@@ -10,8 +10,7 @@ import { fail, ok, type ToolCtx } from "./docs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The two operations behind capsid_read_status (status) and capsid_admin_manage_switches
-// (the admin's switches). Both tools keep the improve loop's names, under which agents'
-// tools lists grant them, though the loop itself was removed (Dustin, 2026-10-19).
+// (the admin's switches). Both tools keep names under which agents' tools lists grant them.
 export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
 

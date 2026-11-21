@@ -46,7 +46,6 @@ const destructive = (r: Reach = {}): ToolHints => ({
 });
 
 export const TOOL_HINTS: Record<string, ToolHints> = {
-  // ---- Capsid (11)
   capsid_start_session: read({ idempotent: true, openWorld: false }),
   capsid_find_docs: read({ idempotent: true, openWorld: false }),
   capsid_read_doc: read({ idempotent: true, openWorld: false }),
@@ -72,7 +71,6 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // Status only: Capsid's state from this Worker's own stores.
   capsid_read_status: read({ idempotent: true, openWorld: false }),
 
-  // ---- Capsid Admin (8)
   // Reads the queue, the Portal's stored state and GitHub's open pull requests.
   capsid_admin_whats_next: read({ idempotent: true, openWorld: true }),
   // update replaces the mapping, delete removes the namespace and, with cascade, its

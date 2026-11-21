@@ -229,7 +229,6 @@ test("the difference names what moved", () => {
   assert.deepEqual(diff, ["counts.documents_live 1 -> 2", "ops_site_revision null -> 2"]);
 });
 
-// ---- the token -------------------------------------------------------------------
 // The token itself is site-runtime's ./confirm-token, tested where it lives; the key is Capsid's.
 
 test("with no root secret nothing is signed or checked", async () => {

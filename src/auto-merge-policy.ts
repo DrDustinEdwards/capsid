@@ -714,7 +714,7 @@ export function evaluatePolicy(
   }
   passed.push("head_in_base_repo");
 
-  // Version 10 (Dustin, 2026-10-31): work comes from project threads, not the job queue,
+  // Version 10: work comes from project threads, not the job queue,
   // so most pull requests name no job. One whose unit has earned unattended merging (a
   // promoted unit, from his recorded approvals) stands in for the job trace: the three
   // job checks pass on the unit, and every other check still applies.

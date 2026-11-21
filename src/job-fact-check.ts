@@ -181,8 +181,6 @@ export function factClaims(body: string): FactClaim[] {
   return claims;
 }
 
-// ---- Checking ------------------------------------------------------------------------------
-
 type FactRead<T> = { ok: true; value: T } | { ok: false; reason: string };
 
 /** What the check reads, injected so the tests need no network. */
@@ -400,8 +398,6 @@ export async function checkBodyFacts(
     warnings,
   };
 }
-
-// ---- The live readers ----------------------------------------------------------------------
 
 const reason = (err: unknown) => errorMessage(err).slice(0, 160);
 

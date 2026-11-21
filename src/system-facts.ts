@@ -28,7 +28,7 @@ import {
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { utcDay } from "./time";
-// THE NIGHTLY SYSTEM FACTS BUILD (Dustin, 2026-11-03). Once a UTC day after 06:00 (the
+// THE NIGHTLY SYSTEM FACTS BUILD. Once a UTC day after 06:00 (the
 // small hours in Chicago, so the 11:00 maintenance pass lists its drift) the tick reads:
 //   the versions model: every model repo's pins of the network's packages, from their
 //     lockfiles (src/shared-code.ts), published per system at /public/versions/v1.json

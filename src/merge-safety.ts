@@ -50,9 +50,6 @@ export interface Paused {
   reason: string;
 }
 
-// ---------------------------------------------------------------------------
-// 1. Revert tracking
-
 /** The pull requests and commits a merged pull request says it reverts. Pure.
  *  Recognized: GitHub's revert button ("Reverts owner/repo#N" in the body, with a title
  *  `Revert "..."`), "reverts #N" or "revert #N" at the start of the title or of a body line
@@ -342,9 +339,6 @@ export async function revertsTick(
   };
 }
 
-// ---------------------------------------------------------------------------
-// 2. The weekly counts
-
 export interface AuditEvidence {
   action: string;
   namespace: string | null;
@@ -499,9 +493,6 @@ async function readSafetyCounts(
   ]);
   return countsFrom(audit.results ?? [], outcomes.results ?? [], namespaces, now);
 }
-
-// ---------------------------------------------------------------------------
-// 3. The shutoff
 
 /** The bad events and unattended merges of a namespace in the last seven days and in
  *  the 30 days before, with the events at or before the lifted time left out. */
@@ -690,9 +681,6 @@ export async function readSafetyReport(kv: KVNamespace): Promise<OpsMergeSafety 
     return null;
   }
 }
-
-// ---------------------------------------------------------------------------
-// 6. Resume
 
 /** What lifting a namespace's pause will do, or why it cannot. Reads only. */
 export async function planResume(

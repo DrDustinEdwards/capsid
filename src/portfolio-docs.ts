@@ -18,7 +18,7 @@ export const PORTFOLIO_DOCS = {
   // old decisions log is history kept under archive/; new rulings go in rulings/.
   volumes: ["archive/decisions-vol-"],
   // One document directly inside the folder, no deeper. One ruling per file. Records,
-  // not rules: readable, never served as read-first (Dustin, 2026-11-18).
+  // not rules: readable, never served as read-first.
   folders: ["rulings/"],
   // The tool actions that may reach capsid for such a caller, as tool.action. Each
   // requires only the read grant (TOOL_GRANTS). A document's versions and links stay

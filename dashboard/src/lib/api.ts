@@ -214,8 +214,6 @@ export async function requestRefresh(): Promise<RefreshResult> {
   }
 }
 
-// ---- Portal controls, namespaces and activity ----------------------------------------------
-
 // Capsid's words for an action with no answer in time: Activity says whether it went through.
 const noAnswer = (seconds: number) =>
   `no answer within ${seconds} seconds. Check Activity to see whether anything changed before trying again.`;

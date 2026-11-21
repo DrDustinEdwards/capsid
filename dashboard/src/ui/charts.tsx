@@ -9,8 +9,6 @@ import { pct } from "../lib/format";
 import { utc } from "capsomer/behavior/time";
 import { markup } from "capsomer/behavior/trusted-html";
 
-// ---- uptime ticks: 336 half-hour slots as 84 two-hour ticks ------------------------
-
 const TICKS = 84;
 
 // Chart 8 (design-portal-evaluation.md section 3: "Is every site up, and since when?"), drawn
@@ -60,8 +58,6 @@ export function UptimeFoot({ site }: { site: SiteSnapshot }) {
     </div>
   );
 }
-
-// ---- errors per hour ---------------------------------------------------------------------
 
 export function errorTotals(e: HourBucket[]) {
   const req = e.reduce((a, x) => a + x.requests, 0);

@@ -213,7 +213,6 @@ async function commitSigned(
   return { ok: true, signed, signature, sha256: digest };
 }
 
-// ---------------------------------------------------------------------------
 // sign_policy_change (docs/design/design-merge-pipeline.md section 7, PR 10; Dustin's
 // DECIDE 9 of 2026-10-09): promoting a merge unit to auto, or removing one, writes the
 // next version of the auto-merge policy and signs it in one admin control. It widens
@@ -392,7 +391,6 @@ export async function performPolicyChange(
   };
 }
 
-// ---------------------------------------------------------------------------
 // sign_policy_from_repo: the reviewable source of the auto-merge policy is
 // docs/policy/auto-merge.md on the default branch, and the stored, signed copy is written
 // from it. This control does that in one admin step instead of a capsid_write_doc and a

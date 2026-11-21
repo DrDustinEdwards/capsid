@@ -113,8 +113,6 @@ export const OLD_TOOLS: string[] = [
   ...Object.keys(SPLIT),
 ];
 
-// ---- prose ------------------------------------------------------------------------
-
 // A backticked old name followed by one of these words is not the tool: "the `write`
 // grant", "the `jobs` table".
 const NOT_A_TOOL_AFTER =

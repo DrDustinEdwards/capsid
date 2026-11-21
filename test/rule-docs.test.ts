@@ -33,7 +33,7 @@ test("which documents are rule documents, and their caps", () => {
     ["capsid", "audits/CLOSED-2026-09.md"],
     ["capsid", "jobs/job_0123456789ab.md"],
     ["capsid", "rulings/old/one.md"],
-    // Dustin's rulings are records, not rules (Dustin, 2026-11-18).
+    // Dustin's rulings are records, not rules.
     ["capsid", "rulings/testing-2026-10-04.md"],
     ["sample", "conventions.md"],
     ["sample", "schema.md"],

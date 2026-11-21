@@ -150,8 +150,6 @@ export function NoSnapshot() {
   return <Empty kind="nothing-yet" title={<Status tone="nodata">No watcher pass yet</Status>} />;
 }
 
-// ---- fleet table -------------------------------------------------------------------------
-
 function LiveDeployCell({ s }: { s: SiteSnapshot }) {
   const { now } = useApp();
   const cf = cfOk(s);
@@ -303,8 +301,6 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
     </div>
   );
 }
-
-// ---- queue -------------------------------------------------------------------------------
 
 // The Queue's groups, in order. Blocked jobs are ordered by priority, then the newest
 // update first, with those blocked over 7 days after them (audit ruling 10, lib/derive.ts
@@ -482,8 +478,6 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
   );
 }
 
-// ---- incidents -----------------------------------------------------------------------------
-
 export function IncidentFeed({ ns }: { ns?: string }) {
   const { feed, now } = useApp();
   let items = incidents(feed);
@@ -524,8 +518,6 @@ export function IncidentFeed({ ns }: { ns?: string }) {
     </div>
   );
 }
-
-// ---- timeline panel ------------------------------------------------------------------------
 
 export function TimelinePanel({
   title,

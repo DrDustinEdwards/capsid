@@ -343,8 +343,6 @@ export function fingerprintDifference(signed: string, current: string): string[]
     .map((k) => `${k} ${fa[k] ?? "absent"} -> ${fb[k] ?? "absent"}`);
 }
 
-// ---- Preview and perform ------------------------------------------------------------
-
 /** What the delete removes and what it keeps, one line each: the tool's preview and the
  *  namespace_remove control's preview (src/controls-plan.ts) both show it. */
 export function summarize(plan: DeletePlan): { will_delete: string[]; will_keep: string[] } {

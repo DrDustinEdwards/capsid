@@ -174,8 +174,6 @@ test("a reason is kept to one line of at most REASON_MAX characters", async () =
   assert.ok(!reason.includes("\n"));
 });
 
-// ---- flags ----------------------------------------------------------------------
-
 const NOW = new Date("2026-10-01T12:00:00Z");
 const run = (minutesAgo: number, outcome: OpsTaskRun["outcome"] = "ok"): OpsTaskRun => {
   const at = new Date(NOW.getTime() - minutesAgo * 60_000).toISOString();

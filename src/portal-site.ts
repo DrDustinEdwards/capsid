@@ -99,7 +99,6 @@ const noSite = (namespace: string, what: string) =>
     `${namespace} has no site configured (ops_sites), so it has no ${what}. Add one in Settings (site_add).`,
   );
 
-// ---------------------------------------------------------------------------
 // Search: Google Search Console and Bing Webmaster.
 
 interface PerformanceAnswer {
@@ -282,7 +281,6 @@ export async function readSiteSearch(
   return { generated, namespace, google, bing };
 }
 
-// ---------------------------------------------------------------------------
 // Traffic: what Cloudflare's edge saw.
 
 /** The traffic tab's read: the four reports at once over the last `days`. */
@@ -373,7 +371,6 @@ function pick<T extends object, K extends keyof T>(value: T, keys: readonly K[])
   return Object.fromEntries(keys.map((k) => [k, value[k]])) as Pick<T, K>;
 }
 
-// ---------------------------------------------------------------------------
 // Workers Builds and one build's log.
 
 /** The deploys tab's builds: the Worker its site row names, newest first. */
@@ -458,7 +455,6 @@ export async function readBuildLog(
   return { generated, build_uuid: buildUuid, log };
 }
 
-// ---------------------------------------------------------------------------
 // The routes.
 
 /** GET /portal/api/site-search?namespace=. */

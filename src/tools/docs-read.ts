@@ -317,7 +317,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
         // The portfolio rules, by path, for every namespace: a session reads these first.
         // Every namespace driver may read them in capsid and nothing else there. Rulings
         // are on the allowlist but not read first: they are dated records of what Dustin
-        // decided, not rules (Dustin, 2026-11-18).
+        // decided, not rules.
         portfolio_documents: {
           namespace: PORTFOLIO_DOCS.namespace,
           read_first: portfolio.filter((r) => !isPortfolioRecord(r.path)).map((r) => r.path),
