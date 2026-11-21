@@ -8,7 +8,6 @@ import {
   PUBLIC_VERSIONS_PATH,
   handlePublicDocument,
 } from "./public-data";
-import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH, handleShadowJob, handleShadowResult } from "./shadow";
 import { REVIEW_RUN_PATH, handleReviewRun } from "./review";
 import {
   BENCH_DRAW_PATH,
@@ -390,10 +389,6 @@ export const defaultHandler = {
       return handleBenchRepro(request, env);
     if (url.pathname === BENCH_SCORE_PATH && request.method === "POST")
       return handleBenchScore(request, env);
-    if (url.pathname === SHADOW_JOB_PATH && request.method === "GET")
-      return handleShadowJob(request, env);
-    if (url.pathname === SHADOW_RESULT_PATH && request.method === "POST")
-      return handleShadowResult(request, env);
     if (url.pathname === REVIEW_RUN_PATH && request.method === "POST")
       return handleReviewRun(request, env);
     if (url.pathname === "/authorize") return handleLogin(request, env);

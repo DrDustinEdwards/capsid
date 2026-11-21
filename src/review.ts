@@ -1,6 +1,6 @@
 import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
 import { githubJson } from "@dustinedwards/site-runtime/github";
-import { verifyJwt } from "@dustinedwards/site-runtime/access-login";
+import { remoteKeys, verifyJwt, type KeySource } from "@dustinedwards/site-runtime/access-login";
 import { untrusted, UNTRUSTED_DATA_RULE } from "@dustinedwards/site-runtime/anthropic";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import type { Env } from "./env";
@@ -10,9 +10,23 @@ import { textResponse } from "@dustinedwards/site-runtime/http";
 import { readJob } from "./jobs-transition";
 import { pathClassOf, type PathClass } from "./merge-class";
 import { worthReviewer, type ChangedFile } from "./model-routing";
-import { issuerKeys, ISSUER } from "./shadow";
 import { splitSignedTask } from "./signed-docs";
 import { auditStatement } from "./store-guards";
+
+const ISSUER = "https://token.actions.githubusercontent.com";
+
+// The key set's address comes from the issuer's discovery document, as OIDC defines,
+// and must be on the issuer's own host.
+let keys: KeySource | null = null;
+async function issuerKeys(): Promise<KeySource> {
+  if (keys) return keys;
+  const resp = await fetch(`${ISSUER}/.well-known/openid-configuration`);
+  if (!resp.ok) throw new Error(`the issuer's discovery document answered ${resp.status}`);
+  const uri = new URL(String(((await resp.json()) as { jwks_uri?: unknown }).jwks_uri));
+  if (uri.origin !== ISSUER) throw new Error("the issuer's key set is on another host");
+  keys = remoteKeys(uri.href);
+  return keys;
+}
 
 // THE AUTOMATIC PR REVIEWER (D5; Dustin 2026-11-03, "lets do it"). A reviewer that did not
 // build the work reads a pull request and says whether it does what it claims. It catches

@@ -48,7 +48,6 @@ import {
   BENCH_START_PATH,
   BENCH_TASKS_PATH,
 } from "../src/bench.ts";
-import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH } from "../src/shadow.ts";
 import { REVIEW_RUN_PATH } from "../src/review.ts";
 import {
   PUBLIC_CODE_PATH,
@@ -85,8 +84,6 @@ const PATH_CONSTANTS: Record<string, string> = {
   BENCH_START_PATH,
   BENCH_REPRO_PATH,
   BENCH_SCORE_PATH,
-  SHADOW_JOB_PATH,
-  SHADOW_RESULT_PATH,
   REVIEW_RUN_PATH,
   PORTAL_CALLBACK_PATH,
   OPS_FEED_PATH,
