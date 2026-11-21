@@ -60,7 +60,7 @@ export function DefaultBranches() {
                       <td>
                         {c.latest?.url && (
                           <AwayLink
-                            className="stretch"
+                            className="cap-table-open"
                             href={c.latest.url}
                             aria-label={`Open the latest ${c.namespace} run on GitHub`}
                             newTab
