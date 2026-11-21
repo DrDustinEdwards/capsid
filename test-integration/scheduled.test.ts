@@ -1,14 +1,8 @@
 import { readDumpJson } from "@dustinedwards/d1-dump";
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import worker, { BACKUP_CRON, SKILLS_REFRESH_CRON, TICK_CRON } from "../src/index";
+import worker, { BACKUP_CRON, TICK_CRON } from "../src/index";
 import { claimJti } from "../src/signed-requests";
-import {
-  SCHEDULE_KEY,
-  SKILLS_NAMESPACE,
-  SKILLS_REFRESH_ACTOR,
-  guideKey,
-} from "../src/skills-refresh";
 
 // The scheduled handler, all three crons, against real bindings.
 //
@@ -104,66 +98,6 @@ describe("the three cron expressions", () => {
     expect(await ledger("tick")).toEqual([
       { outcome: "ok", reason: "the tick's steps ran; each records its own run" },
     ]);
-  });
-
-  // The skills refresh fires daily and gates on its weekday inside the handler, so
-  // both halves are driven: the skip, which reads only real KV, and the run, which
-  // posts a job into real D1. The two docs fetches are stubbed.
-  const skillsJobs = () =>
-    env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE namespace = ?1 AND posted_by = ?2")
-      .bind(SKILLS_NAMESPACE, SKILLS_REFRESH_ACTOR)
-      .first<{ n: number }>();
-
-  it("the skills refresh skips on any other weekday and writes nothing", async () => {
-    const otherDay = (new Date().getUTCDay() + 1) % 7;
-    await env.APP_KV.put(SCHEDULE_KEY, JSON.stringify({ enabled: true, dayUtc: otherDay }));
-    await fire(SKILLS_REFRESH_CRON);
-    expect((await skillsJobs())?.n).toBe(0);
-    expect(await env.APP_KV.get(guideKey("fable-5-1"))).toBeNull();
-    // Not its day is not a run, so the ledger has nothing for it.
-    expect(await ledger("skills-refresh")).toEqual([]);
-  });
-
-  // One run of the refresh on its weekday with the docs stubbed: the overview names one
-  // model and its guide reads `guide()`.
-  async function refreshOnItsDay(guide: () => string) {
-    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')")
-      .bind(SKILLS_NAMESPACE)
-      .run();
-    await env.APP_KV.put(
-      SCHEDULE_KEY,
-      JSON.stringify({ enabled: true, dayUtc: new Date().getUTCDay() }),
-    );
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = String(input instanceof Request ? input.url : input);
-      if (url.endsWith("/models/overview.md"))
-        return new Response("Models: claude-fable-5-1 is the newest.");
-      if (url.endsWith("/prompting-claude-fable-5-1.md")) return new Response(guide());
-      return new Response("not stubbed", { status: 500 });
-    });
-    try {
-      await fire(SKILLS_REFRESH_CRON);
-    } finally {
-      fetchSpy.mockRestore();
-    }
-  }
-
-  it("the skills refresh on its weekday posts a real job and records the guide it saw", async () => {
-    await refreshOnItsDay(() => "guide text");
-    expect((await skillsJobs())?.n).toBe(1);
-    expect(await env.APP_KV.get(guideKey("fable-5-1"))).toMatch(/^[0-9a-f]{64}$/);
-    expect((await ledger("skills-refresh")).map((r) => r.outcome)).toEqual(["ok"]);
-  });
-
-  it("a guide that moves while its job is still open is pending, not a failing run", async () => {
-    await env.APP_KV.delete(guideKey("fable-5-1"));
-    await refreshOnItsDay(() => "first text");
-    const jobs = (await skillsJobs())?.n;
-    await refreshOnItsDay(() => "second text");
-    expect((await skillsJobs())?.n).toBe(jobs);
-    const outcomes = (await ledger("skills-refresh")).map((r) => r.outcome);
-    expect(outcomes.at(-1)).toBe("ok");
-    expect(outcomes).not.toContain("refused");
   });
 
   it("an unrecognized cron expression does no work at all", async () => {

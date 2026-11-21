@@ -61,13 +61,12 @@ Every caller resolves to an agent record with a name, a set of scopes and an aud
 
 ### Scheduled work
 
-Three Cron Triggers are declared, and their expressions are defined once in `src/index.ts`:
+Two Cron Triggers are declared, and their expressions are defined once in `src/index.ts`:
 
 | Schedule (UTC) | Task                                                                                                                                                                             |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `*/5 * * * *`  | The tick: site watcher, auto-merge evaluation, merge-state sweep, search indexing, phone alerts, the daily email digest, and the daily build of the public model and statistics. |
 | `0 9 * * *`    | Database backup to R2, followed by pruning of old document versions and audit rows.                                                                                              |
-| `30 9 * * *`   | Weekly skills refresh, which runs on one configured day and posts a job when a model's prompting guide has changed.                                                              |
 
 ## Components
 

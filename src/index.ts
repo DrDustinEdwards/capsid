@@ -16,7 +16,6 @@ import {
   registrationRefusal,
 } from "@dustinedwards/site-runtime/mcp-login";
 import { runTick } from "./tick";
-import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
 import { isPortalHost, portalHostRequest } from "./portal-host";
 import { handlePortalDemo, isDemoRequest } from "./portal-demo";
@@ -52,7 +51,6 @@ export const BACKUP_CRON = "0 9 * * *";
 export const TICK_CRON = "*/5 * * * *";
 // Fires daily; readSchedule decides from KV whether today is the configured day, so
 // the weekly schedule changes without a redeploy.
-export const SKILLS_REFRESH_CRON = "30 9 * * *";
 
 // What the OAuth provider hands its API handler: the grant's props, and what it verified
 // about the token, its scopes among them.
@@ -310,7 +308,7 @@ export default withSiteSentry({
     // Every key wrangler.jsonc.example registers has a branch below. A key with none (a
     // trigger added in the dashboard, or one renamed here and not there) would run nothing
     // silently, so it is logged as an error (area 8, C2).
-    if (cron !== BACKUP_CRON && cron !== TICK_CRON && cron !== SKILLS_REFRESH_CRON) {
+    if (cron !== BACKUP_CRON && cron !== TICK_CRON) {
       logEvent(
         "CRON_KEY_UNKNOWN",
         { message: `CRON_KEY_UNKNOWN ${cron} has no task here; nothing ran` },
@@ -339,45 +337,6 @@ export default withSiteSentry({
             reason: "the tick's steps ran; each records its own run",
           }),
           { tag: "TICK_THREW", rethrow: true },
-        ),
-      );
-    }
-
-    if (cron === SKILLS_REFRESH_CRON) {
-      ctx.waitUntil(
-        runTask(
-          env,
-          "skills-refresh",
-          () => runSkillsRefresh(env, new Date()),
-          (outcome): TaskResult => {
-            if (!outcome.ran) {
-              logEvent("SKILLS_REFRESH_SKIPPED", {
-                message: `SKILLS_REFRESH_SKIPPED ${outcome.skipped}`,
-              });
-              // Not its day of the week is not a run; switched off is a skip worth showing.
-              return outcome.skipped?.startsWith(NOT_ITS_DAY)
-                ? null
-                : {
-                    outcome: "skipped",
-                    reason: `skipped: ${outcome.skipped ?? "no reason given"}`,
-                  };
-            }
-            const line = `checked=${outcome.checked} changed=${outcome.changed.join(",") || "none"} posted=${outcome.posted.join(",") || "none"} pending=${outcome.pending.join(",") || "none"}`;
-            logEvent("SKILLS_REFRESH", { message: `SKILLS_REFRESH ${line}` });
-            for (const r of outcome.refused)
-              logEvent(
-                "SKILLS_REFRESH_REFUSED",
-                { message: `SKILLS_REFRESH_REFUSED ${r.slug}: ${r.reason}` },
-                { level: "error" },
-              );
-            return outcome.refused.length > 0
-              ? {
-                  outcome: "refused",
-                  reason: `${line}; refused ${outcome.refused.map((r) => `${r.slug}: ${r.reason}`).join("; ")}`,
-                }
-              : { outcome: "ok", reason: line };
-          },
-          { tag: "SKILLS_REFRESH_THREW", rethrow: true },
         ),
       );
     }

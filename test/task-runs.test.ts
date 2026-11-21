@@ -202,20 +202,15 @@ test("PLANT: a task whose newest run threw or was refused is failing, whatever c
   const f = flags({
     backup: [run(60, "threw"), run(1500)],
     "auto-merge": [run(5, "refused")],
-    "skills-refresh": [run(60, "skipped")],
   });
   assert.equal(f.backup, "failing");
   assert.equal(f["auto-merge"], "failing");
-  assert.equal(f["skills-refresh"], null, "a skip is shown, not flagged");
 });
 
 test("PLANT: a failure of a task without a period ages out after a day; a periodic one stands until its next run", () => {
   assert.equal(flags({ "doc-index": [run(23 * 60, "refused")] })["doc-index"], "failing");
   assert.equal(flags({ "doc-index": [run(25 * 60, "refused")] })["doc-index"], null);
-  assert.equal(
-    flags({ "skills-refresh": [run(6 * 24 * 60, "threw")] })["skills-refresh"],
-    "failing",
-  );
+  assert.equal(flags({ backup: [run(6 * 60, "threw")] }).backup, "failing");
 });
 
 test("PLANT: a periodic task is quiet after twice its period and not before", () => {

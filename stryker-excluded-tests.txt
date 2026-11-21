@@ -9,6 +9,5 @@ deploy-pipeline.test.ts
 invariants.test.ts
 mutation-guard-coverage.test.ts
 route-gates.test.ts
-skills-refresh.test.ts
 source-conventions.test.ts
 tool-annotations.test.ts

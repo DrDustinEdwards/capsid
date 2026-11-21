@@ -432,9 +432,7 @@ No skill table is live: `migrations/0048_drop_improve_loop.sql` dropped them wit
 improve loop's own tables, and older nightly dumps still hold their rows. `improve_jti`
 stays as the replay table for the bench and the backup credential, and the
 `skill_ids_offered` and `skill_ids_used` columns on `job_outcomes` stay unused. Skills as
-`SKILL.md` guidance in each repo are separate: the weekly skills refresh
-(`src/skills-refresh.ts`) posts a job in `claude-skills` when a model's prompting guide
-has moved.
+`SKILL.md` guidance in each repo are separate.
 
 ## Why documents carry provenance
 
