@@ -241,10 +241,6 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "signed with the capsid-bench HMAC key and replay-protected; opens a run only while KV bench:enabled reads on and under the running cap, and returns a treatment run's own run key once",
   "/bench/repro":
     "signed with the capsid-bench HMAC key and replay-protected; writes the harness's reproduction receipt once for one running treatment run, which its run key's complete then requires",
-  "/shadow/job":
-    "a GitHub Actions OIDC token whose repository is the capsid namespace's primary repo and whose workflow is shadow-test.yml on a pull request; returns only the capsid job that pull request names",
-  "/shadow/result":
-    "the same OIDC token as /shadow/job; keeps the shadow test written for that pull request's job and records its base and head results",
   "/review/run":
     "a GitHub Actions OIDC token (audience capsid-review) whose owner id is Dustin's, whose job workflow is devkit's review.yml and whose event is a pull request; reviews only that pull request, read through the GitHub App, and records the verdict (src/review.ts)",
   "/bench/score":
