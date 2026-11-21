@@ -2188,20 +2188,6 @@
         ]
       },
       {
-        "id": "skills-refresh",
-        "label": "Skills refresh",
-        "period_ms": 604800000,
-        "flag": null,
-        "recent": [
-          {
-            "started_at": "2026-09-26T07:59:58.000Z",
-            "finished_at": "2026-09-26T08:00:00.000Z",
-            "outcome": "ok",
-            "reason": "checked=3 changed=none posted=none"
-          }
-        ]
-      },
-      {
         "id": "auto-merge",
         "label": "Auto-merge step",
         "period_ms": null,

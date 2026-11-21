@@ -30,7 +30,6 @@ test("actorKind: every caller the queue sees maps to one kind, and the table cov
     ["sample-app[bot]", { reviewer: true }, "reviewer"],
     // Scheduled credentials.
     ["agent:watcher", {}, "system"],
-    ["agent:skills-refresh", {}, "system"],
     ["improve-loop", {}, "system"],
   ];
   for (const [actor, context, want] of table) {

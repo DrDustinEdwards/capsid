@@ -31,10 +31,10 @@ export type ActorKind = (typeof ACTOR_KINDS)[number];
 // older audit_log rows, and no job or touch carries one.
 const SEAT_AGENTS = new Set(["agent:seat", "agent:site-seat"]);
 // Credentials that act on a schedule rather than for a person: the watcher
-// (src/watcher.ts, WATCHER_ACTOR), the skills refresh (src/skills-refresh.ts) and the
+// (src/watcher.ts, WATCHER_ACTOR) and the
 // tick's own document writes (src/doc-statements.ts, SYSTEM_ACTOR). Spelled here rather than imported,
 // so this stays a pure module the unit tests load without the Worker.
-const SYSTEM_ACTORS = new Set(["agent:watcher", "agent:skills-refresh", "improve-loop"]);
+const SYSTEM_ACTORS = new Set(["agent:watcher", "improve-loop"]);
 
 export interface ActorContext {
   // A driver's own resume under the signed gate policy (resumeJob's approved_by_policy

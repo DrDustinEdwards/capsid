@@ -15,7 +15,6 @@ import { MINUTE_MS, HOUR_MS, DAY_MS } from "./time";
 
 export type TaskId =
   | "backup"
-  | "skills-refresh"
   | "tick"
   | "auto-merge"
   | "watcher"
@@ -46,7 +45,6 @@ export type TaskId =
 // means nothing: those are flagged only when they fail.
 //   tick           */5 * * * *, which carries the five steps below it
 //   backup         0 9 * * *
-//   skills-refresh 30 9 * * *, doing its work on one UTC day a week
 //   watcher        on the tick, every cadence_min minutes (src/watcher.ts); its
 //                  period is read from the watcher's own snapshot
 //
@@ -65,12 +63,6 @@ export const TASKS: ReadonlyArray<{
   { id: "tick", label: "Five-minute tick", period_ms: 5 * MINUTE_MS, timeout_ms: 4 * MINUTE_MS },
   { id: "watcher", label: "Watcher pass", period_ms: null },
   { id: "backup", label: "Backup", period_ms: DAY_MS, timeout_ms: 14 * MINUTE_MS },
-  {
-    id: "skills-refresh",
-    label: "Skills refresh",
-    period_ms: 7 * DAY_MS,
-    timeout_ms: 14 * MINUTE_MS,
-  },
   { id: "auto-merge", label: "Auto-merge step", period_ms: null },
   { id: "outcome-sweep", label: "Merge-state sweep", period_ms: null },
   { id: "merge-resume", label: "Stale-job merge resume", period_ms: null },

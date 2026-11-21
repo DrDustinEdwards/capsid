@@ -35,9 +35,8 @@ function handlerConstant(name: string): string {
 
 const BACKUP_CRON = handlerConstant("BACKUP_CRON");
 const TICK_CRON = handlerConstant("TICK_CRON");
-const SKILLS_REFRESH_CRON = handlerConstant("SKILLS_REFRESH_CRON");
 
-const HANDLED = [BACKUP_CRON, TICK_CRON, SKILLS_REFRESH_CRON];
+const HANDLED = [BACKUP_CRON, TICK_CRON];
 
 // scanner-rule: conventions-verification, a list in two places is derived both ways. src/index.ts imports agents/mcp and cannot load under node --test, so its constants and branch shape are read as text. test-integration/scheduled.test.ts imports them and fires each cron
 test("every cron the handler dispatches on is declared in the config", () => {
