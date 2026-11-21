@@ -81,14 +81,6 @@ main {
   color: var(--dim);
 }
 
-.stretch::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-}
-tr:has(.stretch) {
-  position: relative;
-}
 .chev {
   display: inline-block;
   width: 7px;
@@ -313,10 +305,6 @@ tr.click {
   text-transform: uppercase;
   color: var(--muted);
   margin: 0 0 var(--space-3);
-}
-
-dialog {
-  color: var(--text);
 }
 
 /* app additions: utilities that replace the prototype's inline styles (CSP style-src 'self') */
