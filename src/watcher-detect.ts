@@ -353,6 +353,7 @@ export interface WorkflowRun {
   status?: string;
   conclusion?: string | null;
   created_at?: string;
+  updated_at?: string | null;
   url?: string;
 }
 
@@ -397,15 +398,17 @@ export function offaccountFindings(
   const run = copyRun
     ? `last copy run: ${copyRun.created_at ?? "unknown"} concluded ${copyRun.conclusion ?? "none"}${copyRun.url ? ` (${copyRun.url})` : ""}`
     : "no completed offaccount run was returned for the backups repo";
-  // A copy run that succeeded after the report was written is not in the report yet, so
-  // the report's ages are a copy cycle behind. watch.yml reports every 6 hours and GitHub's
-  // schedule can run it late; the 36 hour window leaves only about an hour and a half
-  // over that, so a late report would call every site stale while the copy had run. The
-  // age is judged once the next report lands, and a report that never lands is its own
+  // A copy run that finished after the report was written is not in the report yet, so
+  // the report's ages are a copy cycle behind. A run that started before the report but
+  // finished after it counts too: watch.yml lists the bucket while the copy is still
+  // uploading (2026-11-20: a report at 11:30, a copy running 11:26 to 11:50, every site
+  // called stale at 15:41). watch.yml reports every 6 hours and GitHub's schedule can run
+  // it late; the 36 hour window leaves only about an hour and a half over that. The age
+  // is judged once the next report lands, and a report that never lands is its own
   // finding above.
   const copyAfterReport =
     copyRun?.conclusion === "success" &&
-    Date.parse(copyRun.created_at ?? "") > Date.parse(report.received_at);
+    Date.parse(copyRun.updated_at ?? copyRun.created_at ?? "") > Date.parse(report.received_at);
   for (const site of sites) {
     const line = report.sites[site];
     const newest = line?.newest ?? null;
