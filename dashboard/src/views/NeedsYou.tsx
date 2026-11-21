@@ -77,8 +77,6 @@ export function NeedsYou() {
   );
 }
 
-// ---- Waiting for you -----------------------------------------------------------------------
-
 type Entry = { app: InboxApp; item: InboxItem };
 
 // Queues stopped by the circuit breaker (src/job-breaker.ts), from the roster read
@@ -437,8 +435,6 @@ function OtherGroup({ entries }: { entries: Entry[] }) {
   );
 }
 
-// ---- Weekly digest ----------------------------------------------------------------------
-
 // The watcher's digest-class findings (src/watcher.ts, findingClass): CSP, security
 // headers, analytics and beacon settings, scorer drift. They post no job; one block per
 // site lists what is open, and the Monday email carries the same list. Hidden while none
@@ -478,8 +474,6 @@ function WeeklyDigest() {
     </Panel>
   );
 }
-
-// ---- Trends ---------------------------------------------------------------------------
 
 // The two charts, folded away at the foot (UX audit B3): the list comes first and never
 // moves. They are drawn on the server inside the fold, so opening it shows them at once, with

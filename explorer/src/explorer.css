@@ -1644,7 +1644,7 @@ main .cap-pill {
   color: var(--text);
 }
 
-/* More of NASA's own marks, from capsomer/manual.css (Dustin, 2026-10-26): the layout grid behind
+/* More of NASA's own marks, from capsomer/manual.css: the layout grid behind
    .page-head, the direction strip for the trail, the livery band at the foot and a length of it on
    each card, the cue card and its roll blocks. Teal stays the one color. What is Capsid's own: */
 .cap-running-head + .page-head > .crumbs,

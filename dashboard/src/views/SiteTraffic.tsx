@@ -33,8 +33,6 @@ const NotFound = lazy(() => import("./NotFound").then((m) => ({ default: m.NotFo
 // a state, never a zero"); the text a source returns (queries, paths, commit messages, logs) is
 // strangers' text, shown as text.
 
-// ---- Shared pieces -------------------------------------------------------------------------
-
 // A read's state before its sources is Capsomer's ReadState; one source's answer, or why it has
 // none, is its SourceState. A site with no source set up is "No data", as one with nothing yet.
 function Source<T>({ src, children }: { src: SiteSource<T>; children: (data: T) => ReactNode }) {
@@ -47,8 +45,6 @@ function Source<T>({ src, children }: { src: SiteSource<T>; children: (data: T) 
       };
   return <SourceState src={result}>{children}</SourceState>;
 }
-
-// ---- Search --------------------------------------------------------------------------------
 
 function SearchTable({
   rows,
@@ -211,8 +207,6 @@ function Search({ ns }: { ns: string }) {
     </div>
   );
 }
-
-// ---- Traffic -------------------------------------------------------------------------------
 
 // Core Web Vitals and the two diagnostic metrics, rated at the 75th percentile against
 // Google's published thresholds (web.dev/articles/vitals; /articles/fcp; /articles/ttfb):
@@ -491,8 +485,6 @@ export function SearchAndTraffic({ ns }: { ns: string }) {
     </>
   );
 }
-
-// ---- Workers Builds ------------------------------------------------------------------------
 
 const BUILD: Record<string, { kind: "ok" | "crit" | "warn" | "run" | "nodata"; label: string }> = {
   success: { kind: "ok", label: "Built" },

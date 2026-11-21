@@ -6,7 +6,7 @@ import type { RepoPrivacy, SystemModel } from "./system-model";
 import { cmp, semver } from "./shared-code";
 import { DAY_MS } from "./time";
 
-// THE VERSIONS MODEL, per system (Dustin, 2026-11-03). src/shared-code.ts reads, from every
+// THE VERSIONS MODEL, per system. src/shared-code.ts reads, from every
 // repo the system model names, which version of each network package it installs; this
 // module turns that per-package view into the published per-system document and the
 // nightly drift lines. Versions may be public (the coordinator's plan Dustin said go to):

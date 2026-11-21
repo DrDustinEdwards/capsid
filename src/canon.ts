@@ -14,7 +14,7 @@ import { callerIsSeat } from "./jobs-transition";
 // still snapshotted and audit-logged like any other.
 //
 // Dustin's rulings (capsid/rulings/) are dated records of what he decided, not rules, and
-// no session is served them as rules (Dustin, 2026-11-18). They are guarded the same way,
+// no session is served them as rules. They are guarded the same way,
 // so an unattended key cannot rewrite the record, but they are not canon.
 //
 // A refused write is refused outright; nothing queues it for approval.

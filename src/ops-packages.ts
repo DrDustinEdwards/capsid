@@ -50,8 +50,6 @@ export const historyKey = (name: string) => `packages:history:v1:${name}`;
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-// ---- Configuration ----------------------------------------------------------------------
-
 interface PackageRow {
   name: string;
   registry: string;
@@ -215,8 +213,6 @@ export async function removePackage(
   await db.batch([auditStatement(db, actor, "ops-package-removed", null, null, { before })]);
   return { ok: true, pkg: before };
 }
-
-// ---- Reading a package, once per watcher pass ------------------------------------------
 
 // A scoped name travels in a path with its slash escaped, which the registry and the
 // per-version endpoint require and the download counts accept.
@@ -498,8 +494,6 @@ export function weekStatement(
       g.latest_release?.tag ?? null,
     );
 }
-
-// ---- The daily history, on demand ------------------------------------------------------
 
 /** When npm first published `name`, from the full document's time.created (the
  *  abbreviated one has no time object). An unpublished package keeps its document and

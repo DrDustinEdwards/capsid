@@ -495,7 +495,6 @@ export interface PortalMergeUnits {
   proposals: Array<{ kind: "promote" | "demote"; unit: string; title: string }>;
 }
 
-// ---------------------------------------------------------------------------
 // One site's own page (src/portal-site.ts): search, traffic and Workers Builds, each read
 // live for one namespace when its tab opens. A source the read could not answer is a state
 // with its reason, never a zero (docs/portal.md, "No data is a state, never a zero").

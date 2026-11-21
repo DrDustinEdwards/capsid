@@ -282,7 +282,6 @@ for (const stored of [
   });
 }
 
-// ---- the Portal's own host (portal.dustinedwards.info, src/portal-host.ts) ------------
 // The router hands these handlers the rewritten request (/x on the Portal host is /portal/x
 // here), so they see the Portal host's origin and an internal /portal path.
 

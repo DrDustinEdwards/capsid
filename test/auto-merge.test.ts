@@ -96,7 +96,7 @@ test("body_names_job: a PR body with no job id never merges", () => {
   assert.equal(verdict.merge === false && verdict.failed, "body_names_job");
 });
 
-// Version 10 (Dustin, 2026-10-31): work comes from project threads, so a promoted unit
+// Version 10: work comes from project threads, so a promoted unit
 // stands in for the job trace. Without one, a job-less PR still waits for a person.
 test("PLANT: v10: a job-less PR merges only in a promoted unit, and every other check still applies", () => {
   const unit = { unit: "capsid / docs" };

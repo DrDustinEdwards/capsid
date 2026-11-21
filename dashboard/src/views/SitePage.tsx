@@ -116,8 +116,6 @@ export function SitePage() {
   );
 }
 
-// ---- Overview ------------------------------------------------------------------------------
-
 // The site's uptime as Capsomer's uptime strip: Enarratio's figure with the week's and the
 // day's share up at the end of its title's line, and the key after it.
 const UPTIME_KEYS = [
@@ -245,8 +243,6 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
   );
 }
 
-// ---- Deploys -------------------------------------------------------------------------------
-
 function Deploys({ snap }: { snap: SiteSnapshot | null }) {
   const { now } = useApp();
   const cf = snap ? cfOk(snap) : null;
@@ -293,8 +289,6 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
     </Panel>
   );
 }
-
-// ---- Setup ---------------------------------------------------------------------------------
 
 function Setup({
   ns,

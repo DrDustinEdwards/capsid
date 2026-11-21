@@ -49,8 +49,6 @@ function Stale({ error }: { error: string | null }) {
   ) : null;
 }
 
-// ---- 1. Minutes of Dustin per week ------------------------------------------------------
-
 /** The first chart on Needs you: this week's minutes, the change on last week with its unit
  *  and direction, and eight weeks as a line with its axes and week dates (Dustin's review of
  *  2026-10-11: the tile was half width, a sparkline with no axes, and its words jargon). */
@@ -112,8 +110,6 @@ function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
     />
   );
 }
-
-// ---- 2. Where does waiting go? ----------------------------------------------------------
 
 const MOST_CLASSES = 10;
 
@@ -235,8 +231,6 @@ export function WaitingChart() {
   );
 }
 
-// ---- 3. Is the queue growing or draining? -------------------------------------------------
-
 /** Queue's header chart: jobs open at each day's end over 14 days. The trends route carries
  *  posted, ended and open, not the four states (queued, claimed, blocked, parked), so this
  *  is the one area and the days' posted and ended are said in words. */
@@ -276,8 +270,6 @@ export function QueueChart() {
     />
   );
 }
-
-// ---- 3b. Where is the work waiting? ------------------------------------------------------------
 
 const JOB_STATES = ["Blocked", "Running", "Queued"] as const;
 
@@ -320,8 +312,6 @@ export function ProjectChart({ counts }: { counts: ProjectCounts[] }) {
   } as const;
   return <ChartFrame draw={(width, fit) => barChart({ ...opts, width, ...fit })} />;
 }
-
-// ---- 5. Does each agent's claim match what was verified? -----------------------------------
 
 const AGREEMENTS: readonly ClaimsAgreement[] = ["agree", "disagree", "unclaimed", "unchecked"];
 
@@ -400,8 +390,6 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
   );
 }
 
-// ---- 6. What does the work cost? ------------------------------------------------------------
-
 /** Agents' chart: model spend per week. */
 export function CostChart() {
   const { data, error, loading } = useTrends();
@@ -441,8 +429,6 @@ export function CostChart() {
     />
   );
 }
-
-// ---- 7. How much merges with no human? -------------------------------------------------------
 
 const MERGE_KINDS = ["auto", "approved", "seat", "closed"] as const;
 const MERGE_NAME: Record<(typeof MERGE_KINDS)[number], string> = {
@@ -503,8 +489,6 @@ export function MergesChart() {
     />
   );
 }
-
-// ---- 8. How often do deploys ship, fail and recover? ---------------------------------------
 
 /** Restore time in words: seconds under two minutes, else whole minutes. */
 const restoreWords = (s: number | null) =>
@@ -577,8 +561,6 @@ export function DeploysTable() {
   );
 }
 
-// ---- 9. Did a deploy cause errors? --------------------------------------------------------------
-
 /** The site drawer's chart: the error rate for each of the last 24 hours, a line at the 1%
  *  alert, and a marker at each deploy in the window. The requests the old drawing showed as
  *  bars are in the caption's totals. */
@@ -636,8 +618,6 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     />
   );
 }
-
-// ---- 9b. Deploys and downtime, one lane per site ------------------------------------------
 
 /** Health's Deploys tab: each deploy a point, each run of failed probes or of missing watcher
  *  passes a span, one lane per site. Enarratio gives way to a plain list where the room is
@@ -711,8 +691,6 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
   );
 }
 
-// ---- 4. Tonight -------------------------------------------------------------------------
-
 /** Tonight's plan as a timeline, one lane per repo, as if it started when the plan was read:
  *  the plan holds estimates, not a start time, and Enarratio's axis is a UTC clock. Light
  *  lanes start together; heavy lanes share one session, so they run one after another. A
@@ -766,8 +744,6 @@ export function TonightTimeline({ plan }: { plan: PortalPlan }) {
   );
 }
 
-// ---- 10. Backup retention slots ---------------------------------------------------------
-
 // Drawn as a heat strip on the family ramp (capsomer/enarratio.css), a missing slot at its
 // strong end, at full height: as an uptime strip a missing slot was a third-height tick that
 // read as an underline. The subtitle and each cell's hover text say kept or missing.
@@ -819,8 +795,6 @@ export function BackupSlots() {
     </Panel>
   );
 }
-
-// ---- 11. Default branches by day --------------------------------------------------------
 
 // Green 0, red 1, no run yet as no value: a heat strip's two ends on the family ramp, so red
 // reads as the strong end and a day with no verdict is drawn as missing, never as green.

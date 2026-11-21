@@ -36,8 +36,6 @@ const JOB_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 /** The namespace whose jobs are this Worker's own. */
 export const CAPSID_NAMESPACE = "capsid";
 
-// ---- Capsid's own jobs -------------------------------------------------------------------
-
 type Judged = { ok: boolean; line: string };
 
 /** Capsid's BACKUP_CRON jobs by name: the task each records under and its body with its judge. */
@@ -114,8 +112,6 @@ export async function runCapsidJob(env: Env, name: CapsidJob, rethrow: boolean):
     };
   return { ok: true, line: `capsid ${name}: ran, nothing to record` };
 }
-
-// ---- A site's jobs -----------------------------------------------------------------------
 
 /** Why `name` cannot run on `namespace`, or null. Reads only, so the preview refuses what the run refuses. */
 export async function jobRefusal(

@@ -326,7 +326,7 @@ test("PLANT: capsid_start_session names the rule documents to read first, and no
     };
   };
   assert.equal(out.portfolio_documents.namespace, "capsid");
-  // Rulings are records, not rules (Dustin, 2026-11-18): readable, never read first.
+  // Rulings are records, not rules: readable, never read first.
   assert.deepEqual(
     out.portfolio_documents.read_first,
     ALLOWED.filter((p) => !p.startsWith("rulings/")).sort(),

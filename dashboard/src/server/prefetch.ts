@@ -16,7 +16,7 @@ import { FILTER_KEYS, PUSH_KEY, parseDocParam } from "../lib/keys";
 //
 // The keys here are the ones the views' useAnswer calls use, so a read made here is the
 // one the view finds. A read that fails is left out, and the view reads it in the browser
-// and says why, as it always has.
+// and says why.
 
 /** One Portal read, named from its API root: "/ops", "/claims?since=...". */
 export type PortalRead = (path: string) => Promise<Response>;

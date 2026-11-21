@@ -1,6 +1,5 @@
 import type { OpsFeed } from "./feed";
 
-// ---------------------------------------------------------------------------
 // The Portal's controls (capsid/research/design-portal-unify.md, section 2).
 //
 // Two requests, as ruled 2026-09-11: a preview that writes nothing and returns what

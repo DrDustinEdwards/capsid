@@ -246,8 +246,6 @@ function singleHandler(ops: Operations, name: string, op: string) {
   return (args: Record<string, unknown>): Promise<OperationResult> => ops.run(op, args ?? {}, name);
 }
 
-// ---- Capsid (11) -------------------------------------------------------------------
-
 const FIND_DOCS: CompositeSpec = {
   name: "capsid_find_docs",
   title: "Find documents",
@@ -360,8 +358,6 @@ const READ_STATUS: CompositeSpec = {
   },
   defaultAction: "status",
 };
-
-// ---- Capsid Admin (8) ---------------------------------------------------------------
 
 export const MANAGE_NAMESPACES: CompositeSpec = {
   name: "capsid_admin_manage_namespaces",

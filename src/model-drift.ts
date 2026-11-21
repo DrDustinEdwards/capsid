@@ -11,8 +11,7 @@ import type { SystemModel } from "./system-model";
 // the model never names, a repo the model names that GitHub no longer lists, a watched
 // site whose host is no model system's domain. Each is one line in the daily maintenance
 // list. The check lists and never edits: the model changes by pull request. Every repo,
-// private ones included, belongs in the model unless its `left_off` list names it
-// (Dustin, 2026-10-23).
+// private ones included, belongs in the model unless its `left_off` list names it.
 
 const MAX_ITEMS = 50;
 

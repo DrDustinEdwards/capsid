@@ -13,8 +13,6 @@ import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 // The Packages panel's pure parts and its per-pass read, against a fake of each source.
 // The response shapes are the ones the live endpoints returned on 2026-09-30.
 
-// ---- configuration --------------------------------------------------------------------
-
 test("a package name is npm's: lowercase, URL-safe, optionally scoped", () => {
   for (const name of ["enarratio", "express", "@types/node", "a.b-c_d~e"])
     assert.equal(validatePackage({ name }).ok, true, name);
@@ -49,8 +47,6 @@ test("a repository is owner/name, and a former name is a different npm name", ()
   });
 });
 
-// ---- the history's ranges ---------------------------------------------------------------
-
 test("the history is read in ranges npm will not shorten: contiguous, none over 540 days", () => {
   const ranges = historyRanges("2015-01-10", "2026-09-29");
   assert.equal(ranges[0][0], "2015-01-10");
@@ -70,8 +66,6 @@ test("weeks are ISO 8601 weeks", () => {
   assert.equal(isoWeek(new Date("2021-01-03T00:00:00Z")), "2020-W53");
   assert.equal(isoWeek(new Date("2024-12-30T00:00:00Z")), "2025-W01");
 });
-
-// ---- one pass's read --------------------------------------------------------------------
 
 type Answer = { status?: number; body?: unknown };
 

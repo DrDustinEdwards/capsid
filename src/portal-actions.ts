@@ -61,7 +61,6 @@ export const PORTAL_CSRF_HEADER = "X-Capsid-CSRF";
 // Same cap as the consent form, applied at the stream before parsing.
 const BODY_MAX_BYTES = 65_536;
 
-// ---------------------------------------------------------------------------
 // The routes.
 
 type Gated =

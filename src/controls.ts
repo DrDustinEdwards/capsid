@@ -185,7 +185,6 @@ function paramsFrom(
   return { ok: true, params };
 }
 
-// ---------------------------------------------------------------------------
 // The registry and its two doors.
 
 /** One control: its name, the params it takes, whether it needs a reason, and the two

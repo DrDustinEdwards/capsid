@@ -99,8 +99,6 @@ test("PLANT: blocked jobs are ordered by priority, then newest; over 7 days they
   );
 });
 
-// ---- the run ledger (src/task-runs.ts) ------------------------------------------
-
 test("PLANT: a scheduled task that failed or went quiet is a problem; a backup is critical; no run yet is not listed", async () => {
   const { attentionItems } = await import("../dashboard/src/lib/derive.ts");
   const { f, now } = feed();

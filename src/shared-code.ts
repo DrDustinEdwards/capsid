@@ -109,8 +109,6 @@ export async function readSharedConfig(db: D1Database): Promise<SharedConfig[]> 
   }));
 }
 
-// ---- pure parts ----------------------------------------------------------------------
-
 /** "owner/repo" lower-cased, from any GitHub spelling npm accepts, with its ref; or null. */
 export function gitSpec(spec: string): { repo: string; ref: string | null } | null {
   const s = spec.trim();
@@ -452,8 +450,6 @@ function releaseFields(
     manifest_error: null,
   };
 }
-
-// ---- reading -------------------------------------------------------------------------
 
 /** A repo's root package.json, on its default branch or at `ref`, through the App.
  *  Uncached: the release-tag rule reads it to decide a write. */

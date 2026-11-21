@@ -1,4 +1,3 @@
-// ---------------------------------------------------------------------------
 // Claims apart from verified outcomes (migrations/0023_job_claims.sql). The
 // `capsid_admin_read_claims` tool and GET /portal/api/claims return these, from the same readers
 // (src/job-claims-read.ts). Every column is as stored: JSON columns stay JSON text,

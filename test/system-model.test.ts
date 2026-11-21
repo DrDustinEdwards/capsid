@@ -13,7 +13,7 @@ import {
 } from "../src/system-model.ts";
 
 // The public document (docs/public-data.md). Every system is published whole, private
-// ones included (Dustin, 2026-10-23); a system whose repo GitHub does not report public
+// ones included; a system whose repo GitHub does not report public
 // carries no repo link, so its repo's address never reaches the document.
 
 const ROOT = join(import.meta.dirname, "..");

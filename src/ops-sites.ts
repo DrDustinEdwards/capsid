@@ -145,8 +145,6 @@ export function siteMapDrift(
   };
 }
 
-// ---- Validation -------------------------------------------------------------------------
-
 export interface SiteInput {
   namespace: string;
   name: string;
@@ -321,8 +319,6 @@ export function describeSite(
     : `${site.origin}/ (no health route, so the root)`;
   return `"${site.name}", probed at ${probe}, on ${site.platform}${site.script ? `, Worker script ${site.script}` : ""}`;
 }
-
-// ---- Writes -----------------------------------------------------------------------------
 
 export type SiteResult = { ok: true; site: OpsSiteConfig } | { ok: false; refusal: string };
 
