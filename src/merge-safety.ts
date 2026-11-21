@@ -224,8 +224,20 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
       { job_id: row.job_id, namespace: row.namespace },
     ]);
   }
+  // Only repos a namespace still maps: a job's pull request in a repo that was renamed or
+  // retired (capsid-mcp, dustinedwards-mcp, renovate-config) has no installation to read it
+  // with, so each pass paid a slow "GitHub refused an installation token" for it.
+  const mapped = new Set<string>();
+  const { results: mappings } = await env.DB.prepare("SELECT repos FROM namespaces").all<{
+    repos: string | null;
+  }>();
+  for (const row of mappings ?? [])
+    for (const entry of JSON.parse(row.repos || "[]") as Array<{ repo?: unknown }>)
+      if (typeof entry?.repo === "string") mapped.add(entry.repo.toLowerCase());
   const recorded: string[] = [];
-  for (const { owner, repo, prs } of [...repos.values()].slice(0, OUTCOME_REPOS_MAX)) {
+  for (const { owner, repo, prs } of [...repos.values()]
+    .filter((r) => mapped.has(`${r.owner}/${r.repo}`.toLowerCase()))
+    .slice(0, OUTCOME_REPOS_MAX)) {
     const full = `${owner}/${repo}`;
     try {
       let shaLookups = 0;
