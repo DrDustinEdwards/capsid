@@ -395,7 +395,7 @@ jobs:
     concurrency:
       group: code-map
       cancel-in-progress: false
-    uses: DrDustinEdwards/devkit/.github/workflows/code-map.yml@4ce8c2665f10d17a1fce2510e76f6666b9fcec7f # v0.55.0
+    uses: DrDustinEdwards/devkit/.github/workflows/code-map.yml@d44675809ea4be692d8c24225337386e257956b2 # v0.55.1
     with:
       coverage-command: mkdir -p coverage && node --import ./test/resolve-ts.mjs --test --experimental-test-coverage --test-coverage-include='src/**' --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --test-reporter=dot --test-reporter-destination=stdout "test/*.test.ts"
       coverage-file: coverage/lcov.info
