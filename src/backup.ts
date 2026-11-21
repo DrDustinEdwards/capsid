@@ -13,6 +13,7 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { pruneNotFound } from "@dustinedwards/site-runtime/not-found";
 import type { TaskResult } from "./task-runs";
 import { DAY_MS } from "./time";
+import { mapLimit } from "./map-limit";
 
 const JSON_PREFIX = "backups/json/";
 const MARKDOWN_PREFIX = "backups/markdown/";
@@ -370,17 +371,13 @@ async function preflight(
 // backs. Returns how many were deleted.
 async function mirrorMarkdown(env: Env, docs: DocRow[]): Promise<number> {
   const currentKeys = new Set<string>();
-  for (let i = 0; i < docs.length; i += PUT_CONCURRENCY) {
-    await Promise.all(
-      docs.slice(i, i + PUT_CONCURRENCY).map((doc) => {
-        const key = `${MARKDOWN_PREFIX}${doc.namespace}/${doc.path}`;
-        currentKeys.add(key);
-        return env.MEDIA.put(key, doc.body ?? "", {
-          httpMetadata: { contentType: "text/markdown" },
-        });
-      }),
-    );
-  }
+  await mapLimit(docs, PUT_CONCURRENCY, (doc) => {
+    const key = `${MARKDOWN_PREFIX}${doc.namespace}/${doc.path}`;
+    currentKeys.add(key);
+    return env.MEDIA.put(key, doc.body ?? "", {
+      httpMetadata: { contentType: "text/markdown" },
+    });
+  });
 
   const existingMarkdown = await listAllKeys(env.MEDIA, MARKDOWN_PREFIX);
   const staleMarkdown = existingMarkdown.filter((key) => !currentKeys.has(key));

@@ -9,6 +9,7 @@ import { auditStatement } from "./store-guards";
 import { timeMs } from "./time";
 import { passDue } from "./watcher";
 import { DAY_MS } from "./time";
+import { mapLimit } from "./map-limit";
 import { toSqlTime } from "@dustinedwards/site-runtime/time";
 
 // THE AUTO-MERGE SAFETY METER AND SHUTOFF (docs/design/design-merge-pipeline.md, "The
@@ -306,9 +307,9 @@ export async function revertsTick(
     };
   }
   const recorded: string[] = [...outcomes];
-  for (const namespace of loaded.policy.namespaces) {
+  const perNamespace = await mapLimit(loaded.policy.namespaces, 4, async (namespace) => {
     try {
-      recorded.push(...(await recordReverts(env, namespace, now)));
+      return await recordReverts(env, namespace, now);
     } catch (err) {
       logEvent(
         "MERGE_SAFETY",
@@ -317,8 +318,10 @@ export async function revertsTick(
         },
         { level: "error" },
       );
+      return [];
     }
-  }
+  });
+  for (const found of perNamespace) recorded.push(...found);
   await env.APP_KV.put(REVERTS_STAMP_KEY, now.toISOString());
   return {
     ran: true,

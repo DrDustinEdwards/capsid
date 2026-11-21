@@ -6,6 +6,7 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { externalFence } from "./provenance";
 import type { Finding } from "./watcher-detect";
 import { DAY_MS, timeMs } from "./time";
+import { mapLimit } from "./map-limit";
 
 // STALE CANON AFTER A MERGE (Capsid improvement list, item 23: Foxhound's ROUTES.md and
 // DESIGN.md still said the admin reused the app shell after a pull request changed it).
@@ -40,6 +41,8 @@ const RETAIN_MS = RETAIN_DAYS * DAY_MS;
 // with a remembered merge. A burst of merges is caught up over the next passes.
 export const MAX_NAMESPACES = 20;
 const MAX_PR_READS_PER_PASS = 5;
+// How many GitHub reads of one pass run together (src/map-limit.ts).
+const READ_CONCURRENCY = 6;
 const PULLS_LISTED = 20;
 // Paths kept per list per pull request. A larger change is kept cut, and says so.
 export const MAX_PATHS_PER_PR = 300;
@@ -389,7 +392,9 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
   if (capped) complete = false;
   const pending: Array<{ namespace: string; owner: string; repo: string; pull: ListedPull }> = [];
   const unread: string[] = [];
-  for (const namespace of listed) {
+  // Each namespace's list is its own GitHub read, so they run together; the memory entries
+  // are per namespace, and pending is filled in the listed order after.
+  const lists = await mapLimit(listed, READ_CONCURRENCY, async (namespace) => {
     try {
       const { owner, repo, full } = await resolveRepo(env, namespace);
       // A namespace remapped to another repo starts again: its paths were another repo's.
@@ -403,30 +408,45 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
       if (!resp.ok) throw new Error(`the pull request list returned ${resp.status}`);
       const listed = (await resp.json()) as ListedPull[];
       const known = new Set((memory[namespace]?.prs ?? []).map((p) => p.number));
-      for (const pull of newMerges(Array.isArray(listed) ? listed : [], known, now))
-        pending.push({ namespace, owner, repo, pull });
       memory[namespace] ??= { repo: full, prs: [] };
+      return newMerges(Array.isArray(listed) ? listed : [], known, now).map((pull) => ({
+        namespace,
+        owner,
+        repo,
+        pull,
+      }));
     } catch (err) {
       unread.push(`${namespace} (${errorMessage(err)})`);
+      return [];
     }
-  }
+  });
+  for (const found of lists) pending.push(...found);
   pending.sort((a, b) => timeMs(a.pull.merged_at!) - timeMs(b.pull.merged_at!));
+  const reads = await mapLimit(
+    pending.slice(0, MAX_PR_READS_PER_PASS),
+    READ_CONCURRENCY,
+    async (p) => {
+      try {
+        return { p, files: await readPrFiles(env, p.owner, p.repo, p.pull.number) };
+      } catch (err) {
+        unread.push(`${p.namespace} #${p.pull.number} (${errorMessage(err)})`);
+        return null;
+      }
+    },
+  );
   let read = 0;
-  for (const p of pending.slice(0, MAX_PR_READS_PER_PASS)) {
-    try {
-      const files = await readPrFiles(env, p.owner, p.repo, p.pull.number);
-      const change = changeFromFiles(files.rows);
-      memory[p.namespace]!.prs.push({
-        number: p.pull.number,
-        url: p.pull.html_url,
-        merged_at: p.pull.merged_at!,
-        ...change,
-        partial: [files.problem, change.partial].filter(Boolean).join("; ") || null,
-      });
-      read++;
-    } catch (err) {
-      unread.push(`${p.namespace} #${p.pull.number} (${errorMessage(err)})`);
-    }
+  for (const r of reads) {
+    if (!r) continue;
+    const { p, files } = r;
+    const change = changeFromFiles(files.rows);
+    memory[p.namespace]!.prs.push({
+      number: p.pull.number,
+      url: p.pull.html_url,
+      merged_at: p.pull.merged_at!,
+      ...change,
+      partial: [files.problem, change.partial].filter(Boolean).join("; ") || null,
+    });
+    read++;
   }
   const kept = pruneMemory(memory, now);
   if (JSON.stringify(kept) !== before) await env.APP_KV.put(STALE_CANON_KEY, JSON.stringify(kept));
