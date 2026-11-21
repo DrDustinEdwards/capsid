@@ -42,7 +42,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A GATE THAT GOT NO ANSWER HAS NOT REFUSED ANYTHING. A thrown fetch is retried; a gate
 // whose requests all throw is recorded as COULD NOT RUN, and the script exits 3 instead
-// of 1 when nothing actually failed. ci.yml rolls back on exit 1 only.
+// of 1 when nothing actually failed. The live gate rolls back on exit 1 only.
 const FETCH_TRIES = Number(process.env.VERIFY_FETCH_TRIES ?? 3);
 const FETCH_TIMEOUT_MS = Number(process.env.VERIFY_FETCH_TIMEOUT_MS ?? 20000);
 const EXIT_REFUSED = 1;
@@ -54,15 +54,28 @@ class NoAnswer extends Error {
   }
 }
 
+// During devkit worker-deploy's gradual rollout the new version serves a share of traffic, and
+// the live gate names it in WORKERS_VERSION_OVERRIDE. Every request to the Worker carries it as
+// Cloudflare-Workers-Version-Overrides, so each gate judges the new version, not whichever one the
+// split picks (Cloudflare Docs, "Version overrides").
+const VERSION_OVERRIDE = process.env.WORKERS_VERSION_OVERRIDE ?? "";
+
 // One request, body read included, since a reset can also land mid-body. Retries a
 // throw `tries` times and then throws NoAnswer. A response of any status is an answer
 // and is returned as is. Gates that poll one URL pass tries=1, because the poll loop is
 // their retry.
 async function request(url, init = {}, tries = FETCH_TRIES) {
+  const headers = VERSION_OVERRIDE
+    ? { ...init.headers, "Cloudflare-Workers-Version-Overrides": VERSION_OVERRIDE }
+    : init.headers;
   let last;
   for (let i = 1; i <= tries; i++) {
     try {
-      const resp = await fetch(url, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      const resp = await fetch(url, {
+        ...init,
+        headers,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
       const text = await resp.text();
       return { status: resp.status, ok: resp.ok, headers: resp.headers, text };
     } catch (err) {
@@ -150,11 +163,9 @@ async function gateHealth() {
   const fts = data?.store?.fts ?? "(absent)";
   const passed = live && shaOk && d1 === "ok" && fts === "ok";
   const detail =
-    `status=${data?.status ?? "?"} sha=${(data?.sha ?? "?").slice(0, 8)} dirty=${data?.dirty} d1=${d1} fts=${fts} polls=${attempt}` +
+    `status=${data?.status ?? "?"} sha=${(data?.sha ?? "?").slice(0, 8)} d1=${d1} fts=${fts} polls=${attempt}` +
     (expected ? ` expected=${expected.slice(0, 8)}${shaOk ? " MATCH" : " MISMATCH"}` : "");
   record("1 health + provenance", passed, detail);
-  if (data?.dirty)
-    console.log("      NOTE: deployed from a dirty tree; the bytes are not exactly that commit.");
 }
 
 // The probe client for gates 3 to 5. Overridable only so test/verify-live-no-answer.test.ts

@@ -2,17 +2,13 @@ name: CI
 
 # THE TESTED ARTIFACT IS NOT THE SHIPPED ARTIFACT. checks and deploy run on separate
 # runners and each does its own npm ci, so what ships is a REBUILD of the tested
-# commit, not the bytes that passed. Closing this means uploading the build from checks
-# and downloading it in deploy. foxhound's ci.yml records the same gap.
-#
-# Two mitigations stand: the runner checks out clean, so BUILD_DIRTY=false means
-# something, and the live job asserts /health reports this exact commit before the run
-# goes green.
+# commit, not the bytes that passed. foxhound's ci.yml records the same gap. The live
+# gate asserts /health reports this exact commit before the run goes green.
 #
 # Offline checks do not catch the class of outage that motivated the audit: a
 # "form-action 'self'" CSP landed in 423bbd6, type-checked, passed every unit test, and
-# broke the OAuth consent flow for 26 days. Only scripts/verify-live.mjs catches that,
-# and it already existed with nothing invoking it.
+# broke the OAuth consent flow for 26 days. Only scripts/verify-live.mjs catches that:
+# the deploy's live gate runs it, and so does the six-hourly check.
 
 on:
   # Both names while master moves to main.
@@ -29,7 +25,7 @@ on:
 # Least privilege for GITHUB_TOKEN. Absent, the token's scopes come from the repository
 # default, which for this account is read and WRITE on contents. No job here pushes,
 # comments, or touches the API: checks runs tsc and node --test, deploy talks to
-# Cloudflare with its own secrets, and the live gate talks to a URL.
+# Cloudflare with its own secrets, and the live checks talk to a URL.
 permissions:
   contents: read
 
@@ -54,9 +50,7 @@ jobs:
     name: checks
     runs-on: ubuntu-latest
     # Not on the six-hourly schedule: that run tests an unchanged master head, which the
-    # push run already tested, and costs about 75s of runner time each time. The live
-    # job needs checks only for ordering, and its condition runs it when checks is
-    # skipped (see the live job).
+    # push run already tested, and costs about 75s of runner time each time.
     if: github.event_name != 'schedule'
     # Every job has a timeout, roughly four times its observed run
     # (test/workflow-policy.test.ts).
@@ -144,7 +138,7 @@ jobs:
 
       # The Watch Floor app builds, and stays inside its size budget
       # (devkit-size-budget, dashboard/.size-budget.json, which fails closed on a missing build).
-      # scripts/deploy.mjs runs the same two before every deploy.
+      # The deploy's pre-deploy guard runs the same before every deploy.
       - name: Build the dashboard and hold its size budget
         run: npm run build:dashboard
 
@@ -188,97 +182,79 @@ jobs:
       - name: MCP conformance
         run: npm run check:conformance
 
-  # Ordered after checks: a failing typecheck or test never reaches production. No
-  # continue-on-error, and deliberately no `if: secrets.X != ''` guard. A job that skips
-  # when its credentials are missing makes "deployed" and "could not deploy"
-  # indistinguishable.
-  # If the secrets are absent this job fails loudly.
+  # THE DEPLOY IS DEVKIT'S SHARED worker-deploy.yml, as on every other site: deploy, the live gate, and the rollback of
+  # a refused deploy, guarded so a rerun never rolls back a deploy that is no longer live (devkit README, "The shared
+  # deploy"). Ordered after checks, so a failing typecheck or test never reaches production. Push to master only: the
+  # called workflow would deploy on any default-branch event, the schedule and a manual run included.
+  #
+  # GRADUAL ROLLOUT (D4): the new version takes 10% of traffic for 10 minutes before the live gate judges it through a
+  # version override (Cloudflare-Workers-Version-Overrides; scripts/verify-live.mjs sends it on every request), then
+  # the error rates of both versions are compared and it takes all traffic. A refused one goes back to the version it
+  # shared traffic with. Each Durable Object (RateLimiter, ToolCallLog) runs one version at a time, assigned by the
+  # split, and the two crons follow the split too (Cloudflare Docs, "Gradual deployments", "With Durable Objects").
+  # A deploy that adds a Durable Object migration (wrangler.jsonc.example `migrations`) sets gradual-percent to 0 for
+  # that deploy: Cloudflare applies a migration only with `wrangler deploy`, and refuses a version upload carrying one.
+  #
+  # The pre-deploy guard rebuilds wrangler.jsonc (gitignored; scripts/ci-config.mjs resolves every binding by NAME and
+  # checks it against the id pinned in scripts/bindings.mjs, so a runner never binds the wrong database), applies the
+  # pending migrations that only add (devkit-migrations refuses a drop, rename or row delete with the hand-run
+  # command), and builds the Portal into the Worker's assets within its size budget.
+  #
+  # The live gate runs scripts/verify-live.mjs with EXPECT_SHA. VERIFY_TOKEN is the live-probe agent's key, for gate 8's
+  # real MCP call (docs/rollback.md); the verify command gets no Cloudflare secret, so gate 2b (the OAuth KV canary)
+  # runs on the scheduled check below instead. A failed install is exit 3, could not run, never a rollback.
   deploy:
-    name: deploy
     needs: checks
-    timeout-minutes: 15
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-    runs-on: ubuntu-latest
-    # Which attempt of the run did the deploying. A rerun of the live job alone keeps
-    # this job's outputs from the earlier attempt, so the rollback step can tell a rerun
-    # from the attempt that shipped (scripts/rollback-guard.mjs).
-    outputs:
-      attempt: ${{ github.run_attempt }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@4ce8c2665f10d17a1fce2510e76f6666b9fcec7f # v0.55.0
+    with:
+      worker-name: capsid-mcp
+      health-url: https://mcp.dustinedwards.info/health
+      verify-command: >-
+        npm ci --ignore-scripts --no-audit --no-fund || exit 3;
+        CAPSID_LIVE_PROBE_KEY="$VERIFY_TOKEN" node scripts/verify-live.mjs
+      install: npm ci && npm ci --prefix dashboard
+      pre-deploy: >-
+        node scripts/ci-config.mjs &&
+        npx devkit-migrations migrations --apply capsid &&
+        npm run build:dashboard
+      sha-var: BUILD_SHA
+      d1-database: capsid
+      gradual-percent: 10
+      gradual-minutes: 10
+      # No preview per pull request (D6): Cloudflare makes no preview URL for a Worker that has a Durable Object.
+      preview: false
+      # The Portal is server-rendered here, not a sitemap site.
+      warm: false
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      VERIFY_TOKEN: ${{ secrets.CAPSID_LIVE_PROBE_KEY }}
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      # dashboard/ is built by scripts/deploy.mjs into the Worker's static assets, so the
-      # deploy job installs it too.
-      - name: Install dependencies
-        run: |
-          npm ci
-          npm ci --prefix dashboard
-
-      # wrangler.jsonc is gitignored, so a runner has no deployable config.
-      # scripts/ci-config.mjs rebuilds it: every binding is resolved by NAME against the
-      # account, then checked against an id pinned in the script, and any disagreement is
-      # a hard failure. Resolving by name alone would silently rebind this Worker to the
-      # wrong database.
-      - name: Reconstruct wrangler.jsonc
-        run: node scripts/ci-config.mjs
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      # The deploy applies its own migrations, so none is a hand-run step before a merge. devkit-migrations --apply
-      # applies pending migrations that only add, after reading the D1 Time Travel bookmark (the restore command goes to
-      # the log and the step summary: a rollback never undoes a migration), and refuses one that drops, renames, deletes
-      # rows or says `-- contract:`, with the hand-run command. An unreadable list or bookmark, a failed apply, or a
-      # database still behind afterwards fails here, before the deploy.
-      - name: Apply the pending migrations that only add
-        run: npx devkit-migrations migrations --apply capsid
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Deploy
-        run: npm run deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-  live:
-    name: live gate
-    needs: [checks, deploy]
-    # Above the schedule run's wait (20 minutes at most) plus the poll budget (40 x 3s per
-    # polling gate) with room for every gate.
+  # THE SIX-HOURLY LIVE CHECK. The outage that motivated this ran 26 days; a six hour ceiling on time-to-detect is the
+  # point. It runs the same scripts/verify-live.mjs against master head, with what the deploy's gate leaves out: the
+  # Cloudflare credentials for gate 2b, which reads one long-lived canary record straight out of OAUTH_KV (a missing
+  # client and a KV outage are the same error page through /authorize), and gate 1c's backup freshness (a push says
+  # nothing about last night's backup). It never deploys and never rolls back.
+  scheduled-live:
+    name: scheduled live check
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # The wait below (20 minutes at most) plus the poll budget (40 x 3s per polling gate) with room for every gate.
     timeout-minutes: 40
-    # Never on pull_request. A PR head sha is not deployed, so asserting anything about
-    # production from one is meaningless.
-    #
-    # !failure() && !cancelled() rather than always(): on a schedule run the checks and
-    # deploy jobs are SKIPPED, and a plain `needs:` would skip this job too, retiring the
-    # six-hourly check. This form runs when a dependency was skipped but not when one
-    # failed.
-    if: github.event_name != 'pull_request' && !failure() && !cancelled()
     runs-on: ubuntu-latest
-    # actions: read is for the schedule run's wait below, which lists this workflow's push runs.
+    # actions: read is for the wait below, which lists this workflow's push runs.
     permissions:
       contents: read
       actions: read
     steps:
-      # THE SIX-HOURLY RUN WAITS FOR A PUSH DEPLOY IN FLIGHT. The schedule and push runs
-      # keep separate concurrency groups (above), so a schedule run can start while a push
-      # run is still deploying the commit it will expect. On 2026-11-01 the 05:57Z run
-      # expected 33ca891 while its push run was still deploying it (live stayed at 4b0bba1
-      # until 06:05Z), gave up after 41 polls and turned master red. So the schedule run
-      # waits until no push run on its branch is unfinished, then expects the branch head as
-      # it stands, which still catches a master head that never went live.
+      # A PUSH DEPLOY STILL IN FLIGHT IS WAITED FOR. On 2026-11-01 the 05:57Z run expected 33ca891 while its push run
+      # was still deploying it (live stayed at 4b0bba1 until 06:05Z), gave up after 41 polls and turned master red. So
+      # this waits until no push run on its branch is unfinished, then expects the branch head as it stands, which
+      # still catches a master head that never went live.
       - name: Wait for a push deploy still running
         id: head
-        if: github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -296,7 +272,7 @@ jobs:
           done
           # That push run's own live gate asserts the head it deploys, so this run has nothing it would add;
           # failing here only turned master red for a deploy that was still in flight (3 of 3, 2026-11-11..13).
-          echo "::warning::a push run on ${BRANCH} was still running after 20 minutes; its own live gate covers the head, so this scheduled gate is skipped"
+          echo "::warning::a push run on ${BRANCH} was still running after 20 minutes; its own live gate covers the head, so this check is skipped"
           echo "skip=true" >> "$GITHUB_OUTPUT"
 
       - if: steps.head.outputs.skip != 'true'
@@ -309,105 +285,19 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # scripts/verify-live.mjs grades headers with site-runtime's checkSecurityHeaders,
-      # so the gate installs from the lockfile, with no install scripts. Without it the
-      # import failed with exit 1 and rolled back good deploys (2026-10-31). A failed
-      # install fails this step before verify:live records an exit code, so it never
-      # rolls anything back.
+      # verify-live grades headers with site-runtime's checkSecurityHeaders, so it installs from the lockfile, with no
+      # install scripts.
       - name: Install dependencies
         if: steps.head.outputs.skip != 'true'
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      # EXPECT_SHA is this run's commit when deploy succeeded, and on a schedule run the
-      # branch head read after the wait above. Empty otherwise: the ternary below is the behavior.
-      #
-      # EXIT 1 IS A REFUSAL, EXIT 3 IS "COULD NOT RUN". A gate whose requests never got
-      # an answer (a reset connection, a timeout) has not refused the deploy; on
-      # 2026-09-18 one ECONNRESET rolled back a good deploy. The exit code is recorded
-      # so the rollback below runs on a refusal only. Exit 3 still fails the job.
       - name: verify:live
-        id: verify
         if: steps.head.outputs.skip != 'true'
         env:
-          EXPECT_SHA: ${{ needs.deploy.result == 'success' && github.sha || github.event_name == 'schedule' && steps.head.outputs.sha || '' }}
+          EXPECT_SHA: ${{ steps.head.outputs.sha }}
           VERIFY_POLL_ATTEMPTS: "40"
-          # GATE 1c ASSERTS BACKUP FRESHNESS ON THE SCHEDULED RUN ONLY (residual 7).
-          # /health has reported backup.last_ok since 2026-09-07 and nothing read it. A
-          # push runs minutes after a deploy and says nothing about last night's backup;
-          # the six-hourly schedule bounds this at six hours. Off, the gate reports
-          # SKIPPED and says what it did not assert.
-          ASSERT_BACKUP_FRESH: ${{ github.event_name == 'schedule' && '1' || '0' }}
-          # Gate 2b READS one long-lived canary record straight out of OAUTH_KV. It reads
-          # KV rather than asking the Worker because a missing client and a KV outage are
-          # the same error page through /authorize. Without these the gate SKIPS and says
-          # so; it never passes quietly.
+          ASSERT_BACKUP_FRESH: "1"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # Gate 8 makes a real MCP call through /ops/mcp (initialize or server/discover,
-          # tools/list, one read) as the live-probe agent: read grant on capsid, the read
-          # tool only (scripts/roles.ts). A broken connection refuses (exit 1), so
-          # the step below rolls the deploy back. Without the secret the gate SKIPS, says
-          # so, and warns.
           CAPSID_LIVE_PROBE_KEY: ${{ secrets.CAPSID_LIVE_PROBE_KEY }}
-        run: |
-          set +e
-          npm run verify:live
-          code=$?
-          echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
-          if [ "$code" = "3" ]; then
-            echo "::error::the live gate could not run (no answer from the Worker). No gate refused this deploy, so it is not rolled back. Rerun the live job."
-          fi
-          exit "$code"
-
-      # Only if this run's deploy succeeded, then the gate REFUSED it (exit 1). A
-      # scheduled run skipping deploy must not roll back a live sha that is merely
-      # behind, and a gate that could not run (exit 3) has not refused anything.
-      - name: Roll back the deploy this run shipped
-        if: failure() && needs.deploy.result == 'success' && steps.verify.outputs.exit_code == '1'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          DEPLOY_ATTEMPT: ${{ needs.deploy.outputs.attempt }}
-        run: |
-          set -euo pipefail
-          HEALTH_URL=https://mcp.dustinedwards.info/health
-          # No -f on curl and no abort on its failure: a /health that answers 5xx, or
-          # not at all, must reach the guard as "unreadable" rather than end this step
-          # before it decides anything.
-          live_sha() {
-            { curl -sS --max-time 10 "$HEALTH_URL" || true; } | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).sha??"unknown")}catch{process.stdout.write("unreadable")}})'
-          }
-          ROLLBACK_FROM=$(live_sha)
-          # ROLL BACK ONLY WHAT THIS RUN PUT LIVE. `needs.deploy.result` survives a
-          # rerun of just this job, so the `if:` above is true on a rerun whose deploy
-          # happened in an earlier attempt and has already been rolled back. On
-          # 2026-09-18 that ran the rollback a second time and "the previous version"
-          # was the refused commit, moving production forward onto it. The guard
-          # compares what is live NOW against this run's own commit, and when /health
-          # cannot say, rolls back only if the deploy happened in this attempt.
-          if ! node scripts/rollback-guard.mjs "${ROLLBACK_FROM}" "${GITHUB_SHA}" "${DEPLOY_ATTEMPT}" "${GITHUB_RUN_ATTEMPT}"; then
-            echo "::error::not rolling back. master and production may disagree; a human decides."
-            echo "rollback_skipped: live=${ROLLBACK_FROM} this_run=${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          echo "::warning::the live gate failed against ${ROLLBACK_FROM}; rolling back to the previous version"
-          # The lockfile's wrangler, not npx: npx resolves wrangler's own dependency
-          # ranges at job time, next to the deploy token. No install scripts run, and the
-          # rollback is an API call that needs none (Grok audit 2026-10, U3).
-          npm ci --ignore-scripts --no-audit --no-fund
-          node_modules/.bin/wrangler rollback --name capsid-mcp --message "live gate failed for ${GITHUB_SHA}" --yes
-          # The rollout is not instant, so read the sha back rather than assuming, and
-          # say so when it never moved.
-          ROLLBACK_TO=unreadable
-          for _ in $(seq 1 20); do
-            ROLLBACK_TO=$(live_sha)
-            if node scripts/rollback-guard.mjs --after "${ROLLBACK_TO}" "${GITHUB_SHA}" > /dev/null; then
-              echo "::error::rolled back: was ${ROLLBACK_FROM} (this run's commit ${GITHUB_SHA}), now ${ROLLBACK_TO}. master still points at the bad commit; land a fix or revert it."
-              echo "rollback_from=${ROLLBACK_FROM} rollback_to=${ROLLBACK_TO}" >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-            sleep 3
-          done
-          echo "::error::the rollback did not take effect: /health still reports ${ROLLBACK_TO} after 20 reads (this run's commit ${GITHUB_SHA}). Production may still be serving the refused deploy; a human decides."
-          echo "rollback_did_not_take_effect: from=${ROLLBACK_FROM} now=${ROLLBACK_TO}" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
+        run: npm run verify:live

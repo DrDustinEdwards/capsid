@@ -6,13 +6,13 @@ import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 // /health is site-runtime's healthResponse: the store (D1 and the FTS probe) is the fail
 // level, so only it can make a 503; the backup, the bindings and the task ledger warn and
 // leave it 200, because health is about whether the store answers. The deploy gate's
-// fields (sha, dirty, builtAt, store, schema_version) ride beside the family ones.
+// fields (sha, store, schema_version) ride beside the family ones.
 //
 // That schema_version names the newest applied migration is asserted against a real
 // D1 in test-integration/health.test.ts, which applies every file in migrations/.
 
 function healthEnv(parts: Record<string, unknown>) {
-  return fakeEnv({ BUILD_SHA: "abc123", BUILT_AT: "2026-09-07T00:00:00Z", ...parts });
+  return fakeEnv({ BUILD_SHA: "abc123", ...parts });
 }
 
 type Body = {

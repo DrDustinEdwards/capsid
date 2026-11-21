@@ -51,8 +51,6 @@ const hoursAgo = (n: number) => new Date(NOW.getTime() - n * 3_600_000).toISOStr
 const HEALTHY = {
   status: "ok" as const,
   sha: "1d6912efc2225d3725bfdc8ad5e6e5cae8dec63d",
-  dirty: false,
-  builtAt: null,
   schema_version: "0016_jobs_retry_cap.sql",
   store: { d1: "ok", fts: "ok" },
   bindings: { media: "ok", app_kv: "ok" },

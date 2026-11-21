@@ -85,7 +85,6 @@ export function Backups() {
                     )}{" "}
                     <span className="cap-text cap-mono" data-tone="dim">
                       sha {h.sha.slice(0, 7)}
-                      {h.dirty ? " (dirty)" : ""}
                     </span>
                   </dd>
                   <dt>Store</dt>

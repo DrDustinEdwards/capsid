@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "node scripts/deploy.mjs",
+    "deploy": "npm run build:dashboard && wrangler deploy",
     "types": "node scripts/dry-run-config.mjs && wrangler types worker-configuration.d.ts --config wrangler.dryrun.jsonc --include-runtime=false",
     "check": "tsc --noEmit",
     "check:test": "tsc --noEmit -p tsconfig.test.json",
@@ -49,7 +49,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.8.2",
     "@cloudflare/workers-types": "5.20261113.1",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.54.0",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.55.0",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/conformance": "0.2.0-alpha.12",
     "@types/node": "24.19.2",

@@ -59,10 +59,8 @@ export interface Env extends Omit<
   // GitHub App. No pinned installation id: resolved per owner and repo.
   GITHUB_APP_CLIENT_ID: string;
   GITHUB_APP_PRIVATE_KEY: string;
-  // Stamped by scripts/deploy.mjs at deploy time, not committed.
+  // This deploy's commit, stamped by devkit worker-deploy (`sha-var`), not committed.
   BUILD_SHA?: string;
-  BUILD_DIRTY?: string;
-  BUILT_AT?: string;
   // Root secret the job and policy signing key (src/signed-docs.ts) and the backup
   // credential key (src/signed-requests.ts) are derived from. Named for the improve
   // loop that first used it; renaming a Worker secret is a step only the seat can take.

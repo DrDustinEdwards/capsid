@@ -49,8 +49,6 @@
     "health": {
       "status": "ok",
       "sha": "5a3c9e1",
-      "dirty": false,
-      "builtAt": "2026-09-28T10:24:00.000Z",
       "schema_version": "0042",
       "store": {
         "d1": "ok",

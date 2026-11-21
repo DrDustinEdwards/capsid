@@ -7,8 +7,8 @@ import type { Finding } from "./watcher-detect";
 // THE MEMORY OF A ROLLBACK (docs/design/design-merge-pipeline.md section 6, PR 6). Each
 // watcher pass reads, for every DEPLOY_ROSTER repo, its newest completed default-branch push
 // runs, finds the job named "live gate", or "<caller job> / live gate" when the gate runs in
-// a called workflow (capsid's in .github/workflows/ci.yml; carrel's, "deploy / live gate",
-// in devkit's reusable worker-deploy.yml), and records what became of the deploy in
+// a called workflow ("deploy / live gate" for capsid and carrel, in devkit's reusable
+// worker-deploy.yml), and records what became of the deploy in
 // deploy_outcomes (migrations/0039). A rollback, or one that did not take effect,
 // is a watcher finding, so it reaches Needs you and the queue; the push is PR 7.
 //
