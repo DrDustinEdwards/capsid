@@ -5,6 +5,7 @@ import { aiSearchUsage } from "./doc-index";
 import { HOUR_MS } from "./time";
 import {
   durableObjectCheck,
+  emailCheck,
   healthResponse,
   kvCheck,
   r2Check,
@@ -202,6 +203,9 @@ export async function handleHealth(env: Env): Promise<Response> {
     durableObjectCheck("rate_limiter", env.RATE_LIMITER),
     durableObjectCheck("tool_call_log", env.TOOL_CALL_LOG),
   );
+  // The watcher's send_email binding (area 8, H5), warn: without it a red or green mail is not sent and the
+  // finding still opens in Incidents.
+  checks.push(emailCheck("email", env.EMAIL));
   // What is in the log (area 11, L8), warn: a call started and never finished, a spike in
   // calls, or rows not copied to AUDIT_BUCKET for two days.
   if (env.TOOL_CALL_LOG) checks.push(auditLogCheck(env));
