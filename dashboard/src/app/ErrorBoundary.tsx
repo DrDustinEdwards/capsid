@@ -3,7 +3,7 @@ import { Component, type ReactNode } from "react";
 import { APP_URL } from "../lib/api";
 
 // A render error shows what broke instead of a blank page. With a fallback it holds one part
-// of a page, so the rest stays up.
+// of a page, so the rest stays up. React 19 logs the caught error itself.
 export class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
   { error: Error | null }
@@ -12,10 +12,6 @@ export class ErrorBoundary extends Component<
 
   static getDerivedStateFromError(error: Error) {
     return { error };
-  }
-
-  componentDidCatch(error: Error) {
-    console.error("Watch Floor: render failed", error);
   }
 
   render() {
