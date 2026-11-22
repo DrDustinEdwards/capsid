@@ -2,13 +2,12 @@ import { env } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  dueForReverify,
   outcomePrStatements,
   reverifyPr,
   reverifyStatements,
-  reverifySweep,
   unverifiableStatements,
 } from "../src/outcome-prs";
+import { dueForReverify, reverifySweep } from "../src/outcome-prs-sweep";
 
 // OUTCOME MERGE STATE, AGAINST A REAL D1 (job_3e1596235513).
 //

@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { autoMergeTick } from "./auto-merge-tick";
 import { mergeResumeTick } from "./merge-resume";
 import { returnDueParked } from "./jobs";
-import { sweepIfDue } from "./outcome-prs";
+import { sweepIfDue } from "./outcome-prs-sweep";
 import { offaccountDispatchTick } from "./offaccount-dispatch";
 import { runTask, type TaskResult } from "./task-runs";
 import { watcherTick } from "./watcher";

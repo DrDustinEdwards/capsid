@@ -1,10 +1,5 @@
-import {
-  AUTO_MERGE_REFUSED_PATHS,
-  overSizeCap,
-  sizeCapReason,
-  type PrFacts,
-  type PolicyVerdict,
-} from "./auto-merge-policy";
+import { AUTO_MERGE_REFUSED_PATHS, overSizeCap, sizeCapReason } from "./auto-merge-policy";
+import type { PrFacts, PolicyVerdict } from "./auto-merge-policy-evaluate";
 import { worthReviewer } from "./model-routing";
 import { isMoneyPath } from "./scope";
 

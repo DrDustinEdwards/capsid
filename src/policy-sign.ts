@@ -14,12 +14,8 @@ import {
   requireBodyUnchanged,
   snapshotLive,
 } from "./store-guards";
-import {
-  AUTO_MERGE_POLICY_PATH,
-  checkMergePolicyBody,
-  loadMergePolicy,
-  parseMergePolicy,
-} from "./auto-merge-policy";
+import { AUTO_MERGE_POLICY_PATH, checkMergePolicyBody, loadMergePolicy } from "./auto-merge-policy";
+import { parseMergePolicy } from "./auto-merge-policy-parse";
 import { readRepoFile } from "./github/contents";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 

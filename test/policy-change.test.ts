@@ -5,12 +5,10 @@ import { test } from "node:test";
 import {
   AUTO_MERGE_POLICY_PATH,
   AUTO_MERGE_REQUIRED_CI,
-  evaluatePolicy,
   loadMergePolicy,
-  parseMergePolicy,
-  PROMOTABLE_PATH_CLASSES,
-  type PrFacts,
 } from "../src/auto-merge-policy.ts";
+import { evaluatePolicy, type PrFacts } from "../src/auto-merge-policy-evaluate.ts";
+import { parseMergePolicy, PROMOTABLE_PATH_CLASSES } from "../src/auto-merge-policy-parse.ts";
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/signed-docs.ts";
 import { PATH_CLASSES } from "../src/merge-class.ts";
 import { judgeUnits, LIFTED_KEY, liftSuspension, SUSPENDED_KEY } from "../src/merge-units.ts";

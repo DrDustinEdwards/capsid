@@ -9,17 +9,19 @@ import {
   AUTO_MERGE_REQUIRED_CI,
   AUTO_MERGE_SIZE_CAP,
   POLICY_CHECKS,
-  ciVerdict,
-  evaluatePolicy,
-  jobIdFromBody,
   loadMergePolicy,
-  parseMergePolicy,
   namespacedAllowedPaths,
   namespacedCiLabels,
   requiredCiLabel,
-  type PrFacts,
 } from "../src/auto-merge-policy.ts";
-import { mergeParams } from "../src/auto-merge-tick.ts";
+import {
+  ciVerdict,
+  evaluatePolicy,
+  jobIdFromBody,
+  type PrFacts,
+} from "../src/auto-merge-policy-evaluate.ts";
+import { parseMergePolicy } from "../src/auto-merge-policy-parse.ts";
+import { mergeParams } from "../src/auto-merge-tick-judge.ts";
 import { signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { ALLOWED_AUTHORS, CAPSID_CI, GOOD_POLICY, SECRET, success } from "./auto-merge-fixtures.ts";

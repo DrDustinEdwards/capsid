@@ -1,4 +1,4 @@
-import { ciGreenOn, type PrFacts } from "./auto-merge-policy";
+import { ciGreenOn, type PrFacts } from "./auto-merge-policy-evaluate";
 import type { Env } from "./env";
 import { HeadMovedError, managePr } from "./github/refs";
 import { systemAudit } from "./doc-statements";

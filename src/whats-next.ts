@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { ciVerdict, jobIdFromBody } from "./auto-merge-policy";
+import { ciVerdict, jobIdFromBody } from "./auto-merge-policy-evaluate";
 import { ghFetch, parseReposList } from "./github/client";
 import { readAllPages, readCheckRuns } from "./github/pr-files";
 import { commandFromSummary, isQuestionSummary } from "./jobs-holder";
