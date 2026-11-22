@@ -1,6 +1,7 @@
 import {
   BackupIncomplete,
   DEFAULT_RETENTION,
+  listAllKeys,
   readDumpJson,
   runCheckedBackup,
   type DumpResult,
@@ -245,17 +246,6 @@ function retryingPuts(bucket: R2Bucket, waitMs: number): R2Bucket {
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
-}
-
-async function listAllKeys(bucket: R2Bucket, prefix: string): Promise<string[]> {
-  const keys: string[] = [];
-  let cursor: string | undefined;
-  do {
-    const page = await bucket.list({ prefix, cursor });
-    for (const obj of page.objects) keys.push(obj.key);
-    cursor = page.truncated ? page.cursor : undefined;
-  } while (cursor);
-  return keys;
 }
 
 export async function runBackup(env: Env, putRetryMs = PUT_RETRY_MS): Promise<BackupResult> {
