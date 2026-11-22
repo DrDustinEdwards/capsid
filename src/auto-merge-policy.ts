@@ -140,7 +140,7 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   // pr_recorded_for_job trusts result_ref and job_outcome_prs because only the job's
   // holder writes them. These two sources are what writes them, so a green PR that
   // loosened either could record any PR against any job. The job transitions are
-  // src/jobs.ts and the jobs-* modules it re-exports; jobs-schema.ts writes nothing.
+  // src/jobs.ts and the jobs-* modules it re-exports.
   {
     pattern: /^src\/jobs(-[a-z]+)*\.ts$/i,
     why: "the job transitions that write result_ref, which pr_recorded_for_job reads",

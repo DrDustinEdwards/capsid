@@ -26,6 +26,7 @@ const SHIPPED = readFileSync(
   join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"),
   "utf8",
 );
+const V = Number(/^- version: (\d+)$/m.exec(SHIPPED)![1]);
 const withUnits = (lines: string[]) =>
   `${SHIPPED.trimEnd()}\n\n## Auto units\n\n${lines.join("\n")}\n`;
 
@@ -57,7 +58,7 @@ test("the promotable path classes are merge-class's own, less money, migration a
   );
 });
 
-test("the shipped version 10 lists no unit, and a unit under ## Auto units is read", () => {
+test("the shipped version lists no unit, and a unit under ## Auto units is read", () => {
   const v8 = parseMergePolicy(SHIPPED);
   assert.ok("policy" in v8);
   assert.deepEqual(v8.policy.units, []);
@@ -162,51 +163,61 @@ test("PLANT: a missing typed version is refused, and nothing is signed or writte
   assert.equal(refused.ok, false);
   assert.match(
     !refused.ok ? refused.error : "",
-    /needs the new version number typed as confirm: 11/,
+    new RegExp(`needs the new version number typed as confirm: ${V + 1}`),
   );
   const wrong = await performPolicyChange(
     w.env,
     "access:admin@example.com",
     "promote",
     "capsid/tests",
-    "10",
+    `${V}`,
   );
-  assert.match(!wrong.ok ? wrong.error : "", /confirm is '10', but the new version is 11/);
+  assert.match(
+    !wrong.ok ? wrong.error : "",
+    new RegExp(`confirm is '${V}', but the new version is ${V + 1}`),
+  );
   assert.equal(storedBody(w.rows), before, "the policy changed on a refusal");
   assert.equal(w.kv.puts.length, 0, "the pin moved on a refusal");
 });
 
-test("typing the new version signs version 11 with the unit, and the Worker loads it", async () => {
+test("typing the new version signs the next version with the unit, and the Worker loads it", async () => {
   const w = await world();
   const plan = await planPolicyChange(w.env, "promote", "capsid/tests");
   assert.ok(plan.ok, plan.ok ? "" : plan.error);
-  assert.deepEqual([plan.from, plan.to, plan.unit], ["10", "11", "capsid / tests"]);
+  assert.deepEqual([plan.from, plan.to, plan.unit], [`${V}`, `${V + 1}`, "capsid / tests"]);
   const done = await performPolicyChange(
     w.env,
     "access:admin@example.com",
     "promote",
     "capsid/tests",
-    "11",
+    `${V + 1}`,
   );
   assert.ok(done.ok, done.ok ? "" : done.error);
   const { signature, body } = splitSignedTask(storedBody(w.rows));
   assert.ok(signature, "the new version is not signed");
-  assert.match(body, /^- version: 11$/m);
+  assert.match(body, new RegExp(`^- version: ${V + 1}$`, "m"));
   assert.match(body, /## Auto units[\s\S]*- unit `capsid \/ tests`/);
   const loaded = await loadMergePolicy(w.env);
   assert.ok("policy" in loaded, "error" in loaded ? loaded.error : "");
-  assert.equal(loaded.policy.version, "11");
+  assert.equal(loaded.policy.version, `${V + 1}`);
   assert.deepEqual(loaded.policy.units, ["capsid / tests"]);
-  assert.ok(w.rows.versions.length >= 1, "version 10 was not snapshotted");
+  assert.ok(w.rows.versions.length >= 1, "the prior version was not snapshotted");
   // Removing it is the same control, the next version, the same typed confirm.
   assert.equal(
-    (await performPolicyChange(w.env, "access:admin@example.com", "demote", "capsid/tests", "12"))
-      .ok,
+    (
+      await performPolicyChange(
+        w.env,
+        "access:admin@example.com",
+        "demote",
+        "capsid/tests",
+        `${V + 2}`,
+      )
+    ).ok,
     true,
   );
   const v12 = await loadMergePolicy(w.env);
   assert.ok("policy" in v12);
-  assert.deepEqual([v12.policy.version, v12.policy.units], ["12", []]);
+  assert.deepEqual([v12.policy.version, v12.policy.units], [`${V + 2}`, []]);
 });
 
 test("a change that would not load, or changes nothing, is refused at the preview", async () => {
@@ -217,7 +228,7 @@ test("a change that would not load, or changes nothing, is refused at the previe
   );
   assert.match(
     ((await planPolicyChange(w.env, "demote", "capsid/tests")) as { error: string }).error,
-    /not promoted to auto in version 10/,
+    new RegExp(`not promoted to auto in version ${V}`),
   );
   assert.match(
     ((await planPolicyChange(w.env, "widen", "capsid/tests")) as { error: string }).error,

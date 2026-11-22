@@ -291,7 +291,11 @@ test("paths_not_refused: every pattern matches a sample, each sample refuses alo
     // They write what pr_recorded_for_job reads.
     "src/jobs.ts",
     "src/outcome-prs.ts",
-    ...["claim", "holder", "seat", "mirror", "transition"].map((p) => `src/jobs-${p}.ts`),
+    ...["claim", "holder", "seat", "mirror", "transition", "schema"].map((p) => `src/jobs-${p}.ts`),
+    "src/scope-guard.ts",
+    "src/policy-sign-repo.ts",
+    "src/auto-merge-tick-judge.ts",
+    "src/outcome-prs-sweep.ts",
   ];
   for (const { pattern } of AUTO_MERGE_REFUSED_PATHS) {
     assert.ok(
@@ -313,7 +317,6 @@ test("paths_not_refused: every pattern matches a sample, each sample refuses alo
     "src/environment.ts",
     "src/github/refs.ts",
     "src/signed-requests.ts",
-    "src/jobs-schema.ts",
     "src/agents-schema.ts",
     "src/limits.ts",
     "CLAUDE.md",
