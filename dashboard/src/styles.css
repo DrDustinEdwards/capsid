@@ -176,14 +176,6 @@ table.workers-stores details {
 table.workers-stores .cap-status {
   white-space: normal;
 }
-@media (max-width: 820px) {
-  table.workers-bindings col.c-label {
-    width: 6.5rem;
-  }
-  table.workers-stores .c-used {
-    width: 40%;
-  }
-}
 .shared-local {
   list-style: none;
   margin: 0;
@@ -191,18 +183,6 @@ table.workers-stores .cap-status {
   border-top: var(--line-w) solid var(--line);
   display: grid;
   gap: var(--space-2);
-}
-@media (max-width: 820px) {
-  .shared-users .c-where {
-    display: none;
-  }
-  .shared-users td,
-  .shared-users .cap-status,
-  .cap-panel-src,
-  .cap-panel-src .cap-status {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
 }
 
 /* fleet table */
@@ -256,19 +236,19 @@ table.workers-stores .cap-status {
 .frow .t {
   min-width: 0;
 }
-.frow b {
-  font-weight: var(--weight-semibold);
-  display: block;
+.frow b,
+.frow .sub {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.frow b {
+  font-weight: var(--weight-semibold);
+  display: block;
+}
 .frow .sub {
   font-size: var(--fs-detail);
   color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 /* The namespace's monospace face would otherwise stretch the line (D2, 47 px rows). */
 .frow .sub .ns {
@@ -389,6 +369,22 @@ main .sev-crit[data-row]:focus-visible {
   }
   .sample {
     display: none;
+  }
+  table.workers-bindings col.c-label {
+    width: 6.5rem;
+  }
+  table.workers-stores .c-used {
+    width: 40%;
+  }
+  .shared-users .c-where {
+    display: none;
+  }
+  .shared-users td,
+  .shared-users .cap-status,
+  .cap-panel-src,
+  .cap-panel-src .cap-status {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }
 @media (prefers-reduced-motion: reduce) {
