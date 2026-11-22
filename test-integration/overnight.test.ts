@@ -4,7 +4,8 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail } from "../src/agents";
 import { capsidStatus } from "../src/status";
 import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY, setOvernight } from "../src/overnight";
-import { readOvernightDigest, readOvernightPlan } from "../src/overnight-plan";
+import { readOvernightDigest } from "../src/overnight-digest";
+import { readOvernightPlan } from "../src/overnight-plan";
 import { buildServer } from "../src/server";
 
 // The overnight plan and digest against a real D1: the statements run on SQLite, the

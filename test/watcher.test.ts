@@ -15,13 +15,12 @@ import {
 } from "../src/watcher-findings.ts";
 import {
   DEFAULT_CADENCE_MINUTES,
-  MAX_FINDINGS_PER_PASS,
   WATCHER_ACTOR,
   cadenceMinutes,
   passDue,
-  runPass,
   watcherAgent,
 } from "../src/watcher.ts";
+import { MAX_FINDINGS_PER_PASS, runPass } from "../src/watcher-pass.ts";
 import { newestMigration } from "../src/watcher-gather.ts";
 import { WATCHER_CHECKS, owningCheck, type WatcherCheck } from "../src/watcher-checks.ts";
 import {

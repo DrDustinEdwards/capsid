@@ -6,13 +6,8 @@ import { RETRY_CAP_REASON } from "../src/jobs-schema.ts";
 import { PORTAL_CSRF_COOKIE } from "../src/ops-feed.ts";
 import { PORTAL_CSRF_HEADER } from "../src/portal-actions.ts";
 import { portalSessionCookie } from "../src/portal-auth.ts";
-import {
-  handlePortalPushGet,
-  handlePortalPushPost,
-  PORTAL_PUSH_PATH,
-  pushTick,
-  type PushPayload,
-} from "../src/push.ts";
+import { pushTick, type PushPayload } from "../src/push.ts";
+import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH } from "../src/push-portal.ts";
 import type { PortalPush } from "../src/ops-types/views.ts";
 import type { SiteProbe } from "../src/ops-types/sites.ts";
 import { nextPulse, SITE_PULSE_KEY, type PulseSite } from "../src/site-pulse.ts";

@@ -1,5 +1,6 @@
 import type { PortalDigest, PortalPlan } from "./ops-types/views";
-import { digestSinceFrom, readOvernightDigest, readOvernightPlan } from "./overnight-plan";
+import { digestSinceFrom, readOvernightDigest } from "./overnight-digest";
+import { readOvernightPlan } from "./overnight-plan";
 import { behindGate } from "./portal-auth";
 import { jsonResponse as json } from "@dustinedwards/site-runtime/http";
 

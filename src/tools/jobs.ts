@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { JOBS_TOOL } from "../scope";
-import { digestSinceFrom, readOvernightDigest, readOvernightPlan } from "../overnight-plan";
+import { digestSinceFrom, readOvernightDigest } from "../overnight-digest";
+import { readOvernightPlan } from "../overnight-plan";
 import { readModelLearning } from "../model-learning";
 import {
   beginJob,

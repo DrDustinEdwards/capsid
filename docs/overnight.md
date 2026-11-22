@@ -1,6 +1,6 @@
 # The overnight run
 
-What a night of unattended driver work looks like: a plan and a morning digest, plus a switch that now gates nothing. Ruled by Dustin 2026-10-04 (D2 and D3 of `capsid/research/design-automation-for-speed.md`). Code: `src/overnight.ts`, `src/overnight-plan.ts`.
+What a night of unattended driver work looks like: a plan and a morning digest, plus a switch that now gates nothing. Ruled by Dustin 2026-10-04 (D2 and D3 of `capsid/research/design-automation-for-speed.md`). Code: `src/overnight.ts`, `src/overnight-plan.ts`, `src/overnight-digest.ts`.
 
 Nothing starts a run on its own: project threads do the work (Dustin, 2026-10-31). The switch below is still stored and shown, and the plan and digest are still served, but nothing reads the switch to start a run.
 

@@ -15,7 +15,7 @@ import { portalCookiePath } from "./portal-host";
 import type { Env } from "./env";
 import { readSnapshot } from "./ops-snapshot";
 import type { OpsFeed, OpsUptime, OpsUptimeCounts } from "./ops-types/feed";
-import { DAILY_RETENTION_DAYS } from "./backup";
+import { DAILY_RETENTION_DAYS } from "./backup-prune";
 import { auditStatement } from "./store-guards";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
 import { DEFAULT_CADENCE_MINUTES, watcherTick, type Gathered, type WatcherReport } from "./watcher";

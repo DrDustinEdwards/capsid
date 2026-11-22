@@ -30,7 +30,7 @@ import {
   PORTAL_RESOURCES_PATH,
   PORTAL_SHARED_CODE_PATH,
 } from "../src/portal-packages.ts";
-import { PORTAL_PUSH_PATH } from "../src/push.ts";
+import { PORTAL_PUSH_PATH } from "../src/push-portal.ts";
 import { PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
 import { PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
 import { REPORT_PATH } from "../src/security-headers.ts";

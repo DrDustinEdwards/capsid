@@ -2,7 +2,7 @@ import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 import type { Env } from "./env";
 import { cloudflareCredentials, type FetchLike } from "./ops-cloudflare";
 import { readSiteRow } from "./ops-sites";
-import type { PortalBuildLog, PortalWorkersBuilds, WorkersBuild } from "./ops-types/views";
+import type { PortalBuildLog, PortalWorkersBuilds, WorkersBuild } from "./ops-types/site-page";
 import { behindGate } from "./portal-auth";
 import { attempt, countedRead, none, noSite } from "./portal-site";
 import { BUILDS_DEFAULT, BUILDS_MAX, buildLogs, listBuilds } from "./workers-builds";

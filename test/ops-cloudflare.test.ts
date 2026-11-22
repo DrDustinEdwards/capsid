@@ -18,7 +18,7 @@ import {
   type SiteProbe,
 } from "../src/ops-snapshot.ts";
 import type { SiteCloudflare } from "../src/ops-types/sites.ts";
-import { runPass } from "../src/watcher.ts";
+import { runPass } from "../src/watcher-pass.ts";
 import { gatherFindings } from "../src/watcher-gather.ts";
 import { owningCheck } from "../src/watcher-checks.ts";
 import {
@@ -732,6 +732,7 @@ test("only the watcher, the admin capsid_admin_read_ops calls, the capsid_inspec
     "system-resources-read.ts",
     "tls-expiry.ts",
     "watcher-gather.ts",
+    "watcher-secrets.ts",
     "workers-builds.ts",
   ]);
   assert.deepEqual(importersOf("ops-cloudflare-config"), ["tools/cloudflare.ts"]);
