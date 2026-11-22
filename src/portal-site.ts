@@ -16,7 +16,7 @@ import type {
   TrafficNotFound,
   TrafficServerErrors,
   TrafficWebVitals,
-} from "./ops-types/views";
+} from "./ops-types/site-page";
 import { behindGate } from "./portal-auth";
 import { searchConsole } from "./search-console";
 import { MAX_TRAFFIC_DAYS, siteTraffic } from "./site-traffic";

@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseSystemModel } from "../src/system-model.ts";
-import {
-  bindingOf,
-  resourceDrift,
-  resourcesDoc,
-  userTables,
-  type Binding,
-} from "../src/system-resources.ts";
+import { resourceDrift, resourcesDoc } from "../src/system-resources.ts";
+import { bindingOf, userTables, type Binding } from "../src/system-resources-read.ts";
 import { readResources } from "../src/system-facts-store.ts";
 import { toPublicVersions, versionDrift } from "../src/system-versions.ts";
 import type { SharedCodeView } from "../src/ops-types/feed.ts";

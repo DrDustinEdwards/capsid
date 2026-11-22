@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  historyRanges,
-  readPackage,
-  validatePackage,
-  type FetchLike,
-} from "../src/ops-packages.ts";
+import { historyRanges, readPackage, type FetchLike } from "../src/ops-packages.ts";
+import { validatePackage } from "../src/ops-package-config.ts";
 import type { OpsPackageConfig } from "../src/ops-types/sites.ts";
 import { isoWeek } from "../src/time.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";

@@ -3,20 +3,22 @@ import { test } from "node:test";
 import { portalDisplay, portalSessionCookie } from "../src/portal-auth.ts";
 import { RESUME_MARKER } from "../src/jobs.ts";
 import {
-  awaitingFrom,
   handleOpsFeed,
   handleOpsRefresh,
-  isoTime,
   OPS_FEED_PATH,
   OPS_REFRESH_HEADER,
   OPS_REFRESH_KEY,
   OPS_REFRESH_PATH,
-  opsAgentFrom,
   PORTAL_CSRF_COOKIE,
-  opsJobFrom,
   refreshAllowedAt,
-  type JobFeedRow,
 } from "../src/ops-feed.ts";
+import {
+  awaitingFrom,
+  isoTime,
+  opsAgentFrom,
+  opsJobFrom,
+  type JobFeedRow,
+} from "../src/ops-live.ts";
 import { OPS_SNAPSHOT_KEY } from "../src/ops-snapshot.ts";
 import {
   openWatcherFingerprints,

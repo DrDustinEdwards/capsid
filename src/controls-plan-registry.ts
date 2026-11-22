@@ -14,7 +14,7 @@ import { deleteRefusals, planFingerprint, readDeletePlan, summarize } from "./na
 import { CARREL_SCRIPT, SITE_SECRET, siteKeyTarget } from "./site-key";
 import type { Env } from "./env";
 import { resolveRepo } from "./github";
-import { validatePackage, readPackageRow, describePackage } from "./ops-packages";
+import { validatePackage, readPackageRow, describePackage } from "./ops-package-config";
 import {
   validateSite,
   readSiteRow,

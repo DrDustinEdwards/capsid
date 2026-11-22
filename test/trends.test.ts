@@ -1,14 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  backupSlots,
-  ciDays,
-  costWeeks,
-  lastDays,
-  mondayOf,
-  sessionMinutes,
-  weekStarts,
-} from "../src/trends.ts";
+import { costWeeks, sessionMinutes } from "../src/trends.ts";
+import { backupSlots, ciDays } from "../src/trends-outside.ts";
+import { lastDays, mondayOf, weekStarts } from "../src/trends-days.ts";
 import { timeMs } from "../src/time.ts";
 
 // The counting rules behind GET /portal/api/trends, on plain values. The SQL runs against

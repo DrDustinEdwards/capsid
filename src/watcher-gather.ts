@@ -17,7 +17,8 @@ import {
   readSecretNames,
   readAccessAppNames,
 } from "./ops-cloudflare";
-import { readPackageConfig, readPackage, npmVersions } from "./ops-packages";
+import { readPackage, npmVersions } from "./ops-packages";
+import { readPackageConfig } from "./ops-package-config";
 import { readSiteConfig, type OpsSite, sitesFrom, siteMapDrift } from "./ops-sites";
 import { probeSite, readSnapshot } from "./ops-snapshot";
 import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES } from "./offaccount";

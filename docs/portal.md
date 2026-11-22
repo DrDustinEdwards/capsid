@@ -260,7 +260,7 @@ A value the feed does not have is shown as **No data** with its reason. It is ne
   - If the analytics query fails, the error column shows the query's error text.
 - **Uptime.** Each half-hour slot the watcher did not run is hatched, not counted as up.
 - **Backups.** Capsid's backup age comes from its own `/health`. No other site reports a backup yet: that arrives with each site's `/health` contract, one PR in each site's repo. Until then the column says so.
-- **The store's size.** Health's Backups tab, in its primary panel, shows the D1 store's size against the per-database cap, 10 GB on Workers Paid (`D1_CAP_BYTES` in `src/ops-feed.ts`; 500 MB on Workers Free, the one line to change). From half the cap it is flagged there and listed in Problems as a warning, Foxhound's threshold. The size is read in the admin-only feed, not in the public `/health`. A size D1 did not report reads "Not reported", never zero.
+- **The store's size.** Health's Backups tab, in its primary panel, shows the D1 store's size against the per-database cap, 10 GB on Workers Paid (`D1_CAP_BYTES` in `src/ops-live.ts`; 500 MB on Workers Free, the one line to change). From half the cap it is flagged there and listed in Problems as a warning, Foxhound's threshold. The size is read in the admin-only feed, not in the public `/health`. A size D1 did not report reads "Not reported", never zero.
 
 ## The Cloudflare token
 

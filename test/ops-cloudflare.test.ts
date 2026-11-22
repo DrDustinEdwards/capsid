@@ -729,7 +729,7 @@ test("only the watcher, the admin capsid_admin_read_ops calls, the capsid_inspec
     "portal-site.ts",
     "site-key.ts",
     "site-traffic.ts",
-    "system-resources.ts",
+    "system-resources-read.ts",
     "tls-expiry.ts",
     "watcher-gather.ts",
     "workers-builds.ts",

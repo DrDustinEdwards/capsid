@@ -14,7 +14,7 @@ import {
   addPackage,
   editPackage,
   describePackage,
-} from "./ops-packages";
+} from "./ops-package-config";
 import { removeSite, validateSite, addSite, editSite, describeSite } from "./ops-sites";
 import { runSiteRepair } from "./site-repair";
 import { CAPSID_DUMP, runCapsidDump, runSiteBackups } from "./site-backup";
