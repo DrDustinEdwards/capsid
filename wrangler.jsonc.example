@@ -13,8 +13,9 @@
   "compatibility_date": "2026-09-06",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public", "enable_request_signal"],
   "keep_vars": true,
-  // keep_names stays at its default (true), so stack traces and source maps keep function names.
+  // keep_names is off: its __name() wrapper on every function cost 30 KiB of gzip. Source maps are uploaded, so traces still show source names.
   "minify": true,
+  "keep_names": false,
   "upload_source_maps": true,
   // Logs on, and traces at one invocation in ten (job_beedff911c01; Cloudflare's Workers
   // best-practices guide says to enable both with head_sampling_rate). Traces are beta,

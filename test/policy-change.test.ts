@@ -13,6 +13,7 @@ import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/s
 import { PATH_CLASSES } from "../src/merge-class.ts";
 import { judgeUnits, LIFTED_KEY, liftSuspension, SUSPENDED_KEY } from "../src/merge-units.ts";
 import { performPolicyChange, planPolicyChange } from "../src/policy-sign-change.ts";
+import { SHIPPED_VERSION } from "./policy-version.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // The merge units in the signed policy (docs/design/design-merge-pipeline.md section 7,
@@ -26,7 +27,7 @@ const SHIPPED = readFileSync(
   join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"),
   "utf8",
 );
-const V = Number(/^- version: (\d+)$/m.exec(SHIPPED)![1]);
+const V = SHIPPED_VERSION;
 const withUnits = (lines: string[]) =>
   `${SHIPPED.trimEnd()}\n\n## Auto units\n\n${lines.join("\n")}\n`;
 

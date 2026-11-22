@@ -1,7 +1,9 @@
 import type { Env } from "./env";
 import type { PortalAction, PortalPreview } from "./ops-types/portal";
-import { type ActionResult, performAction } from "./controls-perform";
-import { type Plan, planAction } from "./controls-plan";
+import { performAction } from "./controls-perform";
+import type { ActionResult } from "./controls-perform-base";
+import { planAction } from "./controls-plan";
+import type { Plan } from "./controls-plan-base";
 import { confirmKeys } from "./auth";
 import { mintConfirm, redeemConfirm } from "@dustinedwards/site-runtime/confirm-token";
 import {

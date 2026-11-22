@@ -373,8 +373,8 @@ const OPEN_WORLD_THROUGH: Record<
     via: /\bperformControl\(/,
     evidence: [
       { file: "controls-perform.ts", pattern: /\bmanagePr\(/ },
-      { file: "controls-perform.ts", pattern: /\brunSiteRepair\(/ },
-      { file: "controls-perform.ts", pattern: /\brunSiteBackups\(/ },
+      { file: "controls-perform-sites.ts", pattern: /\brunSiteRepair\(/ },
+      { file: "controls-perform-sites.ts", pattern: /\brunSiteBackups\(/ },
       { file: "site-repair.ts", pattern: /\bcallOperator\(/ },
       { file: "site-operator.ts", pattern: /\boperatorCall\(/ },
     ],
