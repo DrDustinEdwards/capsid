@@ -18,6 +18,8 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 
 // The site reports: reads of a live site, beside the repo tools in src/tools/repo.ts.
 
+const INSPECT_PAGE = "inspect: the page to inspect, a whole https address on the site.";
+
 export function defineSiteReportOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
 
@@ -90,7 +92,7 @@ export function defineSiteReportOperations(server: McpServer, ctx: ToolCtx): voi
         url: bounded(2048)
           .regex(/^https:\/\//, "an https address")
           .optional()
-          .describe("inspect: the page to inspect, a whole https address on the site."),
+          .describe(INSPECT_PAGE),
       },
     },
     async ({ namespace, ...args }) => {
@@ -135,7 +137,7 @@ export function defineSiteReportOperations(server: McpServer, ctx: ToolCtx): voi
         url: bounded(2048)
           .regex(/^https:\/\//, "an https address")
           .optional()
-          .describe("inspect: the page to inspect, a whole https address on the site."),
+          .describe(INSPECT_PAGE),
       },
     },
     async ({ namespace, ...args }) => {

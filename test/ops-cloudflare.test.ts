@@ -732,7 +732,6 @@ test("only the watcher, the admin capsid_admin_read_ops calls, the capsid_inspec
     "system-resources-read.ts",
     "tls-expiry.ts",
     "watcher-gather.ts",
-    "watcher-secrets.ts",
     "workers-builds.ts",
   ]);
   assert.deepEqual(importersOf("ops-cloudflare-config"), ["tools/cloudflare.ts"]);

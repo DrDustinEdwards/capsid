@@ -140,21 +140,7 @@ export function shippedEvidence(job: JobRow): { result_ref?: string; prs: string
   return { ...(ref ? { result_ref: ref } : {}), prs, more: all.length - prs.length };
 }
 
-// bind: params the plan itself adds to the token, beside the caller's, so the perform
-// carries out what this preview read (sign_policy_from_repo binds its source sha this way).
-export type Plan =
-  | { ok: true; changes: string[]; audit: string[]; bind?: Record<string, string> }
-  | { ok: false; refusal: string };
-
-export const refused = (refusal: string): Plan => ({ ok: false, refusal });
-
-export function required(params: ActionParams, field: string): string | null {
-  const value = params[field];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-export type ActionResult =
-  // It happened. warning is set when the click's own audit row was not written.
-  | { ok: true; summary: string; warning: string | null }
-  // It did not happen, and why.
-  | { ok: false; refusal: string };
+export const CLOSE_SHIPPED_NEEDS_REASON =
+  "close_shipped needs a reason: what shipped, and how you know. It is the job's result summary.";
+export const SUPERSEDE_NEEDS_REASON =
+  "supersede_job needs a reason: what replaced this job, or why it was withdrawn.";

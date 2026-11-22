@@ -1,15 +1,17 @@
 import { adminAgentForEmail } from "./agents";
+import { activateAgent, revokeAgent } from "./agents-admin";
 import {
   type ActionParams,
-  type ActionResult,
-  required,
   type Surface,
   AUTOMERGE_RESUME_REASON,
+  CLOSE_SHIPPED_NEEDS_REASON,
+  SUPERSEDE_NEEDS_REASON,
   UNIT_RESUME_REASON,
   SWITCHES,
   auditPrefix,
   clickAuditAction,
   deleteOptionsFrom,
+  revisionOf,
   shippedEvidence,
   switchReasonRefusal,
 } from "./controls-base";
@@ -22,8 +24,8 @@ import {
 } from "./namespace-admin";
 import { deleteAsPlanned } from "./namespace-delete-perform";
 import { setSiteKey } from "./site-key";
-import { performRegistryAction } from "./controls-perform-registry";
 import type { Env } from "./env";
+import { managePr } from "./github";
 import { resetBreaker } from "./job-breaker";
 import { parkJob, unparkJob } from "./jobs-park";
 import { resumeJob, releaseJob, adminFailJob, completeAsCaller, supersedeJob } from "./jobs-seat";
@@ -31,17 +33,36 @@ import { readJob } from "./jobs-transition";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { resumeNamespace } from "./merge-safety";
 import { liftSuspension } from "./merge-units";
+import {
+  removePackage,
+  validatePackage,
+  addPackage,
+  editPackage,
+  describePackage,
+} from "./ops-package-config";
+import { removeSite, validateSite, addSite, editSite, describeSite } from "./ops-sites";
 import type { PortalAction } from "./ops-types/portal";
 import { overnightValueRefusal, setOvernight } from "./overnight";
 import { performPolicyChange, performPolicyFromRepo } from "./policy-sign";
 import { planApproval, performApproval } from "./pr-approvals";
+import { runSiteRepair } from "./site-repair";
+import { CAPSID_DUMP, runCapsidDump, runSiteBackups } from "./site-backup";
+import { runSiteJob } from "./site-jobs";
 import { auditStatement } from "./store-guards";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
 // A control's perform (src/controls.ts is the core): the one dispatch to the shared mutators.
 
-/** One action, performed by the administrator `email`: the shared mutator the MCP tool
- *  calls, then the click's audit row. Nothing here reimplements a transition. */
+function required(params: ActionParams, field: string): string | null {
+  const value = params[field];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export type ActionResult =
+  | { ok: true; summary: string; warning: string | null }
+  | { ok: false; refusal: string };
+
+/** One action, performed by the administrator `email`: the shared mutator, then the click's audit row. */
 export async function performAction(
   env: Env,
   email: string,
@@ -168,8 +189,7 @@ export async function performAction(
         if (!reason)
           return {
             ok: false,
-            refusal:
-              "close_shipped needs a reason: what shipped, and how you know. It is the job's result summary.",
+            refusal: CLOSE_SHIPPED_NEEDS_REASON,
           };
         const job = await readJob(env.DB, id);
         if (!job) return { ok: false, refusal: `no job ${id}.` };
@@ -198,8 +218,7 @@ export async function performAction(
         if (!reason)
           return {
             ok: false,
-            refusal:
-              "supersede_job needs a reason: what replaced this job, or why it was withdrawn.",
+            refusal: SUPERSEDE_NEEDS_REASON,
           };
         const replaced_by = required(params, "replaced_by") ?? undefined;
         const result = await supersedeJob(env, agent, now, id, { reason, replaced_by });
@@ -449,21 +468,206 @@ export async function performAction(
         });
         break;
       }
-      default: {
-        const refusal = await performRegistryAction(
+      case "pr_close": {
+        const namespace = required(params, "namespace");
+        const number = Number(required(params, "number"));
+        const reason = required(params, "reason");
+        if (!namespace || !Number.isInteger(number) || number < 1)
+          return {
+            ok: false,
+            refusal: "pr_close needs a namespace and the pull request's number.",
+          };
+        if (!reason)
+          return {
+            ok: false,
+            refusal: "pr_close needs a reason: why the pull request is closed without merging.",
+          };
+        const repo = required(params, "repo") ?? undefined;
+        // Only the close shape comes back from action "close".
+        const result = (await managePr(env, namespace, number, "close", "squash", repo)) as {
+          repo: string;
+          head_branch: string | null;
+          head_branch_deleted: boolean;
+        };
+        committed = true;
+        summary = `Closed ${result.repo}#${number}${result.head_branch_deleted ? `; its branch ${result.head_branch} was deleted` : ""}.`;
+        // managePr writes no audit row of its own (the guardedWrite behind capsid_close_pr action close does),
+        // so the control writes the change's row beside the click row.
+        await env.DB.batch([
+          auditStatement(env.DB, actor, "pr-closed", namespace, null, {
+            repo: result.repo,
+            number,
+            reason,
+            head_branch: result.head_branch,
+            head_branch_deleted: result.head_branch_deleted,
+          }),
+        ]);
+        await auditClick(namespace, {
+          repo: result.repo,
+          number,
+          reason,
+        });
+        break;
+      }
+      case "revoke_agent": {
+        const name = required(params, "name");
+        if (!name) return { ok: false, refusal: "revoke_agent needs an agent name." };
+        const result = await revokeAgent(env.DB, actor, name);
+        if (!result.ok)
+          return { ok: false, refusal: result.refusal ?? `revoking ${name} was refused.` };
+        committed = true;
+        summary = `Revoked the agent ${name}.`;
+        await auditClick(null, { name });
+        break;
+      }
+      case "activate_agent": {
+        const name = required(params, "name");
+        if (!name) return { ok: false, refusal: "activate_agent needs an agent name." };
+        const result = await activateAgent(env.DB, actor, name);
+        if (!result.ok)
+          return { ok: false, refusal: result.refusal ?? `activating ${name} was refused.` };
+        committed = true;
+        summary = `Activated the agent ${name}.`;
+        await auditClick(null, { name });
+        break;
+      }
+      case "site_add":
+      case "site_edit":
+      case "site_remove": {
+        // Checked again here: the rules could have changed under a token signed before a deploy.
+        let result;
+        if (action === "site_remove") {
+          const revision = revisionOf(params.revision);
+          if (!params.namespace || revision === null)
+            return {
+              ok: false,
+              refusal: "site_remove needs a namespace and the revision it previewed.",
+            };
+          result = await removeSite(env.DB, actor, params.namespace, revision);
+        } else {
+          const checked = validateSite(params);
+          if (!checked.ok) return { ok: false, refusal: checked.refusal };
+          if (action === "site_add") {
+            result = await addSite(env.DB, actor, checked.site);
+          } else {
+            const revision = revisionOf(params.revision);
+            if (revision === null)
+              return { ok: false, refusal: "site_edit needs the revision it previewed." };
+            result = await editSite(env.DB, actor, checked.site, revision);
+          }
+        }
+        if (!result.ok) return { ok: false, refusal: result.refusal };
+        committed = true;
+        summary =
+          action === "site_add"
+            ? `Added ${result.site.namespace}: ${describeSite(result.site)}.`
+            : action === "site_edit"
+              ? `Changed ${result.site.namespace}: ${describeSite(result.site)}.`
+              : `Removed ${result.site.namespace} from the site configuration.`;
+        await auditClick(result.site.namespace, params);
+        break;
+      }
+      case "package_add":
+      case "package_edit":
+      case "package_remove": {
+        // Checked again here, as the site controls are.
+        let result;
+        if (action === "package_remove") {
+          const revision = revisionOf(params.revision);
+          if (!params.name || revision === null)
+            return {
+              ok: false,
+              refusal: "package_remove needs a name and the revision it previewed.",
+            };
+          result = await removePackage(env.DB, actor, params.name, revision);
+        } else {
+          const checked = validatePackage(params);
+          if (!checked.ok) return { ok: false, refusal: checked.refusal };
+          if (action === "package_add") {
+            result = await addPackage(env.DB, actor, checked.pkg);
+          } else {
+            const revision = revisionOf(params.revision);
+            if (revision === null)
+              return { ok: false, refusal: "package_edit needs the revision it previewed." };
+            result = await editPackage(env.DB, actor, checked.pkg, revision);
+          }
+        }
+        if (!result.ok) return { ok: false, refusal: result.refusal };
+        committed = true;
+        summary =
+          action === "package_add"
+            ? `Added ${describePackage(result.pkg)}.`
+            : action === "package_edit"
+              ? `Changed ${result.pkg.name}: ${describePackage(result.pkg)}.`
+              : `Removed ${result.pkg.name} from the packages.`;
+        await auditClick(null, params);
+        break;
+      }
+      case "site_repair": {
+        // Every check runs again inside runSiteRepair: the allowlist, token and rate limit can change before the click.
+        const namespace = required(params, "namespace");
+        const tool = required(params, "tool");
+        if (!namespace || !tool)
+          return { ok: false, refusal: "site_repair needs a namespace and a tool." };
+        const outcome = await runSiteRepair(
           env,
-          actor,
-          surface,
+          { namespace, tool, actor, auto: false, via: surface },
           now,
-          action,
-          params,
-          auditClick,
-          (text) => {
-            committed = true;
-            summary = text;
-          },
         );
-        if (refusal) return refusal;
+        if (!outcome.ran) return { ok: false, refusal: outcome.refusal };
+        committed = true;
+        summary = `${namespace}: ${outcome.line}.${outcome.recorded ? "" : " The call's audit row was not written (SITE_REPAIR_NOT_RECORDED in the log)."}`;
+        await auditClick(namespace, {
+          tool,
+          ok: outcome.call.ok,
+          converged: outcome.call.converged,
+        });
+        break;
+      }
+      case "run_job": {
+        // Every check runs again inside runSiteJob: the configuration, token and rate limit can change before the click.
+        const namespace = required(params, "namespace");
+        const name = required(params, "name");
+        if (!namespace || !name)
+          return { ok: false, refusal: "run_job needs a namespace and a job name." };
+        const outcome = await runSiteJob(env, { namespace, name, actor, via: surface }, now);
+        if (!outcome.ran) return { ok: false, refusal: outcome.refusal };
+        committed = true;
+        summary = `${namespace}: ${outcome.line}.${outcome.recorded ? "" : " The call's audit row was not written (SITE_JOB_NOT_RECORDED in the log)."}`;
+        await auditClick(namespace, {
+          job: name,
+          ok: outcome.ok,
+        });
+        break;
+      }
+      case "site_backup": {
+        // Every check runs again inside runSiteBackups: the configuration, tokens and rate limit can change before the click.
+        const namespace = params.namespace?.trim() || undefined;
+        if (namespace === CAPSID_DUMP) {
+          const dump = await runCapsidDump(env);
+          if (!dump.ok) return { ok: false, refusal: dump.line };
+          committed = true;
+          summary = `${dump.line}.`;
+          await auditClick(namespace, { dump: true });
+          break;
+        }
+        const outcome = await runSiteBackups(env, { namespace, actor, via: surface }, now);
+        if (!outcome.ok) return { ok: false, refusal: outcome.refusal };
+        committed = outcome.runs.some((r) => r.ran);
+        if (!committed)
+          return {
+            ok: false,
+            refusal: outcome.runs.map((r) => (r.ran ? "" : r.refusal)).join(" "),
+          };
+        const unrecorded = outcome.runs.some((r) => r.ran && !r.recorded);
+        summary = `${outcome.runs.map((r) => `${r.namespace}: ${r.ran ? r.line : `skipped, ${r.refusal}`}`).join(". ")}.${unrecorded ? " A call's audit row was not written (SITE_BACKUP_NOT_RECORDED in the log)." : ""}`;
+        await auditClick(namespace ?? null, {
+          sites: outcome.runs.map((r) => ({
+            namespace: r.namespace,
+            ran: r.ran,
+            ok: r.ran ? r.call.ok : false,
+          })),
+        });
         break;
       }
     }

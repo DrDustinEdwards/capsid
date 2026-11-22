@@ -2,6 +2,9 @@ import type { RepoEnv as Env } from "../env";
 import { redact, redactText, type Redacted } from "@dustinedwards/site-runtime/redact";
 import { assertRepoArg, cachedGet, ghFetch, resolveRepo } from "./client";
 
+const ACTIONS_READ_MISSING =
+  "ci_status: the capsid-repo-access GitHub App lacks Actions: Read. Add that permission in the App settings and accept the installation prompt, then retry.";
+
 // Recent CI workflow runs for a namespace's repo, via the GitHub App (Actions: Read; a 403 is surfaced as a named error). Read-only. For the most recent failed run it also returns the failing jobs and steps and a bounded log tail.
 //
 // The log tail is withheld from read-only keys: run metadata (name, sha, conclusion) is inert, but a build log carries whatever the workflow echoed (binding ids, account ids, wrangler output, any variable a step printed by accident). Every log text returned, to anyone, is redacted first (site-runtime ./redact). With run_id, jobs/job/step drill into any run the same way (ciRunJobs below), behind the same log gate.
@@ -131,9 +134,7 @@ export async function ciStatus(
   }
   const resp = await ghFetch(env, owner, repo, query);
   if (resp.status === 403) {
-    throw new Error(
-      "ci_status: the capsid-repo-access GitHub App lacks Actions: Read. Add that permission in the App settings and accept the installation prompt, then retry.",
-    );
+    throw new Error(ACTIONS_READ_MISSING);
   }
   if (!resp.ok)
     throw new Error(`ci_status failed (${resp.status}): ${redactText(await resp.text())}`);
@@ -407,9 +408,7 @@ async function ciRunJobs(
     `/repos/${owner}/${repo}/actions/runs/${run.id}/jobs?filter=latest&per_page=${CI_JOBS_MAX}`,
   );
   if (resp.status === 403) {
-    throw new Error(
-      "ci_status: the capsid-repo-access GitHub App lacks Actions: Read. Add that permission in the App settings and accept the installation prompt, then retry.",
-    );
+    throw new Error(ACTIONS_READ_MISSING);
   }
   if (!resp.ok)
     throw new Error(

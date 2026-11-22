@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/server";
+import { readDocument } from "../doc-reads";
 import { z } from "zod";
 import { repoBlobPaths, resolveRepo } from "../github";
 import {
@@ -272,10 +273,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         const path = reportPath(now);
         const body = renderTruthReport(report);
         // Snapshotted and audited like any other document (snapshot invariant, test/write-invariants.test.ts).
-        const prior = await db
-          .prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
-          .bind(namespace, path)
-          .first<{ id: number; title: string | null; body: string | null }>();
+        const prior = await readDocument(db, namespace, path);
         const title = `Truth report - ${namespace} - ${path.slice("reports/lint-".length, -3)}`;
         // The same confirmation `capsid_write_doc` asks for, since a second run the same date
         // overwrites the first. The prior body is snapshotted either way, but without

@@ -14,6 +14,7 @@ import {
   cloudflareCredentials,
   readWebAnalyticsSites,
   readCloudflare,
+  readSecretNames,
   readAccessAppNames,
 } from "./ops-cloudflare";
 import { readPackage, npmVersions } from "./ops-packages";
@@ -23,8 +24,7 @@ import { probeSite, readSnapshot } from "./ops-snapshot";
 import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES } from "./offaccount";
 import { readResources } from "./system-facts-store";
 import { APP_ROSTER } from "./roster";
-import { storeSecrets } from "./secret-presence";
-import { readSiteSecrets } from "./watcher-secrets";
+import { secretPresence, storeSecrets } from "./secret-presence";
 import { watchSites } from "./site-watch";
 import { readStaleCanon } from "./stale-canon";
 import { capsidStatus } from "./status";
@@ -107,15 +107,17 @@ export async function gatherFindings(
     probes: null,
   };
 
-  // No casts on a repo reader's result: attempt() swallows a throw, so a cast would hide
-  // a check that never runs. test/watcher-gather.test.ts drives both reads end to end.
+  // No casts on a repo reader's result, so a renamed field fails `npm run check`.
+  // attempt() swallows a throw, so a cast would hide a check that never runs.
+  // test/watcher-gather.test.ts drives both reads end to end.
   const health = await attempt("health", () => healthReport(env));
   observed.health = health;
   if (health) {
     ran.add("health");
     const head = await attempt("master head", () => defaultBranchSha(env, "capsid"));
     // Master head's own CI run, read only when the deployed sha differs. A deploy
-    // still in flight leaves the check un-judged: nothing posted, no open finding cleared.
+    // still in flight leaves the check un-judged this pass: nothing is posted and an
+    // open drift finding is not cleared on it.
     let deploy: DeployVerdict | undefined;
     if (head !== null && health.sha && health.sha !== "unknown" && health.sha !== head) {
       const runs = await attempt(
@@ -125,7 +127,8 @@ export async function gatherFindings(
       deploy = deployVerdict(runs, now);
     }
     if (head !== null && !deploy?.wait) ran.add("master head");
-    // An object, so a tree with no migrations (null) differs from a failed read (null).
+    // Wrapped in an object so a tree with no migrations (null) is told apart from a
+    // read that failed (also null from attempt).
     const migrations = await attempt("migrations", async () => {
       const tree = await listRepoTree(env, "capsid", "migrations");
       return { newest: newestMigration(tree.entries.map((e) => basename(e.path))) };
@@ -142,8 +145,8 @@ export async function gatherFindings(
 
   // The Amazon copy, as capsid-backups' watch.yml last reported it (src/offaccount.ts).
   // An unreadable report skips the check: "cannot see the copy" is not "the copy is dead".
-  // The copy workflow's runs ("backups" mapping) are evidence only; a failed read leaves
-  // them out and the age findings still fire.
+  // The copy workflow's runs, read through the capsid namespace's "backups" mapping, are
+  // evidence only; a failed read leaves them out and the age findings still fire.
   const report = await attempt("offaccount report", async () => ({
     value: await env.APP_KV.get<OffaccountReport>(OFFACCOUNT_REPORT_KEY, "json"),
   }));
@@ -198,8 +201,9 @@ export async function gatherFindings(
     };
   }
 
-  // The ci check counts as run only when every roster repo was read: ownership is per
-  // check, not per repo, so an unread repo must not let the others' pass clear its incident.
+  // The ci check counts as run only when every roster repo was read. A ci-red
+  // fingerprint names its namespace, but ownership is per check, not per repo, so a
+  // repo that could not be read must not let the others' pass clear its incident.
   let ciRead = 0;
   const ciRuns = await mapLimit(APP_ROSTER, READ_CONCURRENCY, (namespace) =>
     attempt(
@@ -229,8 +233,9 @@ export async function gatherFindings(
   });
   if (ciRead === APP_ROSTER.length) ran.add("ci");
 
-  // What became of each roster repo's newest deploys (src/deploy-outcomes.ts): a rollback
-  // is a finding. Counts as run only when every repo was read, so a failed read never clears one.
+  // What became of each roster repo's newest deploys (src/deploy-outcomes.ts, the merge
+  // pipeline's PR 6): recorded in deploy_outcomes, and a rollback is a finding. The check
+  // counts as run only when every repo was read, so a failed read never clears one.
   let deploysRead = 0;
   const deployReads = await mapLimit(
     DEPLOY_ROSTER,
@@ -250,7 +255,8 @@ export async function gatherFindings(
   if (deploysRead === DEPLOY_ROSTER.length) ran.add("deploys");
 
   // Canon documents a merged pull request left citing a removed, renamed or changed file
-  // (src/stale-canon.ts): a digest finding, no job, cleared when the document is rewritten.
+  // (src/stale-canon.ts, improvement item 23). A digest finding: it posts no job, and it
+  // clears when the document is next written or stops citing the path.
   const staleCanon = await attempt("stale canon", () => readStaleCanon(env, now));
   if (staleCanon) {
     if (staleCanon.complete) ran.add("stale canon");
@@ -258,8 +264,9 @@ export async function gatherFindings(
     logEvent("WATCHER_STALE_CANON", { message: `WATCHER_STALE_CANON ${staleCanon.note}` });
   }
 
-  // The site configuration (src/ops-sites.ts). Unreadable, no site check runs this pass:
-  // nothing is probed on a guess, and an open site finding is not cleared on no evidence.
+  // The site configuration, read each pass (src/ops-sites.ts). Unreadable, every site
+  // check below cannot run this pass: nothing is probed on a guess, and an open site
+  // finding is not cleared on no evidence.
   const config = await attempt("site config", () => readSiteConfig(env.DB));
   const sites: OpsSite[] | null = config ? sitesFrom(config) : null;
 
@@ -278,8 +285,8 @@ export async function gatherFindings(
     out.push(...siteMapFindings(observed.siteMap));
   }
 
-  // The App's repos against the namespace mapping, read whole or not at all: a failed or
-  // empty read is its own finding and leaves the check un-run (src/unmapped-repos.ts).
+  // The App's repos against the namespace mapping. Read whole or not at all: a failed
+  // or empty read is its own finding and leaves the check un-run (src/unmapped-repos.ts).
   try {
     const repoMap = await readRepoMap(env);
     ran.add("repo map");
@@ -294,16 +301,18 @@ export async function gatherFindings(
     out.push(repoMapUnreadableFinding(reason));
   }
 
-  // Every configured site, probed in turn; none configured, nothing to judge. A probe
-  // with no answer is a result; the check fails only if probing itself throws.
+  // Every configured site, probed in turn. With none configured nothing is probed and
+  // the check has nothing to judge. A probe that gets no answer is a result, not a
+  // failure of the check; the check fails only if probing itself throws.
   const probes = sites
     ? await attempt("site probes", async () => {
         return mapLimit(sites, READ_CONCURRENCY, (site) => probeSite(site, fetchImpl, now, health));
       })
     : null;
-  // The previous pass's rings, for "down on two probes in a row". An absent snapshot has
-  // nothing to compare; a KV read that throws leaves the check un-run, so an open
-  // site-down job is not cleared on no evidence.
+  // The previous pass's rings, for "down on two probes in a row". A snapshot that is
+  // absent or unreadable (readSnapshot logs it) has no previous probe to compare; a
+  // KV read that throws means the check cannot judge, so it does not count as run and
+  // an open site-down job is not cleared on no evidence.
   const prev = await attempt("previous snapshot", async () => ({
     snapshot: await readSnapshot(env),
   }));
@@ -315,9 +324,10 @@ export async function gatherFindings(
     }
   }
 
-  // The live checks (src/live-checks.ts): what capsid/policy/live-checks.md says to look
-  // at, read through this pass's probes. No document, no check; an unread site leaves the
-  // check un-run, so an open finding is not cleared on no evidence.
+  // The live checks (src/live-checks.ts): what capsid/policy/live-checks.md says to
+  // look at, read through the probes this pass just made. No document, no check. A site
+  // that could not be read this pass leaves the check un-run, so an open finding is not
+  // cleared on no evidence.
   if (sites && probes) {
     const live = await attempt("live checks", async () => {
       const config = await readLiveConfig(env.DB);
@@ -367,8 +377,9 @@ export async function gatherFindings(
     ran.add("site repairs");
   }
 
-  // Cloudflare's view of each site: deploys, hourly errors and CPU time (src/ops-cloudflare.ts).
-  // With no token or no site nothing is fetched (each site says why) and the check is not run.
+  // Cloudflare's view of each site: deploys, and hourly errors and CPU time (src/ops-cloudflare.ts).
+  // With no token nothing is fetched, each site says why, and the check is not run.
+  // With no site configured there is nothing to read, and nothing is fetched.
   if (sites && sites.length > 0) {
     const cf = await attempt("cloudflare", () => readCloudflare(env, sites, fetchImpl, now));
     if (cf) {
@@ -396,8 +407,9 @@ export async function gatherFindings(
     }
   }
 
-  // Each opted-in site's Worker secret names, set or not (src/secret-presence.ts), for the
-  // Portal's convergence view; read here because no Portal request calls Cloudflare.
+  // The secret names of each opted-in site's Worker (src/secret-presence.ts), for the
+  // Portal's convergence view: names only, set or not, read here because no Portal request
+  // calls Cloudflare. Each site's read stands alone and stores its own reason on failure.
   const secretSites = (config ?? []).filter(
     (site) =>
       site.origin &&
@@ -407,13 +419,45 @@ export async function gatherFindings(
   );
   await mapLimit(secretSites, READ_CONCURRENCY, async (site) => {
     if (!site.operator) return;
-    const stored = await readSiteSecrets(env, site, observed.cloudflare, now, fetchImpl);
+    const read_at = now.toISOString();
+    const expected = site.operator.secrets;
+    const cfState = observed.cloudflare?.[site.namespace];
+    const script = site.script ?? (cfState?.state === "ok" ? cfState.script : null);
+    const credentials = cloudflareCredentials(env);
+    const stored = !credentials.ok
+      ? { state: "error" as const, script, rows: [], reason: credentials.reason, read_at }
+      : !script
+        ? {
+            state: "error" as const,
+            script: null,
+            rows: [],
+            reason:
+              "the Worker script is not known: name it on the site's row, or let the Cloudflare read resolve it",
+            read_at,
+          }
+        : await readSecretNames(fetchImpl, credentials.token, credentials.account, script).then(
+            (names) => ({
+              state: "ok" as const,
+              script,
+              rows: secretPresence(expected, names),
+              reason: null,
+              read_at,
+            }),
+            (err: unknown) => ({
+              state: "error" as const,
+              script,
+              rows: [],
+              reason: errorMessage(err).slice(0, 300),
+              read_at,
+            }),
+          );
     await attempt(`secret names ${site.namespace}`, () =>
       storeSecrets(env, site.namespace, stored),
     );
   });
 
-  // Agents acting out of pattern, from audit_log (src/anomaly.ts): a finding, never a suspension.
+  // Agents acting out of their usual pattern, from audit_log (src/anomaly.ts, OWASP item
+  // 6). A finding only, never a suspension.
   const actionHours = await attempt("agent anomalies", () =>
     readActionHours(env.DB, now, WATCHER_ACTOR),
   );
@@ -422,8 +466,9 @@ export async function gatherFindings(
     out.push(...anomalyFindings(actionHours, now));
   }
 
-  // Each site's domain registration, by RDAP (src/domain-expiry.ts): a finding 30 and 7
-  // days before expiry. Run only when every domain was read, so a failure clears nothing.
+  // Each configured site's domain registration, by RDAP (src/domain-expiry.ts): a
+  // finding 30 and 7 days before it expires. The check counts as run only when every
+  // domain was read, so a failed read never clears an open finding.
   if (config) {
     const domains = [
       ...new Set(
@@ -464,8 +509,9 @@ export async function gatherFindings(
     }
   }
 
-  // The configured packages, for the Portal's Packages view (src/ops-packages.ts): read,
-  // never judged. None configured, nothing fetched; each source fails on its own.
+  // The configured packages, for the Portal's Packages view (src/ops-packages.ts).
+  // Read, never judged: no finding comes from a package. With none configured nothing
+  // is fetched; each package's sources fail on their own inside readPackage.
   const packageConfig = await attempt("package config", () => readPackageConfig(env.DB));
   if (packageConfig) {
     const read = await attempt("packages", async () => {
@@ -476,9 +522,10 @@ export async function gatherFindings(
     if (read) observed.packages = read;
   }
 
-  // The manual steps blocked jobs name with a "check:" line (src/manual-steps.ts), after
-  // the secret names so a secret set since the last pass is seen. Read, never judged; the
-  // counts go to stale:steps for the inbox and the stale view.
+  // The manual steps blocked jobs name with a "check:" line (src/manual-steps.ts): after
+  // the secret names above, so a secret set since the last pass is seen on this one. Read,
+  // never judged: no finding comes from a step, and the counts go to stale:steps for the
+  // inbox and the stale view.
   const steps = await attempt("manual steps", () =>
     checkManualSteps(
       env,

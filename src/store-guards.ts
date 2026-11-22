@@ -1,3 +1,4 @@
+import { readDocument } from "./doc-reads";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
@@ -156,10 +157,7 @@ export function guardedCommit(opts: {
           };
         }
         if (guard === "missing") return { refusal: refusals.createCollision };
-        const current = await db
-          .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
-          .bind(namespace, path)
-          .first<{ body: string | null }>();
+        const current = await readDocument(db, namespace, path);
         if (!current) return { refusal: refusals.deletedInFlight };
         return { refusal: refusals.bodyChanged(await sha256Hex(current.body ?? ""), elicited) };
       }

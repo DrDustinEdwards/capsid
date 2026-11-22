@@ -70,7 +70,7 @@ const DESTRUCTIVE = [
   // in src/namespace-delete.ts.
   /\bperformNamespaceDelete\(/,
   // The controls' perform: it can revoke an agent, fail a job or remove a site, through
-  // the mutators src/controls-perform.ts and src/controls-perform-registry.ts calls.
+  // the mutators src/controls-perform.ts calls.
   /\bperformControl\(/,
 ];
 
@@ -372,9 +372,9 @@ const OPEN_WORLD_THROUGH: Record<
       "perform closes a pull request on GitHub and runs a site repair or a backup through the site's operator API",
     via: /\bperformControl\(/,
     evidence: [
-      { file: "controls-perform-registry.ts", pattern: /\bmanagePr\(/ },
-      { file: "controls-perform-registry.ts", pattern: /\brunSiteRepair\(/ },
-      { file: "controls-perform-registry.ts", pattern: /\brunSiteBackups\(/ },
+      { file: "controls-perform.ts", pattern: /\bmanagePr\(/ },
+      { file: "controls-perform.ts", pattern: /\brunSiteRepair\(/ },
+      { file: "controls-perform.ts", pattern: /\brunSiteBackups\(/ },
       { file: "site-repair.ts", pattern: /\bcallOperator\(/ },
       { file: "site-operator.ts", pattern: /\boperatorCall\(/ },
     ],
