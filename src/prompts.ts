@@ -31,7 +31,7 @@ export function registerPrompts(server: McpServer, agent: Agent, db: D1Database)
   };
   server.server.registerCapabilities({ prompts: { listChanged: false } });
   server.server.setRequestHandler("prompts/list", async () => {
-    // The whole scope check, as prompts/get makes it (Grok audit 2026-10-21, CA-5).
+    // The whole scope check, as prompts/get makes it.
     const listRefusal = checkScope(agent, {
       tool: "capsid_read_doc",
       action: "read",

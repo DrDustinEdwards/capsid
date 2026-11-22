@@ -15,7 +15,7 @@ import { callSignal } from "./call-signal";
 // (the SEO plan, "Beyond the module"). not_found: the paths that answered 404 over a
 // window, a scanner's probe marked and listed last; web_vitals and ai_crawlers are below.
 // The referrer is not in it: the SQL API refuses clientRefererHost to this account (403,
-// "not permitted to access column", 2026-10-25), so which page holds a broken link is the
+// "not permitted to access column"), so which page holds a broken link is the
 // site audit's to find (src/site-audit.ts).
 //
 // NO SITE CHANGE. Cloudflare's SQL API (developers.cloudflare.com/analytics/sql-api/) reads
@@ -182,9 +182,8 @@ async function webVitals(
   const fields = VITALS.flatMap((v) => P.map((p) => `${v}${p}`)).join(" ");
   // One host, not the whole zone's Web Analytics site (a zone's site also holds its subdomains),
   // and not Cloudflare's ChromeHeadless or ChromeDerivative, which are test runners and audits
-  // (Brave and Opera fall in the latter and are left out too). On 2026-11-07, over 30 days, they were
-  // 49,070 of dustinedwards.info's 50,850 measured views and 22,460 of capsomer's 22,560, where they
-  // made CLS read 0.795 against 0.002 for the 90 real Chrome views.
+  // (Brave and Opera fall in the latter and are left out too). They made up nearly all
+  // measured views and skewed CLS far above the real Chrome views.
   const query = `query($account: string!, $siteTag: string!, $host: string!, $start: Time!, $end: Time!) { viewer { accounts(filter: { accountTag: $account }) { rumWebVitalsEventsAdaptiveGroups(filter: { siteTag: $siteTag, requestHost: $host, userAgentBrowser_notin: ["ChromeHeadless", "ChromeDerivative"], datetime_geq: $start, datetime_leq: $end }, limit: 1) { count quantiles { ${fields} } } } } }`;
   const resp = await fetchImpl(CF_GRAPHQL, {
     method: "POST",
@@ -290,7 +289,7 @@ function crawlerRows(raw: Array<Record<string, unknown>>) {
 // Visitors' requests only (Cloudflare's "filter end users", requestSource = eyeball). The record also holds the
 // zone's own subrequests: a Workers cache lookup that misses and an Early Hints lookup with nothing cached are each
 // logged as a 504 (developers.cloudflare.com/workers/runtime-apis/cache, "Errors"). Every site renders through the
-// Workers cache and sends Early Hints, so those misses read as thousands of 504s nobody was served (2026-10-31).
+// Workers cache and sends Early Hints, so those misses read as thousands of 504s nobody was served.
 const END_USERS = "requestSource = 'eyeball'";
 
 export async function siteTraffic(
@@ -351,7 +350,7 @@ export async function siteTraffic(
       `SELECT clientRequestPath AS path, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host AND ${END_USERS} AND edgeResponseStatus >= 500 GROUP BY clientRequestPath, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
       { start, host },
     );
-    // When, too: a burst in one hour beside a deploy reads differently from a trickle all day (2026-10-31).
+    // When, too: a burst in one hour beside a deploy reads differently from a trickle all day.
     const byHour = await sql(
       fetchImpl,
       creds.token,
@@ -401,13 +400,12 @@ const HOUR_MS = 3_600_000;
 const TOP_5XX = 5;
 
 /**
- * Returned 5xx at the edge per site host, over the most recent complete hour (L6, 2026-10-31):
+ * Returned 5xx at the edge per site host, over the most recent complete hour:
  * Workers analytics count only invocations that threw, so a Worker that catches its error and
  * answers 500 or 503 was invisible to the error-rate finding. Read from the same SQL API record
  * as the 404 report, sampled, so the counts are estimates. A host with no row had none. Keyed
  * by namespace; a site whose origin is a workers.dev host is not in the record and is left out.
- * Grouped by path and status too: the first findings (2026-10-31) said only "79 answers were
- * 5xx", and nobody could tell which page without a dashboard. A 501 is left out: it is a site's contract
+ * Grouped by path and status, so a finding names the page. A 501 is left out: it is a site's contract
  * answer for a Carrel API it does not offer, and Carrel's conformance check asks for one every run.
  */
 export async function readServerErrors(

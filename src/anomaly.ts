@@ -2,10 +2,8 @@ import { slugify } from "@drdustinedwards/site-helpers/slug";
 import type { Finding } from "./watcher-detect";
 import { HOUR_MS } from "./time";
 
-// ANOMALY RULES ON THE AUDIT LOG (OWASP agentic hardening item 6, ASI10;
-// capsid/research/design-owasp-hardening.md; Dustin's D4 of 2026-10-03: a hit is a watcher
-// finding plus a Portal attention item, nothing more. No suspension and no revoke: that
-// is re-decided after two weeks of measured false positives. D5 dropped the path rule.)
+// ANOMALY RULES ON THE AUDIT LOG (capsid/research/design-owasp-hardening.md): a hit is a
+// watcher finding plus a Portal attention item, nothing more. No suspension and no revoke.
 //
 // Per minted agent (actor "agent:<name>", the watcher itself excepted), the last 24 hours
 // against the 14 days before them, from audit_log counted per actor, action and hour:

@@ -19,13 +19,12 @@ import { fromBase64Text } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
-// SHARED CODE: how far the centralization has got (job_584b4e7f2824; ruling
-// capsid/rulings/shared-homes-2026-10-06.md). For each shared package in configuration
+// SHARED CODE: how far the centralization has got (capsid/rulings/shared-homes-2026-10-06.md). For each shared package in configuration
 // (shared_packages, migrations/0036): its newest tag, the tag each app pins, how many
 // releases behind each app is, and how many known local copies are still in the apps.
 //
-// THE VERSIONS MODEL (Dustin, 2026-11-03: which Enarratio, Capsomer and devkit version each
-// site is pinned to, so a fix does not mean hunting through every repo). The apps are every
+// THE VERSIONS MODEL (which Enarratio, Capsomer and devkit version each
+// site is pinned to). The apps are every
 // repo system/model.json names, each read on its default branch through the GitHub App: one
 // recursive tree, then every package.json outside node_modules (up to MANIFESTS_PER_APP),
 // the lockfile that covers it (package-lock.json or pnpm-lock.yaml, src/lockfiles.ts), the

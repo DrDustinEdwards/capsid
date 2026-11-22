@@ -166,7 +166,7 @@ export function riskOf(files: readonly ChangedFile[]): Risk {
   };
 }
 
-// WORTH A REVIEWER (D5, Dustin 2026-10-09, option b). riskOf stays as it is: it routes
+// WORTH A REVIEWER (design D5). riskOf stays as it is: it routes
 // models, and for that a dependency bump or a backup document is reason enough for the
 // stronger model. It is too broad to decide where a second reader of the diff earns
 // its cost: over the last 100 merged capsid PRs it flagged about 7 in 10, mostly
@@ -294,14 +294,13 @@ export const ROUTING_RULES: readonly RoutingRule[] = [
   },
 ];
 
-// TRIAL ARMS (job_aef34f6835cd, 2026-10-10). A trial arm sends a fixed share of a kind's
+// TRIAL ARMS. A trial arm sends a fixed share of a kind's
 // routine jobs to another model, so the learning table has outcomes on both models to
 // compare. It switches no kind: the kind's rule above still names its model, and moving
 // a kind is a seat-approved edit to that rule, made when trialStatus says the evidence
-// supports it. Claude Haiku 5.5 (claude-haiku-5-5, released 2026-10-07; the "haiku" alias
-// since Claude Code 2.1.293) costs $0.10 in and $0.50 out per million tokens for prompts
+// supports it. Claude Haiku 5.5 (claude-haiku-5-5) costs $0.10 in and $0.50 out per million tokens for prompts
 // up to 100K tokens, against Sonnet 5.5's $2 and $10 (platform.claude.com models overview
-// and claude.com/pricing, read 2026-10-10). Mechanical edits already route to haiku, so
+// and claude.com/pricing). Mechanical edits already route to haiku, so
 // they have no arm.
 //
 // An arm keeps the rule's effort, so the comparison is of the model alone. A risky job,

@@ -18,8 +18,7 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 // query joins a job to what its driver did. A minted agent speaks that vocabulary as
 // `agent:<name>` (agentActor in src/agents-schema.ts), and the name is unique in the
 // agents table and never reused, so the string identifies exactly one credential. The
-// admin is `access:<email>` on the MCP login since it moved to Cloudflare Access
-// (docs/auth.md, 2026-09-27) and `github:<login>` on rows the old console wrote before it moved to Access.
+// admin is `access:<email>` on the MCP login (docs/auth.md) and `github:<login>` on older rows.
 const ACTOR_SHAPE = /^(access:|github:|agent:)/;
 
 export function actorShapeRefusal(action: string, actor: string): JobResult | null {

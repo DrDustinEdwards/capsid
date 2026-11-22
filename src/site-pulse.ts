@@ -6,8 +6,8 @@ import type { SiteProbe } from "./ops-types/sites";
 import { DAY_MS, utcDay } from "./time";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
-// THE FIVE-MINUTE PULSE (area 8, 2026-10-30). The watcher probes the sites half-hourly
-// for the Portal's rings and findings, and until this nothing told Dustin when a site went
+// THE FIVE-MINUTE PULSE The watcher probes the sites half-hourly
+// for the Portal's rings and findings; this tells Dustin when a site goes
 // down. On every tick the pulse probes each site's health route as the watcher does
 // (src/ops-snapshot.ts probeSite, the root only when that route fails) and keeps, per
 // site, how many probes in a row were down. Its alerts go out through src/push.ts, which
@@ -161,7 +161,7 @@ export async function sitePulseTick(
     if (pulse.down_since !== was)
       changed.push(`${site.namespace} ${pulse.down_since ? "down" : "back up"}`);
   }
-  // The daily uptime rows (area 8, U4). A failed write is logged and never stops the pulse,
+  // The daily uptime rows. A failed write is logged and never stops the pulse,
   // whose alerts matter more than one tick's count.
   try {
     await env.DB.batch(counts);

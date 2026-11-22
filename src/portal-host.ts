@@ -7,7 +7,7 @@
 // unchanged. On the Portal host a browser asking for /portal/... is sent to the same path
 // at the root (308), so an old link lands on the new address. The build's hashed files (/assets/...) are answered before this rewrite
 // (src/portal-app.ts portalAsset).
-// One exception: /health is the Worker's own health route on this host too (area 8, H1, round 2),
+// One exception: /health is the Worker's own health route on this host too,
 // so the Portal's address answers the shared health with the deployed sha without a sign-in.
 // It reports what mcp.dustinedwards.info/health reports, never a document. Cloudflare Access
 // in front of the host lets it through only with its own Bypass application for
@@ -55,7 +55,7 @@ export function portalHostRequest(request: Request): { redirect: Response } | { 
   if (underPortal) {
     const publicPath = publicPortalPath(url, path);
     // /portal//attacker.example would otherwise become a 308 to https://attacker.example/,
-    // carrying an OAuth code or a phishing visitor off the host (Grok audit 2026-10, C1).
+    // carrying an OAuth code or a phishing visitor off the host.
     if (!isSameOriginPath(publicPath))
       return { redirect: new Response("Not found", { status: 404 }) };
     const target = new URL(publicPath + url.search, url.origin);

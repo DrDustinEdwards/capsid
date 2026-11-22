@@ -65,7 +65,7 @@ const apiHandler = {
     const url = new URL(request.url);
     // The token must have been issued for this host's resource (RFC 8707), re-checked with
     // the family's shared check against the resource this host serves, not only the one the
-    // provider was built with (area 11, A5). Capsid Admin on /mcp/admin takes the /mcp token.
+    // provider was built with. Capsid Admin on /mcp/admin takes the /mcp token.
     const wrongAudience = audienceRefusal(auth, MCP_URL, [SCOPES.read]);
     if (wrongAudience) return wrongAudience;
     const adminRoute = url.pathname === ADMIN_MCP_ROUTE;
@@ -155,7 +155,7 @@ function providerFor(env: Env): OAuthProvider<Env> {
     scopesSupported: SCOPES.all,
     requiredScopes: [SCOPES.read],
     resourceMetadata: { resource: MCP_URL, resource_name: "Capsid" },
-    // CIMD first (capsid/mcp-wrapper-standard.md, amendment 2026-09-27): a client's id is
+    // CIMD first (capsid/mcp-wrapper-standard.md): a client's id is
     // the URL of its metadata document. The provider advertises CIMD only while the
     // global_fetch_strictly_public compatibility flag is set (wrangler.jsonc.example).
     clientIdMetadataDocumentEnabled: true,
@@ -191,8 +191,7 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
   // /x there is /portal/x here, and an old /portal address redirects to the root. It
   // runs FIRST, before the OAuth provider, because the provider answers its own routes
   // (/mcp, /token, /authorize, /register, its metadata) without reaching the routes
-  // handler. Behind the provider, /mcp on the Portal host was the MCP endpoint, and
-  // live gate 7 rolled #218's deploy back (run 36863432268).
+  // handler. Behind the provider, /mcp on the Portal host would be taken as the MCP endpoint.
   const { hostname, pathname: asked } = new URL(original.url);
   const secured = (response: Response, path: string) =>
     withSecurityHeaders(withCacheDefault(response, path), original);
@@ -253,8 +252,8 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
     if (foreign) return secured(foreign, pathname);
   }
   if (pathname === "/register" && request.method === "POST") {
-    // A registration the allowlist refuses counts only per address, never toward the daily 30
-    // (site-runtime 0.165.0), so the live gate's unlisted-redirect probe cannot spend it (run 41245505021).
+    // A registration the allowlist refuses counts only per address, never toward the daily 30,
+    // so the live gate's unlisted-redirect probe cannot spend it.
     const limited = await registrationLimited(request, env.OAUTH_KV, dcrAllowlist(env));
     if (limited) return secured(limited, pathname);
   }
@@ -265,7 +264,7 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
   );
 }
 
-// The protected resource metadata lists every scope the resource takes (area 11, A1), read
+// The protected resource metadata lists every scope the resource takes, read
 // and write. The provider publishes its requiredScopes there, which are also the 401's
 // scope=, the least a client asks for first; that stays the read scope alone, so a client
 // that follows the challenge meets the consent page with the write box unticked.
@@ -284,9 +283,9 @@ async function withEveryScope(response: Response): Promise<Response> {
 }
 
 // Every request writes one `request` line (site-runtime withRequestLog: cf-ray, method, path
-// without the query, status, ms and the deployed sha; area 8, L3), and a 404 to a GET is
+// without the query, status, ms and the deployed sha), and a 404 to a GET is
 // counted per path, referring host and UTC day in page_404_daily (site-runtime
-// countNotFound, migrations/0053; area 8, N1), written in waitUntil so it never holds the
+// countNotFound, migrations/0053), written in waitUntil so it never holds the
 // answer. The backup prunes the counts at 90 days (src/backup.ts).
 // Errors go to Sentry (site-runtime ./sentry): a throw, and every error-level log line.
 export default withSiteSentry({
@@ -307,7 +306,7 @@ export default withSiteSentry({
     const cron = controller.cron;
     // Every key wrangler.jsonc.example registers has a branch below. A key with none (a
     // trigger added in the dashboard, or one renamed here and not there) would run nothing
-    // silently, so it is logged as an error (area 8, C2).
+    // silently, so it is logged as an error.
     if (cron !== BACKUP_CRON && cron !== TICK_CRON) {
       logEvent(
         "CRON_KEY_UNKNOWN",
@@ -319,7 +318,7 @@ export default withSiteSentry({
     if (cron === BACKUP_CRON) {
       // Each its own task (src/site-jobs.ts CAPSID_JOBS, the list the run_job control runs
       // now), so a throw in one cannot stop the others: the dump under its lease, the
-      // tool-call log's daily copy to AUDIT_BUCKET (area 11, L6-L7), and the supersede pass
+      // tool-call log's daily copy to AUDIT_BUCKET, and the supersede pass
       // (design-hybrid-search 3.4).
       for (const job of CAPSID_JOBS) ctx.waitUntil(runCapsidJob(env, job, true));
     }

@@ -310,7 +310,7 @@ export function parseEvidence(
 // The pull requests a finished job names: evidence.prs, plus the job's result_ref when it
 // is a pull request URL. A session that sends only result_ref (the seat closing a job it
 // took, or a driver that left evidence out) named its pull request all the same, and
-// GitHub, not the sender, is the authority on it (job_d5262df1dc32). Deduplicated, in
+// GitHub, not the sender, is the authority on it. Deduplicated, in
 // order, so the pull request named twice is read and counted once.
 export function namedPrUrls(
   evidence: JobEvidence | undefined,

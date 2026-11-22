@@ -13,7 +13,7 @@ import {
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { DAY_MS } from "./time";
-// Park: a job that is wanted but not now (job_4ef99d687805, Dustin 2026-10-07), for
+// Park: a job that is wanted but not now, for
 // example one kept on his request until a decision comes back. A parked job is never
 // claimed (claim reads only queued rows), never planned (the overnight plan reads only
 // queued rows), and still listed and searchable: it keeps its row and its mirror.

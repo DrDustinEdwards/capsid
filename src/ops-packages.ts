@@ -7,14 +7,12 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { DAY_MS, isoWeek, utcDay } from "./time";
 import { callSignal } from "./call-signal";
 
-// The packages Capsid Portal watches (job_c6e4ab939a54). Ruled 2026-09-29: "Portal monitoring is optional and configured per install; packages panel
-// approved". Configured like the sites (src/ops-sites.ts): rows in D1 (ops_packages,
+// The packages Capsid Portal watches Configured like the sites (src/ops-sites.ts): rows in D1 (ops_packages,
 // migrations/0028) edited in the Portal's Settings view through the same preview and
 // perform. With no row, the watcher reads nothing for packages and the Portal hides the
 // Packages view.
 //
-// Every source below was checked against its own documentation on 2026-09-30, and the
-// response shapes against the live endpoints:
+// Source shapes, from each one's documentation:
 //   registry.npmjs.org/<name> with Accept: application/vnd.npm.install-v1+json, the
 //     abbreviated document: dist-tags, versions, modified; no time object
 //     (github.com/npm/registry, docs/responses/package-metadata.md).

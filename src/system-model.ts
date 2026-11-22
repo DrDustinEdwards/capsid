@@ -10,8 +10,7 @@ import { bounded } from "./limits";
 // it, never from the file itself.
 //
 // Every system is drawn whole, its parts and lines included, whether its repo is public
-// or private (Dustin, 2026-10-23: "do not exclude private repos", "fully wired just like
-// the public ones"). A private repo shows no link and no code map; nothing else differs.
+// or private. A private repo shows no link and no code map; nothing else differs.
 // The file is in a public repo, so it holds only what may be published: what a system is
 // for and what it is made of, never a secret, an id or an internal address.
 

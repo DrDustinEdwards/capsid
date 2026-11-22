@@ -48,7 +48,7 @@ export type TaskId =
 //   watcher        on the tick, every cadence_min minutes (src/watcher.ts); its
 //                  period is read from the watcher's own snapshot
 //
-// timeout_ms (area 8, C3) is given to the three a cron key starts: past it, runTask records
+// timeout_ms is given to the three a cron key starts: past it, runTask records
 // the run as threw ("timed out after N ms") and the invocation fails, so a hung run shows
 // in the ledger and on /health rather than holding the trigger silently. The work itself
 // cannot be canceled and may still finish. The tick gets four minutes, inside the five to
@@ -117,10 +117,8 @@ const STALE_PERIODS = 2;
 // How long the newest failure of a task without a period counts as current. Such a task
 // records a run only when it acts, so no later "ok" row may ever come to clear a failure:
 // doc-index stays silent while nothing changes, site-repair while no site drifts. Read
-// as current forever, one transient refusal (an AI Search timeout, a slow operator call)
-// held /health at warn for days after the cause was fixed. Best practice for event
-// alerts is a window the event ages out of (Prometheus increase(errors[window]) > 0; the
-// SRE workbook's "reset time": an alert that keeps firing after recovery gets ignored).
+// as current forever, one transient refusal would hold /health at warn after the cause
+// was fixed, so a failure ages out of a window instead.
 // A day is the longest retry among these tasks (the daily digest; site-repair retries every 30 minutes, up to AUTO_PER_DAY times), so a fault that
 // persists fails again, and is flagged again, before its last failure ages out.
 const EVENT_FAILURE_WINDOW_MS = DAY_MS;

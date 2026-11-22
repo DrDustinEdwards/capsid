@@ -64,7 +64,7 @@ export function pathProblem(path: string): string | null {
     return "path must not contain control characters (including newlines and tabs)";
   // SQL reads the archive with LIKE 'archive/%', which folds ASCII case, and JavaScript with
   // startsWith("archive/"), which does not. A path like Archive/x.md would be archived to one
-  // and live to the other, so only the exact prefix is accepted (Grok audit 2026-10-21, CA-4).
+  // and live to the other, so only the exact prefix is accepted.
   if (path.slice(0, 8).toLowerCase() === "archive/" && !path.startsWith("archive/")) {
     return "path must spell the archive prefix exactly 'archive/' (lowercase)";
   }
@@ -97,7 +97,7 @@ export const docPath = z.string().superRefine((value, ctx) => {
 export const bounded = (max: number) => z.string().max(max);
 
 // The fixed shapes a tool argument can declare as a pattern, so a client sees the shape
-// in the schema before it calls (area 11, T4). Each matches every value the store and
+// in the schema before it calls. Each matches every value the store and
 // GitHub hold today; a free-form string (a title, a query, a path) stays unpatterned.
 // A namespace is a lowercase slug, as every registered one is.
 export const nsName = bounded(MAX_NAMESPACE).regex(

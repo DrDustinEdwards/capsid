@@ -6,7 +6,7 @@ import { REPAIR_AUDIT_ACTION } from "./site-repair";
 import { callOperator, tokenSet, toolRefusal, type FetchLike } from "./site-operator";
 import { readStoredSecrets } from "./secret-presence";
 import { clip, readHealth } from "./site-watch";
-// THE CONVERGENCE VIEW (job_09e5f6cbf782): per site that opted in, what its own operator
+// THE CONVERGENCE VIEW per site that opted in, what its own operator
 // API says (sync_status: the repository count against D1, the search index and the Ask
 // index, and any named divergence) beside what its health route says per content type,
 // each failing check with the repair it maps to and whether Capsid may run it, and the

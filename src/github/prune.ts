@@ -2,7 +2,7 @@ import { readAllPages } from "@dustinedwards/site-runtime/github";
 import type { RepoEnv as Env } from "../env";
 import { encodePath, getDefaultBranch, ghFetch, invalidateRepoReads, resolveRepo } from "./client";
 
-// PRUNE MERGED BRANCHES (job_8779278b8e91, Dustin 2026-10-07). capsid_close_pr action delete_branch with merged:true
+// PRUNE MERGED BRANCHES. capsid_close_pr action delete_branch with merged:true
 // finds the branches whose work has landed and, only with confirm:true, deletes them. A branch
 // is pruned only when its LATEST pull request in this repo merged AND the branch tip is the
 // commit that pull request merged from, so a commit pushed after the merge is never lost.
@@ -49,7 +49,7 @@ export interface PruneCandidate {
   pr: number | null;
 }
 
-// Screenshot branches (job_9dbaf2ecfd2c): a pull request's images live on a branch of their
+// Screenshot branches: a pull request's images live on a branch of their
 // own, named shots/... or ...-shots, that no pull request has as its head. One is kept while
 // an open pull request's description names it or its tip, and is an orphan after that.
 const SHOTS_BRANCH = /^shots\/|-shots$/;
@@ -116,7 +116,7 @@ export function pruneVerdict(
       orphan: true,
     };
   // A list not read whole may hide a newer open pull request on the same head, so a
-  // delete waits until it can be read whole (Grok audit 2026-10-21, CA-17).
+  // delete waits until it can be read whole.
   if (!listsComplete)
     return {
       prune: false,

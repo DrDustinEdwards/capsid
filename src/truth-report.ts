@@ -75,7 +75,7 @@ export interface TruthInput {
 // A published decision older than this is worth re-reading. A prompt, not a defect.
 export const STALE_DECISION_DAYS = 180;
 
-// Consolidate when a namespace holds more than five unconsolidated documents. Capsid's own threshold; the portfolio conventions no longer state one.
+// Consolidate when a namespace holds more than five unconsolidated documents. Capsid's own threshold.
 export const UNCONSOLIDATED_CADENCE = 5;
 
 // Matches a repo path in prose: at least one slash, a file extension, and no

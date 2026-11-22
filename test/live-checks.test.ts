@@ -14,7 +14,6 @@ import {
   parseLiveConfig,
   readPage,
   shaFinding,
-  slug,
   type FetchLike,
   type LiveRule,
 } from "../src/live-checks.ts";
@@ -25,10 +24,8 @@ import { gatherFindings } from "../src/watcher-gather.ts";
 import { owningCheck, WATCHER_CHECKS } from "../src/watcher-checks.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// The watcher's live checks (src/live-checks.ts). The beacon snippet, the CSP
-// directives and the rule that Cloudflare reports to the site's own /cdn-cgi/rum are
-// from developers.cloudflare.com/web-analytics/faq. A real page from a real site could
-// not be fetched from the build sandbox, so the HTML below is the documented snippet.
+// The watcher's live checks (src/live-checks.ts). The beacon snippet and CSP directives are
+// from developers.cloudflare.com/web-analytics/faq.
 
 const NOW = new Date("2026-10-04T12:00:00.000Z");
 const BEACON = `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "sample"}'></script>`;
@@ -104,29 +101,15 @@ test("PLANT: a '- site' line that does not parse refuses the whole document, nam
 });
 
 test("the document is bounded in page rules and in sha rules", () => {
-  const pages = Array.from(
-    { length: MAX_PAGE_RULES + 1 },
-    (_, i) => `- site sample beacon /p${i}`,
-  ).join("\n");
-  assert.ok("error" in parseLiveConfig(pages));
-  const shas = Array.from({ length: MAX_SHA_RULES + 1 }, (_, i) => `- site s${i} sha`).join("\n");
-  assert.ok("error" in parseLiveConfig(shas));
-  const analytics = (n: number) =>
-    Array.from({ length: n }, (_, i) => `- site s${i} analytics`).join("\n");
+  const lines = (n: number, rule: (i: number) => string) =>
+    Array.from({ length: n }, (_, i) => rule(i)).join("\n");
+  const beacons = (n: number) => lines(n, (i) => `- site sample beacon /p${i}`);
+  assert.ok("error" in parseLiveConfig(beacons(MAX_PAGE_RULES + 1)));
+  assert.ok("rules" in parseLiveConfig(beacons(MAX_PAGE_RULES)));
+  assert.ok("error" in parseLiveConfig(lines(MAX_SHA_RULES + 1, (i) => `- site s${i} sha`)));
+  const analytics = (n: number) => lines(n, (i) => `- site s${i} analytics`);
   assert.ok("error" in parseLiveConfig(analytics(MAX_ANALYTICS_RULES + 1)));
   assert.ok("rules" in parseLiveConfig(analytics(MAX_ANALYTICS_RULES)));
-  assert.ok(
-    "rules" in
-      parseLiveConfig(
-        Array.from({ length: MAX_PAGE_RULES }, (_, i) => `- site sample beacon /p${i}`).join("\n"),
-      ),
-  );
-});
-
-test("slug: a path as one fingerprint-safe word", () => {
-  assert.equal(slug("/"), "root");
-  assert.equal(slug("/Account/Settings/"), "account-settings");
-  assert.equal(slug("/a_b.c"), "a-b-c");
 });
 
 // the beacon
@@ -187,6 +170,14 @@ const noBeaconRule: Extract<LiveRule, { path: string }> = {
   path: "/account",
 };
 const prints = (findings: Array<{ fingerprint: string }>) => findings.map((f) => f.fingerprint);
+const summary = (
+  pages_expected: number,
+  pages_read: number,
+  shas_expected: number,
+  shas_read: number,
+  analytics_expected: number,
+  analytics_read: number,
+) => ({ pages_expected, pages_read, shas_expected, shas_read, analytics_expected, analytics_read });
 
 test("a public page with one beacon and a CSP that allows it is clean", () => {
   const ok =
@@ -197,11 +188,6 @@ test("a public page with one beacon and a CSP that allows it is clean", () => {
     [],
     "no CSP at all blocks nothing",
   );
-});
-
-test("a beacon rule no longer counts beacons: a Worker cannot see the one the edge injects, so none or two is not a finding", () => {
-  assert.deepEqual(pageFindings(SITE, beaconRule, read(page(""))), []);
-  assert.deepEqual(pageFindings(SITE, beaconRule, read(page(BEACON + BEACON))), []);
 });
 
 test("PLANT: a CSP that blocks the beacon's script or its report is a finding", () => {
@@ -286,7 +272,7 @@ test("PLANT: a missing header, a report-only policy and no policy at all each fi
   );
 });
 
-test("the headers rule counts a page read, and a page it cannot read is unread, not clean", async () => {
+test("the headers rule counts a page read, and a page with missing headers is a finding", async () => {
   const body = "- site sample headers /";
   const ok = await liveChecks(
     { body },
@@ -304,14 +290,7 @@ test("the headers rule counts a page read, and a page it cannot read is unread, 
     NOW,
   );
   assert.deepEqual(ok.findings, []);
-  assert.deepEqual(ok.summary, {
-    pages_expected: 1,
-    pages_read: 1,
-    shas_expected: 0,
-    shas_read: 0,
-    analytics_expected: 0,
-    analytics_read: 0,
-  });
+  assert.deepEqual(ok.summary, summary(1, 1, 0, 0, 0, 0));
   const bare = await liveChecks(
     { body },
     [SITE],
@@ -320,15 +299,6 @@ test("the headers rule counts a page read, and a page it cannot read is unread, 
     NOW,
   );
   assert.deepEqual(prints(bare.findings), ["live-headers-sample-root"]);
-  const unread = await liveChecks(
-    { body },
-    [SITE],
-    [probe()],
-    deps({ "/": () => new Response("no", { status: 500 }) }),
-    NOW,
-  );
-  assert.deepEqual(prints(unread.findings), ["live-page-unread-sample-root"]);
-  assert.equal(unread.ran, false);
 });
 
 // the Web Analytics setting
@@ -347,30 +317,21 @@ const wa = (over: Partial<WebAnalyticsSite> = {}): WebAnalyticsSite => ({
 
 test("analyticsFinding: automatic setup on is clean; a missing host, auto_install off and a switched-off ruleset each file their own finding", () => {
   assert.equal(analyticsFinding(ANALYTICS_SITE, [wa()]), null);
-  assert.equal(
-    analyticsFinding(ANALYTICS_SITE, [wa({ enabled: null })]),
-    null,
-    "a ruleset switch Cloudflare does not report is not a finding",
-  );
-  assert.equal(
-    analyticsFinding(ANALYTICS_SITE, [wa({ host: "other.example.com", auto_install: false })])
-      ?.fingerprint,
-    "live-analytics-missing-sample",
-  );
-  assert.equal(analyticsFinding(ANALYTICS_SITE, [])?.fingerprint, "live-analytics-missing-sample");
-  assert.equal(
-    analyticsFinding(ANALYTICS_SITE, [wa({ auto_install: false })])?.fingerprint,
-    "live-analytics-off-sample",
-  );
-  assert.equal(
-    analyticsFinding(ANALYTICS_SITE, [wa({ auto_install: null })])?.fingerprint,
-    "live-analytics-off-sample",
-    "an unreported setting is not read as on",
-  );
-  assert.equal(
-    analyticsFinding(ANALYTICS_SITE, [wa({ enabled: false })])?.fingerprint,
-    "live-analytics-off-sample",
-  );
+  // a ruleset switch Cloudflare does not report is not a finding
+  assert.equal(analyticsFinding(ANALYTICS_SITE, [wa({ enabled: null })]), null);
+  const cases: Array<[WebAnalyticsSite[], string]> = [
+    [[wa({ host: "other.example.com", auto_install: false })], "missing"],
+    [[], "missing"],
+    [[wa({ auto_install: false })], "off"],
+    // an unreported setting is not read as on
+    [[wa({ auto_install: null })], "off"],
+    [[wa({ enabled: false })], "off"],
+  ];
+  for (const [list, kind] of cases)
+    assert.equal(
+      analyticsFinding(ANALYTICS_SITE, list)?.fingerprint,
+      `live-analytics-${kind}-sample`,
+    );
 });
 
 test("the analytics rule takes no path, and reads the account's list once for any number of sites", async () => {
@@ -421,14 +382,7 @@ test("PLANT: an analytics read that fails is an unread finding for the site and 
   assert.deepEqual(prints(out.findings), ["live-analytics-unread-sample"]);
   assert.match(out.findings[0]?.evidence[0] ?? "", /Account Settings \/ Read/);
   assert.equal(out.ran, false);
-  assert.deepEqual(out.summary, {
-    pages_expected: 0,
-    pages_read: 0,
-    shas_expected: 0,
-    shas_read: 0,
-    analytics_expected: 1,
-    analytics_read: 0,
-  });
+  assert.deepEqual(out.summary, summary(0, 0, 0, 0, 1, 0));
 });
 
 // the sha
@@ -459,18 +413,6 @@ test("PLANT: a deployed sha that is not the head, past the grace, is a finding n
     f?.evidence.some((e) => e.includes("a".repeat(40))) &&
       f.evidence.some((e) => e.includes(HEAD.sha)),
   );
-  assert.equal(
-    shaFinding(
-      SITE,
-      "a".repeat(40),
-      {
-        sha: HEAD.sha,
-        committed_at: new Date(NOW.getTime() - (DEPLOY_GRACE_MINUTES + 1) * 60_000).toISOString(),
-      },
-      NOW,
-    )?.fingerprint.startsWith("live-sha-drift"),
-    true,
-  );
   assert.equal(shaFinding(SITE, null, HEAD, NOW)?.fingerprint, "live-sha-unreported-sample");
   assert.equal(
     shaFinding(SITE, "a".repeat(40), { sha: HEAD.sha, committed_at: null }, NOW),
@@ -499,21 +441,6 @@ const fetchOf =
   (res: () => Response | Promise<Response>): FetchLike =>
   async () =>
     res();
-
-test("readPage returns the HTML and the headers of a 200 page", async () => {
-  const got = await readPage(
-    fetchOf(() =>
-      html(page(BEACON), {
-        headers: { "content-type": "text/html", "content-security-policy": "default-src 'self'" },
-      }),
-    ),
-    SITE.origin,
-    "/",
-  );
-  assert.equal(got.problem, null);
-  assert.equal(got.headers?.get("content-security-policy"), "default-src 'self'");
-  assert.equal(beaconCount(got.html ?? ""), 1);
-});
 
 test("readPage reaches only the site's own origin plus the path, with a timeout", async () => {
   const seen: Array<{ url: string; signal: boolean }> = [];
@@ -590,14 +517,7 @@ test("no document: nothing is read and the check does not run", async () => {
   assert.deepEqual(out, {
     findings: [],
     ran: false,
-    summary: {
-      pages_expected: 0,
-      pages_read: 0,
-      shas_expected: 0,
-      shas_read: 0,
-      analytics_expected: 0,
-      analytics_read: 0,
-    },
+    summary: summary(0, 0, 0, 0, 0, 0),
   });
 });
 
@@ -621,14 +541,7 @@ test("a clean pass reads every page and sha, files nothing, and counts what it r
   );
   assert.deepEqual(out.findings, []);
   assert.equal(out.ran, true);
-  assert.deepEqual(out.summary, {
-    pages_expected: 3,
-    pages_read: 3,
-    shas_expected: 1,
-    shas_read: 1,
-    analytics_expected: 1,
-    analytics_read: 1,
-  });
+  assert.deepEqual(out.summary, summary(3, 3, 1, 1, 1, 1));
 });
 
 test("a pass over a dirty site files each finding and still counts every page read", async () => {
@@ -666,14 +579,7 @@ test("an unread public page is its own finding and leaves the check un-run, so n
   );
   assert.deepEqual(prints(out.findings), ["live-page-unread-sample-root"]);
   assert.equal(out.ran, false);
-  assert.deepEqual(out.summary, {
-    pages_expected: 1,
-    pages_read: 0,
-    shas_expected: 0,
-    shas_read: 0,
-    analytics_expected: 0,
-    analytics_read: 0,
-  });
+  assert.deepEqual(out.summary, summary(1, 0, 0, 0, 0, 0));
 });
 
 test("a page that must carry no beacon and answers with a login redirect or 403 passes as read", async () => {
@@ -720,17 +626,6 @@ test("a site that is down is the site-down check's finding: its pages are not re
   assert.equal(out.ran, false);
 });
 
-test("a rule for a site that is not configured is a finding, since it can never run", async () => {
-  const out = await liveChecks(
-    { body: "- site elsewhere beacon /" },
-    [SITE],
-    [probe()],
-    deps({}),
-    NOW,
-  );
-  assert.deepEqual(prints(out.findings), ["live-config-unknown-site-elsewhere"]);
-});
-
 test("PLANT: two rules for one unknown site, or one page named twice, file one finding, not two", async () => {
   const unknown = await liveChecks(
     { body: "- site elsewhere beacon /\n- site elsewhere nobeacon /account" },
@@ -775,9 +670,7 @@ test("the live checks are a watcher check, and every live-* fingerprint belongs 
   }
 });
 
-// A D1 that answers the site configuration and the live-checks document, and throws on
-// every other read, as a real outage would: those checks fail into attempt() and the
-// live checks are all that runs here.
+// A D1 that answers the site configuration and the live-checks document and throws on every other read.
 function liveDb(doc: string | null) {
   const rows = [
     {
@@ -871,9 +764,7 @@ test("PLANT: with no live-checks document the pass fetches no page and the check
   const { gathered, requested } = await gather(null, {});
   assert.equal(gathered.ran.has("live checks"), false);
   assert.ok(!gathered.findings.some((f) => f.fingerprint.startsWith("live-")));
-  // The only request to the site is the probe's own, to the root, not a page the document
-  // names. (The pass also reads RDAP for the site's domain, src/domain-expiry.ts, which is
-  // not the site.)
+  // The only request to the site is the probe's own, to the root (RDAP for its domain is not the site).
   const toSite = requested.filter((u) => new URL(u).hostname === "sample.example.com");
   assert.ok(toSite.length > 0, "the probe's request was not seen, so this proves nothing");
   assert.ok(

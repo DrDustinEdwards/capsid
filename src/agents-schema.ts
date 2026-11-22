@@ -20,7 +20,7 @@ export const SCOPE_FLAGS = ["can_merge", "can_touch_protected"] as const;
 export type ScopeFlag = (typeof SCOPE_FLAGS)[number];
 
 // Flags that gated only tools since removed (capsid_change_repo, capsid_open_pr and
-// capsid_run_ci, Dustin, 2026-10-31). Stored agent rows and queued jobs may still name
+// capsid_run_ci). Stored agent rows and queued jobs may still name
 // them, so every reader skips them rather than refusing the row.
 export const RETIRED_FLAGS: readonly string[] = [
   "can_direct_write",

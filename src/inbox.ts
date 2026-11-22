@@ -14,7 +14,7 @@ import { plural } from "@drdustinedwards/site-helpers/text";
 import { JOB_DOC_PREFIX } from "./jobs-schema";
 import { HOUR_MS, MINUTE_MS, timeMs } from "./time";
 
-// "WHAT NEEDS DUSTIN, PER APP" (job_84e901d8eb71, Dustin 2026-10-06). The shared admin
+// "WHAT NEEDS DUSTIN, PER APP". The shared admin
 // shell shows a badge per app and a combined inbox count; Capsid answers it once, so no
 // app queries another. Everything here is read from what the queue, auto-merge and the
 // watcher already keep; this module only gathers and counts. It writes nothing.
@@ -52,8 +52,7 @@ const WAITING_ON_PERSON: ReadonlySet<InboxKind> = new Set([
 
 // A claim never expires and nothing releases one on its own (migrations/0044 and 0061: no
 // leases). A claimed job whose audit trail has been quiet this long is shown to the seat,
-// who decides whether its holder is gone (release) or still working (Dustin, 2026-11-17:
-// "a notice, never an auto-release"). Longer than an overnight run, which can work a job
+// who decides whether its holder is gone (release) or still working: a notice, never an auto-release. Longer than an overnight run, which can work a job
 // for 8 hours without a transition.
 export const STALE_CLAIM_MS = 24 * HOUR_MS;
 // The tick returns a due parked job within five minutes (src/jobs-park.ts). One still
@@ -123,7 +122,7 @@ const CLASS_WORDS: Record<MergeClass, string> = {
 /** An auto-merge hold as an inbox title, in plain words: what held it, then what it takes.
  *  A visual pull request one tap would merge says it waits for his look, whichever check
  *  stopped it first: a session's visual PR usually names no job, and "names no job" hid
- *  that there was something to look at (job_0368576da167). */
+ *  that there was something to look at. */
 export function prHoldTitle(
   a: Pick<AwaitingSeat, "number" | "failed" | "class" | "visual">,
 ): string {
@@ -131,9 +130,8 @@ export function prHoldTitle(
   return `PR #${a.number} waits for you: ${why}${a.class ? ` (${CLASS_WORDS[a.class]})` : ""}`;
 }
 
-// A blocked job whose block is already answered is not waiting on anyone (Dustin's review of
-// 2026-10-11: the inbox kept a migration the seat had applied, and a job whose pull requests
-// had merged). Two facts the Worker already holds settle it: every pull request it names is
+// A blocked job whose block is already answered is not waiting on anyone (for example a migration the
+// seat had applied, or a job whose pull requests had merged). Two facts the Worker already holds settle it: every pull request it names is
 // merged or closed, as the merge-resume step last read them after the job last changed
 // (src/stale-jobs.ts, the same test as the stale view's prs-settled), or every migration
 // file its block names (the command is in its summary, src/jobs-holder.ts) is in d1_migrations,

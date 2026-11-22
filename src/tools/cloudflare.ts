@@ -11,8 +11,7 @@ const ZONE_NAME = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{
 export function defineCloudflareOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
 
-  // Cloudflare Access and Email Routing, read. Ruled 2026-09-29, "Capsid MCP roadmap,
-  // build or don't build". Admin only in whole: it reads the
+  // Cloudflare Access and Email Routing, read. Admin only in whole: it reads the
   // account's login gates and mail routes, which span every namespace. TOOL_GRANTS in
   // src/scope.ts states it and the registrar refuses anyone else before this handler
   // runs. It reads only, through src/ops-cloudflare-config.ts, which copies named

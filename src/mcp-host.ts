@@ -1,5 +1,4 @@
-// The MCP endpoint on the family domain ("one address pattern for the family";
-// job_2f9671f89e89, approved as a same-day cut):
+// The MCP endpoint on the family domain ("one address pattern for the family"):
 // https://mcp.dustinedwards.info, a Custom Domain on this Worker.
 //
 // That host serves the machine surface and nothing else: the MCP endpoints, the OAuth
@@ -7,7 +6,7 @@
 // and bench endpoints, /health and the CSP report sink. Any other path there is the plain 404, so
 // the host never answers with the Portal or a page; the Portal has its own host
 // (src/portal-host.ts). It runs first in the Worker's fetch, with the Portal's rewrite,
-// before the OAuth provider (the lesson of #226).
+// before the OAuth provider.
 
 export const MCP_HOST = "mcp.dustinedwards.info";
 export const MCP_URL = `https://${MCP_HOST}/mcp`;
@@ -39,7 +38,7 @@ const MCP_HOST_PATHS = new Set([
   "/public/versions/v1.json",
   "/oauth/clients/verify-live.json",
   "/reports/signed-in-security.json",
-  // site-runtime's owner page (./owner-page, area 11 A15 and L9): your grants with Revoke, and the
+  // site-runtime's owner page (./owner-page): your grants with Revoke, and the
   // tool-call log. Its POSTs are under /owner/.
   "/owner",
 ]);

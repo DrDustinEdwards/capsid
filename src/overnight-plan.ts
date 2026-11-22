@@ -16,13 +16,13 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 
 // THE OVERNIGHT PLAN AND THE MORNING DIGEST (capsid/research/design-automation-for-speed.md,
-// D2, ruled by Dustin 2026-10-04). Both are read-only views through `capsid_work_jobs` action `list`
+// D2). Both are read-only views through `capsid_work_jobs` action `list`
 // (view "plan" and view "digest"), so no tool is added and a hand-started VS Code tab reads
 // them with the credential it already holds.
 //
 // THE PLAN says what an overnight run of about eight hours should work, per repo:
 //   - queued jobs, in priority order, that fit the budget. A gated job is planned too
-//     (conventions 2.3, Dustin 2026-10-07: gates apply to risky steps, not whole jobs):
+//     (conventions 2.3: gates apply to risky steps, not whole jobs):
 //     the session does its ordinary work, lists each risky step in the pull request for
 //     the seat, and moves on. It is marked `gated` so the session knows to. A parked job
 //     is never read: the query takes only queued rows;

@@ -562,6 +562,32 @@ export async function readCloudflare(
 // last pass stored (src/secret-presence.ts).
 const SECRETS_PERMISSION = "Account / Workers Scripts / Read";
 
+/** The `name` of every row of a Cloudflare list, nothing else: whatever else a row carries
+ *  is dropped here, unread. A 403 names the permission the token lacks. */
+async function readNames(
+  fetchImpl: FetchLike,
+  token: string,
+  url: string,
+  what: string,
+  pageSize: number,
+  permission: string,
+): Promise<string[]> {
+  let rows: unknown[];
+  try {
+    rows = await cfGetAll(fetchImpl, token, url, what, pageSize);
+  } catch (err) {
+    if (err instanceof CfReadError && err.status === 403) {
+      throw new Error(
+        `${what} was refused with 403: CF_OPS_TOKEN lacks ${permission}. Cloudflare said: ${err.message}`,
+      );
+    }
+    throw err;
+  }
+  return rows
+    .map((r) => (r && typeof r === "object" ? (r as { name?: unknown }).name : null))
+    .filter((n): n is string => typeof n === "string" && n.length > 0);
+}
+
 /** GET /accounts/{id}/workers/scripts/{script}/secrets: the names. A 403 names the
  *  permission the token lacks. */
 export async function readSecretNames(
@@ -571,28 +597,14 @@ export async function readSecretNames(
   script: string,
 ): Promise<string[]> {
   if (!SCRIPT_NAME.test(script)) throw new Error(`'${script}' is not a Worker script name`);
-  const what = `the secrets list of ${script}`;
-  let rows: unknown[];
-  try {
-    rows = await cfGetAll(
-      fetchImpl,
-      token,
-      `${CF_API}/accounts/${encodeURIComponent(account)}/workers/scripts/${encodeURIComponent(script)}/secrets`,
-      what,
-      100,
-    );
-  } catch (err) {
-    if (err instanceof CfReadError && err.status === 403) {
-      throw new Error(
-        `${what} was refused with 403: CF_OPS_TOKEN lacks ${SECRETS_PERMISSION}. Cloudflare said: ${err.message}`,
-      );
-    }
-    throw err;
-  }
-  // The name only: whatever else a row carries is dropped here, unread.
-  return rows
-    .map((r) => (r && typeof r === "object" ? (r as { name?: unknown }).name : null))
-    .filter((n): n is string => typeof n === "string" && n.length > 0);
+  return readNames(
+    fetchImpl,
+    token,
+    `${CF_API}/accounts/${encodeURIComponent(account)}/workers/scripts/${encodeURIComponent(script)}/secrets`,
+    `the secrets list of ${script}`,
+    100,
+    SECRETS_PERMISSION,
+  );
 }
 
 // The Access applications' names, for a blocked job's "check: access app <name>" line
@@ -607,25 +619,12 @@ export async function readAccessAppNames(
   token: string,
   account: string,
 ): Promise<string[]> {
-  const what = "the Access applications list";
-  let rows: unknown[];
-  try {
-    rows = await cfGetAll(
-      fetchImpl,
-      token,
-      `${CF_API}/accounts/${encodeURIComponent(account)}/access/apps`,
-      what,
-      50,
-    );
-  } catch (err) {
-    if (err instanceof CfReadError && err.status === 403) {
-      throw new Error(
-        `${what} was refused with 403: CF_OPS_TOKEN lacks ${ACCESS_PERMISSION}. Cloudflare said: ${err.message}`,
-      );
-    }
-    throw err;
-  }
-  return rows
-    .map((r) => (r && typeof r === "object" ? (r as { name?: unknown }).name : null))
-    .filter((n): n is string => typeof n === "string" && n.length > 0);
+  return readNames(
+    fetchImpl,
+    token,
+    `${CF_API}/accounts/${encodeURIComponent(account)}/access/apps`,
+    "the Access applications list",
+    50,
+    ACCESS_PERMISSION,
+  );
 }

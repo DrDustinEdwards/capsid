@@ -186,14 +186,14 @@ export async function handleHealth(env: Env): Promise<Response> {
     taskCheck(env),
   ];
   if (env.MEDIA) checks.push({ ...r2Check("media", env.MEDIA), level: "warn" });
-  // The tool-call log's copies (area 8, H5): one head of a fixed key, a class B read. Warn,
+  // The tool-call log's copies: one head of a fixed key, a class B read. Warn,
   // like MEDIA: the daily copy retries on its next run, and tool-call-log below warns when
   // rows go uncopied for two days.
   if (env.AUDIT_BUCKET)
     checks.push({ ...r2Check("audit_bucket", env.AUDIT_BUCKET), level: "warn" });
   if (env.APP_KV) checks.push({ ...kvCheck("app_kv", env.APP_KV), level: "warn" });
   if (env.OAUTH_KV) checks.push({ ...kvCheck("oauth_kv", env.OAUTH_KV), level: "warn" });
-  // The two Durable Objects (area 8, H5), warn: a bound namespace mints an id, and no
+  // The two Durable Objects, warn: a bound namespace mints an id, and no
   // object is woken. Without RATE_LIMITER the limited routes refuse, and without
   // TOOL_CALL_LOG a tool call goes unlogged; the store still answers, so neither is a 503.
   // Left out: AI_SEARCH, because every read of it is a billed query and the hybrid search
@@ -203,10 +203,10 @@ export async function handleHealth(env: Env): Promise<Response> {
     durableObjectCheck("rate_limiter", env.RATE_LIMITER),
     durableObjectCheck("tool_call_log", env.TOOL_CALL_LOG),
   );
-  // The watcher's send_email binding (area 8, H5), warn: without it a red or green mail is not sent and the
+  // The watcher's send_email binding, warn: without it a red or green mail is not sent and the
   // finding still opens in Incidents.
   checks.push(emailCheck("email", env.EMAIL));
-  // What is in the log (area 11, L8), warn: a call started and never finished, a spike in
+  // What is in the log, warn: a call started and never finished, a spike in
   // calls, or rows not copied to AUDIT_BUCKET for two days.
   if (env.TOOL_CALL_LOG) checks.push(auditLogCheck(env));
   const response = await healthResponse({

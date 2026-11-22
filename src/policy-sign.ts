@@ -213,8 +213,7 @@ async function commitSigned(
   return { ok: true, signed, signature, sha256: digest };
 }
 
-// sign_policy_change (docs/design/design-merge-pipeline.md section 7, PR 10; Dustin's
-// DECIDE 9 of 2026-10-09): promoting a merge unit to auto, or removing one, writes the
+// sign_policy_change (docs/design/design-merge-pipeline.md section 7, PR 10): promoting a merge unit to auto, or removing one, writes the
 // next version of the auto-merge policy and signs it in one admin control. It widens
 // autonomy, so the perform needs the new version number typed as confirm. It edits only
 // two things in the stored, signed policy: the version line, and one line of the

@@ -1,7 +1,6 @@
 import { inTestDir, type PrFileRow } from "./github/pr-files";
 
-// Narrow test protection on complete (docs/work-queue.md, "CI on complete"; Grok design
-// review 2026-10-23, build step 5). Green CI shows nothing when the change took away the
+// Narrow test protection on complete (docs/work-queue.md, "CI on complete"). Green CI shows nothing when the change took away the
 // test that would have failed, so complete is refused when a pull request removes a test
 // file, removes or renames a test, or adds a skip, unless the job's body names that file
 // or test. Only these three: editing a test's body is ordinary work, and is left to the

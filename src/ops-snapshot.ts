@@ -19,9 +19,8 @@ import { MINUTE_MS } from "./time";
 import { callSignal } from "./call-signal";
 
 // The watcher's pass, kept (capsid/research/design-ops-console.md, PR 1 of the Watch
-// Floor build). Until this, a pass kept only its timestamp: every check's outcome, the
-// Amazon backup copy's report, and each repo's latest CI run were computed and
-// thrown away. The dashboard reads this one KV value instead of assembling the same
+// Floor build). Every check's outcome, the Amazon backup copy's report and each repo's
+// latest CI run are kept in this one KV value, so the dashboard does not assemble the same
 // facts from about a hundred reads per load.
 
 export const OPS_SNAPSHOT_KEY = "ops:snapshot";
@@ -222,7 +221,7 @@ export async function probeSite(
       error: root.error,
     };
   }
-  // The home page is read on every pass, beside the health route (U1, round 2): a health
+  // The home page is read on every pass, beside the health route: a health
   // route can pass while the page visitors load fails. An API-only host answers 404 at its
   // root, so only no answer or a 5xx counts against it. A caller that reads a page itself
   // (src/site-check.ts) passes home: false, and the root is then read only on a failure.

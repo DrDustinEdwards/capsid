@@ -103,7 +103,7 @@ export async function latestResumeNote(
 }
 
 // Every resume note a driver is handed, together, and no more than this many bytes of
-// them: a job resumed fifteen times (job_5765103c658f, 2026-09-26) carried its PR order
+// them: a job resumed fifteen times carried its PR order
 // and rulings in the early notes, which "the latest only" lost.
 const RESUME_NOTES_MAX_BYTES = 64 * 1024;
 // Rows read for it, so one job with a very long history is one bounded read.

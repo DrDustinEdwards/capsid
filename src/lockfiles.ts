@@ -12,7 +12,7 @@
 //     directory ("." for the root), each dependency with a `specifier` and a `version`.
 //     A git dependency's version is its tarball URL with peers in parentheses; the
 //     version number is under `packages`, keyed "<name>@<that URL>"
-//     (pnpm.io/git, the lockfile section; checked against Foxing's lockfile 2026-11-03).
+//     (pnpm.io/git, the lockfile section).
 // YAML (pnpm's lockfile, the workflows) is read with the `yaml` parser, as devkit's no-bloat bin reads a workflow, so
 // any spelling YAML allows (flow maps, quoted keys, anchors, CRLF) is the same data.
 

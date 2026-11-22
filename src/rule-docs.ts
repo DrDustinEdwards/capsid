@@ -1,12 +1,12 @@
 // The rule documents: the ones sessions follow as rules rather than read as records
-// (job_c13dc0d4f22f). Two checks hold them:
+// Two checks hold them:
 //
 //   - the cap. A namespace's core.md stays under 8KB, any other rule document under 20KB.
 //   - stale tool names. A rule document names no tool or action the Worker does not
 //     serve. A session that follows a rule naming a removed tool fails at the call.
 //
 // Dated records (archive/, research/, reports/, audits/, jobs/, and Dustin's rulings in
-// capsid/rulings/, Dustin 2026-11-18) are not rule documents:
+// capsid/rulings/) are not rule documents:
 // they say what was true when written, and an old tool name there is history.
 //
 // Three places run the checks. capsid_write_doc refuses a write that makes a rule document

@@ -13,7 +13,7 @@ import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";
 import { parseDumpStamp, type OffaccountReport } from "./watcher-detect";
 
-// BACKUPS FOR EVERY SITE, IN ONE PLACE (Dustin 2026-11-06, "as recommended"): checking the
+// BACKUPS FOR EVERY SITE, IN ONE PLACE checking the
 // backups and backing up now are Capsid Admin's, not a tool on each site's own admin MCP.
 // Each site keeps its nightly cron, which does the backing up; this reads what that cron
 // left and runs its files passes on demand.
@@ -237,7 +237,7 @@ export async function runSiteBackups(
 export const CAPSID_DUMP = "capsid";
 
 /**
- * Back up now for Capsid itself (Dustin 2026-11-06): the nightly cron's run, on demand. It
+ * Back up now for Capsid itself: the nightly cron's run, on demand. It
  * takes the cron's lease (src/backup.ts runBackup), so a run that overlaps the cron skips
  * and prunes nothing, and it writes the same task_runs row (backup) the Portal reads.
  */

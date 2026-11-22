@@ -8,8 +8,7 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { weeklyDigestLines } from "./watcher-digest";
 import { DAY_MS, utcDay } from "./time";
 
-// THE DAILY EMAIL DIGEST (docs/design/design-merge-pipeline.md section 5; Dustin's DECIDE
-// 5 of 2026-10-09: Web Push for the four urgent things, and everything else in a daily
+// THE DAILY EMAIL DIGEST (docs/design/design-merge-pipeline.md section 5: Web Push for the four urgent things, and everything else in a daily
 // email). Once a UTC day, after DIGEST_HOUR_UTC, the tick mails one plain-text message to
 // ALERT_EMAIL: what waits on Dustin now (pull requests by class, questions, blocked jobs),
 // rollbacks, and what finished, blocked and became ready since the last digest. It is

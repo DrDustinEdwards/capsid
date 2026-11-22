@@ -3,8 +3,8 @@ import type { Agent } from "./agents";
 import type { InboxItem } from "./inbox";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// WHAT AN APP REPORTS ABOUT ITSELF TO THE INBOX (job_84e901d8eb71; design
-// capsid/research/design-inbox-report.md, Dustin's answers 2026-10-10). Some things that
+// WHAT AN APP REPORTS ABOUT ITSELF TO THE INBOX (design
+// capsid/research/design-inbox-report.md). Some things that
 // need Dustin live only in an app's own database (Carrel's AI drafts waiting). Capsid does
 // not read that database; the app posts its present state to POST /ops/inbox/report with
 // its own scoped key, and the inbox reads the last report back as kind "report".
@@ -15,7 +15,7 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 // - A report replaces the last one whole and expires after 6 hours: an app that stops
 //   reporting stops being counted, because a stale "needs you" is worse than none.
 // - No severity field: a reported item always counts as needs-you, so an app cannot quiet
-//   its own badge (Dustin, decision 3).
+//   its own badge.
 // - The items are the app's words. A link must stay on the app's own origin (its ops_sites
 //   row), and capsid_read_status action status fences the title as external before an agent reads it.
 // - One report per minute per key, fail closed: this is a write path.

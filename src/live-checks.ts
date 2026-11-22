@@ -10,9 +10,8 @@ import { MINUTE_MS } from "./time";
 import { callSignal } from "./call-signal";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// THE WATCHER'S LIVE CHECKS (capsid/research/design-automation-for-speed.md, D5, ruled
-// by Dustin 2026-10-04). Four things Dustin checked by hand with PowerShell after a
-// deploy, read by the Worker instead: the deployed sha against the default branch, the
+// THE WATCHER'S LIVE CHECKS (capsid/research/design-automation-for-speed.md, D5). Four checks after a
+// deploy, read by the Worker: the deployed sha against the default branch, the
 // Web Analytics beacon on public pages, a CSP that lets the beacon load and report,
 // and no beacon on pages that must not carry one.
 //
@@ -132,7 +131,7 @@ export interface LiveFinding {
 }
 
 /** A page's path as one fingerprint-safe word: "/" is root, "/a/b" is a-b. */
-export const slug = (path: string): string =>
+const slug = (path: string): string =>
   path
     .replace(/^\/+|\/+$/g, "")
     .replace(/[^A-Za-z0-9]+/g, "-")

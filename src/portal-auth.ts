@@ -34,7 +34,7 @@ import { isolationVerdict, originRefusal } from "@dustinedwards/site-runtime/ori
 // random session id, the sign-in time and an expiry). Three things end it:
 // - 24 hours after the sign-in (PORTAL_SESSION_TTL_SECONDS), the Portal sends the
 //   browser back through Access. 24 hours via Access plus the idle hour below are the
-//   approved admin durations (Dustin, 2026-10-31, NIST SP 800-63B-4).
+//   approved admin durations (NIST SP 800-63B-4).
 // - An hour with no request: site-runtime's adminIdle times the session, as it times
 //   the sites' Access sessions (withPortalIdle below). Past it the Portal session is
 //   ended and the browser is sent to Access's logout, which ends the Access session too,
@@ -96,7 +96,7 @@ interface SessionPayload extends PortalUser {
 
 // The session's signing key: COOKIE_ENCRYPTION_KEY under its own label (confirmKeys), as
 // the confirmations and the idle cookie each have, so the root secret signs nothing
-// itself (Capsid security review, round 4, finding 8). A new label signs every Portal
+// itself. A new label signs every Portal
 // session out once.
 const SESSION_LABEL = "portal-session";
 const sessionKey = async (secret: string): Promise<string> =>

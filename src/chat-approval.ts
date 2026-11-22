@@ -6,10 +6,8 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
 // A chat approval in the approval record (src/pr-approvals.ts, table pr_approvals).
 // Dustin approves most pull requests with a "yes" in a Claude chat, and the session
-// merges. Until 2026-10-31 nothing recorded that yes: pr_approvals had no rows, and the
-// merge units (src/merge-units.ts) had no evidence to propose a unit from (Dustin,
-// 2026-10-31, thread "Measure how much Claude uses Capsid": make the ledger record chat
-// approvals). capsid_close_pr action merge with `approved_in` (a link to his message)
+// merges. The ledger records it so merge units (src/merge-units.ts) have evidence to
+// propose a unit from. capsid_close_pr action merge with `approved_in` (a link to his message)
 // and `sha` merges that exact head and writes one row: surface chat, status merged,
 // the path class the units count in.
 //

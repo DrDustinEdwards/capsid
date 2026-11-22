@@ -4,8 +4,7 @@ import { ghFetch, resolveRepo } from "./github/client";
 import { auditStatement } from "./store-guards";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// THE APPROVAL RECORD (docs/design/design-merge-pipeline.md section 3, PR 3; Dustin's
-// DECIDE of 2026-10-09). The `approve_pr` control (src/controls.ts) records that Dustin
+// THE APPROVAL RECORD (docs/design/design-merge-pipeline.md section 3, PR 3). The `approve_pr` control (src/controls.ts) records that Dustin
 // approved one or more pull requests at the head sha he saw; it never merges. The
 // executor in the auto-merge tick (PR 4) merges an approved pull request once its CI is
 // green on that sha, and voids the approval on a new push, red CI or after 7 days.

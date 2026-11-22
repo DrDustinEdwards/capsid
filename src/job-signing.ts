@@ -2,7 +2,7 @@ import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { deriveTaskKey } from "./signed-docs";
 
-// Signed resume notes and block commands (job_9e602b31888f item 4, OWASP ASI07).
+// Signed resume notes and block commands.
 //
 // A job body is signed at post and verified at claim, but what a job carries after that
 // was plain text: the approval a resume hands the driver, and the command a block asks a

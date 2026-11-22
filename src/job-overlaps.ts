@@ -7,7 +7,7 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 // Overlap warnings (Track A D1, capsid/research/design-track-a.md section 1). When block or
 // complete names a pull request, say which other open pull requests in the same repo change
 // the same files, from the file lists GitHub reports. Stacked and parallel pull requests that
-// rewrote the same function cost the seat a rebase on 2026-09-25; the warning is the moment
+// rewrote the same function cost the seat a rebase; the warning is the moment
 // to merge in order instead. It informs and never refuses: a read that fails is reported as
 // "not checked", so a missing check is visible and never reads as a clean one.
 

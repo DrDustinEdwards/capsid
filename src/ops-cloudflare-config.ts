@@ -8,8 +8,7 @@ import {
 } from "./ops-cloudflare";
 
 // The reads behind capsid_admin_read_ops's Cloudflare actions: Access applications and policies, and Email
-// Routing rules and destination addresses. Ruled 2026-09-29, "Capsid MCP roadmap,
-// build or don't build". Only src/tools/cloudflare.ts imports
+// Routing rules and destination addresses. Only src/tools/cloudflare.ts imports
 // this module (test/ops-cloudflare-config.test.ts), and that tool is admin only.
 //
 // Every reader copies named fields into a fresh object. Nothing Cloudflare returns is
@@ -141,7 +140,7 @@ function toAccessApp(raw: unknown): AccessAppOut {
 
 // The one field each value-bearing rule type may show. Every other type shows its
 // type alone: its value is an identity provider id, a list id, an IP range or a
-// claim, none of which the tool was ruled to return.
+// claim, none of which the tool returns.
 const RULE_VALUE: Record<string, string> = {
   email: "email",
   email_domain: "domain",

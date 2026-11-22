@@ -53,7 +53,7 @@ export async function serveMcp(
 // The door's rate limit on all four MCP routes, per caller (`access:<email>` for a session,
 // the agent's actor for a key): site-runtime's 30 requests a minute on the RATE_LIMITER
 // Durable Object, refusing when it cannot count. A refusal is logged as `rate-limited`,
-// naming the server it was for (area 11, L3).
+// naming the server it was for.
 export async function mcpRateLimited(
   env: Env,
   caller: string,

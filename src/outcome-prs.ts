@@ -14,7 +14,7 @@ import { DAY_MS, timeMs } from "./time";
 // A URL names a number, not a pull request. A repository that is recreated or
 // transferred hands its numbers out again, so each row pins the pull request it named
 // (GitHub's node id) on its first read, and every later read refuses a pull request
-// whose id differs (migrations/0026, job_6092edef11e1).
+// whose id differs (migrations/0026).
 
 // How many rows one sweep re-checks. Bounded because each row costs a GitHub read,
 // and walking the whole table would spend the request budget on rows whose answer
@@ -357,9 +357,8 @@ export interface SweepReport {
 const BACKFILL_ACTOR = "system:outcome-backfill";
 
 /**
- * Outcomes recorded wrong by the bug job_d5262df1dc32 fixed: a pull request named only
- * in result_ref was never read, so commits, files_changed and ci_green sit unverified
- * (and prs_opened and prs_merged did too, until the seed below counted them). For each
+ * Outcomes whose pull request, named only in result_ref, was never read, so commits,
+ * files_changed and ci_green sit unverified. For each
  * such row in the window this reads every pull request the job names (its join rows and
  * its result_ref) the way complete does now, and writes GitHub's numbers. A row is
  * touched only while its commits are still unverified, and only when every named pull

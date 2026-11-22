@@ -37,7 +37,7 @@ export const AUTO_MERGE_POLICY_PATH = "policy/auto-merge.md";
 // signed document carries. The list is in the document and not here, so changing who
 // may author an unattended merge is a signed act.
 //
-// Version 7 (job_e68de044f8a4; Dustin, 2026-10-10, plan step 2) drops author_is_driver,
+// Version 7 drops author_is_driver,
 // which required the job to have been claimed by a minted driver agent. Cloud sessions
 // sign in as the admin login and complete a job without a claim, naming its pull request
 // (src/jobs-seat.ts completeUnclaimed), so nothing they opened could merge. Who may open
@@ -137,7 +137,7 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
     why: "the live gate, whose rollback is the backstop for an unattended merge",
   },
   // Install, build and deploy glue. A namespace with no allowed-path limit merged these
-  // on green, though each runs in CI or ships (Grok audit 2026-10, U2). Lockfiles are
+  // on green, though each runs in CI or ships. Lockfiles are
   // no_migration_workflow_lockfile's, below.
   { pattern: /(^|\/)scripts\//i, why: "a script CI, a build or a deploy runs" },
   { pattern: /(^|\/)\.github\//i, why: "CI configuration beyond the workflows" },
@@ -179,8 +179,7 @@ function refusedPathHits(paths: string[]): Array<{ path: string; why: string }> 
 
 // The paths a namespace's pull requests may touch at all, for a namespace that carries
 // a limit. Every changed path must match one of its patterns; a namespace with no entry
-// here has no limit beyond the refused paths. capsid carries one (Dustin, D6 of
-// 2026-10-03, policy version 6): a capsid merge deploys the control plane, so only
+// here has no limit beyond the refused paths. capsid carries one: a capsid merge deploys the control plane, so only
 // docs outside docs/policy/ and the Portal's stylesheets merge unattended there, and
 // tests, the Portal's scripts and every other path wait for the seat. This is the one
 // path list that admits rather than refuses, so it is per namespace: inheriting another
@@ -236,8 +235,8 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
     "Tests",
     "Integration tests",
   ].map(ciStep("checks")),
-  // Every named step of both jobs of dustinedwards-info's ci.yml, read off main on
-  // 2026-10-18. Install and the build steps are named alongside the ones that judge, so
+  // Every named step of both jobs of dustinedwards-info's ci.yml, read off main.
+  // Install and the build steps are named alongside the ones that judge, so
   // a reordered workflow that drops one refuses rather than merging on a run that
   // skipped it. The Admin MCP job's command steps carry no name, so GitHub reports them
   // as "Run <command>", and those are the names below.
@@ -255,7 +254,7 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
       "Run npm run build",
     ].map(ciStep("Admin MCP, clean checkout")),
   ],
-  // Every step of Carrel's two jobs, read off its ci.yml on main on 2026-10-07. Carrel's
+  // Every step of Carrel's two jobs, read off its ci.yml on main. Carrel's
   // steps that run a command carry no name, so GitHub names them "Run <command>"; that
   // is the name the jobs API reports, and a script rename in package.json that changes
   // the command text refuses until this list is updated. Both jobs judge: `check` runs
@@ -274,8 +273,8 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
       ciStep("gates"),
     ),
   ],
-  // Every blocking step of Capsomer's `check` job, read off its ci.yml on main on
-  // 2026-10-07. The steps its own file marks warn-only (forced-colors screenshots, size,
+  // Every blocking step of Capsomer's `check` job, read off its ci.yml on main.
+  // The steps its own file marks warn-only (forced-colors screenshots, size,
   // token check, the site summary and the artifact upload) are left out: they run with
   // continue-on-error or always(), so a pass proves nothing about the change. The
   // `results` job runs on a push to main only and is skipped on a pull request. The
