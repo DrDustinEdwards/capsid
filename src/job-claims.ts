@@ -5,13 +5,11 @@ import type { JobClaimRow as StoredClaimRow } from "./ops-types/claims";
 
 // WHAT THE AGENT SAID, kept apart from what the Worker verified (migrations/0023).
 //
-// job_outcomes stores GitHub's number in place of the driver's wherever GitHub could
-// answer, so the driver's own account was overwritten at the moment it was recorded.
-// This module records that account first, in job_claims, from the arguments exactly as
-// they arrived, and then one job_evaluations row per check with the claim and the
-// verified value side by side. Both are written in the transition's own batch
-// (holderTransition, src/jobs-holder.ts), so a claim exists exactly when the
-// transition it describes does.
+// job_outcomes stores GitHub's number in place of the driver's wherever GitHub could answer,
+// overwriting the driver's own account. This module records that account first, in
+// job_claims, from the arguments exactly as they arrived, then one job_evaluations row per
+// check with the claim and the verified value side by side. Both are written in the
+// transition's own batch (holderTransition, src/jobs-holder.ts).
 //
 // NULL IS NOT FALSE, on 0011's reasoning: a field the agent did not state is NULL,
 // never 0 and never false. "Nobody said" and "said none" are different facts.
@@ -29,14 +27,12 @@ const MAX_CLAIM_VERSION = 128;
 
 const count = z.number().int().nonnegative();
 const version = bounded(MAX_CLAIM_VERSION);
-// A usage figure the agent read off its own session. zod's number() already refuses NaN
-// and Infinity, which JSON cannot carry but a caller object can; the claim test pins that,
-// so neither can reach SUM().
+// A usage figure the agent read off its own session. zod's number() already refuses NaN and
+// Infinity (the claim test pins it), so neither can reach SUM().
 const usageAmount = z.number().nonnegative();
 
-// Strict at every level: an unknown key is refused, never dropped. A dropped key is a
-// claim the agent made and the record does not have, which is the loss this table
-// exists to prevent.
+// Strict at every level: an unknown key is refused, never dropped, since a dropped key is a
+// claim the record does not have.
 export const claimSchema = z
   .object({
     prs_opened: z
@@ -181,10 +177,9 @@ const listColumn = (list: readonly string[] | undefined): string | null =>
   list === undefined ? null : JSON.stringify([...list]);
 
 /**
- * The job_claims row for one complete, fail or block call. Pure, and built from the
- * arguments before verifyEvidence runs, so nothing GitHub says can reach it: commits,
- * files_changed and tests_added are the driver's numbers as sent. An empty list is
- * stated ("said none") and stored as [] and 0; an absent one is NULL.
+ * The job_claims row for one complete, fail or block call. Pure, built from the arguments
+ * before verifyEvidence runs so nothing GitHub says can reach it. An empty list is stated
+ * ("said none") and stored as [] and 0; an absent one is NULL.
  */
 export function claimRow(input: {
   job_id: string;
@@ -316,13 +311,10 @@ const json = (value: number | null): string | null =>
   value === null ? null : JSON.stringify(value);
 
 /**
- * One row per worker check, from the claim row and what verifyEvidence read off
- * GitHub. Pure. A value the Worker could not read is NULL with label unknown, and an
- * unstated claim is NULL with agreement unclaimed: neither is ever a 0 or a false.
- *
- * Only the pull requests in evidence.prs, and a result_ref that is one, are read (verifyEvidence), so a URL the claim
- * names that evidence does not is unread, and a check over it is unchecked rather than
- * guessed.
+ * One row per worker check, from the claim row and what verifyEvidence read off GitHub. Pure.
+ * A value the Worker could not read is NULL with label unknown, and an unstated claim is NULL
+ * with agreement unclaimed: neither is ever a 0 or a false. Only the PRs in evidence.prs (and
+ * a result_ref that is one) are read, so a URL the claim names beyond them is unchecked.
  */
 export function evaluationRows(
   claim: JobClaimRow,

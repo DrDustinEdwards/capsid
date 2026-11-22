@@ -1,18 +1,15 @@
-// A job body a session can act on. Three checks, run
-// by the capsid_work_jobs tool on a caller's post and edit, and by nothing else: the
-// watcher, the skills refresh and the finalize step post through postJob and are not
-// subject to them.
+// A job body a session can act on. Three checks, run by the capsid_work_jobs tool on a caller's
+// post and edit, and by nothing else (the watcher, skills refresh and finalize step post through
+// postJob and are not subject to them).
 //
-// 1. An unfilled placeholder is refused. Tonight two sessions stalled on a pasted
-//    template that still read <ID>. Text in a code block or an external fence is exempt,
-//    since a body may quote a template or relay text it did not write.
-// 2. A body missing any of the five headed parts is accepted with a warning, because a
-//    refusal nobody can predict teaches people to route around the queue
-//    (src/provenance.ts makes the same call).
-// 3. A body stating a pull request merged, a version tagged or a package version published
-//    is checked against GitHub and npm, and refused when what Capsid reads says otherwise;
-//    a claim that could not be checked is a warning (src/job-fact-check.ts, which reads
-//    prose through proseOnly and the parts through heading, both exported for it).
+// 1. An unfilled placeholder is refused (two sessions once stalled on a pasted template that
+//    still read <ID>). Text in a code block or an external fence is exempt.
+// 2. A body missing any of the five headed parts is accepted with a warning: a refusal nobody can
+//    predict teaches people to route around the queue (src/provenance.ts makes the same call).
+// 3. A body stating a pull request merged, a version tagged or a package version published is
+//    checked against GitHub and npm and refused when Capsid reads otherwise; a claim that could
+//    not be checked is a warning (src/job-fact-check.ts, which reads prose through proseOnly and
+//    the parts through heading, both exported for it).
 
 // A fenced block: ``` or ~~~ (an external fence is a ~~~ fence), closed by a line of at
 // least as many of the same character, or by the end of the text.

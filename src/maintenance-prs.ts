@@ -6,12 +6,10 @@ import type { MaintenanceItem } from "./maintenance";
 import { HOUR_MS, days } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The daily maintenance pass's pull request rules. Two lists:
-// a green driver pull request that is still open is waiting for the seat, shown with its
-// age; a pull request whose checks have been red for more than 48 hours is shown with the
-// step that failed. Both read what the auto-merge tick reads (the open list and each head's
-// check runs, judged by the same ciVerdict), never the file lists. A read that fails is
-// listed as "not checked", so a missing read never passes as a clean result.
+// The daily maintenance pass's pull request rules: a green driver PR still open is waiting for the
+// seat (shown with its age); a PR red for more than 48 hours is shown with the failing step. Both
+// read what the auto-merge tick reads (the open list and each head's check runs, judged by ciVerdict).
+// A read that fails is listed as "not checked", so a missing read never passes as clean.
 
 const RED_HOURS = 48;
 // Open pull requests read per repo. More are reported as not checked, not silently cut.

@@ -87,12 +87,7 @@ async function getInstallationToken(env: Env, owner: string, repo: string): Prom
   return minted.token;
 }
 
-// What the App can see, for the watcher's unmapped-repo check (src/unmapped-repos.ts).
-// Listing /installation/repositories needs an installation token covering every repo,
-// which getInstallationToken deliberately never mints. This one is minted for the call,
-// limited to the metadata:read permission (names, visibility, archived and push date, and
-// nothing else: no contents, no writes), held in a local variable and never stored in
-// KV or logged. It is the only unscoped token in the Worker.
+// What the App can see, for the watcher's unmapped-repo check (src/unmapped-repos.ts). Listing /installation/repositories needs a token covering every repo, which getInstallationToken never mints. This one is minted for the call, limited to metadata:read, held in a local variable and never stored or logged. It is the only unscoped token in the Worker.
 export interface InstalledRepo {
   full_name: string;
   private: boolean;
@@ -175,16 +170,7 @@ export async function listInstalledRepos(
 // One installation covers every repo under a single owner, but each minted token is
 // scoped to one repo, so the token cache is per owner+repo to match.
 
-// The URL built for a repo call cannot escape /repos/<owner>/<repo>/. A "../.."
-// smuggled through a file path or branch would normalize out of it once fetch()
-// parsed the string as a URL. This check runs after assembly and after WHATWG
-// normalization, so it sees the escape the input-level repoPathProblem guard is also
-// there to stop. owner and repo come from the namespace mapping (REPO_SHAPE excludes
-// "." and ".."), so the expected base is itself traversal-free.
-//
-// It builds the same URL new URL() will, which is why a fake fetch keyed on the raw
-// string cannot substitute for this guard: the raw string still contains the "..",
-// the parsed pathname does not.
+// The URL built for a repo call cannot escape /repos/<owner>/<repo>/. A "../.." smuggled through a file path or branch would normalize out of it once fetch() parsed the string. This runs after assembly and WHATWG normalization, building the same URL new URL() will (so a fake fetch keyed on the raw string cannot substitute: the raw string still contains the "..", the parsed pathname does not). owner and repo come from the namespace mapping (REPO_SHAPE excludes "." and ".."), so the base is traversal-free.
 function repoApiUrl(owner: string, repo: string, path: string): string {
   const url = `${GH}${path}`;
   const base = `/repos/${owner}/${repo}`;
@@ -248,15 +234,7 @@ export async function cachedGet(
   return new Response(body, { status: resp.status });
 }
 
-// Invalidation after a write. Without it, for up to READ_CACHE_TTL_SECONDS after a
-// commit a read returns the body the write replaced, and Capsid writes and then
-// reads back as its ordinary path.
-//
-// Swept by repo prefix rather than by computed key. A key-precise invalidation has to
-// reproduce the exact spelling of every affected entry (the encoded path, the parent
-// listing, the root listing's trailing slash, each with and without ?ref=), and one
-// missed spelling is a stale read. The prefix sweep also covers a merge, whose
-// affected paths are not known here. It over-invalidates by one GitHub GET.
+// Invalidation after a write: without it a read returns the body the write replaced for up to READ_CACHE_TTL_SECONDS, and Capsid writes then reads back as its ordinary path. Swept by repo prefix, not by computed key: a key-precise invalidation must reproduce every spelling of every affected entry (encoded path, parent listing, trailing slash, with and without ?ref=), and one miss is a stale read. The sweep also covers a merge, whose paths are not known here, at the cost of one extra GitHub GET.
 export async function invalidateRepoReads(env: Env, owner: string, repo: string): Promise<number> {
   const prefix = readPrefix(owner, repo);
   let cursor: string | undefined;
@@ -343,12 +321,7 @@ export function requireSinglePrimary(list: RepoEntry[]): string | null {
     : `repos must have exactly one entry labeled "primary" (found ${primaries})`;
 }
 
-// Resolve a namespace to one of its mapped repos. `selector` is the optional `repo`
-// tool argument: a label from the namespace's repos array ("primary", "legacy") or a
-// full "owner/name" that MUST appear in that array. The namespace mapping is the
-// authorization boundary, so an unknown selector is rejected with the valid values
-// rather than falling through to an arbitrary repo. With no selector the default is
-// the entry labeled "primary", or the first entry.
+// Resolve a namespace to one of its mapped repos. `selector` is a label from the namespace's repos array ("primary", "legacy") or a full "owner/name" that MUST appear in it. The mapping is the authorization boundary, so an unknown selector is rejected with the valid values rather than falling through to an arbitrary repo. With none, the default is the entry labeled "primary", or the first.
 export async function resolveRepo(
   env: Env,
   namespace: string,

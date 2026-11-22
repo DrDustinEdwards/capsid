@@ -17,15 +17,13 @@ import {
 import { DAY_MS } from "./time";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
-// WHAT THE ROUTING LEARNS (capsid/research/design-model-routing.md): per kind and model,
-// the share of jobs merged with green CI and not undone since, the corrections spent,
-// and the cost where telemetry recorded one, read from job_outcomes. Merge and CI are
-// GitHub's, read at complete, not the driver's own account (docs/work-queue.md). A merge
-// is a weak label on its own (Peralta et al., MSR 2026: reviewers fix and merge, or
-// merge and revert), so a job whose pull request was later reverted (src/merge-safety.ts,
-// `job-pr-reverted`) or whose deploy was rolled back does not count as work that held.
-// The result proposes rule changes and applies none: the rules are code and the seat
-// approves each edit.
+// WHAT THE ROUTING LEARNS (capsid/research/design-model-routing.md): per kind and model, the share
+// of jobs merged with green CI and not undone since, the corrections spent, and the cost where
+// telemetry recorded one, read from job_outcomes. Merge and CI are GitHub's, read at complete
+// (docs/work-queue.md). A merge is a weak label alone (Peralta et al., MSR 2026: reviewers fix and
+// merge, or merge and revert), so a job whose PR was later reverted (`job-pr-reverted`,
+// src/merge-safety.ts) or whose deploy was rolled back does not count as work that held. The
+// result proposes rule changes and applies none: the seat approves each edit.
 
 const LEARNING_WINDOW_DAYS = 90;
 // One read, bounded. A window with more outcomes than this says so, never a partial table
@@ -45,7 +43,6 @@ export interface ModelLearning {
   trial_arms: ReadonlyArray<{ kind: string; model: string; percent: number }>;
   cells: Cell[];
   proposals: Proposal[];
-  // Each trial arm against its kind's rule (src/model-routing.ts TRIAL_ARMS).
   trials: TrialStatus[];
   note: string;
 }

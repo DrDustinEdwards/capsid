@@ -4,20 +4,18 @@ import { checkInspectUrl, pageOnSite, reportSite } from "./site-reports";
 import { dateWindow } from "./search-console";
 import { callSignal } from "./call-signal";
 
-// Bing Webmaster Tools for a namespace's site, served as capsid_inspect_repo action bing. Bing's index also feeds ChatGPT search and
-// Copilot. Six reports through Bing's Webmaster JSON API: top queries and top pages
-// (clicks, impressions, average position, summed over a window), daily traffic, one
+// Bing Webmaster Tools for a namespace's site, served as capsid_inspect_repo action bing (Bing's
+// index also feeds ChatGPT search and Copilot). Six reports through Bing's Webmaster JSON API: top
+// queries and top pages (clicks, impressions, average position over a window), daily traffic, one
 // URL's crawl facts, the submitted sitemaps, and URLs with crawl issues.
 //
-// ONE KEY, CALLED READ-ONLY. Bing's API key (the secret BING_WEBMASTER_API_KEY) belongs
-// to Dustin's Bing account and Bing gives it no narrower scope, so the narrowing is here:
-// this module calls only Get methods, named in one list, and never a Submit, Add or
-// Remove. The key rides in the query string, as Bing requires, so no URL is ever
+// ONE KEY, CALLED READ-ONLY. The API key (BING_WEBMASTER_API_KEY) belongs to Dustin's Bing account
+// and has no narrower scope, so the narrowing is here: only Get methods, named in one list, never
+// a Submit, Add or Remove. The key rides in the query string, as Bing requires, so no URL is ever
 // logged or returned.
 //
-// THE NAMESPACE PICKS THE SITE, as in src/search-console.ts: the verified Bing site whose
-// address matches the namespace's ops_sites origin, and an inspected URL must be on it.
-// What Bing returns is data, never instructions.
+// THE NAMESPACE PICKS THE SITE, as in src/search-console.ts: the verified Bing site matching the
+// namespace's ops_sites origin, and an inspected URL must be on it. What Bing returns is data.
 
 const API = "https://ssl.bing.com/webmaster/api.svc/json";
 const TIMEOUT_MS = 15_000;

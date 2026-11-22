@@ -33,7 +33,6 @@ const SECURITY_TXT_PATH = "/.well-known/security.txt";
 // Under a year out (RFC 9116); the family check reminds a month ahead.
 const SECURITY_TXT_EXPIRES = "2027-10-25T00:00:00Z";
 
-// The Durable Objects wrangler.jsonc binds (RATE_LIMITER, TOOL_CALL_LOG), from site-runtime.
 export { RateLimiter } from "@dustinedwards/site-runtime/rate-limit/durable-object";
 import { ToolCallLog as SharedToolCallLog } from "@dustinedwards/site-runtime/audit-log";
 import { withAuditKey } from "./audit-key";
@@ -217,10 +216,9 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
       asked,
     );
   // The admin list, hashed with a fresh salt, for the daily Access drift check
-  // (.github/workflows/access-drift.yml). The Portal signs people in through Access for
-  // SaaS, so no Access application stands in front of it: this one path on the Portal host
-  // has its own self-hosted application, Service Auth only, whose tag is ACCESS_DRIFT_AUD.
-  // adminListResponse answers only a GET carrying that application's verified Access token
+  // (.github/workflows/access-drift.yml). The Portal signs in through Access for SaaS, so no Access
+  // application fronts it: this one path has its own self-hosted application, Service Auth only
+  // (ACCESS_DRIFT_AUD). adminListResponse answers only a GET with that application's verified token
   // from a service token, and 404 to everything else, so it runs before the Portal's sign-in.
   if (asked === ADMIN_LIST_PATH && isPortalHost(new URL(original.url))) {
     const list = await adminListResponse(
@@ -234,7 +232,6 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
   // Portal host's rewrite and its gate, which every other path on that host goes through.
   if (isDemoRequest(new URL(original.url)))
     return secured(await handlePortalDemo(original, env), asked);
-  // The Portal's hashed build files, which the demo's pages load too (src/portal-app.ts).
   const asset = await portalAsset(original, env);
   if (asset) return secured(asset, asked);
   const host = portalHostRequest(original);
@@ -282,12 +279,11 @@ async function withEveryScope(response: Response): Promise<Response> {
   );
 }
 
-// Every request writes one `request` line (site-runtime withRequestLog: cf-ray, method, path
-// without the query, status, ms and the deployed sha), and a 404 to a GET is
-// counted per path, referring host and UTC day in page_404_daily (site-runtime
-// countNotFound, migrations/0053), written in waitUntil so it never holds the
-// answer. The backup prunes the counts at 90 days (src/backup.ts).
-// Errors go to Sentry (site-runtime ./sentry): a throw, and every error-level log line.
+// Every request writes one `request` line (site-runtime withRequestLog: cf-ray, method, path without
+// the query, status, ms, deployed sha), and a 404 to a GET is counted per path, referring host and
+// UTC day in page_404_daily (site-runtime countNotFound, migrations/0053) in waitUntil, so it never
+// holds the answer; the backup prunes it at 90 days. Errors go to Sentry (site-runtime ./sentry): a
+// throw, and every error-level log line.
 export default withSiteSentry({
   fetch: withRequestLog(
     async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {

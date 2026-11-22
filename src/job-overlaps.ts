@@ -4,12 +4,10 @@ import { resolveRepo } from "./github/client";
 import { readAllPages, readPrFiles } from "./github/pr-files";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Overlap warnings (Track A D1, capsid/research/design-track-a.md section 1). When block or
-// complete names a pull request, say which other open pull requests in the same repo change
-// the same files, from the file lists GitHub reports. Stacked and parallel pull requests that
-// rewrote the same function cost the seat a rebase; the warning is the moment
-// to merge in order instead. It informs and never refuses: a read that fails is reported as
-// "not checked", so a missing check is visible and never reads as a clean one.
+// Overlap warnings (Track A D1, capsid/research/design-track-a.md section 1). When block or complete
+// names a pull request, say which other open PRs in the same repo change the same files (GitHub's
+// file lists): stacked and parallel PRs that rewrote the same function cost the seat a rebase.
+// It informs and never refuses; a failed read is reported as "not checked", never as clean.
 
 // Other open pull requests read per transition. A repo with more is reported, not silently
 // cut: the warning says how many it did not read.

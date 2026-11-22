@@ -49,8 +49,7 @@ import { runSiteJob } from "./site-jobs";
 import { auditStatement } from "./store-guards";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
-// A control's perform (src/controls.ts is the core): the one dispatch to the shared
-// mutators, run once a signed preview token is verified.
+// A control's perform (src/controls.ts is the core): the one dispatch to the shared mutators.
 
 function required(params: ActionParams, field: string): string | null {
   const value = params[field];
@@ -58,13 +57,10 @@ function required(params: ActionParams, field: string): string | null {
 }
 
 export type ActionResult =
-  // It happened. warning is set when the click's own audit row was not written.
   | { ok: true; summary: string; warning: string | null }
-  // It did not happen, and why.
   | { ok: false; refusal: string };
 
-/** One action, performed by the administrator `email`: the shared mutator the MCP tool
- *  calls, then the click's audit row. Nothing here reimplements a transition. */
+/** One action, performed by the administrator `email`: the shared mutator, then the click's audit row. */
 export async function performAction(
   env: Env,
   email: string,
@@ -79,17 +75,15 @@ export async function performAction(
   // Set once the mutator succeeds, so the catch knows whether the action happened.
   let committed = false;
   let summary = "";
-  // The switches: a reason in both directions, checked again here because the token
-  // binds the params and a token signed before this rule could lack one. The reason and
-  // whether this is an Undo go in the click row.
+  // The switches: a reason in both directions, checked again because a token signed before
+  // this rule could lack one. The reason and whether this is an Undo go in the click row.
   const switchReason = SWITCHES.has(action) ? required(params, "reason") : null;
   if (SWITCHES.has(action) && !switchReason)
     return { ok: false, refusal: switchReasonRefusal(action) };
   const undo = params.undo === "true";
   const click = clickAuditAction(action, params, surface);
-  // The click's own audit row, naming the admin and the address the click came from
-  // (sourceAddress), for the surface and the action unless `name` says otherwise. The shared
-  // mutators' rows do not always say who asked.
+  // The click's own audit row, naming the admin and the click's address (sourceAddress); the
+  // shared mutators' rows do not always say who asked.
   const auditClick = async (
     namespace: string | null,
     detail: object,
@@ -374,8 +368,7 @@ export async function performAction(
       }
       case "namespace_add":
       case "namespace_edit": {
-        // Checked again here, as the site controls are: the token binds the params, not the
-        // rules they were checked against. The mutators are the admin tool's (src/namespace-admin.ts).
+        // Checked again, as the site controls are: the token binds the params, not the rules.
         const namespace = required(params, "namespace") ?? undefined;
         const bad = namespaceNameRefusal(namespace);
         if (bad || !namespace) return { ok: false, refusal: bad ?? `${action} needs a namespace.` };
@@ -541,8 +534,7 @@ export async function performAction(
       case "site_add":
       case "site_edit":
       case "site_remove": {
-        // Checked again here, not only at preview: the token binds the params, and the
-        // rules could have changed under a token signed before a deploy.
+        // Checked again here: the rules could have changed under a token signed before a deploy.
         let result;
         if (action === "site_remove") {
           const revision = revisionOf(params.revision);
@@ -578,8 +570,7 @@ export async function performAction(
       case "package_add":
       case "package_edit":
       case "package_remove": {
-        // Checked again here, as the site controls are: the token binds the params, not
-        // the rules they were checked against.
+        // Checked again here, as the site controls are.
         let result;
         if (action === "package_remove") {
           const revision = revisionOf(params.revision);
@@ -613,8 +604,7 @@ export async function performAction(
         break;
       }
       case "site_repair": {
-        // Every check runs again inside runSiteRepair: the allowlist, the token and the
-        // rate limit can all change between the preview and this click.
+        // Every check runs again inside runSiteRepair: the allowlist, token and rate limit can change before the click.
         const namespace = required(params, "namespace");
         const tool = required(params, "tool");
         if (!namespace || !tool)
@@ -635,8 +625,7 @@ export async function performAction(
         break;
       }
       case "run_job": {
-        // Every check runs again inside runSiteJob: the configuration, the token and the
-        // rate limit can all change between the preview and this click.
+        // Every check runs again inside runSiteJob: the configuration, token and rate limit can change before the click.
         const namespace = required(params, "namespace");
         const name = required(params, "name");
         if (!namespace || !name)
@@ -652,8 +641,7 @@ export async function performAction(
         break;
       }
       case "site_backup": {
-        // Every check runs again inside runSiteBackups: the configuration, the tokens and the
-        // rate limit can all change between the preview and this click.
+        // Every check runs again inside runSiteBackups: the configuration, tokens and rate limit can change before the click.
         const namespace = params.namespace?.trim() || undefined;
         if (namespace === CAPSID_DUMP) {
           const dump = await runCapsidDump(env);

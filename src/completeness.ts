@@ -6,16 +6,16 @@ import { bounded } from "./limits";
 import type { CompletenessView } from "./ops-types/feed";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// THE COMPLETENESS SCOREBOARD, read for the Portal (GET /portal/api/completeness). devkit's
-// daily live run (devkit .github/workflows/live.yml, bin/live.mjs) writes board.json to its
-// orphan `scoreboard` branch: every area of the shared code against the package and every
-// live site, each cell filled only from the live checks and the verifiers' verdicts. The
-// rules that decide a cell are devkit's; Capsid only reads the board through the GitHub App
-// and shows it, so a thread cannot mark itself complete here either.
+// THE COMPLETENESS SCOREBOARD, read for the Portal (GET /portal/api/completeness). devkit's daily
+// live run (.github/workflows/live.yml, bin/live.mjs) writes board.json to its orphan
+// `scoreboard` branch: every area of the shared code against the package and every live site,
+// each cell filled only from the live checks and the verifiers' verdicts. devkit decides the
+// cells; Capsid only reads the board through the GitHub App, so a thread cannot mark itself
+// complete here either.
 //
-// The board is a public repo's file, read as data: parsing keeps only the fields named
-// below, bounded, and a link that is not https is dropped. Kept ten minutes in KV, since the
-// board changes once a day and on a merged verdict.
+// The board is a public repo's file, read as data: parsing keeps only the named fields, bounded,
+// and drops a link that is not https. Kept ten minutes in KV (it changes once a day and on a
+// merged verdict).
 
 const OWNER = "DrDustinEdwards";
 const REPO = "devkit";

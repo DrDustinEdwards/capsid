@@ -15,16 +15,12 @@ import type {
   JobTouchRow,
 } from "./ops-types/claims";
 
-// The read side of claims apart from verified outcomes (migrations/0023_job_claims.sql,
-// roadmap P0). One set of readers, shared by the `capsid_admin_read_claims` tool (src/tools/claims.ts)
-// and the Portal's GET /portal/api/claims (src/portal-claims.ts), so the two cannot
-// disagree about what the tables say.
-//
-// Read-only: nothing here writes. Every value a caller supplies is a bound parameter,
-// and every read carries a LIMIT, one row past its bound so a cut is reported by name
-// in `truncated` rather than passed off as the whole answer.
+// The read side of claims apart from verified outcomes (migrations/0023_job_claims.sql). One
+// set of readers, shared by `capsid_admin_read_claims` (src/tools/claims.ts) and the Portal's
+// GET /portal/api/claims (src/portal-claims.ts), so the two cannot disagree. Read-only; every
+// caller value is a bound parameter, and every read carries a LIMIT one row past its bound so
+// a cut is reported in `truncated`.
 
-// The tables the export pages through, and the only names it will read.
 export const CLAIMS_EXPORT_TABLES = [
   "job_claims",
   "job_evaluations",
@@ -34,14 +30,10 @@ export const CLAIMS_EXPORT_TABLES = [
 export type ClaimsExportTable = (typeof CLAIMS_EXPORT_TABLES)[number];
 
 export const CLAIMS_EXPORT_MAX = 500;
-// Rows of each kind the per-job read returns. A job blocked two hundred times is not a
-// job anybody reads row by row.
 export const CLAIMS_JOB_ROWS = 200;
-// Agent and namespace pairs the aggregate returns.
 const CLAIMS_GROUP_LIMIT = 500;
 // Evaluation count rows: at most seven names by four agreements per group.
 const EVALUATION_ROWS = 5000;
-// Touch rows the aggregate folds in TypeScript, for the median wait.
 const TOUCH_ROWS = 5000;
 
 const AGREEMENTS: readonly ClaimsAgreement[] = ["agree", "disagree", "unclaimed", "unchecked"];
@@ -54,7 +46,6 @@ export type ClaimsFilterResult =
 function text(value: string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   const trimmed = value.trim();
-  // An empty value is no filter, not a filter on the empty string.
   return trimmed.length ? trimmed : null;
 }
 
@@ -215,12 +206,10 @@ const WAIT_CLASS_NEEDS_HUMAN = "needs_human";
 const WAIT_CLASS_UNREADABLE = "unreadable_gate";
 
 /**
- * The class of the gate a wait ended, from the gate row's detail (the JSON a block
- * writes: reason and command). Reuses the gate policy's own classifier, so "which
- * waits could the policy have approved" is answered by the code that approves them.
- * A command that matches no class, or a gate that recorded none, needs a person. A
- * detail that is not JSON is named, not folded into needs_human: it is a row the writer
- * should never have produced.
+ * The class of the gate a wait ended, from the gate row's detail (the JSON a block writes:
+ * reason and command), using the gate policy's own classifier so "which waits could the
+ * policy have approved" is answered by the code that approves them. No matching class, or no
+ * command, needs a person. A detail that is not JSON is named, not folded into needs_human.
  */
 export function gateClassOf(detail: string | null): string {
   if (detail === null) return WAIT_CLASS_NEEDS_HUMAN;
@@ -253,13 +242,10 @@ function emptyGroup(agent: string | null, namespace: string): ClaimsGroup {
   };
 }
 
-/** Per agent and namespace: jobs and claims, each evaluation's agreement counts, and
- *  the human touches on those jobs with the total and median wait.
- *
- *  An evaluation is attributed through its claim (claim_id), which is how the worker
- *  writes every one. A touch is attributed to every agent that made a claim on its
- *  job, so a job two drivers worked shows its touches under both; a touch on a job
- *  with no claim yet is grouped under agent null. */
+/** Per agent and namespace: jobs and claims, each evaluation's agreement counts, and the
+ *  human touches on those jobs with the total and median wait. An evaluation is attributed
+ *  through its claim_id. A touch is attributed to every agent that claimed its job, so a job
+ *  two drivers worked shows under both; a touch on a job with no claim is under agent null. */
 export async function readClaimsAggregate(
   db: D1Database,
   filter: ClaimsFilter,

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { expect } from "vitest";
-import type { Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
 import { blockJob, claimJob, postJob } from "../src/jobs";
@@ -127,4 +127,75 @@ export async function blockedJob(
   expect((await claimJob(jobsEnv(), holder, at, { id })).ok).toBe(true);
   expect((await blockJob(jobsEnv(), holder, at, id, block)).ok).toBe(true);
   return id;
+}
+
+export const SEAT = "github:DrDustinEdwards";
+// Minted-agent actors on a legacy write agent. The CAS and the unique index
+// are properties of SQLite and do not change with the caller; the agent: shape matters
+// to resume, which returns a job to its own driver only when that actor is one driver's
+// credential rather than a shared one.
+export const DRIVER_ACTOR = "agent:driver-aaaa";
+export const OTHER_ACTOR = "agent:driver-dddd";
+export const DRIVER = grantAgent("write", DRIVER_ACTOR);
+export const OTHER = grantAgent("write", OTHER_ACTOR);
+
+export const at = (iso: string) => new Date(iso);
+export const NOW = at("2026-09-10T12:00:00.000Z");
+
+export async function auditActions(id: string): Promise<string[]> {
+  const { results } = await env.DB.prepare(
+    "SELECT action FROM audit_log WHERE params LIKE ?1 ORDER BY id ASC",
+  )
+    .bind(`%${id}%`)
+    .all<{ action: string }>();
+  return (results ?? []).map((r) => r.action);
+}
+
+// An env whose first batch runs `between` first, against the real D1. Every job
+// transition reads the row and then commits one guarded batch, so this puts a
+// competing write in the gap the guard exists for.
+export function racingEnv(between: () => Promise<void>) {
+  let armed = true;
+  return {
+    ...jobsEnv(),
+    DB: {
+      prepare: (sql: string) => env.DB.prepare(sql),
+      batch: async (statements: D1PreparedStatement[]) => {
+        if (armed) {
+          armed = false;
+          await between();
+        }
+        return env.DB.batch(statements);
+      },
+    },
+  } as unknown as Parameters<typeof postJob>[0];
+}
+
+export async function post(
+  over: Partial<{
+    namespace: string;
+    title: string;
+    body: string;
+    priority: number;
+    gate_required: boolean;
+    kind: string;
+  }> = {},
+) {
+  return postJob(jobsEnv(), grantAgent("write", SEAT), NOW, {
+    namespace: "capsid",
+    title: "a job",
+    body: "do the thing",
+    ...over,
+  });
+}
+
+/** Empties the queue tables and seeds the namespaces the job tests post into. */
+export async function resetJobs() {
+  await env.DB.prepare("DELETE FROM jobs").run();
+  await env.DB.prepare("DELETE FROM audit_log").run();
+  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await seedCapsidNamespace();
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+    .bind("germomics", JSON.stringify([{ repo: "example/germomics", label: "primary" }]))
+    .run();
 }

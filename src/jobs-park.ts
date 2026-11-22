@@ -13,36 +13,29 @@ import {
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { DAY_MS } from "./time";
-// Park: a job that is wanted but not now, for
-// example one kept on his request until a decision comes back. A parked job is never
-// claimed (claim reads only queued rows), never planned (the overnight plan reads only
-// queued rows), and still listed and searchable: it keeps its row and its mirror.
+// Park: a job that is wanted but not now. A parked job is never claimed or planned (both read
+// only queued rows) but is still listed and searchable: it keeps its row and mirror.
 //
-// The seat's act, like edit: the admin or a can_merge caller, never a driver. A driver
-// that could park a job could take work out of the queue's order. Only a queued job is
-// parked. A claimed job is being worked, and a blocked one has somebody waiting on it:
-// resume or supersede those. The one-line reason ("comes back when ...") is kept in
-// result_summary, the column a blocked job already uses for why it is not moving, so
-// there is no migration, and it is cleared when the job comes back.
+// The seat's act, like edit (the admin or a can_merge caller): a driver that could park a job
+// could take work out of the queue's order. Only a queued job is parked; a claimed or blocked
+// one is resumed or superseded. The one-line reason ("comes back when ...") is kept in
+// result_summary, so there is no migration, and cleared when the job comes back.
 //
-// Parked is not an open status (src/jobs-schema.ts): it holds no title slot, so the
-// partial unique index is unchanged and the feed, namespace delete and the watcher read
-// a parked job as they read a finished one. The price is that the same title can be
-// posted while a job is parked, so unpark refuses, naming the job, when it would put a
+// Parked is not an open status (src/jobs-schema.ts): it holds no title slot, so the partial
+// unique index is unchanged and readers treat it as finished. The price is that the same title
+// can be posted while a job is parked, so unpark refuses, naming the job, when it would put a
 // second open job under one title.
 //
-// A due date: park may take `until`, and the five-minute tick
-// (returnDueParked, from src/tick.ts) returns the job to the queue once that time has
-// passed, as the system actor PARK_DUE_ACTOR, through the same transition unpark makes.
-// It is kept in jobs.parked_until (migrations/0064) and cleared whenever the job leaves
-// parked. When the title is taken by then, the job stays parked and the inbox shows it
-// as due (src/inbox.ts), so the seat decides; the tick never supersedes anything.
+// A due date: park may take `until`, and the five-minute tick (returnDueParked, src/tick.ts)
+// returns the job to the queue once it passes, as PARK_DUE_ACTOR, through the transition unpark
+// makes. Kept in jobs.parked_until (migrations/0064), cleared when the job leaves parked. When
+// the title is taken by then the job stays parked and the inbox shows it as due (src/inbox.ts);
+// the tick never supersedes anything.
 
 const REASON_MAX = 300;
 // How far ahead a due date may be: a year. A job wanted further out than that is a
 // decision to make again, not a timer.
 const UNTIL_MAX_MS = 366 * DAY_MS;
-// The most parked jobs one tick returns. More wait for the next tick, five minutes on.
 const DUE_PER_TICK = 25;
 const PARK_DUE_ACTOR = "system:park-due";
 

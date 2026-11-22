@@ -4,34 +4,28 @@ import { APP_ROSTER } from "./roster";
 import { externalFence } from "./provenance";
 import type { Finding } from "./watcher-detect";
 
-// THE MEMORY OF A ROLLBACK (docs/design/design-merge-pipeline.md section 6, PR 6). Each
-// watcher pass reads, for every DEPLOY_ROSTER repo, its newest completed default-branch push
-// runs, finds the job named "live gate", or "<caller job> / live gate" when the gate runs in
-// a called workflow ("deploy / live gate" for capsid and carrel, in devkit's reusable
-// worker-deploy.yml), and records what became of the deploy in
-// deploy_outcomes (migrations/0039). A rollback, or one that did not take effect,
-// is a watcher finding, so it reaches Needs you and the queue; the push is PR 7.
+// THE MEMORY OF A ROLLBACK (docs/design/design-merge-pipeline.md section 6, PR 6). Each watcher
+// pass reads, for every DEPLOY_ROSTER repo, its newest completed default-branch push runs, finds
+// the job named "live gate" (or "<caller job> / live gate" when the gate runs in a called
+// workflow, as for capsid and carrel in devkit's worker-deploy.yml), and records what became of
+// the deploy in deploy_outcomes (migrations/0039). A rollback, or one that did not take effect, is
+// a watcher finding, so it reaches Needs you and the queue.
 //
-// GitHub serves no step summary through its API, so the outcome is read from what it does
-// serve: the job's conclusion, the conclusion of its rollback step, and the job's check-run
-// annotations, where the step's ::error:: lines land ("rolled back: was A ... now B", "not
-// rolling back", "the rollback did not take effect"). No CI secret is added: the App
-// already reads CI.
+// GitHub serves no step summary through its API, so the outcome is read from the job's
+// conclusion, its rollback step's conclusion, and the check-run annotations where the step's
+// ::error:: lines land ("rolled back: was A ... now B", "not rolling back", "the rollback did not
+// take effect"). No CI secret is added: the App already reads CI.
 
 const LIVE_JOB = "live gate";
 const LIVE_JOB_SUFFIX = ` / ${LIVE_JOB}`;
-// The repos the deploy watcher reads: each by its namespace, and by its repo label where the
-// repo is not the namespace's primary. `key` names the fingerprint, so two repos of one
-// namespace never share a finding. carrel's live gate runs in devkit's reusable
-// worker-deploy.yml; carrel is not on APP_ROSTER (src/roster.ts). Julie, txasm, bsw and the
-// static sites (Capsomer, Prelum's specimen, Carrel's public page, the capsid explorer) deploy
-// through worker-deploy too. Prelum has no namespace of its own: it is the dustinedwards
-// namespace's "prelum" repo. A run with two live gates (carrel's app and public site) records
-// the one that did not pass, else the first. Enarratio's gallery deploys through worker-deploy
-// too.
-// dustinedwards.info deploys from its own Deploy workflow, started by CI's completion (workflow_run)
-// and on a schedule, never by a push, so its runs are read by `workflow`, of any event; its "live gate"
-// job is in that workflow.
+// The repos the deploy watcher reads: each by its namespace, and by its repo label where the repo
+// is not the namespace's primary. `key` names the fingerprint, so two repos of one namespace never
+// share a finding. Carrel is not on APP_ROSTER (src/roster.ts). Prelum has no namespace of its
+// own: it is the dustinedwards namespace's "prelum" repo. A run with two live gates (carrel's app
+// and public site) records the one that did not pass, else the first.
+// dustinedwards.info deploys from its own Deploy workflow, started by CI's completion
+// (workflow_run) and on a schedule, never by a push, so its runs are read by `workflow`, of any
+// event; its "live gate" job is in that workflow.
 export interface DeployRepo {
   key: string;
   namespace: string;

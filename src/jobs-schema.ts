@@ -4,9 +4,6 @@ import { checkScope, JOBS_TOOL } from "./scope";
 import { toHex } from "@dustinedwards/site-runtime/encoding";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
-// The work queue's vocabulary, in one place so the table, the tool and the driver
-// cannot disagree about it.
-
 // parked: wanted but not now (src/jobs-park.ts). Not open, not terminal: it holds no title slot
 // and its mirror stays active.
 export const JOB_STATUSES = [
@@ -20,18 +17,14 @@ export const JOB_STATUSES = [
 ] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
-// The states a job still holds a title slot in. The partial unique index names the
-// same values, and test/jobs.test.ts asserts they agree with the last migration that
-// defines it: a status added here and not there would let two open jobs share a title.
-//
-// Blocked is open (migrations/0019). It is a pause with somebody waiting on it, and
-// resume takes the same row back to claimed; leaving it out would let a watcher post
-// the same finding again while the first copy waits for the seat.
+// The states a job still holds a title slot in. The partial unique index names the same
+// values (test/jobs.test.ts asserts they agree with the last migration defining it). Blocked
+// is open (migrations/0019): resume takes the same row back to claimed, and leaving it out
+// would let a watcher post the same finding again while the first waits for the seat.
 export const OPEN_JOB_STATUSES: readonly JobStatus[] = ["queued", "claimed", "blocked"];
 
-// The finished states. A job's mirror document closes on these. Superseded is finished
-// but not a failure (migrations/0020): the job was replaced before any work was done,
-// so it writes no outcome row.
+// The finished states; a job's mirror document closes on these. Superseded is finished but
+// not a failure (migrations/0020): replaced before any work, so it writes no outcome row.
 const TERMINAL_JOB_STATUSES: readonly JobStatus[] = ["done", "failed", "superseded"];
 
 export function isTerminalJobStatus(status: JobStatus): boolean {
@@ -84,7 +77,6 @@ export interface JobRow {
   required_scopes: string | null;
   // The track record this job needs of that driver, as JSON, or null (migrations/0011).
   min_record: string | null;
-  // Gates hit and human resumes, counted where they happen (migrations/0007).
   blocked_count: number;
   resumed_count: number;
   // The retry cap's budget (migrations/0016): only the times the work was sent back to
@@ -156,15 +148,13 @@ export interface RequiredScopes {
   flags: ScopeFlag[];
 }
 
-// A requirement that cannot be read is corrupt, not absent. Failing open would hand out a
-// job whose requirement had been damaged to any driver at all, and a garbled "needs
-// can_merge" is not the same statement as "needs nothing". post validates both fields
-// before it writes them, so an unreadable value only comes from a write that bypassed
-// post, which is the row that should not be handed out.
+// A requirement that cannot be read is corrupt, not absent: failing open would hand a damaged
+// requirement's job to any driver, and a garbled "needs can_merge" is not "needs nothing".
+// post validates both fields, so an unreadable value comes only from a write that bypassed it.
 //
-// So the job cannot strand behind a refusal nothing can satisfy, the claim marks it
-// failed with the field named, as it does a bad signature; resume refuses and leaves
-// it blocked. null, undefined, "" and an object without the field are no requirement.
+// So the job cannot strand behind a refusal nothing can satisfy, the claim marks it failed
+// with the field named, as for a bad signature; resume refuses and leaves it blocked. null,
+// undefined, "" and an object without the field are no requirement.
 export type ParsedRequirement<T> = { ok: true; value: T } | { ok: false; problem: string };
 
 function parseObject(field: string, json: string): ParsedRequirement<Record<string, unknown>> {
@@ -290,11 +280,10 @@ export function missingForRecord(
   return `this job asks for a driver with at least ${plural(prs_merged, "merged pull request")} on its record, and this one has ${record.prs_merged}.`;
 }
 
-// A swallowed parameter tag: a caller that closes a parameter tag inside a value sends
-// the later arguments as literal text in that value. Refused rather than cleaned up,
-// because the lost arguments cannot be recovered from the text, and the outcome row
-// cannot be corrected after the write. test/jobs.test.ts derives these names from
-// the tool's schema.
+// A swallowed parameter tag: a caller that closes a parameter tag inside a value sends the
+// later arguments as literal text in it. Refused, not cleaned up, because the lost arguments
+// cannot be recovered and the outcome row cannot be corrected after the write.
+// test/jobs.test.ts derives these names from the tool's schema.
 export const JOB_PARAM_NAMES = [
   "action",
   "namespace",
@@ -315,14 +304,12 @@ export const JOB_PARAM_NAMES = [
 // Only the full `</name>` spelling, so a body that discusses this rule is not refused.
 const SWALLOWED_TAG = new RegExp(`</(${JOB_PARAM_NAMES.join("|")})>`);
 
-// The first parameter name found, which is where the value was cut off, or null.
 export function swallowedParamTag(value: string): string | null {
   const match = SWALLOWED_TAG.exec(value ?? "");
   return match ? match[1] : null;
 }
 
-// One message for every call site. It names both the field and the tag, because a
-// value cut off by its own closing tag reads confusingly unless both are stated.
+// One message for every call site, naming both the field and the tag.
 export function swallowedTagRefusal(field: string, tag: string): string {
   const own = field === tag ? " (its own closing tag)" : "";
   return (

@@ -12,21 +12,21 @@ import { DAY_MS } from "./time";
 import { mapLimit } from "./map-limit";
 import { toSqlTime } from "@dustinedwards/site-runtime/time";
 
-// THE AUTO-MERGE SAFETY METER AND SHUTOFF (docs/design/design-merge-pipeline.md, "The
-// safety meter"). Merge units (src/merge-units.ts) narrow one path class after a bad
-// unattended merge; this narrows the whole namespace. It only narrows: the tick stops
-// merging that namespace's pull requests unattended and they fall to class approve, and
-// Dustin's approvals still execute. Lifting it is the automerge_resume control.
+// THE AUTO-MERGE SAFETY METER AND SHUTOFF (docs/design/design-merge-pipeline.md, "The safety
+// meter"). Merge units (src/merge-units.ts) narrow one path class after a bad unattended merge;
+// this narrows the whole namespace. It only narrows: the tick stops merging that namespace's PRs
+// unattended and they fall to class approve; Dustin's approvals still execute. Lifting it is the
+// automerge_resume control.
 //
-// Three parts, none of them a D1 migration (audit_log rows and APP_KV only):
-//   1. Revert tracking. A merged pull request that reverts one the tick auto-merged is
-//      recorded as an `auto-merge-reverted` audit row. A rollback is the deploy gate's
-//      verdict; a revert is Dustin's (or a driver's) verdict, and nothing else records it.
-//   2. The meter: the last seven days per namespace, written to APP_KV so the status
-//      tool, the Portal feed and the phone alerts read it with no D1 or GitHub read.
-//   3. The shutoff: a namespace pauses when 2 or more of the pull requests the tick merged
-//      were rolled back or reverted in 7 days, or when that rate is more than 3 times the
-//      rate over the 30 days before.
+// Three parts, none a D1 migration (audit_log rows and APP_KV only):
+//   1. Revert tracking. A merged PR that reverts one the tick auto-merged is recorded as an
+//      `auto-merge-reverted` audit row. A rollback is the deploy gate's verdict; a revert is
+//      Dustin's (or a driver's), and nothing else records it.
+//   2. The meter: the last seven days per namespace, in APP_KV, so the status tool, the Portal
+//      feed and the phone alerts read it with no D1 or GitHub read.
+//   3. The shutoff: a namespace pauses when 2 or more of the PRs the tick merged were rolled back
+//      or reverted in 7 days, or when that rate is more than 3 times the rate over the 30 days
+//      before.
 
 export const PAUSED_KEY = "merge-safety:paused";
 export const LIFTED_KEY = "merge-safety:lifted";
@@ -356,7 +356,6 @@ export interface OutcomeEvidence {
 
 export interface SafetyCounts {
   namespace: string;
-  // The last seven days.
   auto_merged: number;
   approved: number;
   deploys_verified: number;
@@ -412,7 +411,6 @@ export function countsFrom(
   const inWeek = (ms: number) => ms > t - WEEK_MS && ms <= t;
   const inReach = (ms: number) => ms > t - WEEK_MS - BASELINE_MS && ms <= t;
 
-  // The unattended merges, by pull request, for the join below.
   const autoPrs = new Set<string>();
   for (const a of audit) {
     if (a.action !== "auto-merged" || !a.namespace) continue;
@@ -659,7 +657,6 @@ export interface MergeSafetyTickReport {
 
 /** What the tick calls: the revert pass (half-hourly), then the meter and the shutoff. */
 export async function mergeSafetyTick(env: Env, now: Date): Promise<MergeSafetyTickReport> {
-  // The policy is loaded (and its signature checked) once for both passes.
   const loaded = await loadMergePolicy(env);
   const reverts = await revertsTick(env, now, loaded);
   const safety = await safetyTick(env, now, "policy" in loaded ? loaded.policy.namespaces : []);

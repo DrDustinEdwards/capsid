@@ -1,12 +1,11 @@
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 
-// The bindings and vars wrangler.jsonc.example declares (DB, APP_KV, OAUTH_KV, MEDIA,
-// AI_SEARCH, GITHUB_APP_CLIENT_ID) come from worker-configuration.d.ts, which
-// `npm run types` generates with `wrangler types` and test/env-types.test.ts holds to
-// the example in both directions. What is written here is what the config cannot say:
-// secrets, the OAuth provider the library injects, the optional assets binding, and the
-// build stamps. GITHUB_APP_CLIENT_ID is generated as the literal pinned id; it is widened to string
-// here so tests and the deploy check can hold other values.
+// The bindings and vars wrangler.jsonc.example declares (DB, APP_KV, OAUTH_KV, MEDIA, AI_SEARCH,
+// GITHUB_APP_CLIENT_ID) come from worker-configuration.d.ts (`npm run types`;
+// test/env-types.test.ts holds it to the example both ways). What is written here is what the
+// config cannot say: secrets, the OAuth provider the library injects, the optional assets binding,
+// and the build stamps. GITHUB_APP_CLIENT_ID is generated as the literal pinned id; widened to
+// string here so tests and the deploy check can hold other values.
 export interface Env extends Omit<
   GeneratedEnv,
   "GITHUB_APP_CLIENT_ID" | "EMAIL" | "ALERT_FROM" | "EMAIL_ROUTING"

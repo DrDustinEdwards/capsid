@@ -9,44 +9,37 @@ import { fromBase64Text } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
-// The daily maintenance pass's release-tag rule (Capsid improvement list, item 13:
-// releases without Dustin's PC). A cloud session cannot push a tag, so a shared package's
-// version bump merged from one sat untagged until he tagged it at his desk, and every
-// package repo's bump-consumers workflow (on push: tags: v*) waited with it. Merging the
-// bump is the release decision; this rule makes the tag that follows from it.
+// The daily maintenance pass's release-tag rule (Capsid improvement list, item 13). A cloud
+// session cannot push a tag, so a shared package's version bump merged from one sat untagged,
+// and every package repo's bump-consumers workflow (on push: tags: v*) waited with it. Merging
+// the bump is the release decision; this rule makes the tag that follows.
 //
-// For each shared package (shared_packages, migrations/0036; the Shared code view's
-// configuration, src/shared-code.ts) the version in the repo's root package.json on its
-// default branch is compared with the repo's tags by releaseDecision, the rule the view
-// uses for "untagged":
+// For each shared package (shared_packages, migrations/0036; src/shared-code.ts) the version in
+// the repo's root package.json on its default branch is compared with the repo's tags by
+// releaseDecision, the rule the Shared code view uses for "untagged":
 // - a version a tag already names is left alone;
-// - a version newer than every release tag is tagged v<version> at the commit that set
-//   it: walking the commits that touched package.json, newest first, the oldest of the
-//   run that carries this version. Not the newest such commit: a later dependency change
-//   that kept the version is not the release. When the run reaches the end of what was
-//   read (COMMITS_READ) and the file's history is longer, the commit is not known, and
+// - a version newer than every release tag is tagged v<version> at the commit that set it: the
+//   oldest of the newest run of commits (touching package.json) carrying this version, since a
+//   later dependency change that kept the version is not the release. When the run reaches the
+//   end of what was read (COMMITS_READ) and the history is longer, the commit is not known, and
 //   the version is listed rather than tagged at a guess;
-// - a version below the newest release tag is never tagged (it would start
-//   bump-consumers on an older version) and is listed;
+// - a version below the newest release tag is never tagged (it would start bump-consumers on an
+//   older version) and is listed;
 // - a pre-release or missing version is left for a person.
-// A tag made through the App's installation token fires push workflows (only events
-// made with a workflow's own GITHUB_TOKEN are suppressed), so the tag starts
-// bump-consumers in the package repo, which opens the apps' bump pull requests.
+// A tag made through the App's installation token fires push workflows, so it starts
+// bump-consumers, which opens the apps' bump pull requests.
 //
-// Tag, and a release only when the CHANGELOG has a section for the version: the notes
-// are then the package's own words (src/github/releases.ts, releaseNotes, the rule
-// capsid_close_pr action release applies). With no section the tag alone is made, since
-// a release with empty or guessed notes is what that action refuses. A failed release
-// after a made tag is listed, never retried by retagging.
+// A release is made only when the CHANGELOG has a section for the version (src/github/releases.ts
+// releaseNotes, the rule capsid_close_pr action release applies); otherwise the tag alone, since
+// empty or guessed notes are what that action refuses. A failed release after a made tag is
+// listed, never retried by retagging.
 //
-// On by default, unlike the branch prune: a tag adds and never removes, GitHub refuses a
-// tag that exists (so nothing is retagged or moved), and the decision was the merge. The
-// seat turns it off by setting RELEASE_TAGS_SWITCH_KEY to "off"; off, what would be
-// tagged is listed. At most RELEASE_TAG_CAP tags per run; the rest wait for the next.
-// Each tag is audit-logged, before the next, with the repo, tag and sha
-// (snapshot invariant, test/write-invariants.test.ts: a write leaves its record). A system action of the pass, like the
-// branch prune, so it takes no caller's grant; the writes are the ones guardedWrite
-// files for capsid_close_pr action tag and release, through the same helpers.
+// On by default, unlike the branch prune: a tag adds and never removes, GitHub refuses a tag that
+// exists, and the decision was the merge. The seat turns it off with RELEASE_TAGS_SWITCH_KEY set
+// to "off"; off, what would be tagged is listed. At most RELEASE_TAG_CAP tags per run. Each tag
+// is audit-logged before the next (snapshot invariant, test/write-invariants.test.ts). A system
+// action of the pass, so it takes no caller's grant; the writes are guardedWrite's for
+// capsid_close_pr action tag and release, through the same helpers.
 
 /** The switch the seat sets to "off" to stop the pass tagging. Anything else, or no key,
  *  is on. A KV key rather than a control, as the prune switch is

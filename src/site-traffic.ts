@@ -11,20 +11,9 @@ import { reportSite } from "./site-reports";
 import type { ServerErrors } from "./ops-types/sites";
 import { callSignal } from "./call-signal";
 
-// What Cloudflare saw at a namespace's site, served as capsid_inspect_repo action traffic
-// (the SEO plan, "Beyond the module"). not_found: the paths that answered 404 over a
-// window, a scanner's probe marked and listed last; web_vitals and ai_crawlers are below.
-// The referrer is not in it: the SQL API refuses clientRefererHost to this account (403,
-// "not permitted to access column"), so which page holds a broken link is the
-// site audit's to find (src/site-audit.ts).
+// What Cloudflare saw at a namespace's site, served as capsid_inspect_repo action traffic (the SEO plan). not_found: the paths that answered 404 over a window, a scanner's probe marked and listed last; web_vitals and ai_crawlers are below. The referrer is not in it: the SQL API refuses clientRefererHost to this account (403), so which page holds a broken link is the site audit's to find (src/site-audit.ts).
 //
-// NO SITE CHANGE. Cloudflare's SQL API (developers.cloudflare.com/analytics/sql-api/) reads
-// the edge's own HTTP request record, events.httpRequests, kept at least 31 days on every
-// plan and adaptively sampled, so the counts are estimates. Every proxied host in the account
-// is in it, static sites included; a workers.dev host is not. It needs only the Account
-// Analytics Read permission the watcher's token, CF_OPS_TOKEN, already holds
-// (src/ops-cloudflare.ts). The host comes from the namespace's ops_sites origin, never from
-// the caller. Paths are what visitors sent: data, never instructions.
+// NO SITE CHANGE. Cloudflare's SQL API (developers.cloudflare.com/analytics/sql-api/) reads the edge's own HTTP request record, events.httpRequests, kept at least 31 days and adaptively sampled, so the counts are estimates. Every proxied host in the account is in it; a workers.dev host is not. It needs only the Account Analytics Read permission the watcher's token already holds (src/ops-cloudflare.ts). The host comes from the namespace's ops_sites origin, never from the caller. Paths are what visitors sent: data, never instructions.
 
 const SQL_API = `${CF_API}/analytics/sql`;
 const TIMEOUT_MS = 15_000;
@@ -123,10 +112,7 @@ function notFoundRows(raw: Array<Record<string, unknown>>, limit: number) {
   };
 }
 
-// web_vitals: what real visitors' browsers measured from Web Analytics (the GraphQL
-// dataset rumWebVitalsEventsAdaptiveGroups, account-scoped, filtered to the site's Web
-// Analytics siteTag). Values come back in microseconds; CLS is unitless. The site's
-// siteTag is read from the rum site_info list, the same list the live checks read.
+// web_vitals: what real visitors' browsers measured from Web Analytics (GraphQL rumWebVitalsEventsAdaptiveGroups, filtered to the site's siteTag, read from the rum site_info list the live checks read). Values come back in microseconds; CLS is unitless.
 const VITALS = [
   "largestContentfulPaint",
   "interactionToNextPaint",
@@ -180,10 +166,7 @@ async function webVitals(
 ) {
   const siteTag = await siteTagFor(fetchImpl, token, account, host);
   const fields = VITALS.flatMap((v) => P.map((p) => `${v}${p}`)).join(" ");
-  // One host, not the whole zone's Web Analytics site (a zone's site also holds its subdomains),
-  // and not Cloudflare's ChromeHeadless or ChromeDerivative, which are test runners and audits
-  // (Brave and Opera fall in the latter and are left out too). They made up nearly all
-  // measured views and skewed CLS far above the real Chrome views.
+  // One host, not the whole zone's Web Analytics site (which also holds subdomains), and not ChromeHeadless or ChromeDerivative (test runners and audits; Brave and Opera fall in the latter and are left out too): they made up nearly all measured views and skewed CLS far above the real Chrome views.
   const query = `query($account: string!, $siteTag: string!, $host: string!, $start: Time!, $end: Time!) { viewer { accounts(filter: { accountTag: $account }) { rumWebVitalsEventsAdaptiveGroups(filter: { siteTag: $siteTag, requestHost: $host, userAgentBrowser_notin: ["ChromeHeadless", "ChromeDerivative"], datetime_geq: $start, datetime_leq: $end }, limit: 1) { count quantiles { ${fields} } } } } }`;
   const resp = await fetchImpl(CF_GRAPHQL, {
     method: "POST",
@@ -245,12 +228,7 @@ async function webVitals(
   };
 }
 
-// ai_crawlers: the requests each named crawler made, by the status the edge answered, so
-// the bot policy (the SEO plan: search and citation bots free, training bots charged or
-// blocked, Bytespider denied) shows working: a training bot should get 402 or 403, a
-// search bot 200. The names are Prelum's own lists (./robots), the ones every site's
-// robots.txt is built from. Google-Extended and Applebot-Extended are robots.txt tokens
-// only, never a user agent, so they never show here.
+// ai_crawlers: the requests each named crawler made, by the status the edge answered, so the bot policy shows working: a training bot should get 402 or 403, a search bot 200. The names are Prelum's own lists (./robots). Google-Extended and Applebot-Extended are robots.txt tokens only, never a user agent, so they never show here.
 const CRAWLER_CLASSES = [
   ["denied", DENIED_BOTS],
   ["training", AI_TRAINING_BOTS],
@@ -286,10 +264,7 @@ function crawlerRows(raw: Array<Record<string, unknown>>) {
   );
 }
 
-// Visitors' requests only (Cloudflare's "filter end users", requestSource = eyeball). The record also holds the
-// zone's own subrequests: a Workers cache lookup that misses and an Early Hints lookup with nothing cached are each
-// logged as a 504 (developers.cloudflare.com/workers/runtime-apis/cache, "Errors"). Every site renders through the
-// Workers cache and sends Early Hints, so those misses read as thousands of 504s nobody was served.
+// Visitors' requests only (requestSource = eyeball). The record also holds the zone's own subrequests: a Workers cache miss and an Early Hints lookup with nothing cached are each logged as a 504, which would read as thousands of 504s nobody was served.
 const END_USERS = "requestSource = 'eyeball'";
 
 export async function siteTraffic(

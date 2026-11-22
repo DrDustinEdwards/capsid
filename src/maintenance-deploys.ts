@@ -6,19 +6,16 @@ import { readSnapshot } from "./ops-snapshot";
 import { HOUR_MS, days } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The daily maintenance pass's undeployed-merge rule. Carrel sat
-// four days behind its default branch before anyone noticed. A site's live Worker is
-// behind when its newest Cloudflare deployment is older than the last commit on its repo's
-// default branch, and that commit is more than GRACE_HOURS old, so a deploy still running
-// after a merge is not listed. A site whose health route reports the default branch's head
-// sha is deployed, whatever the dates say.
+// The daily maintenance pass's undeployed-merge rule (Carrel once sat four days behind its default
+// branch unnoticed). A site's live Worker is behind when its newest Cloudflare deployment is older
+// than the last commit on its repo's default branch, and that commit is more than GRACE_HOURS old
+// (so a deploy still running is not listed). A site whose health route reports the default
+// branch's head sha is deployed, whatever the dates say.
 //
-// The deployments come from the watcher's last snapshot (src/ops-cloudflare.ts), so the pass
-// costs no Cloudflare read of its own; the default branch costs two GitHub reads per site
-// (the repository, for its default branch's name, then that branch's head).
-// A site the snapshot could not read on Cloudflare is listed as not checked; no snapshot at
-// all is listed under capsid, whose watcher writes it. A site not on
-// Cloudflare (a Vercel site) has no Worker and is left out.
+// The deployments come from the watcher's last snapshot (src/ops-cloudflare.ts), so the pass costs
+// no Cloudflare read; the default branch costs two GitHub reads per site. A site the snapshot could
+// not read is listed as not checked; no snapshot at all is listed under capsid, whose watcher
+// writes it. A site not on Cloudflare (a Vercel site) has no Worker and is left out.
 
 const GRACE_HOURS = 2;
 const MAX_ITEMS = 50;

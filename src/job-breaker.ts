@@ -3,21 +3,17 @@ import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The queue's circuit breaker.
+// The queue's circuit breaker. A namespace whose drivers failed N jobs in the last 24 hours stops
+// handing out work until the seat or Dustin resets it. It holds no "open" flag: it is computed at
+// claim time from the audit log, so there is no state to drift, and only a person's reset closes
+// it. The reset is a timestamp; only failures after it count.
 //
-// A namespace whose drivers failed N jobs in the last 24 hours stops handing out work
-// until the seat or Dustin resets it. The breaker holds no "open" flag: it is computed
-// at claim time from the audit log, so there is no state to drift from what happened,
-// and nothing but a person's reset closes it. The reset is a timestamp; only failures
-// after it count, so a reset cannot be undone by the failures that tripped it.
-//
-// What counts is the holder's own `fail` (audit `job-fail`). A seat's admin fail is a
-// person cleaning up, and a claim that fails a tampered or corrupt body is the Worker
-// refusing, not a driver failing, so neither trips it. Nor does a bench run's key: its
-// fail is the honest "not done" its job asks for (src/jobs-seat.ts completeAsCaller), and
-// three of them in a day would otherwise stop the study's runs. A holder's fail that
-// Capsid's own complete refusal forced, or that states its remainder item by item against
-// a diff that shows the rest done, is left out too (src/fail-exemption.ts).
+// What counts is the holder's own `fail` (audit `job-fail`). A seat's admin fail is a person
+// cleaning up, and a claim failing a tampered or corrupt body is the Worker refusing, so neither
+// trips it. Nor does a bench run's key: its fail is the honest "not done" its job asks for
+// (src/jobs-seat.ts completeAsCaller), and three a day would stop the study's runs. A holder's
+// fail that Capsid's own complete refusal forced, or that states its remainder item by item
+// against a diff showing the rest done, is left out too (src/fail-exemption.ts).
 
 const BREAKER_THRESHOLD_DEFAULT = 3;
 const BREAKER_WINDOW_MS = DAY_MS;
@@ -115,10 +111,9 @@ export function breakerRefusal(state: BreakerState): string {
 }
 
 /**
- * The seat's or Dustin's control (capsid_admin_manage_switches action breaker_reset, admin only, and the
- * Portal's reset_breaker): close one namespace's breaker, so failures before now stop
- * counting, and optionally set the threshold, which applies to every namespace. Audited
- * under the caller, and read back.
+ * The seat's or Dustin's control (capsid_admin_manage_switches action breaker_reset, admin only,
+ * and the Portal's reset_breaker): close one namespace's breaker so earlier failures stop counting,
+ * and optionally set the threshold, which applies to every namespace. Audited under the caller.
  */
 export async function resetBreaker(
   env: Env,

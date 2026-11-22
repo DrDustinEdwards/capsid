@@ -11,7 +11,7 @@ import {
   PORTAL_SESSION_TTL_SECONDS,
   type PortalUser,
   portalDisplay,
-  portalGate,
+  behindGate,
   sourceAddress,
 } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
@@ -53,39 +53,24 @@ import { warningHeaders } from "./http";
 import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 import { MINUTE_MS, DAY_MS } from "./time";
 
-// The Watch Floor's one read (capsid/research/design-ops-console.md): GET
-// /portal/api/ops returns OpsFeed (src/ops-types/feed.ts), the watcher's last pass from KV
-// plus what changes between passes, read live. POST /portal/api/ops/refresh runs one
-// watcher pass now and returns the new feed.
+// The Watch Floor's one read (capsid/research/design-ops-console.md): GET /portal/api/ops returns OpsFeed (src/ops-types/feed.ts), the watcher's last pass from KV plus what changes between passes, read live. POST /portal/api/ops/refresh runs one watcher pass now and returns the new feed. Both answer to portalGate; they are routes, not tools, so no grant is checked here (src/scope.ts lists them among the routes gated some other way).
 //
-// Both answer to portalGate, as every Portal route does: the administrator's Access
-// session and the ADMIN_EMAIL or CO_OWNER_EMAILS check on every request, and a 403 for any Authorization header.
-// They are routes, not tools, so no grant is checked here
-// (one enforcement point, test/route-gates.test.ts); src/scope.ts lists them among the routes gated some other way.
-//
-// READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
-// loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
+// READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
 //   D1, 13 statements plus one per TASKS entry (18 today, so 31):
 //     1  jobs: every open job and every job that ended in the last 24 hours
 //     3  agentSummaries: the inventory, then loadRecordRows' two grouped reads
 //     1  job_outcome_prs in the last 7 days
-//     1  ops_sites: the site configuration, every row
-//     1  ops_packages: the package configuration, every row
-//    18  task_runs: each scheduled task's newest runs, one keyed read per task in
-//        one batch (src/task-runs.ts, TASKS)
+//     1  ops_sites, 1  ops_packages: the configuration, every row
+//    18  task_runs: each task's newest runs, one keyed read per task in one batch
 //     1  watcher_findings: the open findings that post no job (src/watcher-digest.ts)
 //     1  ops_uptime_daily: each site's last 90 days, by month (siteUptime below)
 //     4  gatherInbox (src/inbox.ts): the blocked jobs, the claimed and due parked jobs
-//        with their newest audit rows, the applied migrations (a block
-//        on a migration already applied is settled) and the site configuration again,
-//        so Needs you counts exactly what GET /ops/inbox answers with
-//   KV, 10 gets: gatherInbox's own
-//     reads of the stale pull request cache (src/stale-jobs.ts), the manual steps cache
-//     (src/manual-steps.ts), ops:snapshot, the awaiting-seat set and the merge units' report
-//     (src/merge-units.ts), then ops:snapshot, the
-//     awaiting-seat set, the auto-merge safety report (src/merge-safety.ts), the refresh stamp,
-//     and the overnight switch's mode (its decision record is
-//     read only while the mode is subscription).
+//        with their newest audit rows, the applied migrations and the site configuration
+//        again, so Needs you counts exactly what GET /ops/inbox answers with
+//   KV, 10 gets: gatherInbox's own reads (stale pull request cache, manual steps cache,
+//     ops:snapshot, the awaiting-seat set, the merge units' report), then ops:snapshot,
+//     the awaiting-seat set, the auto-merge safety report, the refresh stamp, and the
+//     overnight switch's mode (its decision record only while the mode is subscription).
 // They run concurrently; the longest chain is agentSummaries' two steps.
 
 export const OPS_FEED_PATH = "/portal/api/ops";
@@ -318,11 +303,7 @@ export function refreshAllowedAt(last: string | null, now: Date): string | null 
   return next > now.getTime() ? new Date(next).toISOString() : null;
 }
 
-// The store's size against D1's cap. Every D1 result carries the database's size in
-// meta.size_after, so the jobs read below reports it and the feed makes no extra read
-// (Foxhound reads it the same way: PRAGMA page_count is not authorized on D1). 10 GB is
-// the per-database cap on Workers Paid (developers.cloudflare.com/d1/platform/limits);
-// on Workers Free it is 500 MB, and this is the one line to change.
+// The store's size against D1's cap. Every D1 result carries the database's size in meta.size_after, so the jobs read below reports it and the feed makes no extra read (PRAGMA page_count is not authorized on D1). 10 GB is the Workers Paid per-database cap (developers.cloudflare.com/d1/platform/limits); on Free it is 500 MB, and this is the one line to change.
 export const D1_CAP_BYTES = 10 * 1024 ** 3;
 
 /** The size a D1 result reports, or null when its meta has no number for it. */
@@ -337,12 +318,7 @@ async function liveJobs(
   secret: string | undefined,
 ): Promise<{ jobs: OpsJob[]; sizeBytes: number | null }> {
   const open = OPEN_JOB_STATUSES.map((_, i) => `?${i + 2}`).join(", ");
-  // datetime() on both sides: updated_at is written both as ISO and as D1's default
-  // text form, and the two do not compare as text. The watcher's finding row joins
-  // on the job it is currently filed as, so a watcher job shows how often its finding
-  // has been seen; one row per fingerprint, so the join cannot multiply a job. A parked
-  // job is not open (src/jobs-schema.ts) but is listed whatever its age, so it does not
-  // vanish from the Queue a day after it was parked.
+  // datetime() on both sides: updated_at is written both as ISO and as D1's default text form, which do not compare as text. The watcher's finding row joins on the job it is currently filed as (one row per fingerprint, so the join cannot multiply a job). A parked job is not open (src/jobs-schema.ts) but is listed whatever its age, so it does not vanish from the Queue a day after it was parked.
   const { results, meta } = await db
     .prepare(
       `SELECT j.id, j.namespace, j.title, j.status, j.priority, j.posted_by, j.claimed_by, j.created_at, j.updated_at,
@@ -529,25 +505,11 @@ export interface OpsDeps {
   gather?: (env: Env, now: Date) => Promise<Gathered>;
 }
 
-export async function handleOpsFeed(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-  deps: OpsDeps = {},
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
-  return opsFeedAnswer(request, gate.user, await (deps.feed ?? opsFeed)(env, now));
-}
+export const handleOpsFeed = behindGate(async (request, env, now, user, deps: OpsDeps = {}) =>
+  opsFeedAnswer(request, user, await (deps.feed ?? opsFeed)(env, now)),
+);
 
-export async function handleOpsRefresh(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-  deps: OpsDeps = {},
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handleOpsRefresh = behindGate(async (request, env, now, user, deps: OpsDeps = {}) => {
   if (request.headers.get(OPS_REFRESH_HEADER) !== OPS_REFRESH_HEADER_VALUE) {
     return textResponse(
       `forbidden: a refresh must carry the header ${OPS_REFRESH_HEADER}: ${OPS_REFRESH_HEADER_VALUE}. The dashboard sends it; a cross-site form cannot.`,
@@ -599,7 +561,7 @@ export async function handleOpsRefresh(
     );
   }
 
-  const actor = adminAgentForEmail(gate.user.email).actor;
+  const actor = adminAgentForEmail(user.email).actor;
   const gather = deps.gather ?? gatherFindings;
   let report: WatcherReport;
   try {
@@ -640,5 +602,5 @@ export async function handleOpsRefresh(
     logEvent("OPS_REFRESH_AUDIT_FAILED", { message: warning }, { level: "error" });
   }
   const feed = await (deps.feed ?? opsFeed)(env, now);
-  return opsFeedAnswer(request, gate.user, feed, warningHeaders(warning));
-}
+  return opsFeedAnswer(request, user, feed, warningHeaders(warning));
+});

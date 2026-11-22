@@ -14,19 +14,16 @@ import {
 } from "./jobs-transition";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Edit: the seat correcting a job that nobody is working A job's body is
-// signed, so without it every correction was a supersede and a repost.
+// Edit: the seat correcting a job that nobody is working. A job's body is signed, so without this
+// every correction was a supersede and a repost.
 //
-// Only the seat (callerIsSeat: the admin or a can_merge caller), never a driver: a
-// driver that could rewrite a job's body could hand itself a different prompt under a
-// signature this Worker made. Only while the job is queued or blocked. A claimed job is
-// being worked to the body it was handed, and a finished one is history.
+// Only the seat (callerIsSeat), never a driver: one that could rewrite a body could hand itself a
+// different prompt under a signature this Worker made. Only while queued or blocked: a claimed job
+// is worked to the body it was handed, and a finished one is history.
 //
-// A new body goes through signedJobBody, the path post uses, so it is refused for what
-// post refuses and signed as post signs it, and claim and resume verify it as they
-// verify a posted body. The version the edit replaces is copied to job_versions
-// (migrations/0033) in the same guarded batch as the UPDATE, the mirror and the audit
-// row, so a version is never lost and never kept for an edit that did not commit.
+// A new body goes through signedJobBody, the path post uses, so it is refused and signed as post
+// does, and claim and resume verify it likewise. The replaced version is copied to job_versions
+// (migrations/0033) in the same guarded batch as the UPDATE, mirror and audit row.
 
 const EDITABLE_STATUSES: readonly JobRow["status"][] = ["queued", "blocked"];
 

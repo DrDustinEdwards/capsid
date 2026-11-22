@@ -15,18 +15,14 @@ import { runKeyAgent } from "./bench-run-key";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// A bearer resolves to a caller, not to a tier. A bare "read" or "write" plus a key
-// fingerprint cannot say whose credential did something, and cannot give a queue
-// driver a credential that works a job without also being able to merge a pull
-// request into a repo that deploys on push.
+// A bearer resolves to a caller, not a tier: a bare "read" or "write" plus a key fingerprint
+// cannot say whose credential did something, nor give a queue driver a credential that works a
+// job without also being able to merge into a repo that deploys on push.
 //
 // Three kinds of caller resolve here:
-//
 //   1. A minted agent (a row in `agents`), with exactly its row's scopes.
-//   2. A bench run key (src/bench-run-key.ts): one treatment run of the paired
-//      comparison, bound to its one job while the run is open.
-//   3. The OAuth admin session, resolved in src/index.ts: the synthetic agent
-//      "admin", holding every scope.
+//   2. A bench run key (src/bench-run-key.ts): one treatment run, bound to its one job while open.
+//   3. The OAuth admin session, resolved in src/index.ts: the synthetic agent "admin", with every scope.
 
 export interface Agent {
   // The agents.id for a minted agent. For a synthetic one, its actor string, so a

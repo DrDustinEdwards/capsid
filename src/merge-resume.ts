@@ -14,15 +14,14 @@ import {
 } from "./stale-jobs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The stale-jobs step on the five-minute tick.
-// A merge is not completion, so this never closes anything: it returns a BLOCKED job to
-// its holder (or the queue) once EVERY pull request the job names has merged, with a
-// note per pull request. A pull request that is closed without merging, unreadable or
-// still open leaves the job blocked. A job is resumed by this step once: a job that
-// blocks again on the same merged pull requests is waiting on something else.
+// The stale-jobs step on the five-minute tick. A merge is not completion, so this never closes
+// anything: it returns a BLOCKED job to its holder (or the queue) once EVERY pull request the job
+// names has merged, with a note per PR. A PR closed without merging, unreadable or open leaves the
+// job blocked. A job is resumed by this step once: one that blocks again on the same merged PRs is
+// waiting on something else.
 //
-// Every state it reads is also written, as counts per job, to the stale:prs cache that
-// the stale view reads (src/stale-jobs.ts, D5), so that view costs no GitHub reads.
+// Every state it reads is also written, as counts per job, to the stale:prs cache the stale view
+// reads (src/stale-jobs.ts, D5), so that view costs no GitHub reads.
 
 const MAX_JOBS = 25;
 const MAX_PRS = 5;

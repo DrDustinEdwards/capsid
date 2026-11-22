@@ -3,20 +3,17 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { SEARCH_ROWS } from "./limits";
 import type { SearchFilter, SearchRow } from "./doc-reads";
 
-// The meaning index: every document, in a Cloudflare AI Search instance whose data
-// source is this Worker's own D1 database (AI Search D1 data source, beta:
-// https://developers.cloudflare.com/ai-search/configuration/data-source/d1/),
-// so search can match by meaning as well as by keyword
-// (capsid/research/design-hybrid-search.md, step 1). D1 stays the source of truth.
+// The meaning index: every document, in a Cloudflare AI Search instance whose data source is this
+// Worker's own D1 database (AI Search D1 data source, beta:
+// https://developers.cloudflare.com/ai-search/configuration/data-source/d1/), so search can match
+// by meaning as well as keyword (capsid/research/design-hybrid-search.md, step 1). D1 stays the
+// source of truth.
 //
-// AI Search runs INDEX_QUERY itself on each sync: new rows are indexed, changed rows
-// re-indexed, unchanged rows skipped, and a row the query no longer returns (a delete
-// or a move) is removed once the whole result has been read. The tick only starts a sync
-// when the store has changed since the last one it started; the instance's own daily
-// schedule is the backstop. Search re-checks every hit against D1 in any case, so an
-// item a sync has not yet caught up with is never served.
-//
-// Unbound (tests, local dev, a deploy without the binding), it does nothing and says so.
+// AI Search runs INDEX_QUERY itself on each sync: new rows indexed, changed rows re-indexed,
+// unchanged skipped, and a row the query no longer returns removed once the whole result has been
+// read. The tick only starts a sync when the store has changed since the last; the instance's
+// daily schedule is the backstop. Search re-checks every hit against D1, so a row a sync has not
+// caught up with is never served. Unbound (tests, local dev), it does nothing and says so.
 
 export const INDEX_INSTANCE = "capsid-documents";
 
@@ -28,13 +25,12 @@ const GATEWAY_KEY = "doc-index:gateway";
 // A hybrid query that has not answered by then falls back to keyword search (AI Search's search() takes no timeout or signal of its own.
 const SEARCH_TIMEOUT_MS = 8_000;
 
-// One row per document. id is the primary key, so each page AI Search reads is an index
-// seek. The body is cut to fit the 64 KiB a rendered row may take
-// (d1_document_too_large); keyword search (FTS5) still reads every byte. meta_canon is the current canon: the
-// documents a ruling or convention lives in, which search boosts over a session log
-// that quotes an old ruling (design section 3.3). AI Search allows five meta_ columns,
-// and puts each row's id on every chunk as `row_id`, so the id needs none.
-// The query may not hold a semicolon, "--" or slash-star, even in a literal.
+// One row per document. id is the primary key, so each page AI Search reads is an index seek. The
+// body is cut to fit the 64 KiB a rendered row may take (d1_document_too_large); keyword search
+// (FTS5) still reads every byte. meta_canon is the current canon (the documents a ruling or
+// convention lives in), which search boosts over a session log quoting an old ruling (design 3.3).
+// AI Search allows five meta_ columns and puts each row's id on every chunk as `row_id`, so the id
+// needs none. The query may not hold a semicolon, "--" or slash-star, even in a literal.
 export const INDEX_QUERY = `SELECT id, title, substr(body, 1, 63000) AS content,
   namespace AS meta_namespace, coalesce(type, 'note') AS meta_type,
   coalesce(status, 'published') AS meta_status,
@@ -56,13 +52,12 @@ export interface IndexReport {
 
 const idle = (note: string): IndexReport => ({ ran: false, note, failed: 0 });
 
-// The instance was created once through the API (type "d1", source the `capsid` database
-// in scripts/bindings.mjs, token_id the account's AI Search service token, whose Index
-// Engine permission holds D1 Read, custom_metadata derived from the meta_ columns
-// (a column can be added on update, never removed or retyped), index_method vector
-// and keyword, fusion rrf). Its query is this file's: a changed INDEX_QUERY is sent on
-// the next tick, which also starts a sync. A missing instance is refused, never silently
-// re-created, because creating one needs the token the API call names.
+// The instance was created once through the API (type "d1", source the `capsid` database in
+// scripts/bindings.mjs, token_id the account's AI Search service token, custom_metadata derived
+// from the meta_ columns (add on update, never remove or retype), index_method vector and keyword,
+// fusion rrf). Its query is this file's: a changed INDEX_QUERY is sent on the next tick, which also
+// starts a sync. A missing instance is refused, never silently re-created, because creating one
+// needs the token the API call names.
 async function ensureInstance(env: Env, ns: AiSearchNamespace): Promise<AiSearchInstance> {
   const instance = ns.get(INDEX_INSTANCE);
   if ((await env.APP_KV.get(READY_KEY)) === INDEX_QUERY) return instance;
@@ -139,15 +134,12 @@ export async function docIndexTick(env: Env): Promise<IndexReport> {
   return idle(`sync ${job.id} already running`);
 }
 
-// Hybrid search (step 2 of the design): meaning plus keyword, through the index. The
-// index decides only the order. Every hit is read back from D1 with the caller's
-// filters, so a document the caller may not see, or one deleted or moved since it was
-// indexed, is never returned. Anything that keeps the index from answering returns a
-// reason instead of rows, and the caller falls back to FTS5.
-//
-// Queries are counted per month in KV. The account's free 1,000 a month is shared with
-// the site's Ask, and a paid hybrid query costs $0.00075, so the cap holds the worst case
-// near $4 a month (the $5 cap).
+// Hybrid search (step 2 of the design): meaning plus keyword, through the index. The index decides
+// only the order: every hit is read back from D1 with the caller's filters, so a document the
+// caller may not see, or one deleted or moved since indexing, is never returned. Anything that
+// keeps the index from answering returns a reason instead of rows, and the caller falls back to
+// FTS5. Queries are counted per month in KV: the account's free 1,000 a month is shared with the
+// site's Ask, and a paid hybrid query costs $0.00075, so the cap holds the worst case near $4.
 export const HYBRID_MONTHLY_CAP = 5000;
 const RERANK_MODEL = "@cf/baai/bge-reranker-base";
 const SNIPPET_CHARS = 240;

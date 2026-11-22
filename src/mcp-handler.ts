@@ -11,18 +11,16 @@ import { createMcpHandler, type CreateMcpHandlerOptions } from "agents/mcp/serve
 import type { Env } from "./env";
 import { rateLimiter } from "./http";
 
-// Capsid's two MCP endpoints (/mcp for the admin login, /ops/mcp for driver keys) on
-// MCP 2026-07-28 through @modelcontextprotocol/server 2 and agents, stateless: no
-// session is kept between requests, and a fresh server answers each one. The caller is
-// resolved before this runs and closed over by the factory, never read from the
-// request. site-runtime's routeMcpEra sends a 2025-11-25 `initialize` to the prior-era
-// handler; its removal condition is in its header.
+// Capsid's two MCP endpoints (/mcp for the admin login, /ops/mcp for driver keys) on MCP 2026-07-28
+// through @modelcontextprotocol/server 2 and agents, stateless: a fresh server answers each request.
+// The caller is resolved before this runs and closed over by the factory, never read from the
+// request. site-runtime's routeMcpEra sends a 2025-11-25 `initialize` to the prior-era handler; its
+// removal condition is in its header.
 //
-// Origins: /mcp and /mcp/admin have their own Origin rule before the OAuth provider
-// (src/index.ts, mcpOriginRefusal admitting https://claude.ai), so the wrapper's
-// default list, which would refuse claude.ai, is not applied there a second time.
-// /ops/mcp is called with a bearer key and no browser, so it keeps
-// the wrapper's default: a present Origin must be localhost-class or the workers.dev host.
+// Origins: /mcp and /mcp/admin have their own Origin rule before the OAuth provider (src/index.ts,
+// mcpOriginRefusal admitting https://claude.ai), so the wrapper's default list, which would refuse
+// claude.ai, is not applied again there. /ops/mcp is called with a bearer key and no browser, so it
+// keeps the wrapper's default: a present Origin must be localhost-class or the workers.dev host.
 // Capsid Admin's route: the administrator's OAuth session alone.
 export const ADMIN_MCP_ROUTE = "/mcp/admin";
 

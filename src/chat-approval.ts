@@ -4,18 +4,16 @@ import { readPrFiles } from "./github/pr-files";
 import { pathClassOfAll } from "./merge-class";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
-// A chat approval in the approval record (src/pr-approvals.ts, table pr_approvals).
-// Dustin approves most pull requests with a "yes" in a Claude chat, and the session
-// merges. The ledger records it so merge units (src/merge-units.ts) have evidence to
-// propose a unit from. capsid_close_pr action merge with `approved_in` (a link to his message)
-// and `sha` merges that exact head and writes one row: surface chat, status merged,
-// the path class the units count in.
+// A chat approval in the approval record (src/pr-approvals.ts). Dustin approves most pull requests
+// with a "yes" in a Claude chat and the session merges; the ledger records it so merge units
+// (src/merge-units.ts) have evidence to propose from. capsid_close_pr action merge with
+// `approved_in` (a link to his message) and `sha` merges that exact head and writes one row:
+// surface chat, status merged, the path class the units count in.
 //
-// The admin identity alone may name an approval: a driver key's session is not Dustin,
-// so a row it wrote would claim a yes nobody gave. Every project thread is the admin
-// identity, though, so the row is still the session's word: it is a record, and the
-// merge units never count it as evidence for unattended merging (src/merge-units.ts). The row is written after the merge
-// and never fails it: the merge already happened.
+// The admin identity alone may name an approval (a driver key's session is not Dustin). Every
+// project thread is the admin identity, though, so the row is still the session's word: a record,
+// never counted by merge units as evidence for unattended merging. It is written after the merge
+// and never fails it.
 
 const LINK = /^https:\/\/claude\.ai\/\S+$/;
 export const MAX_APPROVAL_LINK = 512;

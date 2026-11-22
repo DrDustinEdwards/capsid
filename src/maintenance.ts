@@ -19,26 +19,22 @@ import { DAY_MS } from "./time";
 // that step's pull request having landed: until it does, the query finds no rows.
 const MERGE_RESUME_ACTOR = "system:merge-resume";
 
-// THE DAILY MAINTENANCE PASS (routine maintenance, so no stale thing waits
-// to be asked about). One pass a day
-// on the five-minute tick, reusing its stamp pattern rather than adding a second scheduler.
-// Every finding either was acted on by a step that already audit-logs (the merge-resume
-// step) or lands in one short list, served by capsid_read_status action status, that the seat reads at the
-// start of a session. This pass lists; it acts twice. It prunes merged branches, which is
-// off until the seat turns it on and audit-logs each delete (src/maintenance-branches.ts),
-// and it tags a shared package's merged version bump, which is on until the seat turns it
-// off and audit-logs each tag (src/maintenance-releases.ts).
+// THE DAILY MAINTENANCE PASS (routine maintenance, so no stale thing waits to be asked about).
+// One pass a day on the five-minute tick, reusing its stamp pattern. Every finding either was
+// acted on by a step that already audit-logs (the merge-resume step) or lands in one short list,
+// served by capsid_read_status action status, that the seat reads at the start of a session.
+// This pass lists; it acts twice: it prunes merged branches (off until the seat turns it on,
+// audit-logging each delete, src/maintenance-branches.ts), and it tags a shared package's
+// merged version bump (on until the seat turns it off, audit-logging each tag,
+// src/maintenance-releases.ts).
 //
-// The job rules need only the database. The pull request rules (src/maintenance-prs.ts)
-// and the branch rules (src/maintenance-branches.ts) read GitHub for every roster
-// namespace. The undeployed-merge rule (src/maintenance-deploys.ts) reads the
-// watcher's snapshot and each site's default branch. The release-tag rule
-// (src/maintenance-releases.ts) reads each shared package's repo.
-//
-// The release tags ride this daily pass rather than the five-minute tick: a merged bump
-// is tagged within a day, which is soon enough for the apps' bump pull requests the tag
-// starts, and the pass already has the switch, the cap, the audit pattern and the list
-// the seat reads, where a version it would not tag (below the newest tag) belongs.
+// The job rules need only the database. The pull request rules (src/maintenance-prs.ts) and
+// branch rules read GitHub for every roster namespace; the undeployed-merge rule
+// (src/maintenance-deploys.ts) reads the watcher's snapshot and each site's default branch; the
+// release-tag rule reads each shared package's repo. The tags ride this daily pass, not the
+// five-minute tick: tagging within a day is soon enough for the bump pull requests they start,
+// and the pass already has the switch, the cap, the audit pattern and the list where a version
+// it would not tag belongs.
 
 const MAINTENANCE_KEY = "maintenance:list";
 export const MAINTENANCE_LAST_KEY = "maintenance:last";

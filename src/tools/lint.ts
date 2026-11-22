@@ -33,13 +33,7 @@ export const LINT_DESCRIPTION =
 export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
   const { env, db, actor } = ctx;
 
-  // Consolidation loop (the LLM Wiki maintenance step). The Worker does no reasoning:
-  // a capable client calls gather, synthesizes the update with capsid_read_doc and
-  // capsid_write_doc, then calls finalize to archive what it consumed.
-  //
-  // The report's checks are named by their response ids, not paraphrased, so a test
-  // can derive this list from the report itself. A description that miscounts what
-  // sits beside it is the defect the count lint exists for.
+  // Consolidation loop (the LLM Wiki maintenance step). The Worker does no reasoning: a capable client calls gather, synthesizes the update with capsid_read_doc and capsid_write_doc, then calls finalize to archive what it consumed. The report's checks are named by their response ids so a test can derive this list from the report itself.
   ctx.ops.define(
     "lint",
     {
@@ -54,11 +48,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
       },
     },
     async ({ namespace, mode, consumed, confirm }) => {
-      // lint reads only what the caller is scoped to. The registrar checks the
-      // namespace argument, but gather and report also read the far end of every edge
-      // that touches this namespace, and the namespace's repo tree. Each is asked of
-      // checkScope with this call's action before it is read or returned. capsid's
-      // conventions is exempt: see the rules query in gather.
+      // lint reads only what the caller is scoped to. The registrar checks the namespace argument, but gather and report also read the far end of every edge touching this namespace, and its repo tree; each is asked of checkScope with this call's action first. capsid's conventions is exempt: see the rules query in gather.
       const action = mode ?? "gather";
       const reaches = (other: string) =>
         ctx.scope({ tool: LINT_TOOL, action, namespace: other }) === null;
@@ -111,13 +101,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
             "SELECT namespace, path, title, body FROM documents WHERE namespace = 'capsid' AND path IN ('conventions.md') ORDER BY path",
           )
           .all();
-        // Typed edges whose endpoint no longer exists. Gather is read-only and the
-        // client judges, so these are reported, never auto-repaired: a dangling edge
-        // usually means the target was renamed by hand or removed before delete
-        // cascaded, and which of those decides whether the fix is repointing the edge
-        // or dropping it. Both endpoints are checked. An edge whose other end is in a
-        // namespace this caller is not scoped to is dropped: whether that document
-        // exists is a fact about the other namespace.
+        // Typed edges whose endpoint no longer exists. Gather is read-only and the client judges, so these are reported, never auto-repaired (repointing or dropping depends on whether the target was renamed or removed). Both endpoints are checked; an edge whose other end is in a namespace this caller is not scoped to is dropped, since whether that document exists is a fact about the other namespace.
         const danglingEdges = await db
           .prepare(
             `SELECT l.from_ns, l.from_path, l.type, l.to_ns, l.to_path,
@@ -132,12 +116,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
           )
           .bind(namespace)
           .all<ReportEdge>();
-        // Bounded to GATHER_BUDGET. Trim order follows what gather is for. The client needs core (the thing
-        // being updated), the unconsolidated docs (the input being compiled), and the
-        // wiki (current state). The wiki is the largest section and the most
-        // re-readable one document at a time, so it stubs first. Unconsolidated bodies
-        // are held back last, oldest kept, because oldest-first is the compile order.
-        // core and rules are never trimmed: they are the rules of the job.
+        // Bounded to GATHER_BUDGET. Trim order follows what gather is for: the wiki is the largest section and the most re-readable one document at a time, so it stubs first; unconsolidated bodies are held back last, oldest kept (the compile order). core and rules are never trimmed: they are the rules of the job.
         type PacketRow = { namespace?: unknown; path?: unknown; body?: unknown };
         const bodyChars = (row: unknown) => {
           const body = (row as PacketRow | null)?.body;
@@ -368,12 +347,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         unsupported: `confirmation required: re-run capsid_lint_namespace mode finalize with confirm: true to archive ${paths.length} document(s) in ${namespace}.`,
       });
       if (!finalizeRefusal.ok) return fail(finalizeRefusal.message);
-      // Archiving is a rename to archive/<path>, so it goes through the same helper as
-      // move and drags its edges along for the same reason.
-      //
-      // Each path carries its own in-batch existence guard, because the loop above
-      // read each path in a separate transaction, and a partial archive would silently
-      // drop documents out of the lint loop's view.
+      // Archiving is a rename to archive/<path>, so it goes through the same helper as move and drags its edges along. Each path carries its own in-batch existence guard, because the loop above read each path in a separate transaction and a partial archive would silently drop documents out of the lint loop's view.
       const statements = paths.flatMap((path) => [
         requireExists(db, namespace, path),
         ...pathMutation(db, namespace, path, `archive/${path}`),

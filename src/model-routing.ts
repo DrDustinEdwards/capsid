@@ -92,8 +92,6 @@ export function deriveKind(job: {
   return hit ? { kind: hit.kind, source: "title" } : { kind: "other", source: "default" };
 }
 
-// RISK.
-
 // Namespaces whose work is risky by what they are: foxhound takes payments
 // (capsid/conventions.md leaves its parity-first rule in force).
 const HIGH_RISK_NAMESPACES: ReadonlyArray<{ namespace: string; why: string }> = [
@@ -166,18 +164,15 @@ export function riskOf(files: readonly ChangedFile[]): Risk {
   };
 }
 
-// WORTH A REVIEWER (design D5). riskOf stays as it is: it routes
-// models, and for that a dependency bump or a backup document is reason enough for the
-// stronger model. It is too broad to decide where a second reader of the diff earns
-// its cost: over the last 100 merged capsid PRs it flagged about 7 in 10, mostly
-// lockfile and package.json bumps, backup docs and a deleted screenshot. This narrower
-// test asks one question: does the change edit code that enforces something, where a
-// subtle mistake ships quietly? Nothing calls it yet. The advisory reviewer that would
-// is the seat's decision, after this measurement.
+// WORTH A REVIEWER (design D5). riskOf routes models, and for that a dependency bump or a
+// backup document is reason enough for the stronger model. It is too broad to decide where a
+// second reader earns its cost (it flagged about 7 in 10 of the last 100 merged capsid PRs,
+// mostly lockfile bumps, backup docs and a deleted screenshot). This narrower test asks: does
+// the change edit code that enforces something, where a subtle mistake ships quietly? Nothing
+// calls it yet; the advisory reviewer is the seat's decision, after this measurement.
 //
-// Only code is judged. A document, an image, a test, a lockfile or a JSON manifest is
-// never the reason on its own: a reviewer reading a version bump or a prose edit adds
-// little that CI and the seat do not already see.
+// Only code is judged: a document, image, test, lockfile or JSON manifest is never the
+// reason on its own.
 const CODE_FILE = /\.(ts|tsx|mts|cts|js|mjs|cjs|sql|sh)$/i;
 const WORKFLOW_FILE = /^\.github\/workflows\/[^/]+\.ya?ml$/i;
 const TEST_FILE =
@@ -294,22 +289,19 @@ export const ROUTING_RULES: readonly RoutingRule[] = [
   },
 ];
 
-// TRIAL ARMS. A trial arm sends a fixed share of a kind's
-// routine jobs to another model, so the learning table has outcomes on both models to
-// compare. It switches no kind: the kind's rule above still names its model, and moving
-// a kind is a seat-approved edit to that rule, made when trialStatus says the evidence
-// supports it. Claude Haiku 5.5 (claude-haiku-5-5) costs $0.10 in and $0.50 out per million tokens for prompts
-// up to 100K tokens, against Sonnet 5.5's $2 and $10 (platform.claude.com models overview
-// and claude.com/pricing). Mechanical edits already route to haiku, so
+// TRIAL ARMS. An arm sends a fixed share of a kind's routine jobs to another model, so the
+// learning table has outcomes on both. It switches no kind: moving a kind is a seat-approved
+// edit to its rule, made when trialStatus says the evidence supports it. Claude Haiku 5.5
+// costs $0.10 in and $0.50 out per million tokens (up to 100K prompt) against Sonnet 5.5's $2
+// and $10 (platform.claude.com models overview); mechanical edits already route to haiku, so
 // they have no arm.
 //
-// An arm keeps the rule's effort, so the comparison is of the model alone. A risky job,
-// or one whose body names its model, never takes an arm. Which jobs take it is a stable
-// hash of the job id, so post and claim agree, and a job's arm never changes.
+// An arm keeps the rule's effort, so the comparison is of the model alone. A risky job, or
+// one whose body names its model, never takes an arm. Which jobs take it is a stable hash of
+// the job id, so post and claim agree.
 export interface TrialArm {
   kind: JobKind;
   model: RoutedModel;
-  // The share of the kind's routine jobs the arm takes, in whole percent.
   percent: number;
 }
 
@@ -336,9 +328,7 @@ export interface Routing {
   model: RoutedModel;
   effort: Effort;
   risk: Risk["level"];
-  // The trial arm's model this job was sent to, or null when the rule's model holds.
   trial: RoutedModel | null;
-  // One line, stored with the job: why this model, under which rules.
   reason: string;
   rules_version: number;
 }
@@ -348,7 +338,6 @@ export interface Routing {
 const NAMED_MODEL = /^\s*model\s*[:=]\s*(haiku|sonnet|opusplan|opus)\s*$/im;
 
 export function routeJob(job: {
-  // The job id, which places the job in a trial arm. Absent, no arm is taken.
   id?: string | null;
   title: string;
   body?: string | null;
@@ -400,8 +389,6 @@ export function routeJob(job: {
     rules_version: ROUTING_RULES_VERSION,
   };
 }
-
-// LEARNING.
 
 // A cell (kind, model) is read only from this many outcomes. Below it a rate is noise: a
 // single merged job reads as 100 percent.
@@ -498,11 +485,10 @@ export interface Proposal {
 
 const rank = (model: string): number => MODELS.indexOf(model as RoutedModel);
 
-/** Rule changes the evidence supports, never applied: the seat approves each (the rules
- *  are code). Only cells with MIN_SAMPLE outcomes count. A cheaper model is proposed when
- *  it did as well as the current one; a more capable one when the current one is under the
- *  floor and the other is clearly better. The current model for a kind is the one its
- *  routine rule names. */
+/** Rule changes the evidence supports, never applied: the seat approves each. Only cells
+ *  with MIN_SAMPLE outcomes count. A cheaper model is proposed when it did as well as the
+ *  current one (the one the kind's routine rule names); a more capable one when the current
+ *  is under the floor and the other is clearly better. */
 export function proposeRuleChanges(cells: readonly Cell[]): Proposal[] {
   const out: Proposal[] = [];
   for (const kind of JOB_KINDS) {
@@ -543,7 +529,6 @@ export function proposeRuleChanges(cells: readonly Cell[]): Proposal[] {
 export interface TrialStatus {
   kind: string;
   model: string;
-  // The model the kind's rule names, which the arm is measured against.
   against: string;
   percent: number;
   n: number;

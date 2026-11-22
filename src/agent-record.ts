@@ -48,7 +48,6 @@ export interface AgentRecord {
 // The rows the record is computed from. Grouped reads, one per shape, so the query
 // count does not grow with the number of credentials.
 export interface RecordRows {
-  // One row per finished job, from job_outcomes.
   outcomes: Array<{
     agent: string;
     prs_opened: number | null;
@@ -59,7 +58,6 @@ export interface RecordRows {
     duration_minutes: number | null;
     verified: string;
   }>;
-  // One row per (claimed_by, status) from jobs.
   jobs: Array<{ actor: string; status: string; n: number }>;
 }
 
@@ -125,7 +123,6 @@ export function recordFor(actor: string, rows: RecordRows): AgentRecord {
   };
 }
 
-// One record per credential.
 export function recordsFrom(
   agents: RecordSubject[],
   rows: RecordRows,

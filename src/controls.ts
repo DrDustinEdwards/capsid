@@ -13,12 +13,11 @@ import {
   UNKNOWN_ACTION,
 } from "./controls-base";
 
-// THE CONTROLS' CORE (capsid/research/design-portal-full-controls.md, section 2): what each
-// admin control is, what it will do, the one dispatch to the shared mutators, and the
-// signed confirmation both surfaces use. It was the body of src/portal-actions.ts; the
-// Portal's routes there and the `capsid_admin_run_controls` tool (src/tools/controls.ts) are its two
-// callers, so a control is implemented once and parity is a property of this file and the
-// controls-*.ts files beside it.
+// THE CONTROLS' CORE (capsid/research/design-portal-full-controls.md, section 2): what each admin
+// control is, what it will do, the one dispatch to the shared mutators, and the signed confirmation
+// both surfaces use. The Portal's routes (src/portal-actions.ts) and `capsid_admin_run_controls`
+// (src/tools/controls.ts) are its two callers, so a control is implemented once and parity is a
+// property of this file and the controls-*.ts files beside it.
 
 export const TOKEN_TTL_SECONDS = 5 * 60;
 
@@ -185,8 +184,6 @@ function paramsFrom(
   return { ok: true, params };
 }
 
-// The registry and its two doors.
-
 /** One control: its name, the params it takes, whether it needs a reason, and the two
  *  steps every surface goes through. plan writes nothing. perform calls the one
  *  mutator that exists for the control, then writes the click's audit row. */
@@ -271,11 +268,10 @@ export type Performed =
   | { ok: false; status: number; refusal: string };
 
 /** The perform step for either surface: the token must verify for the email, and redeemConfirm
- *  spends it (a confirmation is used once, whichever surface took it), then the control runs.
- *  A token is spent even when the control then refuses: the refusal is about state, and
- *  the next try starts from a fresh preview that shows the state as it is. KV has no
- *  compare-and-set, so two performs of one token inside the same instant could both
- *  pass the check; every mutator is guarded on the state it moves from, which is what
+ *  spends it (a confirmation is used once, whichever surface took it), then the control runs. A
+ *  token is spent even when the control then refuses: the refusal is about state, and the next try
+ *  starts from a fresh preview. KV has no compare-and-set, so two performs of one token in the same
+ *  instant could both pass the check; every mutator is guarded on the state it moves from, which
  *  stops the second. */
 export async function performControl(
   env: Env,

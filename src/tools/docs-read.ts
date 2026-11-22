@@ -78,10 +78,7 @@ export function defineListOperation(server: McpServer, ctx: ToolCtx): void {
       }
       const { results } = await db
         .prepare(
-          // frontmatter and publish_at are not selected: nothing in this server reads
-          // or writes them. They stay in the table, because dropping a column means a
-          // migration, a rebuild of the FTS triggers and a change to the backup table
-          // guard, to reclaim nothing.
+          // frontmatter and publish_at are not selected: nothing here reads or writes them. They stay in the table because dropping a column means a migration, a rebuild of the FTS triggers and a change to the backup table guard, to reclaim nothing.
           `SELECT id, namespace, path, title, type, status, tags, created_at, updated_at
            FROM documents
            WHERE (?1 IS NULL OR namespace = ?1) AND (?2 IS NULL OR type = ?2) AND (?3 IS NULL OR status = ?3)
@@ -163,22 +160,12 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
         doc(namespace, "core.md"),
         portfolioDocuments(db),
       ]);
-      // Not filtered on status (beyond 'closed' below): status records editorial
-      // state and does not mark a task done, so filtering on 'published' would hide
-      // most open task docs. archive/ is the only other exclusion.
-      //
-      // The four remaining reads run together: none depends on another's result.
+      // Not filtered on status (beyond 'closed' below): status records editorial state and does not mark a task done, so filtering on 'published' would hide most open task docs. archive/ is the only other exclusion. The four remaining reads run together: none depends on another's result.
       const [openTasksResult, recentEpisodicsResult, coreOutResult, coreInResult] =
         await Promise.all([
           db
             .prepare(
-              // The closure predicate below is the only status filter in this query.
-              // It excludes exactly one value, set deliberately to mean finished.
-              // status is NOT NULL, so the comparison cannot swallow a row via NULL.
-              //
-              // test/doc-meta.test.ts asserts this predicate appears exactly once in
-              // this file, so the lint loop can never grow one. Only the archive/
-              // prefix takes a document out of memory.
+              // The closure predicate below is the only status filter in this query; it excludes exactly the one value set to mean finished. status is NOT NULL, so the comparison cannot swallow a row via NULL. test/doc-meta.test.ts asserts it appears exactly once in this file, so the lint loop can never grow one. Only the archive/ prefix takes a document out of memory.
               "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND type = 'task' AND status != 'closed' AND path NOT LIKE 'archive/%' ORDER BY updated_at DESC",
             )
             .bind(namespace)
@@ -208,15 +195,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       const coreOut = coreOutResult.results;
       const coreIn = coreInResult.results;
 
-      // Provenance on every document in the packet: a poisoned task or core.md is
-      // instructions at turn 0, and last_actor is how a session tells the operator's
-      // own writing from another client's. Attached after the reads so each documents
-      // SELECT stays a plain projection.
-      //
-      // One query for all of them. The pairs travel as one JSON parameter because D1
-      // caps a statement at 100 bound parameters and the open-task list has no cap.
-      // The correlated subquery is the lastActor query per pair, so it uses
-      // audit_log_doc.
+      // Provenance on every document in the packet: a poisoned task or core.md is instructions at turn 0, and last_actor is how a session tells the operator's own writing from another client's. Attached after the reads so each documents SELECT stays a plain projection. One query for all of them: the pairs travel as one JSON parameter because D1 caps a statement at 100 bound parameters and the open-task list has no cap. The correlated subquery is the lastActor query per pair (audit_log_doc).
       type Keyed = { namespace: string; path: string };
       type Actored<T> = T & { last_actor: string | null; last_client: string | null };
       const present = [conventions, core, ...openTasks, ...recentEpisodics].filter(
@@ -261,16 +240,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       const openTasksA = withActors(openTasks);
       const recentEpisodicsA = withActors(recentEpisodics);
 
-      // Open tasks always come back as stubs (path, title, updated_at, last_actor): the
-      // packet is read on every start and re-read on every later turn, and the list
-      // includes whole job prompts and stale watcher findings. A session reads the
-      // one it works with capsid_read_doc. Episodics, which carry the handoff, stay
-      // whole until the packet is over budget, then they are cut to metadata too.
-      //
-      // Only a cut that happened is reported. Nothing is cut when the two documents
-      // that are never trimmed exceed the budget by themselves, since trimming the
-      // rest cannot bring the packet under it; that is reported as
-      // floor_exceeds_budget with the sizes.
+      // Open tasks always come back as stubs (path, title, updated_at, last_actor): the packet is re-read every turn and the list includes whole job prompts and stale watcher findings; a session reads the one it works with capsid_read_doc. Episodics, which carry the handoff, stay whole until the packet is over budget, then are cut to metadata too. Only a cut that happened is reported. Nothing is cut when the two never-trimmed documents exceed the budget by themselves; that is reported as floor_exceeds_budget with the sizes.
       type Row = {
         namespace: string;
         path: string;
@@ -314,10 +284,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
         open_tasks: tasksOut,
         recent_episodics: episodicsOut,
         core_links: { outgoing: coreOut, incoming: coreIn },
-        // The portfolio rules, by path, for every namespace: a session reads these first.
-        // Every namespace driver may read them in capsid and nothing else there. Rulings
-        // are on the allowlist but not read first: they are dated records of what Dustin
-        // decided, not rules.
+        // The portfolio rules, by path, for every namespace: a session reads these first. Every namespace driver may read them in capsid and nothing else there. Rulings are on the allowlist but not read first: they are dated records of what Dustin decided, not rules.
         portfolio_documents: {
           namespace: PORTFOLIO_DOCS.namespace,
           read_first: portfolio.filter((r) => !isPortfolioRecord(r.path)).map((r) => r.path),
@@ -468,10 +435,7 @@ export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
       },
     },
     async ({ query, namespace, type, mode, include_retired }) => {
-      // A caller outside capsid searches the portfolio documents there and nothing else
-      // (src/portfolio-docs.ts): the query is narrowed to the paths that exist, so the
-      // page is not spent on rows that would be dropped, and every row is checked again
-      // below, so the narrowing is never what keeps another document out.
+      // A caller outside capsid searches the portfolio documents there and nothing else (src/portfolio-docs.ts): the query is narrowed to the paths that exist so the page is not spent on rows that would be dropped, and every row is checked again below, so the narrowing is never what keeps another document out.
       const restricted = portfolioOnly(agent, namespace);
       const allowed = restricted
         ? JSON.stringify((await portfolioDocuments(db)).map((r) => r.path))

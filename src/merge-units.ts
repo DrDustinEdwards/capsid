@@ -6,30 +6,27 @@ import { readLifted } from "./merge-safety";
 import { DAY_MS } from "./time";
 
 // EARNED PROMOTION AND DEMOTION (docs/design/design-merge-pipeline.md section 7, PR 9;
-// Dustin's DECIDE 9 and 10 of 2026-10-09). A unit is (namespace, path class). REPORT-ONLY:
-// this proposes and never widens anything (conventions 11.3). The one thing it changes on
-// its own only narrows: a rollback of a pull request the tick merged unattended suspends
-// that unit at once, so the tick stops merging its pull requests unattended and they fall
-// to class approve (src/auto-merge-tick.ts reads the suspensions).
+// Dustin's DECIDE 9 and 10 of 2026-10-09). A unit is (namespace, path class). REPORT-ONLY: it
+// proposes and never widens anything (conventions 11.3). The one thing it changes on its own
+// only narrows: a rollback of a PR the tick merged unattended suspends that unit at once, so
+// its pull requests fall to class approve (src/auto-merge-tick.ts reads the suspensions).
 //
 // Evidence per unit, over 90 days:
-//   - approved merges, from pr_approvals (namespace and path_class, migrations/0043),
-//     never a chat one: any admin session can write that row with any claude.ai link, so
-//     it is the session's word, not Dustin's (Capsid security review, round 4, finding 6);
+//   - approved merges, from pr_approvals (migrations/0043), never a chat one: any admin
+//     session can write that row with any claude.ai link, so it is the session's word, not
+//     Dustin's (Capsid security review, round 4, finding 6);
 //   - approvals voided for anything but a new push (an undo, red CI);
-//   - rollbacks, from deploy_outcomes, joined to the pull request's unit through the
-//     tick's auto-merged audit row or its approval;
-//   - reverts of a pull request the tick merged, from the auto-merge-reverted audit rows
-//     src/merge-safety.ts records. A revert counts as a rollback of an unattended merge:
-//     it suspends the unit and blocks its promotion.
+//   - rollbacks, from deploy_outcomes, joined to the unit through the tick's auto-merged
+//     audit row or its approval;
+//   - reverts of a PR the tick merged (auto-merge-reverted rows, src/merge-safety.ts), which
+//     count as a rollback: they suspend the unit and block its promotion.
 // The CI-green share joins in with the signed unit list (PR 10).
 //
-// Promotion proposal: at least 20 approved merges over at least 14 days, no rollback or revert, and
-// at most one approval voided for anything but a new push. Demotion: a rollback of an
-// unattended merge suspends its unit and proposes removing the unit from the signed list.
-// Both reach Dustin as inbox items of kind "proposal". Acting on a proposal is a signed
-// policy change (the sign_policy_change control, src/policy-sign.ts), and a suspension is
-// lifted with the unit_resume control (liftSuspension below).
+// Promotion proposal: at least 20 approved merges over at least 14 days, no rollback or
+// revert, and at most one approval voided for anything but a new push. Demotion: a rollback
+// of an unattended merge suspends its unit and proposes removing it from the signed list.
+// Both reach Dustin as inbox items of kind "proposal". Acting on one is a signed policy
+// change (sign_policy_change, src/policy-sign.ts); a suspension is lifted with unit_resume.
 
 export const SUSPENDED_KEY = "merge-units:suspended";
 export const REPORT_KEY = "merge-units:report";
@@ -40,8 +37,7 @@ const WINDOW_MS = 90 * DAY_MS;
 const PROMOTE_MERGES = 20;
 const PROMOTE_SPAN_MS = 14 * DAY_MS;
 const PROMOTE_MAX_BAD_VOIDS = 1;
-// A void that only says the pull request changed after it was approved is not evidence
-// against the unit: the approval was simply of an older head.
+// A void that only says the PR changed after approval is not evidence against the unit.
 const NOT_AGAINST = /^(new push|head moved|replaced)\b/;
 
 export const unitKey = (namespace: string, pathClass: string) => `${namespace}/${pathClass}`;
@@ -66,7 +62,6 @@ export interface RollbackEvidence {
   head_sha: string;
   run_id: number;
   run_at: string;
-  // How the pull request reached the default branch, and its unit, when known.
   merged_by: "tick" | "approval" | "unknown";
   path_class: string | null;
 }
@@ -88,7 +83,6 @@ export interface UnitsReport {
   generated: string;
   proposals: UnitProposal[];
   suspended: Suspension[];
-  // Rollbacks whose pull request's unit could not be found, so nothing was suspended.
   unplaced: string[];
 }
 
@@ -125,7 +119,6 @@ export function judgeUnits(
     const k = unitKey(r.namespace, r.path_class);
     unit(k).rollbacks++;
     if (r.merged_by !== "tick") continue;
-    // Dustin lifted the suspension after this rollback: it is answered.
     if (lifted[k] && Date.parse(r.run_at) <= Date.parse(lifted[k]!)) continue;
     if (!nowSuspended.has(k))
       nowSuspended.set(k, {

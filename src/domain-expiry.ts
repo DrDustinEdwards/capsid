@@ -4,22 +4,20 @@ import { callSignal } from "./call-signal";
 import { parse } from "tldts";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// DOMAIN REGISTRATION EXPIRY, BY RDAP (design-portal-insight.md section 5): auto-renew
-// being on is no reason to go without the alert.
+// DOMAIN REGISTRATION EXPIRY, BY RDAP (design-portal-insight.md section 5): auto-renew being on
+// is no reason to go without the alert.
 //
-// The domains are the registrable names of the configured sites' origins (ops_sites), so
-// nothing here is a list in code. Hosting suffixes a site borrows (workers.dev and the
-// like) are not ours to renew and are left out.
+// The domains are the registrable names of the configured sites' origins (ops_sites), so nothing
+// here is a list in code. Hosting suffixes a site borrows (workers.dev and the like) are left out.
 //
-// RDAP (RFC 9224 bootstrap, RFC 9083 responses): the IANA bootstrap maps a TLD to its
-// registry's RDAP base; `{base}domain/{name}` answers with an `expiration` event. Both are
-// public and need no key. The bootstrap is kept a week and each domain's answer a day, in
-// KV, so a half-hourly watcher pass makes about one RDAP call per domain per day.
+// RDAP (RFC 9224 bootstrap, RFC 9083 responses): the IANA bootstrap maps a TLD to its registry's
+// RDAP base; `{base}domain/{name}` answers with an `expiration` event. Both are public, no key.
+// The bootstrap is kept a week and each domain's answer a day in KV, so a half-hourly watcher
+// pass makes about one RDAP call per domain per day.
 //
-// A finding at EARLY_DAYS before expiry, and a second, new fingerprint at LATE_DAYS, so the
-// last week posts again even if the first finding was dismissed. A domain whose expiry
-// could not be read is not a finding (it says nothing about the domain); the check then
-// counts as not run, so an open finding is not cleared by a read that failed.
+// A finding at EARLY_DAYS before expiry, and a second, new fingerprint at LATE_DAYS, so the last
+// week posts again even if the first was dismissed. A domain whose expiry could not be read is
+// not a finding, and the check counts as not run, so a failed read does not clear an open finding.
 
 export const BOOTSTRAP_URL = "https://data.iana.org/rdap/dns.json";
 const BOOTSTRAP_KEY = "rdap:bootstrap:v1";

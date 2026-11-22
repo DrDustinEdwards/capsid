@@ -19,7 +19,7 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 export const PORTAL_PACKAGE_HISTORY_PATH = "/portal/api/packages/history";
 
 export const handlePortalPackageHistory = behindGate(
-  async (request, env, now, fetchImpl: FetchLike = (url, init) => fetch(url, init)) => {
+  async (request, env, now, _user, fetchImpl: FetchLike = (url, init) => fetch(url, init)) => {
     const name = new URL(request.url).searchParams.get("name")?.trim() ?? "";
     if (!name || name.length > 214)
       return textResponse("name must be a configured package's npm name.", 400);

@@ -124,16 +124,12 @@ function applyScopes(base: AgentScopes, args: ScopeArgs): AgentScopes {
   return scopes;
 }
 
-// The repos axis a mint gets when the caller names none: every repo the named
-// namespaces map. Starting from defaultScopes (repos "*") would give every agent
-// minted through MCP every repo in the portfolio.
+// The repos axis a mint gets when the caller names none: every repo the named namespaces map
+// (defaultScopes' repos "*" would give every MCP-minted agent every repo). Derived from the live
+// namespaces mapping, the table resolveRepo reads, so the two cannot drift.
 //
-// Derived from the live namespaces mapping, the same table resolveRepo reads and the
-// repos axis is compared against, so the two cannot drift apart.
-//
-// A namespace scope of "*" derives "*": enumerating today's mapping would silently
-// exclude a namespace registered later. A namespace with no mapped repo refuses
-// rather than falling back to the wildcard.
+// A namespace scope of "*" derives "*": enumerating today's mapping would exclude a namespace
+// registered later. A namespace with no mapped repo refuses rather than falling back to "*".
 async function reposForNamespaces(
   db: D1Database,
   namespaces: "*" | string[],

@@ -8,21 +8,18 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { weeklyDigestLines } from "./watcher-digest";
 import { DAY_MS, utcDay } from "./time";
 
-// THE DAILY EMAIL DIGEST (docs/design/design-merge-pipeline.md section 5: Web Push for the four urgent things, and everything else in a daily
-// email). Once a UTC day, after DIGEST_HOUR_UTC, the tick mails one plain-text message to
-// ALERT_EMAIL: what waits on Dustin now (pull requests by class, questions, blocked jobs),
-// rollbacks, and what finished, blocked and became ready since the last digest. It is
-// read from what the queue, the auto-merge tick and the watcher already keep, through the
-// same reader as capsid_work_jobs action list view digest, so the mail and the Portal
-// cannot disagree. It writes nothing but its own state in KV.
+// THE DAILY EMAIL DIGEST (docs/design/design-merge-pipeline.md section 5: Web Push for the four
+// urgent things, everything else in a daily email). Once a UTC day, after DIGEST_HOUR_UTC, the
+// tick mails one plain-text message to ALERT_EMAIL: what waits on Dustin now, rollbacks, and
+// what finished, blocked and became ready since the last digest. Read through the same reader as
+// capsid_work_jobs action list view digest, so the mail and the Portal cannot disagree. It
+// writes nothing but its own state in KV.
 //
-// It does nothing until Email Routing is on. Cloudflare's send_email binding can only send
-// to a destination address verified in Email Routing, and only from the zone that has
-// Email Routing turned on, which is an account setting only Dustin can change. So the
-// digest needs all four of: the EMAIL binding, ALERT_EMAIL, ALERT_FROM, and the var
-// EMAIL_ROUTING set to "on", which the seat sets after Dustin's steps (docs/portal.md,
-// "Daily digest"). Until then each tick returns at once, and the Portal's Settings says
-// which is missing (digestState below).
+// It does nothing until Email Routing is on: the send_email binding can only send to a
+// destination verified in Email Routing, from a zone with it on, an account setting only Dustin
+// can change. So it needs the EMAIL binding, ALERT_EMAIL, ALERT_FROM and EMAIL_ROUTING "on"
+// (docs/portal.md, "Daily digest"). Until then each tick returns at once, and the Portal's
+// Settings says which is missing (digestState below).
 
 export const DIGEST_LAST_KEY = "digest:last";
 // 12:00 UTC is 07:00 in Chicago in summer and 06:00 in winter: before the day starts.
