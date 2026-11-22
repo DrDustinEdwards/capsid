@@ -5,7 +5,7 @@ import { buildAdminServer, buildServer } from "../src/server.ts";
 import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS } from "../src/tools/surface.ts";
 import { defaultScopes, allowsToolAction } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
-import { actionArgFor } from "../src/scope.ts";
+import { actionArgFor } from "../src/scope-guard.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // The schemas both servers actually serve (Capsid and Capsid Admin), as the admin sees them.

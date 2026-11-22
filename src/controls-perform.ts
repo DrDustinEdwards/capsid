@@ -43,7 +43,8 @@ import {
 import { removeSite, validateSite, addSite, editSite, describeSite } from "./ops-sites";
 import type { PortalAction } from "./ops-types/portal";
 import { overnightValueRefusal, setOvernight } from "./overnight";
-import { performPolicyChange, performPolicyFromRepo } from "./policy-sign";
+import { performPolicyChange } from "./policy-sign-change";
+import { performPolicyFromRepo } from "./policy-sign-repo";
 import { planApproval, performApproval } from "./pr-approvals";
 import { runSiteRepair } from "./site-repair";
 import { CAPSID_DUMP, runCapsidDump, runSiteBackups } from "./site-backup";

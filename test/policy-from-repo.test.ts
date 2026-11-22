@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { AUTO_MERGE_POLICY_PATH, loadMergePolicy } from "../src/auto-merge-policy.ts";
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/signed-docs.ts";
-import { performPolicyFromRepo, planPolicyFromRepo, REPO_POLICY_PATH } from "../src/policy-sign.ts";
+import {
+  performPolicyFromRepo,
+  planPolicyFromRepo,
+  REPO_POLICY_PATH,
+} from "../src/policy-sign-repo.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // sign_policy_from_repo (src/policy-sign.ts): the stored, signed auto-merge policy written

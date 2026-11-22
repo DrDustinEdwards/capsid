@@ -12,7 +12,7 @@ import { parseMergePolicy, PROMOTABLE_PATH_CLASSES } from "../src/auto-merge-pol
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/signed-docs.ts";
 import { PATH_CLASSES } from "../src/merge-class.ts";
 import { judgeUnits, LIFTED_KEY, liftSuspension, SUSPENDED_KEY } from "../src/merge-units.ts";
-import { performPolicyChange, planPolicyChange } from "../src/policy-sign.ts";
+import { performPolicyChange, planPolicyChange } from "../src/policy-sign-change.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // The merge units in the signed policy (docs/design/design-merge-pipeline.md section 7,

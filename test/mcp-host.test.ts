@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hostRefusal, MCP_HOST, servedOnMcpHost } from "../src/mcp-host.ts";
 import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
-import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope.ts";
+import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope-routes.ts";
 
 // The host rules (src/mcp-host.ts) without the Worker: what the MCP host serves.
 // test-integration/mcp-host.test.ts runs them through the whole Worker.

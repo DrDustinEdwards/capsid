@@ -13,7 +13,7 @@ import type { Agent } from "../src/agents.ts";
 import { serveMcp } from "../src/mcp-handler.ts";
 import { CAPSID_TOOLS } from "../src/tools/surface.ts";
 import { buildServer } from "../src/server.ts";
-import { toolListed } from "../src/scope.ts";
+import { toolListed } from "../src/scope-guard.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { breaking, type Handler, healthy, NON_HTML, run } from "./verify-live-stub.ts";
 

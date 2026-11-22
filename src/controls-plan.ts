@@ -49,7 +49,8 @@ import {
   decisionFor,
   OVERNIGHT_MODE_KEY,
 } from "./overnight";
-import { planPolicyChange, planPolicyFromRepo } from "./policy-sign";
+import { planPolicyChange } from "./policy-sign-change";
+import { planPolicyFromRepo } from "./policy-sign-repo";
 import { planApproval } from "./pr-approvals";
 import { APP_ROSTER } from "./roster";
 import { toolRefusal, tokenSet } from "./site-operator";
