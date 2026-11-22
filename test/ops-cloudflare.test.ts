@@ -725,6 +725,7 @@ test("only the watcher, the admin capsid_admin_read_ops calls, the capsid_inspec
   // portal-site.ts reads live for one site when a site page's tab opens, never with the feed or its poll.
   assert.deepEqual(importersOf("ops-cloudflare"), [
     "ops-cloudflare-config.ts",
+    "portal-builds.ts",
     "portal-site.ts",
     "site-key.ts",
     "site-traffic.ts",

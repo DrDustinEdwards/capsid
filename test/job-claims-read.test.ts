@@ -5,15 +5,17 @@ import { buildAdminServer } from "../src/server.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
 import {
-  CLAIMS_EXPORT_MAX,
-  CLAIMS_EXPORT_TABLES,
   CLAIMS_JOB_ROWS,
   claimsFilterFrom,
-  exportClaimsPage,
   gateClassOf,
   readClaimsAggregate,
   readJobClaims,
 } from "../src/job-claims-read.ts";
+import {
+  CLAIMS_EXPORT_MAX,
+  CLAIMS_EXPORT_TABLES,
+  exportClaimsPage,
+} from "../src/job-claims-export.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // The read side of claims apart from verified outcomes (src/job-claims-read.ts). These

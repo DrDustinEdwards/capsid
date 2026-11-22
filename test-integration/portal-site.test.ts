@@ -1,12 +1,8 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import {
-  readBuildLog,
-  readSiteSearch,
-  readSiteTraffic,
-  readWorkersBuilds,
-} from "../src/portal-site";
+import { readBuildLog, readWorkersBuilds } from "../src/portal-builds";
+import { readSiteSearch, readSiteTraffic } from "../src/portal-site";
 
 // A site page's reads (src/portal-site.ts) against a real D1, the outside services stubbed:
 // each source answers its data or no data with the reason, never a zero, and one source
