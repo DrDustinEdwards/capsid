@@ -551,7 +551,7 @@ test("SWEEP: a read-only caller is refused every write by checkScope on both ser
     const caller = readOnlyCaller(surface);
     const unserved = SURFACES[surface].tools.filter((tool) => !toolListed(caller, tool));
     // Every action as a writer is served it: a tool whose action decides its grant is
-    // served to a read grant with its read actions alone (src/tools/surface.ts READ_VIEWS),
+    // served to a read grant with its read actions alone (src/tools/surface-composite.ts READ_VIEWS),
     // and its write actions must still be refused when asked for by name.
     const { served: writerTools } = await sweep(
       { ...grantAgent("write", "opkey:writer000000"), admin: surface === "admin" },

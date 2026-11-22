@@ -62,7 +62,7 @@ test("every tool argument is bounded: no bare z.string() anywhere in src/", () =
   // Excluded: comments, the two primitives in limits.ts the rule is built from, and the
   // output schemas, which describe answers, not arguments.
   const offenders = sourceFiles()
-    .filter((f) => f.name !== "limits.ts" && f.name !== "tools/outputs.ts")
+    .filter((f) => f.name !== "limits.ts" && !f.name.startsWith("tools/outputs"))
     .flatMap((f) =>
       f.text
         .split("\n")

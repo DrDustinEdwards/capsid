@@ -5,7 +5,7 @@ import { adminAgentForEmail } from "../src/agents.ts";
 import { buildServer } from "../src/server.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// An action that takes fewer arguments than its operation declares (src/tools/surface.ts
+// An action that takes fewer arguments than its operation declares (src/tools/surface-composite.ts
 // ActionSpec.fields) refuses one it does not take, rather than dropping it. A comment
 // silently dropped from a merge is a review nobody posted; a sha dropped from a comment
 // is a check nobody made. An argument NO action of the tool takes is refused by the

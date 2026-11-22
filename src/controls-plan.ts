@@ -4,6 +4,8 @@ import { agentActor, parseScopes, SCOPE_FLAGS } from "./agents-schema";
 import {
   type Surface,
   AUTOMERGE_RESUME_REASON,
+  CLOSE_SHIPPED_NEEDS_REASON,
+  SUPERSEDE_NEEDS_REASON,
   UNIT_RESUME_REASON,
   clickAuditAction,
   deleteOptionsFrom,
@@ -31,7 +33,7 @@ import { readJob } from "./jobs-transition";
 import { MAX_RESUME_NOTE } from "./limits";
 import { planResume } from "./merge-safety";
 import { planLift } from "./merge-units";
-import { validatePackage, readPackageRow, describePackage } from "./ops-packages";
+import { validatePackage, readPackageRow, describePackage } from "./ops-package-config";
 import {
   validateSite,
   readSiteRow,
@@ -52,7 +54,13 @@ import { planApproval } from "./pr-approvals";
 import { APP_ROSTER } from "./roster";
 import { toolRefusal, tokenSet } from "./site-operator";
 import { limitRefusalFor } from "./site-repair";
-import { BACKUP_LIMIT, backupRefusal, backupSites, CAPSID_DUMP } from "./site-backup";
+import {
+  BACKUP_LIMIT,
+  backupRefusal,
+  backupSites,
+  CAPSID_DUMP,
+  NO_BACKUP_SITES,
+} from "./site-backup";
 import { CAPSID_NAMESPACE, jobRefusal } from "./site-jobs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
@@ -207,10 +215,7 @@ export async function planAction(
     }
     case "close_shipped": {
       if (!p.id) return refused("close_shipped needs a job id.");
-      if (!p.reason)
-        return refused(
-          "close_shipped needs a reason: what shipped, and how you know. It is the job's result summary.",
-        );
+      if (!p.reason) return refused(CLOSE_SHIPPED_NEEDS_REASON);
       const job = await readJob(env.DB, p.id);
       if (!job) return refused(`no job ${p.id}.`);
       if (job.status !== "blocked") {
@@ -238,10 +243,7 @@ export async function planAction(
     }
     case "supersede_job": {
       if (!p.id) return refused("supersede_job needs a job id.");
-      if (!p.reason)
-        return refused(
-          "supersede_job needs a reason: what replaced this job, or why it was withdrawn.",
-        );
+      if (!p.reason) return refused(SUPERSEDE_NEEDS_REASON);
       const job = await readJob(env.DB, p.id);
       if (!job) return refused(`no job ${p.id}.`);
       const label = `${job.id} ('${job.title}' in ${job.namespace})`;
@@ -662,10 +664,7 @@ export async function planAction(
       const sites = (await backupSites(env)).filter(
         (s) => !p.namespace || s.namespace === p.namespace,
       );
-      if (sites.length === 0)
-        return refused(
-          "no site sets backup: true in its operator configuration, so there is nothing to back up.",
-        );
+      if (sites.length === 0) return refused(NO_BACKUP_SITES);
       const lines = await Promise.all(
         sites.map(async (s) => {
           const wait = await limitRefusalFor(env, s.namespace, BACKUP_LIMIT, now);

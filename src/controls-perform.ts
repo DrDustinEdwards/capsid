@@ -4,6 +4,8 @@ import {
   type ActionParams,
   type Surface,
   AUTOMERGE_RESUME_REASON,
+  CLOSE_SHIPPED_NEEDS_REASON,
+  SUPERSEDE_NEEDS_REASON,
   UNIT_RESUME_REASON,
   SWITCHES,
   auditPrefix,
@@ -37,7 +39,7 @@ import {
   addPackage,
   editPackage,
   describePackage,
-} from "./ops-packages";
+} from "./ops-package-config";
 import { removeSite, validateSite, addSite, editSite, describeSite } from "./ops-sites";
 import type { PortalAction } from "./ops-types/portal";
 import { overnightValueRefusal, setOvernight } from "./overnight";
@@ -187,8 +189,7 @@ export async function performAction(
         if (!reason)
           return {
             ok: false,
-            refusal:
-              "close_shipped needs a reason: what shipped, and how you know. It is the job's result summary.",
+            refusal: CLOSE_SHIPPED_NEEDS_REASON,
           };
         const job = await readJob(env.DB, id);
         if (!job) return { ok: false, refusal: `no job ${id}.` };
@@ -217,8 +218,7 @@ export async function performAction(
         if (!reason)
           return {
             ok: false,
-            refusal:
-              "supersede_job needs a reason: what replaced this job, or why it was withdrawn.",
+            refusal: SUPERSEDE_NEEDS_REASON,
           };
         const replaced_by = required(params, "replaced_by") ?? undefined;
         const result = await supersedeJob(env, agent, now, id, { reason, replaced_by });

@@ -1,16 +1,13 @@
 import { env } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
+import { historyKey, packageHistory, weekStatement, type FetchLike } from "../src/ops-packages";
 import {
   addPackage,
   editPackage,
-  historyKey,
-  packageHistory,
   readPackageConfig,
   removePackage,
-  weekStatement,
-  type FetchLike,
-} from "../src/ops-packages";
+} from "../src/ops-package-config";
 import type { PackageSnapshot } from "../src/ops-types/sites";
 
 // The Packages panel against a real D1 and KV (job_c6e4ab939a54): its configuration is

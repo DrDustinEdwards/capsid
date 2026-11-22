@@ -95,8 +95,8 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
 
 // A tool whose action decides its grant (capsid_work_jobs, capsid_lint_namespace) is
 // served to a caller holding only the read grant with its read actions alone
-// (src/tools/surface.ts READ_VIEWS), so for that caller it is read-only in fact and says
-// so. Both views read only this Worker's D1 and KV.
+// (src/tools/surface-composite.ts READ_VIEWS), so for that caller it is read-only in fact and says
+// so (area 11, T7). Both views read only this Worker's D1 and KV.
 export const READ_VIEW_HINTS: Record<string, ToolHints> = {
   // list, with its plan, digest, models and stale views: the queue and the stored plan.
   capsid_work_jobs: read({ idempotent: true, openWorld: false }),

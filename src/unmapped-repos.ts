@@ -1,3 +1,4 @@
+import { readDocument } from "./doc-reads";
 import type { Env } from "./env";
 import { listInstalledRepos, type InstalledRepo } from "./github/client";
 
@@ -93,9 +94,7 @@ export async function readRepoMap(env: Env): Promise<RepoMapRead> {
       if (typeof entry?.repo === "string") mapped.add(entry.repo.toLowerCase());
     }
   }
-  const doc = await env.DB.prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
-    .bind(UNMAPPED_ON_PURPOSE_NS, UNMAPPED_ON_PURPOSE_PATH)
-    .first<{ body: string | null }>();
+  const doc = await readDocument(env.DB, UNMAPPED_ON_PURPOSE_NS, UNMAPPED_ON_PURPOSE_PATH);
   return {
     installed: repos,
     installations,

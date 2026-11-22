@@ -17,7 +17,8 @@ import {
   readSecretNames,
   readAccessAppNames,
 } from "./ops-cloudflare";
-import { readPackageConfig, readPackage, npmVersions } from "./ops-packages";
+import { readPackage, npmVersions } from "./ops-packages";
+import { readPackageConfig } from "./ops-package-config";
 import { readSiteConfig, type OpsSite, sitesFrom, siteMapDrift } from "./ops-sites";
 import { probeSite, readSnapshot } from "./ops-snapshot";
 import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES } from "./offaccount";
@@ -60,8 +61,7 @@ import {
 // The watcher's reads (src/watcher.ts runs the pass), turned into findings by src/watcher-detect.ts.
 // Every read is wrapped so one failing surface does not stop the others: silence reads as health.
 
-// How many reads of one roster run together: the pass waits on GitHub and Cloudflare, so
-// one at a time spent most of the tick's four minutes (src/map-limit.ts).
+// How many reads of one roster run together: the pass waits on GitHub and Cloudflare (src/map-limit.ts).
 const READ_CONCURRENCY = 6;
 
 async function attempt<T>(what: string, fn: () => Promise<T>): Promise<T | null> {

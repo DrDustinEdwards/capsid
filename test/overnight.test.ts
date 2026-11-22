@@ -14,13 +14,9 @@ import {
   FLOOR_ESTIMATE_MINUTES,
   MIN_SAMPLES,
   buildOvernightPlan,
-  chooseUsage,
-  digestSinceFrom,
   estimateFromDurations,
   ineligibleReason,
   parseOvernightPolicy,
-  pullRequestsIn,
-  readOvernightDigest,
   readOvernightPlan,
   DEFAULT_POLICY,
   type Estimate,
@@ -28,9 +24,15 @@ import {
   type PlanJobRow,
   type RepoOf,
 } from "../src/overnight-plan.ts";
+import {
+  chooseUsage,
+  digestSinceFrom,
+  pullRequestsIn,
+  readOvernightDigest,
+} from "../src/overnight-digest.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// The overnight run's switch, plan and digest (src/overnight.ts, src/overnight-plan.ts).
+// The overnight run's switch, plan and digest (src/overnight.ts, src/overnight-plan.ts, src/overnight-digest.ts).
 // What reads a real D1 (the json_extract and the joins) is in test-integration/overnight.test.ts.
 
 const NOW = new Date("2026-10-04T22:00:00.000Z");

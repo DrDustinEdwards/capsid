@@ -14,6 +14,7 @@ import { defineLintOperations } from "../../src/tools/lint.ts";
 import { Operations } from "../../src/tools/operations.ts";
 import { defineOpsSnapshotOperations } from "../../src/tools/ops.ts";
 import { defineRepoOperations } from "../../src/tools/repo.ts";
+import { defineSiteReportOperations } from "../../src/tools/site-reports.ts";
 import { defineStatusOperations } from "../../src/tools/status.ts";
 import { defineSystemOperations } from "../../src/tools/system.ts";
 import {
@@ -94,6 +95,7 @@ export function servedTools() {
     defineDocOperations,
     defineLintOperations,
     defineRepoOperations,
+    defineSiteReportOperations,
     defineStatusOperations,
     defineSystemOperations,
     defineJobOperations,

@@ -18,12 +18,8 @@ import { PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { PORTAL_STALE_PATH } from "../src/portal-stale.ts";
 import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight.ts";
 import { PORTAL_MERGE_UNITS_PATH } from "../src/portal-merge-units.ts";
-import {
-  PORTAL_BUILD_LOG_PATH,
-  PORTAL_SITE_SEARCH_PATH,
-  PORTAL_SITE_TRAFFIC_PATH,
-  PORTAL_WORKERS_BUILDS_PATH,
-} from "../src/portal-site.ts";
+import { PORTAL_BUILD_LOG_PATH, PORTAL_WORKERS_BUILDS_PATH } from "../src/portal-builds.ts";
+import { PORTAL_SITE_SEARCH_PATH, PORTAL_SITE_TRAFFIC_PATH } from "../src/portal-site.ts";
 import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
 import { PORTAL_BACKUPS_PATH } from "../src/portal-backups.ts";
@@ -34,7 +30,7 @@ import {
   PORTAL_RESOURCES_PATH,
   PORTAL_SHARED_CODE_PATH,
 } from "../src/portal-packages.ts";
-import { PORTAL_PUSH_PATH } from "../src/push.ts";
+import { PORTAL_PUSH_PATH } from "../src/push-portal.ts";
 import { PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
 import { PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
 import { REPORT_PATH } from "../src/security-headers.ts";

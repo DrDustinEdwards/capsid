@@ -1,10 +1,8 @@
+import { ROUTING_RULES, ROUTING_RULES_VERSION, TRIAL_ARMS } from "./model-routing";
 import {
   MIN_SAMPLE,
   RATE_FLOOR,
   RATE_GAIN,
-  ROUTING_RULES,
-  ROUTING_RULES_VERSION,
-  TRIAL_ARMS,
   cellsOf,
   modelAlias,
   proposeRuleChanges,
@@ -13,7 +11,7 @@ import {
   type OutcomeFact,
   type Proposal,
   type TrialStatus,
-} from "./model-routing";
+} from "./model-evidence";
 import { DAY_MS } from "./time";
 import { plural } from "@drdustinedwards/site-helpers/text";
 

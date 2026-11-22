@@ -2,7 +2,7 @@ import { type HealthReport, BACKUP_STALE_HOURS } from "./health";
 import type { HourBucket, ServerErrors, SiteCloudflare } from "./ops-types/sites";
 import type { OpsSnapshot, SiteProbe } from "./ops-snapshot";
 import type { SiteMapDrift } from "./ops-sites";
-import type { LiveFinding } from "./live-checks";
+import type { LiveFinding } from "./live-findings";
 import { externalFence } from "./provenance";
 import type { StatusReport } from "./status";
 import { type RepoMapRead, unmappedRepos } from "./unmapped-repos";

@@ -1,4 +1,5 @@
-import { packageHistory, readPackageRow, type FetchLike } from "./ops-packages";
+import { packageHistory, type FetchLike } from "./ops-packages";
+import { readPackageRow } from "./ops-package-config";
 import { behindGate } from "./portal-auth";
 import { readSharedCode } from "./shared-code-read";
 import { readCompleteness } from "./completeness";

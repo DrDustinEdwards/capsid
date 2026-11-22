@@ -13,12 +13,8 @@ import {
   readFactsJson,
   type StoredDrift,
 } from "./system-facts-store";
-import {
-  readResourceFacts,
-  resourceDrift,
-  resourcesDoc,
-  type ResourceFacts,
-} from "./system-resources";
+import { resourceDrift, resourcesDoc } from "./system-resources";
+import { readResourceFacts, type ResourceFacts } from "./system-resources-read";
 import {
   PublicVersionsSchema,
   toPublicVersions,

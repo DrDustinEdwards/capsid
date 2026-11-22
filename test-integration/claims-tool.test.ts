@@ -5,7 +5,7 @@ import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { buildAdminServer } from "../src/server";
 import type { ClaimsAggregate, ClaimsJob } from "../src/ops-types/claims";
-import type { ClaimsExportPage } from "../src/job-claims-read";
+import type { ClaimsExportPage } from "../src/job-claims-export";
 
 // The capsid_admin_read_claims tool (Capsid Admin) against a real D1 with
 // migrations/0023 applied: what the admin reads back from rows planted here, what a

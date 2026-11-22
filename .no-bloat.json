@@ -12,15 +12,15 @@
     }
   ],
   "baseline": {
-    "measured_at": "86d9736",
+    "measured_at": "e7751437",
     "knip (Worker)": {},
     "knip (dashboard)": {
       "exports": 5
     },
     "jscpd": {
-      "clones": 148,
-      "lines": 1301,
-      "percentage": 0.84,
+      "clones": 147,
+      "lines": 1296,
+      "percentage": 0.83,
       "unread": 5
     },
     "shared copies": {
@@ -43,35 +43,16 @@
       "scripts/verify-live.mjs": 766,
       "src/auto-merge-policy.ts": 814,
       "src/auto-merge-tick.ts": 838,
-      "src/backup.ts": 552,
       "src/controls-perform.ts": 685,
-      "src/controls-plan.ts": 775,
-      "src/github/refs.ts": 543,
-      "src/job-claims-read.ts": 524,
+      "src/controls-plan.ts": 774,
       "src/jobs-claim.ts": 561,
       "src/jobs-holder.ts": 633,
       "src/jobs-seat.ts": 1051,
-      "src/live-checks.ts": 528,
-      "src/model-routing.ts": 583,
       "src/ops-cloudflare.ts": 611,
-      "src/ops-feed.ts": 606,
-      "src/ops-packages.ts": 598,
-      "src/ops-types/views.ts": 647,
       "src/outcome-prs.ts": 541,
-      "src/overnight-plan.ts": 596,
       "src/policy-sign.ts": 583,
-      "src/portal-site.ts": 526,
-      "src/push.ts": 552,
-      "src/review.ts": 533,
       "src/scope.ts": 961,
-      "src/system-resources.ts": 571,
-      "src/tools/jobs.ts": 502,
-      "src/tools/outputs.ts": 564,
-      "src/tools/repo.ts": 701,
-      "src/tools/surface.ts": 644,
-      "src/trends.ts": 536,
       "src/watcher-gather.ts": 547,
-      "src/watcher.ts": 509,
       "test/fakes.ts": 1492
     },
     "tests": {

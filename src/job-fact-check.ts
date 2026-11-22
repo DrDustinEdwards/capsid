@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { encodePath, ghFetch } from "./github/client";
-import { npmVersions, readPackageConfig, type FetchLike } from "./ops-packages";
+import { npmVersions, type FetchLike } from "./ops-packages";
+import { readPackageConfig } from "./ops-package-config";
 import { heading, proseOnly } from "./job-body-check";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";

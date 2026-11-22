@@ -17,7 +17,9 @@ import { ok, fail, type ToolCtx, requireConfirmation, pathMutation, edgesTouchin
 import { policyPathsRefusal, requireRegisteredNamespace } from "./docs-write";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
+import { readDocument } from "../doc-reads";
 import { errorMessage } from "@dustinedwards/site-runtime/log";
+
 // The document lifecycle beyond writing (src/tools/docs-write.ts writes): restore an
 // earlier version, delete, and move.
 
@@ -50,10 +52,7 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
         .bind(version_id, namespace, path)
         .first<{ id: number; title: string | null; body: string | null; snapshot_at: string }>();
       if (!version) return fail(`no version ${version_id} for ${namespace}/${path}`);
-      const prior = await db
-        .prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
-        .bind(namespace, path)
-        .first<{ id: number; title: string | null; body: string | null }>();
+      const prior = await readDocument(db, namespace, path);
       // The policy-document guard (see policyPathsRefusal).
       const restorePolicyRefusal = policyPathsRefusal(
         ctx,
@@ -185,10 +184,7 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
       if (nsError) return fail(nsError);
       if (canonGuarded(ctx.agent, namespace, path))
         return fail(canonRefusal("delete", namespace, path));
-      const prior = await db
-        .prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
-        .bind(namespace, path)
-        .first<{ id: number; title: string | null; body: string | null }>();
+      const prior = await readDocument(db, namespace, path);
       if (!prior) return fail(`not found: ${namespace}/${path}`);
       // The policy-document guard (see policyPathsRefusal).
       const deletePolicyRefusal = policyPathsRefusal(
@@ -301,10 +297,7 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
         new_path,
       ]);
       if (movePolicyRefusal) return fail(movePolicyRefusal);
-      const moved = await db
-        .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
-        .bind(namespace, path)
-        .first<{ body: string | null }>();
+      const moved = await readDocument(db, namespace, path);
       const movedBody = moved?.body ?? "";
       // Moving a document onto a rule path makes it a rule document, held to the same
       // checks as a write that creates one (src/rule-docs.ts). Moving one away is free, and

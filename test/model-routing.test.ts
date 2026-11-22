@@ -6,23 +6,25 @@ import { readModelLearning } from "../src/model-learning.ts";
 import {
   DELETION_LINES_HIGH,
   JOB_KINDS,
-  MIN_SAMPLE,
   MODELS,
   ROUTING_RULES,
   TRIAL_ARMS,
   WATCHER_ACTOR_NAME,
-  cellsOf,
   deriveKind,
-  modelAlias,
-  proposeRuleChanges,
   riskFromJob,
   riskOf,
   worthReviewer,
   routeJob,
   trialBucket,
+} from "../src/model-routing.ts";
+import {
+  MIN_SAMPLE,
+  cellsOf,
+  modelAlias,
+  proposeRuleChanges,
   trialStatus,
   type OutcomeFact,
-} from "../src/model-routing.ts";
+} from "../src/model-evidence.ts";
 import { WATCHER_ACTOR } from "../src/watcher.ts";
 import { pullRequestRisk } from "../src/model-routing-pr.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";

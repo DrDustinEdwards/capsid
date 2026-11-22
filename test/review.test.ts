@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  parseVerdict,
-  reviewCaller,
-  reviewScope,
-  REVIEW_OWNER_ID,
-  toolArguments,
-} from "../src/review.ts";
+import { reviewCaller, reviewScope, REVIEW_OWNER_ID } from "../src/review.ts";
+import { parseVerdict, toolArguments } from "../src/review-answer.ts";
 
 // The gate on who may spend a review: the shared workflows, on a pull request, in a
 // repository Dustin owns. Any of the three missing is a refusal.

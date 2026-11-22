@@ -19,10 +19,8 @@ export {
   REPO_HISTORY_DEFAULT_LIMIT,
   REPO_HISTORY_MAX_LIMIT,
   REPO_PATCH_BUDGET,
-  deleteBranch,
-  managePr,
   repoHistory,
-  repoRefs,
-} from "./github/refs";
+} from "./github/history";
+export { deleteBranch, managePr, repoRefs } from "./github/refs";
 export { pruneMergedBranches, pruneVerdict } from "./github/prune";
 export { CI_JOBS_MAX, CI_LOG_BUDGET, ciStatus } from "./github/actions";

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { beginJob, completeAsCaller, listJobs } from "../src/jobs.ts";
-import { opsJobFrom, type JobFeedRow } from "../src/ops-feed.ts";
+import { opsJobFrom, type JobFeedRow } from "../src/ops-live.ts";
 import { signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 

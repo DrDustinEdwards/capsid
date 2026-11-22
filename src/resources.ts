@@ -1,3 +1,4 @@
+import { readDocument } from "./doc-reads";
 import {
   McpServer,
   ProtocolError,
@@ -51,10 +52,7 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
       const path = String(variables.path);
       const refusal = resourceRefusal(agent, namespace);
       if (refusal) throw new ProtocolError(ProtocolErrorCode.InvalidParams, refusal);
-      const row = await db
-        .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
-        .bind(namespace, path)
-        .first<{ body: string | null }>();
+      const row = await readDocument(db, namespace, path);
       if (!row) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `not found: ${uri.href}`);
       return { contents: [{ uri: uri.href, mimeType: "text/markdown", text: row.body ?? "" }] };
     },

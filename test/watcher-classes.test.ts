@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runPass } from "../src/watcher.ts";
+import { runPass } from "../src/watcher-pass.ts";
 import {
   CLASS_PATTERNS,
   OWNER_PATTERNS,

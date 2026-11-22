@@ -139,3 +139,8 @@ export function shippedEvidence(job: JobRow): { result_ref?: string; prs: string
   const ref = job.result_ref && prs.includes(job.result_ref) ? job.result_ref : prs[0];
   return { ...(ref ? { result_ref: ref } : {}), prs, more: all.length - prs.length };
 }
+
+export const CLOSE_SHIPPED_NEEDS_REASON =
+  "close_shipped needs a reason: what shipped, and how you know. It is the job's result summary.";
+export const SUPERSEDE_NEEDS_REASON =
+  "supersede_job needs a reason: what replaced this job, or why it was withdrawn.";

@@ -47,6 +47,9 @@ interface BackupSite {
 }
 
 /** The sites whose operator configuration sets backup: true, in namespace order. */
+export const NO_BACKUP_SITES =
+  "no site sets backup: true in its operator configuration, so there is nothing to back up.";
+
 export async function backupSites(
   env: Env,
   rows?: Awaited<ReturnType<typeof readSiteConfig>>,
@@ -216,8 +219,7 @@ export async function runSiteBackups(
   if (targets.length === 0)
     return {
       ok: false,
-      refusal:
-        "no site sets backup: true in its operator configuration, so there is nothing to back up.",
+      refusal: NO_BACKUP_SITES,
     };
   const runs = await Promise.all(
     targets.map((site) =>

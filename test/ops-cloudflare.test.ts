@@ -18,7 +18,7 @@ import {
   type SiteProbe,
 } from "../src/ops-snapshot.ts";
 import type { SiteCloudflare } from "../src/ops-types/sites.ts";
-import { runPass } from "../src/watcher.ts";
+import { runPass } from "../src/watcher-pass.ts";
 import { gatherFindings } from "../src/watcher-gather.ts";
 import { owningCheck } from "../src/watcher-checks.ts";
 import {
@@ -725,10 +725,11 @@ test("only the watcher, the admin capsid_admin_read_ops calls, the capsid_inspec
   // portal-site.ts reads live for one site when a site page's tab opens, never with the feed or its poll.
   assert.deepEqual(importersOf("ops-cloudflare"), [
     "ops-cloudflare-config.ts",
+    "portal-builds.ts",
     "portal-site.ts",
     "site-key.ts",
     "site-traffic.ts",
-    "system-resources.ts",
+    "system-resources-read.ts",
     "tls-expiry.ts",
     "watcher-gather.ts",
     "workers-builds.ts",

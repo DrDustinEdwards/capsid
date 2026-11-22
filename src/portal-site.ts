@@ -7,10 +7,8 @@ import { readSiteRow, sitesFrom } from "./ops-sites";
 import type {
   BingSearchData,
   GoogleSearchData,
-  PortalBuildLog,
   PortalSiteSearch,
   PortalSiteTraffic,
-  PortalWorkersBuilds,
   SearchRow,
   SiteNoData,
   SiteSource,
@@ -18,12 +16,10 @@ import type {
   TrafficNotFound,
   TrafficServerErrors,
   TrafficWebVitals,
-  WorkersBuild,
-} from "./ops-types/views";
+} from "./ops-types/site-page";
 import { behindGate } from "./portal-auth";
 import { searchConsole } from "./search-console";
 import { MAX_TRAFFIC_DAYS, siteTraffic } from "./site-traffic";
-import { BUILDS_DEFAULT, BUILDS_MAX, buildLogs, listBuilds } from "./workers-builds";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { plural } from "@drdustinedwards/site-helpers/text";
@@ -34,8 +30,7 @@ import { plural } from "@drdustinedwards/site-helpers/text";
 //                                             (capsid_inspect_repo actions search_console and bing_webmaster)
 //   GET /portal/api/site-traffic?namespace=&days=   siteTraffic, every TRAFFIC_REPORTS report
 //                                             (capsid_inspect_repo action site_traffic)
-//   GET /portal/api/workers-builds?namespace=&limit=   listBuilds
-//   GET /portal/api/build-log?build=          buildLogs (capsid_admin_read_ops actions workers_builds and workers_build_logs)
+//   (the Deploys tab's workers-builds and build-log routes are src/portal-builds.ts)
 // The site, its property and its Worker come from the namespace's ops_sites row, never from
 // the caller. Each source answers on its own: data, or no data with the reason (docs/portal.md,
 // "No data is a state, never a zero"), so one source failing leaves the others. They read the
@@ -45,20 +40,17 @@ import { plural } from "@drdustinedwards/site-helpers/text";
 
 export const PORTAL_SITE_SEARCH_PATH = "/portal/api/site-search";
 export const PORTAL_SITE_TRAFFIC_PATH = "/portal/api/site-traffic";
-export const PORTAL_WORKERS_BUILDS_PATH = "/portal/api/workers-builds";
-export const PORTAL_BUILD_LOG_PATH = "/portal/api/build-log";
 
-const BUILD_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DEFAULT_TRAFFIC_DAYS = 7;
 
-const none = (
+export const none = (
   kind: SiteNoData,
   reason: string,
 ): { ok: false; kind: SiteNoData; reason: string } => ({ ok: false, kind, reason });
 const message = (err: unknown): string => errorMessage(err);
 
 /** A source's read: its data, or the read's own error as the reason. */
-async function attempt<T>(read: () => Promise<SiteSource<T>>): Promise<SiteSource<T>> {
+export async function attempt<T>(read: () => Promise<SiteSource<T>>): Promise<SiteSource<T>> {
   try {
     return await read();
   } catch (err) {
@@ -92,7 +84,7 @@ async function configuredSite(env: Env, namespace: string) {
   return row ? (sitesFrom([row])[0] ?? null) : null;
 }
 
-const noSite = (namespace: string, what: string) =>
+export const noSite = (namespace: string, what: string) =>
   none(
     "no_site",
     `${namespace} has no site configured (ops_sites), so it has no ${what}. Add one in Settings (site_add).`,
@@ -370,90 +362,6 @@ function pick<T extends object, K extends keyof T>(value: T, keys: readonly K[])
   return Object.fromEntries(keys.map((k) => [k, value[k]])) as Pick<T, K>;
 }
 
-// Workers Builds and one build's log.
-
-/** The deploys tab's builds: the Worker its site row names, newest first. */
-export async function readWorkersBuilds(
-  env: Env,
-  namespace: string,
-  limit: number,
-  fetchImpl: FetchLike = fetch,
-  now: Date = new Date(),
-): Promise<PortalWorkersBuilds> {
-  const generated = now.toISOString();
-  const row = await readSiteRow(env.DB, namespace);
-  const script = row?.script ?? null;
-  if (!row) return { generated, namespace, script, builds: noSite(namespace, "Workers Builds") };
-  if (!script) {
-    return {
-      generated,
-      namespace,
-      script,
-      builds: none(
-        "no_site",
-        row.platform === "vercel"
-          ? `${namespace} runs on Vercel, so it has no Workers Builds.`
-          : `${namespace}'s site row names no Worker script, so its Workers Builds cannot be found. Add the script in Settings.`,
-      ),
-    };
-  }
-  const creds = cloudflareCredentials(env);
-  if (!creds.ok)
-    return {
-      generated,
-      namespace,
-      script,
-      builds: none("not_configured", `Workers Builds cannot be read: ${creds.reason}.`),
-    };
-  const builds = await attempt<{ builds: WorkersBuild[] }>(async () => {
-    const read = await listBuilds(env, { script, limit }, fetchImpl, false);
-    if (read.builds.length === 0) {
-      return none(
-        "empty",
-        `Cloudflare has no Workers Builds for ${script}: it deploys some other way (CI running wrangler deploy), or has not built yet.`,
-      );
-    }
-    return { ok: true, data: { builds: read.builds } };
-  });
-  return { generated, namespace, script, builds };
-}
-
-/** One build's log, its last lines. */
-export async function readBuildLog(
-  env: Env,
-  buildUuid: string,
-  fetchImpl: FetchLike = fetch,
-  now: Date = new Date(),
-): Promise<PortalBuildLog> {
-  const generated = now.toISOString();
-  const creds = cloudflareCredentials(env);
-  if (!creds.ok)
-    return {
-      generated,
-      build_uuid: buildUuid,
-      log: none("not_configured", `Workers Builds cannot be read: ${creds.reason}.`),
-    };
-  const log = await attempt<{
-    lines: string[];
-    line_count: number;
-    truncated: boolean;
-    note: string | null;
-  }>(async () => {
-    const read = await buildLogs(env, { build_uuid: buildUuid }, fetchImpl);
-    if (read.line_count === 0) return none("empty", `The log of build ${buildUuid} has no lines.`);
-    return {
-      ok: true,
-      data: {
-        lines: read.lines,
-        line_count: read.line_count,
-        truncated: read.truncated,
-        note: read.note ?? null,
-      },
-    };
-  });
-  return { generated, build_uuid: buildUuid, log };
-}
-
 // The routes.
 
 /** GET /portal/api/site-search?namespace=. */
@@ -465,7 +373,7 @@ export const handlePortalSiteSearch = behindGate(async (request, env, now) => {
 
 /** A namespace read with one whole-number parameter (days, limit): the gate, the namespace
  *  and the number, each refused with its reason, then the read. */
-const countedRead = behindGate(
+export const countedRead = behindGate(
   async (
     request,
     _env,
@@ -498,29 +406,3 @@ export function handlePortalSiteTraffic(
     (ns, days) => readSiteTraffic(env, ns, days, fetch, now),
   );
 }
-
-/** GET /portal/api/workers-builds?namespace=&limit=. */
-export function handlePortalWorkersBuilds(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  return countedRead(
-    request,
-    env,
-    now,
-    { name: "limit", max: BUILDS_MAX, fallback: BUILDS_DEFAULT },
-    (ns, limit) => readWorkersBuilds(env, ns, limit, fetch, now),
-  );
-}
-
-/** GET /portal/api/build-log?build=<uuid>. */
-export const handlePortalBuildLog = behindGate(async (request, env, now) => {
-  const build = new URL(request.url).searchParams.get("build") ?? "";
-  if (!BUILD_UUID.test(build))
-    return textResponse(
-      "build must be a build's id (a lowercase UUID), from GET /portal/api/workers-builds.",
-      400,
-    );
-  return jsonResponse(await readBuildLog(env, build, fetch, now));
-});

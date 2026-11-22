@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { D1_CAP_BYTES, sizeFrom } from "../src/ops-feed.ts";
+import { D1_CAP_BYTES, sizeFrom } from "../src/ops-live.ts";
 import type { OpsFeed } from "../src/ops-types/feed.ts";
 
 // The D1 store's size against its cap (capsid/decisions.md 2026-09-30, "admin panels

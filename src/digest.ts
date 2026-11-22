@@ -1,7 +1,7 @@
 import { sendEmail } from "@dustinedwards/site-runtime/email";
 import type { Env } from "./env";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
-import { readOvernightDigest } from "./overnight-plan";
+import { readOvernightDigest } from "./overnight-digest";
 import { PORTAL_HOST } from "./portal-host";
 import type { DigestState } from "./ops-types/views";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";

@@ -242,7 +242,7 @@ describe("jobs list stale: true, through the tool", () => {
       expect(refused.isError, JSON.stringify(extra)).toBe(true);
       expect(refused.text).toMatch(/without view, status or id/);
     }
-    // A writer: a reader is served list alone (src/tools/surface.ts READ_VIEWS).
+    // A writer: a reader is served list alone (src/tools/surface-composite.ts READ_VIEWS).
     const writer = scopedReader("sample");
     writer.scopes.grants = ["read", "write"];
     const claim = await callJobs(writer, { action: "claim", stale: true, namespace: "sample" });

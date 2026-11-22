@@ -1,5 +1,7 @@
-import { z, type ZodType } from "zod";
+import { z } from "zod";
 import type { Shape } from "./operations";
+import { ADMIN_OUTPUTS } from "./outputs-admin";
+import { bool, mergeOutputs, nullable, num, obj, rows, str, strs } from "./outputs-shapes";
 
 // What each operation answers on success, as its handler builds it (the `ok(...)` calls in
 // this folder and the functions they return). A served tool's outputSchema is its
@@ -7,37 +9,6 @@ import type { Shape } from "./operations";
 // action always returns it. The SDK checks each successful result against it, so a key a
 // handler leaves out on some path is optional here, and every object stays loose: rows
 // and GitHub or Cloudflare answers carry fields this file does not name.
-
-const obj = z.looseObject({});
-const rows = z.array(obj);
-const str = z.string();
-const num = z.number();
-const bool = z.boolean();
-const strs = z.array(z.string());
-const nullable = (t: ZodType) => t.nullable();
-
-// A key every variant returns is required; the rest are optional. A key whose type
-// differs between variants takes either.
-function mergeOutputs(shapes: readonly Shape[]): Shape {
-  const types = new Map<string, Map<string, ZodType>>();
-  const present = new Map<string, number>();
-  for (const shape of shapes) {
-    for (const [key, type] of Object.entries(shape)) {
-      const inner = type instanceof z.ZodOptional ? (type.unwrap() as ZodType) : type;
-      const seen = types.get(key) ?? new Map<string, ZodType>();
-      seen.set(JSON.stringify(z.toJSONSchema(inner, { unrepresentable: "any" })), inner);
-      types.set(key, seen);
-      if (!type.safeParse(undefined).success) present.set(key, (present.get(key) ?? 0) + 1);
-    }
-  }
-  const merged: Shape = {};
-  for (const [key, seen] of types) {
-    const list = [...seen.values()];
-    const type = list.length === 1 ? list[0] : z.union(list as [ZodType, ZodType, ...ZodType[]]);
-    merged[key] = present.get(key) === shapes.length ? type : type.optional();
-  }
-  return merged;
-}
 
 // A served tool's outputSchema: its actions' operations, merged.
 export function toolOutput(ops: readonly string[]) {
@@ -72,16 +43,6 @@ const jobResult: Shape = {
   routing_note: str.optional(),
   models: obj.optional(),
   versions: rows.optional(),
-};
-
-const agentResult: Shape = {
-  ok: bool,
-  action: str,
-  agent: obj.optional(),
-  agents: rows.optional(),
-  key: str.optional(),
-  note: str.optional(),
-  scopes: obj.optional(),
 };
 
 const searchConsole = { namespace: str, origin: str, property: str, report: str };
@@ -466,99 +427,5 @@ const OUTPUTS: Record<string, Shape> = {
     },
   ]),
 
-  // Capsid Admin (./admin, ./agents, ./claims, ./cloudflare, ./controls, ./ops).
-  whats_next: {
-    as_of: str,
-    questions: rows,
-    blocked: rows,
-    stale: rows,
-    pull_requests: obj,
-    checks: obj,
-    not_checked: strs,
-  },
-  workers_builds: { script: str, builds: rows },
-  system_versions: { as_of: str, packages: rows, systems: rows, unread: strs },
-  system_resources: mergeOutputs([
-    {
-      version: num,
-      read_at: str,
-      workers: rows,
-      databases: rows,
-      kv_namespaces: rows,
-      buckets: rows,
-      problems: strs,
-    },
-    {
-      read_at: str,
-      worker: obj,
-      databases: rows,
-      kv_namespaces: rows,
-      buckets: rows,
-      problems: strs,
-    },
-  ]),
-  site_backups: {
-    read_at: str,
-    capsid: obj,
-    sites: rows,
-    amazon_report_at: nullable(str),
-    not_configured: strs,
-  },
-  workers_build_logs: {
-    build_uuid: str,
-    lines: strs,
-    line_count: num,
-    truncated: bool,
-    note: str.optional(),
-  },
-  agents: mergeOutputs([agentResult, { ok: bool, action: str, archived: rows }]),
-  claims: mergeOutputs([
-    { filter: obj, groups: rows, waits: rows, usage: rows, truncated: strs },
-    {
-      job: obj,
-      outcome: nullable(obj),
-      claims: rows,
-      evaluations: rows,
-      touches: rows,
-      limit: num,
-      truncated: strs,
-    },
-    { table: str, after: num, limit: num, rows, next_after: nullable(num), provenance: obj },
-  ]),
-  cloudflare_config: mergeOutputs([
-    { action: str, count: num, apps: rows },
-    { action: str, count: num, policies: rows },
-    { action: str, zones: rows },
-    { action: str, count: num, addresses: rows },
-  ]),
-  controls: mergeOutputs([
-    { controls: rows, next: str },
-    { action: str, summary: str, changes: strs, audit: strs, token: str, expires_at: str },
-    { action: str, summary: str, warning: nullable(str) },
-  ]),
-  ops_snapshot: mergeOutputs([
-    {
-      version: num,
-      pass_at: str,
-      pass_ms: num,
-      cadence_min: num,
-      checks: rows,
-      health: nullable(obj),
-      mirror: nullable(obj),
-      ci: rows,
-      site_map: nullable(obj),
-      sites: rows,
-      packages: rows.optional(),
-    },
-    { pass_at: str, site: obj },
-    {
-      pass_at: str,
-      namespace: str,
-      slot: num,
-      from: str,
-      to: str,
-      value: str,
-      mark: nullable(str),
-    },
-  ]),
+  ...ADMIN_OUTPUTS,
 };
