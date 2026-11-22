@@ -4,11 +4,8 @@ import type { Env } from "./env";
 
 import { splitSignedTask } from "./signed-docs";
 import { auditStatement } from "./store-guards";
-import {
-  AUTO_MERGE_POLICY_PATH,
-  checkMergePolicyBody,
-  parseMergePolicy,
-} from "./auto-merge-policy";
+import { AUTO_MERGE_POLICY_PATH, checkMergePolicyBody } from "./auto-merge-policy";
+import { parseMergePolicy } from "./auto-merge-policy-parse";
 import { readRepoFile } from "./github/contents";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 

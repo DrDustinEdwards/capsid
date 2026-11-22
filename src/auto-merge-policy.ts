@@ -69,16 +69,16 @@ export const sizeCapReason = (facts: Pick<PrFacts, "changedLines">): string =>
 export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> = [
   { pattern: /^src\/gate-policy\.ts$/i, why: "the gate policy source" },
   {
-    pattern: /^src\/auto-merge(-(policy|tick))?\.ts$/i,
+    pattern: /^src\/auto-merge(-[a-z]+)*\.ts$/i,
     why: "the auto-merge source, which holds this list",
   },
-  { pattern: /^src\/policy-sign\.ts$/i, why: "the policy signer" },
+  { pattern: /^src\/policy-sign(-[a-z]+)*\.ts$/i, why: "the policy signer" },
   { pattern: /^src\/protected-paths\.ts$/i, why: "the protected path list" },
   // The sources the checks read their answers from, not only the ones that run them.
   // Each is a two-step route otherwise: a green driver PR weakens the source and
   // merges on its own, and the next PR passes the check it weakened.
   {
-    pattern: /^src\/scope\.ts$/i,
+    pattern: /^src\/scope(-[a-z]+)*\.ts$/i,
     why: "isMoneyPath, which is the whole of the paths_not_money check",
   },
   {
@@ -142,11 +142,11 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   // loosened either could record any PR against any job. The job transitions are
   // src/jobs.ts and the jobs-* modules it re-exports; jobs-schema.ts writes nothing.
   {
-    pattern: /^src\/jobs(-(claim|holder|seat|mirror|transition))?\.ts$/i,
+    pattern: /^src\/jobs(-[a-z]+)*\.ts$/i,
     why: "the job transitions that write result_ref, which pr_recorded_for_job reads",
   },
   {
-    pattern: /^src\/outcome-prs\.ts$/i,
+    pattern: /^src\/outcome-prs(-[a-z]+)*\.ts$/i,
     why: "the writer of job_outcome_prs, which pr_recorded_for_job reads",
   },
 ];
