@@ -14,9 +14,8 @@ import {
 } from "./jobs-transition";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Edit: the seat correcting a job that nobody is working (job_4ef99d687805, Dustin
-// 2026-10-07). Before it, a posted job could not be changed, because its body is
-// signed, so every correction was a supersede and a repost.
+// Edit: the seat correcting a job that nobody is working A job's body is
+// signed, so without it every correction was a supersede and a repost.
 //
 // Only the seat (callerIsSeat: the admin or a can_merge caller), never a driver: a
 // driver that could rewrite a job's body could hand itself a different prompt under a

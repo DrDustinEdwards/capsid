@@ -18,7 +18,7 @@ import { plural } from "@drdustinedwards/site-helpers/text";
 // Deleting a namespace (capsid_admin_manage_namespaces actions delete_preview and
 // delete_perform): the plan, the refusals, the signed confirmation and the one batch.
 // Its operation is registered in src/tools/namespaces.ts, admin only (TOOL_GRANTS in
-// src/scope.ts). Ruled 2026-09-29, "Capsid MCP roadmap, build or don't build". The
+// src/scope.ts). The
 // namespace_remove control (src/controls.ts) is its second door: its preview reads this
 // plan and refusals and binds the same fingerprint, and its perform is deleteAsPlanned.
 //

@@ -4,8 +4,8 @@ import { SEARCH_ROWS } from "./limits";
 import type { SearchFilter, SearchRow } from "./doc-reads";
 
 // The meaning index: every document, in a Cloudflare AI Search instance whose data
-// source is this Worker's own D1 database (AI Search D1 data source, beta since
-// 2026-11-12: https://developers.cloudflare.com/ai-search/configuration/data-source/d1/),
+// source is this Worker's own D1 database (AI Search D1 data source, beta:
+// https://developers.cloudflare.com/ai-search/configuration/data-source/d1/),
 // so search can match by meaning as well as by keyword
 // (capsid/research/design-hybrid-search.md, step 1). D1 stays the source of truth.
 //
@@ -25,14 +25,12 @@ const SYNCED_KEY = "doc-index:synced";
 const READY_KEY = "doc-index:instance";
 // The AI Gateway id the instance was last pointed at (routeThroughGateway).
 const GATEWAY_KEY = "doc-index:gateway";
-// A hybrid query that has not answered by then falls back to keyword search (checklist
-// area 11, C2): AI Search's search() takes no timeout or signal of its own.
+// A hybrid query that has not answered by then falls back to keyword search (AI Search's search() takes no timeout or signal of its own.
 const SEARCH_TIMEOUT_MS = 8_000;
 
 // One row per document. id is the primary key, so each page AI Search reads is an index
 // seek. The body is cut to fit the 64 KiB a rendered row may take
-// (d1_document_too_large); the largest document on 2026-11-14 was 57,737 bytes, and
-// keyword search (FTS5) still reads every byte. meta_canon is the current canon: the
+// (d1_document_too_large); keyword search (FTS5) still reads every byte. meta_canon is the current canon: the
 // documents a ruling or convention lives in, which search boosts over a session log
 // that quotes an old ruling (design section 3.3). AI Search allows five meta_ columns,
 // and puts each row's id on every chunk as `row_id`, so the id needs none.
@@ -80,7 +78,7 @@ async function ensureInstance(env: Env, ns: AiSearchNamespace): Promise<AiSearch
 // The reranker and the embedding model run inside AI Search, so a search call has no
 // gateway of its own to name: the instance names it (`ai_gateway_id`), and every model
 // call it makes then goes through that gateway's logs, rate limits and spend limits
-// (area 11, C13 and G1). AI_GATEWAY_ID is a dashboard var (kept by keep_vars); unset, the
+//. AI_GATEWAY_ID is a dashboard var (kept by keep_vars); unset, the
 // instance is left as it is. A refusal is logged and retried on the next tick.
 async function routeThroughGateway(env: Env, instance: AiSearchInstance): Promise<void> {
   const id = env.AI_GATEWAY_ID?.trim();
@@ -149,7 +147,7 @@ export async function docIndexTick(env: Env): Promise<IndexReport> {
 //
 // Queries are counted per month in KV. The account's free 1,000 a month is shared with
 // the site's Ask, and a paid hybrid query costs $0.00075, so the cap holds the worst case
-// near $4 a month (Dustin's $5 cap, decision D1 of the design).
+// near $4 a month (the $5 cap).
 export const HYBRID_MONTHLY_CAP = 5000;
 const RERANK_MODEL = "@cf/baai/bge-reranker-base";
 const SNIPPET_CHARS = 240;
@@ -233,7 +231,7 @@ export async function hybridSearch(
     ({ chunks } = await Promise.race([search, late]));
   } catch (err) {
     // The upstream error goes to the log only; the caller is told what happened, never
-    // the raw text of another service's answer (area 11, C12).
+    // the raw text of another service's answer.
     const message = errorMessage(err);
     logEvent(
       "DOC_INDEX_SEARCH_FAILED",

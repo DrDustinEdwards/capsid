@@ -408,7 +408,7 @@ export function defineBacklinksOperation(server: McpServer, ctx: ToolCtx): void 
     async ({ namespace, path }) => {
       const { outgoing, incoming } = await documentEdges(db, namespace, path);
       // An incoming edge names a document in another namespace, so it is kept only when
-      // the caller may read that document, asked through checkScope (Grok audit 2026-10, A2).
+      // the caller may read that document, asked through checkScope.
       const readable = incoming.filter(
         (e) =>
           ctx.scope({

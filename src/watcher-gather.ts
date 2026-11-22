@@ -459,7 +459,7 @@ export async function gatherFindings(
   });
 
   // Agents acting out of their usual pattern, from audit_log (src/anomaly.ts, OWASP item
-  // 6). A finding only, never a suspension (Dustin, D4 of 2026-10-03).
+  // 6). A finding only, never a suspension.
   const actionHours = await attempt("agent anomalies", () =>
     readActionHours(env.DB, now, WATCHER_ACTOR),
   );

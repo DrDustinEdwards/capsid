@@ -24,8 +24,7 @@ import { jsonResponse as json, textResponse as text } from "@dustinedwards/site-
 import { toSqlTime } from "@dustinedwards/site-runtime/time";
 import { HOUR_MS, DAY_MS, utcDay } from "./time";
 
-// PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7; Dustin's DECIDE 5
-// and 6 of 2026-10-09). Web Push to the devices the administrator turned on in the
+// PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7). Web Push to the devices the administrator turned on in the
 // Portal's Settings, for exactly eight things:
 //   1. a `typed` pull request (a money path) waiting more than 2 hours;
 //   2. a rollback (deploy_outcomes: rolled_back or rollback_failed);
@@ -33,7 +32,7 @@ import { HOUR_MS, DAY_MS, utcDay } from "./time";
 //   4. a question over 4 hours old on a job with priority 70 or more;
 //   5. auto-merge paused for a namespace by the safety shutoff (src/merge-safety.ts);
 //   6. a pull request labeled visual waiting for Dustin to look at it (src/visual-pr.ts),
-//      once per head, so a new push asks again (job_0368576da167);
+//      once per head, so a new push asks again;
 //   7. a site down on two probes in a row, and its return, once each; a site whose health
 //      route reports degraded, once a UTC day per failing check, naming why
 //      (src/site-pulse.ts); a site the watcher found erroring on over 1 percent of its
@@ -376,7 +375,7 @@ export async function pushTick(
 }
 
 /**
- * THE EMAIL FALLBACK (area 8, U2). With no device subscribed an alert reached nobody, so
+ * THE EMAIL FALLBACK. With no device subscribed an alert reached nobody, so
  * the same urgent items go by email instead, through the path the daily digest already uses
  * (src/digest.ts): the send_email binding EMAIL, from ALERT_FROM to ALERT_EMAIL, and only
  * once Email Routing is on (digestProblem). One mail per tick holds the items due, at most

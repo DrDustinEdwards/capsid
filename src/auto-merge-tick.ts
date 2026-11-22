@@ -176,7 +176,7 @@ async function factsForPr(
 
 // The audit row shapes, built by pure functions so test/auto-merge.test.ts asserts them.
 
-export function declineParams(
+function declineParams(
   policyVersion: string,
   // Only the PR and head, so a PR declined before its facts were read is audited alike.
   facts: Pick<PrFacts, "repo" | "number" | "headSha">,
@@ -405,8 +405,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       ({ owner, repo } = await resolveRepo(env, namespace));
       defaultBranch = await getDefaultBranch(env, owner, repo);
       // Every page, so a PR past the first hundred is judged and stays in the seat's
-      // queue. A list that cannot be read whole skips the namespace (Grok audit
-      // 2026-10-21, CA-15).
+      // queue. A list that cannot be read whole skips the namespace.
       const listedPrs = await listOpenPrs(env, owner, repo);
       if (typeof listedPrs === "string") {
         logEvent(
@@ -445,7 +444,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       // reads share the rate limit. With a promoted unit its files are read: a PR in that
       // unit merges on the unit instead of a job (policy version 10). A visual PR, or one
       // Dustin approved, is judged all the same: body_names_job leaves it class approve,
-      // so his approval merges it on green CI (job_0368576da167).
+      // so his approval merges it on green CI.
       const visual = isVisual(pr);
       const hasUnit = policy.units.some((u) => u.startsWith(`${namespace} / `));
       if (!jobIdFromBody(pr.body ?? "") && !visual && !approvals.has(pr.number) && !hasUnit) {
@@ -683,7 +682,7 @@ async function judgeOnePr(
     reason: string;
   } | null = null;
   // A draft first, and it keeps its class wait: GitHub refuses to merge a draft with a
-  // 405, so sending it would only fail (Grok audit 2026-10, C2).
+  // 405, so sending it would only fail.
   if (verdict.merge && pr.draft === true) {
     hold = {
       failed: "pr_is_draft",
@@ -720,8 +719,7 @@ async function judgeOnePr(
   // The executor (docs/design/design-merge-pipeline.md section 4): a pull request the
   // policy leaves open but Dustin approved merges here once CI is green on the approved
   // sha, or its approval is voided, expired or refused, and the PR is judged as before.
-  // Not for a draft: GitHub refuses to merge one, and the hold below says why (Grok audit
-  // 2026-10-21, CA-16).
+  // Not for a draft: GitHub refuses to merge one, and the hold below says why.
   if (!merges && approval && pr.draft !== true) {
     const done = await executeApproval(env, namespace, facts, merge_class, approval, now);
     if (done.done === "merged") {
@@ -841,7 +839,7 @@ async function judgeOnePr(
     );
   // The merge has landed, and the tick's catch does not retry a PR whose outcome is pushed,
   // so the row the safety meter and the merge units read is tried a second time before the
-  // failure is left to that catch (Grok audit 2026-10-21, CA-18).
+  // failure is left to that catch.
   const writeMerged = () =>
     env.DB.batch([
       systemAudit(

@@ -12,7 +12,7 @@ import { auditStatement, snapshotLive } from "./store-guards";
 //
 // Canon (src/canon.ts) is never marked: a driver may write an edge in its own namespace
 // but may not change that namespace's core.md or decisions.md, so an edge to one must
-// not do it on the driver's behalf (Grok audit 2026-10, M4). The seat changes a canon
+// not do it on the driver's behalf. The seat changes a canon
 // document's status itself. The write path refuses such an edge, and a cross-namespace
 // one the writer cannot write, before it is stored (src/tools/docs-write.ts).
 

@@ -96,7 +96,7 @@ export const OPS_RETURN_TO = PORTAL_PREFIX;
 // D1 statements: one per task, and 15 more, one of them the signed policy's read (liveMergePolicy).
 export const OPS_FEED_READS = { d1: 14 + TASKS.length, kv: 10 } as const;
 
-// The uptime target the Portal shows each site against (area 8, U4).
+// The uptime target the Portal shows each site against.
 const UPTIME_TARGET = 0.999;
 
 /** Each site's probes and up probes over the retention window, and the days under the

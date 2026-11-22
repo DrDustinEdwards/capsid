@@ -107,7 +107,7 @@ export const POLICY_PREFIX = "policy/";
  * authority: capsid/policy/auto-merge.md says what it may merge with no human, and
  * capsid/policy/gates.md which blocked commands the seat may approve without one. So
  * a write here is a ruling, accepted only with allow_improve_paths (a name kept from
- * the improve loop, removed 2026-10-19), which needs can_touch_protected.
+ * a removed loop), which needs can_touch_protected.
  */
 export function policyWriteRefusal(namespace: string, path: string, allow: boolean): string | null {
   if (allow || !path.startsWith(POLICY_PREFIX)) return null;

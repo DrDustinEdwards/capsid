@@ -4,8 +4,7 @@ import type { Agent } from "./agents";
 import { HOUR_MS } from "./time";
 import { toHex } from "@dustinedwards/site-runtime/encoding";
 
-// THE RUN KEY (the methods paper's protocol, section 4, "The run key"; decided
-// 2026-10-19). Each treatment run gets its own Capsid key, minted by /bench/start for
+// THE RUN KEY (the methods paper's protocol, section 4, "The run key"). Each treatment run gets its own Capsid key, minted by /bench/start for
 // that run id and held by no other run. The harness posts the run's one job with its
 // own driver key, which the agent never holds. The run key's only successful calls are
 // claim, and list by id, of that one job (src/scope.ts benchRunRefusal). It stops

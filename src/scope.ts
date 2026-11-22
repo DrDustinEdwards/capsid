@@ -150,7 +150,7 @@ export const SCOPES = mcpScopes("capsid");
 // For an "action" tool, the actions that only read; every other action writes. The
 // handlers split the same way where the namespace is known (src/tools/jobs.ts list,
 // src/tools/lint.ts gather), and a caller holding only the read grant is served the tool
-// with these actions alone (src/tools/surface.ts READ_VIEWS; area 11, T7).
+// with these actions alone (src/tools/surface.ts READ_VIEWS).
 export const READ_ACTIONS: Record<string, readonly [string, ...string[]]> = {
   capsid_work_jobs: ["list"],
   capsid_lint_namespace: ["gather"],
@@ -480,7 +480,7 @@ export function portfolioOnly(agent: Agent, namespace: string | undefined): bool
 //
 // The window slides, as GitHub's sudo mode does: a step-up action is allowed when the
 // Access sign-in or the last SUCCESSFUL step-up action was within STEP_UP_IDLE_MS, and
-// each success resets that clock. A fixed window refused a working session mid-task.
+// each success resets that clock.
 // STEP_UP_MAX_MS caps it from the sign-in whatever the activity (NIST SP 800-63B-4
 // allows an AAL3 session no more than 12 hours overall), so only a new sign-in extends
 // past it.
@@ -756,7 +756,7 @@ export interface CallLog {
 
 // The tools whose answers carry text written outside Capsid, and its label: a repository's
 // files, code search hits, pull request titles and bodies, review comments and CI logs, all
-// written by whoever can push or comment (area 11, S2). Their successful results go through
+// written by whoever can push or comment. Their successful results go through
 // site-runtime's outsideResult: the shared notice, then the answer inside <data> delimiters,
 // and the notice beside the answer in structuredContent. Documents are not listed: a
 // document's provenance (last_actor) travels with it, and the server's instructions name
@@ -784,11 +784,11 @@ function markOutside(tool: string, result: unknown): unknown {
   );
 }
 
-/** An MCP icon, as serverInfo and tools/list carry it (area 11, T9). */
+/** An MCP icon, as serverInfo and tools/list carry it. */
 export type ToolIcon = { src: string; mimeType?: string; sizes?: string[] };
 
 // Whether this caller's grant could ever call the tool, whatever the arguments: the grant
-// TOOL_GRANTS names (area 11, T7). A tool its grant never could is not registered for it, so
+// TOOL_GRANTS names. A tool its grant never could is not registered for it, so
 // tools/list shows a read grant no write tool, as site-runtime's toolsForGrant does on the
 // other servers, and a call to one is an unknown tool. An "action" tool is listed for every
 // grant: one of its actions needs only read. The admin identity (Capsid Admin's route admits
@@ -865,7 +865,7 @@ export function guardRegistrations(
       signal: AbortSignal | undefined,
     ): Promise<unknown> => {
       // The request's abort signal reaches every outbound request the handler makes
-      // (src/call-signal.ts; area 11, P11).
+      // (src/call-signal.ts).
       const result = markOutside(name, await withCallSignal(signal, () => handler(...callArgs)));
       // A step-up action that succeeded resets the idle clock (STEP_UP). A refused or
       // failed one does not: it proves nothing about the person being there.
@@ -968,7 +968,7 @@ export function guardRegistrations(
     };
     // An OAuth token without the scope the call needs is answered 403 insufficient_scope
     // before the handler runs, naming every scope it needs, so the client can step up
-    // instead of the person reconnecting by hand (area 11, A3). A key carries no token and
+    // instead of the person reconnecting by hand. A key carries no token and
     // gets the refusal above in words. A grant from before the scopes existed carries none
     // and reads, as src/index.ts treats it.
     const challenge =
@@ -993,7 +993,7 @@ export function guardRegistrations(
           },
         }));
     const { namespaceActions: _namespaceActions, ...declaredConfig } = config ?? {};
-    // Each tool carries the server's icon unless it names its own (area 11, T9).
+    // Each tool carries the server's icon unless it names its own.
     const served =
       icons && !(declaredConfig as { icons?: unknown }).icons
         ? { ...declaredConfig, icons }

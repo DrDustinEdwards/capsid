@@ -19,8 +19,8 @@ import { DAY_MS } from "./time";
 // that step's pull request having landed: until it does, the query finds no rows.
 const MERGE_RESUME_ACTOR = "system:merge-resume";
 
-// THE DAILY MAINTENANCE PASS (job_549550d73d4e, Dustin 2026-10-07: routine maintenance
-// keeps not happening, and each stale thing was found only when he asked). One pass a day
+// THE DAILY MAINTENANCE PASS (routine maintenance, so no stale thing waits
+// to be asked about). One pass a day
 // on the five-minute tick, reusing its stamp pattern rather than adding a second scheduler.
 // Every finding either was acted on by a step that already audit-logs (the merge-resume
 // step) or lands in one short list, served by capsid_read_status action status, that the seat reads at the

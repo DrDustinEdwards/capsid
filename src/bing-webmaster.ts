@@ -4,8 +4,7 @@ import { checkInspectUrl, pageOnSite, reportSite } from "./site-reports";
 import { dateWindow } from "./search-console";
 import { callSignal } from "./call-signal";
 
-// Bing Webmaster Tools for a namespace's site, served as capsid_inspect_repo action bing
-// (Dustin, 2026-10-18, beside Search Console). Bing's index also feeds ChatGPT search and
+// Bing Webmaster Tools for a namespace's site, served as capsid_inspect_repo action bing. Bing's index also feeds ChatGPT search and
 // Copilot. Six reports through Bing's Webmaster JSON API: top queries and top pages
 // (clicks, impressions, average position, summed over a window), daily traffic, one
 // URL's crawl facts, the submitted sitemaps, and URLs with crawl issues.

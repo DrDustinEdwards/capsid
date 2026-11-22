@@ -20,8 +20,7 @@ import type {
 } from "./ops-types/views";
 import { MINUTE_MS, DAY_MS, isoWeek, timeMs, utcDay } from "./time";
 
-// The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3,
-// ruled 2026-10-09: DECIDE 5, the trends route, and DECIDE 6, all eleven visuals). The feed
+// The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3). The feed
 // carries no series longer than 7 days, so these are read on demand by GET
 // /portal/api/trends (src/portal-trends.ts), read-only:
 //

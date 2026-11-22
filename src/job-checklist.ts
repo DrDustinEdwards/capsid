@@ -1,7 +1,6 @@
 import { heading, proseOnly } from "./job-body-check";
 
-// The DONE WHEN checklist (docs/work-queue.md, "CI on complete"; Grok design review
-// 2026-10-23, build step 6). The poster numbers the items under DONE WHEN, at most
+// The DONE WHEN checklist (docs/work-queue.md, "CI on complete"). The poster numbers the items under DONE WHEN, at most
 // CHECKLIST_MAX of them. An item that says it changes a path in backticks ("3. The breaker
 // skips run keys: changes `src/job-breaker.ts`") is checked at complete: a pull request
 // the complete names must change that path, or the job is not done. A path ending in /

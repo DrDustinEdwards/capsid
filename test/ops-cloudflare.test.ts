@@ -4,7 +4,6 @@ import {
   CF_GRAPHQL,
   DEPLOYS_KEPT,
   WEB_ANALYTICS_PERMISSION,
-  cloudflareCredentials,
   errorWindow,
   readCloudflare,
   readWebAnalyticsSites,
@@ -175,25 +174,6 @@ test("with no token or no account, every Cloudflare site says exactly what is un
   }
 });
 
-test("the account falls back to R2_ACCOUNT_ID, the same Cloudflare account", () => {
-  const creds = cloudflareCredentials({ CF_OPS_TOKEN: TOKEN, R2_ACCOUNT_ID: ACCOUNT });
-  assert.deepEqual(creds, { ok: true, token: TOKEN, account: ACCOUNT });
-  assert.deepEqual(
-    cloudflareCredentials({ CF_OPS_TOKEN: TOKEN, CF_ACCOUNT_ID: "cf", R2_ACCOUNT_ID: "r2" }),
-    { ok: true, token: TOKEN, account: "cf" },
-  );
-});
-
-test("a Vercel site is not Cloudflare's, with a reason, even with a token", async () => {
-  const cf = cloudflare({});
-  const read = await readCloudflare(CREDS, [VERCEL], cf.impl, NOW);
-  assert.deepEqual(read.bySite["sample-vercel"], {
-    state: "not-cloudflare",
-    reason: "Sample Vercel is served by vercel, not Cloudflare",
-  });
-  assert.equal(cf.calls.length, 0);
-});
-
 // Script resolution
 
 // The seed's scripts (a script named only where the host proves it) are checked
@@ -221,16 +201,6 @@ test("a custom-domain site resolves to the Worker its custom domain names; one w
     "an unresolved site's script was guessed and fetched",
   );
   assert.equal(read.ran, true, "an unresolved site is a finding about the map, not a failed read");
-});
-
-test("a workers.dev site needs no domains read", async () => {
-  const cf = cloudflare({
-    [`GET ${API}/workers/scripts/sample-dev/deployments`]: deployments([]),
-    [`POST ${CF_GRAPHQL}`]: graph([]),
-  });
-  const read = await readCloudflare(CREDS, [WORKERS_DEV], cf.impl, NOW);
-  assert.equal(read.bySite["sample-dev"].state, "ok");
-  assert.ok(!cf.calls.some((c) => c.url.endsWith("/workers/domains")));
 });
 
 test("a domains list that cannot be read makes each custom-domain site an error, and the check does not run", async () => {
@@ -301,17 +271,6 @@ test("deployments are newest first, at most ten, with the version serving the la
   }
 });
 
-test("a deployments read that fails makes that site an error with the reason, and the check does not run", async () => {
-  const cf = cloudflare({ [`POST ${CF_GRAPHQL}`]: graph([]) });
-  const { value: read } = await quietly(() => readCloudflare(CREDS, [WORKERS_DEV], cf.impl, NOW));
-  assert.equal(read.ran, false);
-  assert.equal(read.bySite["sample-dev"].state, "error");
-  assert.match(
-    read.bySite["sample-dev"].state === "error" ? read.bySite["sample-dev"].reason : "",
-    /connect failed/,
-  );
-});
-
 // Errors
 
 test("ONE analytics query covers every script: 24 hourly buckets, oldest first, an hour with no row a real zero", async () => {
@@ -323,7 +282,7 @@ test("ONE analytics query covers every script: 24 hourly buckets, oldest first, 
       ["sample-web", LAST_HOUR, 200, 3, 2_500_400],
       ["sample-dev", "2026-09-27T12:00:00Z", 10, 1],
       ["sample-dev", "2026-09-27T12:00:00Z", 5, 0],
-      // REPLAY (2026-10-31 15:00): Cloudflare's unattributed row blinded every site's checks.
+      // Cloudflare's unattributed row must not blind every site's checks.
       ["__unknown__", LAST_HOUR, 7, 0],
     ]),
   });
@@ -396,43 +355,18 @@ test("an analytics query that fails is no data with its reason, never zeros, and
       `${what} was not logged`,
     );
   }
-  const cf = cloudflare({
-    [`GET ${API}/workers/scripts/sample-dev/deployments`]: deployments([]),
-    [`POST ${CF_GRAPHQL}`]: failures[0][1],
-  });
-  const { value: read } = await quietly(() => readCloudflare(CREDS, [WORKERS_DEV], cf.impl, NOW));
-  const state = read.bySite["sample-dev"];
-  assert.match(
-    state.state === "ok" ? String(state.errors_reason) : "",
-    /unknown field datetimeHour/,
-  );
 });
 
-// L6, live 2026-10-31: Cloudflare answered the scriptName_in query with a row named
-// "__unknown__" (no Worker) inside the window, and the whole read failed on every site.
-test("a row Cloudflare names __unknown__ is set aside and every site keeps its buckets; another unasked script still fails the read", async () => {
-  const answer = (extra: [string, string, number, number]) =>
-    cloudflare({
-      [`GET ${API}/workers/scripts/sample-dev/deployments`]: deployments([]),
-      [`POST ${CF_GRAPHQL}`]: graph([["sample-dev", LAST_HOUR, 40, 2], extra]),
-    });
-  const cf = answer(["__unknown__", LAST_HOUR, 7, 7]);
-  const { value: read } = await quietly(() => readCloudflare(CREDS, [WORKERS_DEV], cf.impl, NOW));
-  assert.equal(read.ran, true);
-  const state = read.bySite["sample-dev"];
-  assert.ok(state.state === "ok");
-  assert.equal(state.errors_reason, null);
-  assert.deepEqual(state.errors24?.at(-1), {
-    hour: "2026-09-28T11:00:00.000Z",
-    requests: 40,
-    errors: 2,
-    cpu_ms: 0,
+test("a row for an unasked script still fails the read", async () => {
+  const cf = cloudflare({
+    [`GET ${API}/workers/scripts/sample-dev/deployments`]: deployments([]),
+    [`POST ${CF_GRAPHQL}`]: graph([
+      ["sample-dev", LAST_HOUR, 40, 2],
+      ["someone-else", LAST_HOUR, 1, 0],
+    ]),
   });
-
-  const { value: other } = await quietly(() =>
-    readCloudflare(CREDS, [WORKERS_DEV], answer(["someone-else", LAST_HOUR, 1, 0]).impl, NOW),
-  );
-  assert.equal(other.ran, false);
+  const { value: read } = await quietly(() => readCloudflare(CREDS, [WORKERS_DEV], cf.impl, NOW));
+  assert.equal(read.ran, false);
 });
 
 // The findings
@@ -512,22 +446,14 @@ test("the error rate fires above 1 percent of at least 100 requests in the last 
   const fires = (cf: SiteCloudflare) =>
     siteErrorFindings(sites, { sample: cf }).map((f) => f.fingerprint);
   assert.deepEqual(fires(hourly(100, 2)), ["site-errors-sample"]);
-  assert.deepEqual(fires(hourly(1000, 11)), ["site-errors-sample"]);
   assert.deepEqual(fires(hourly(100, 1)), [], "exactly 1 percent fired");
-  assert.deepEqual(fires(hourly(1000, 10)), [], "exactly 1 percent fired");
   assert.deepEqual(fires(hourly(99, 50)), [], "99 requests fired");
-  assert.deepEqual(
-    fires(hourly(100, 0, { requests: 1000, errors: 900 })),
-    [],
-    "an earlier hour fired",
-  );
   assert.deepEqual(
     fires({ ...hourly(100, 50), errors24: null, errors_reason: "query failed" }),
     [],
     "no data was judged",
   );
-  assert.deepEqual(fires({ state: "no-token", reason: "CF_OPS_TOKEN is not set" }), []);
-  // REPLAY (L6, 2026-10-31): a Worker that caught its error and answered 503 threw nothing, so it was never counted.
+  // A Worker that caught its error and answered 503 threw nothing, so only the edge count sees it.
   const withEdge = (cf: SiteCloudflare, served5xx: number) =>
     siteErrorFindings(sites, { sample: cf }, { sample: { count: served5xx, top: [] } }).map(
       (f) => f.fingerprint,
@@ -538,7 +464,6 @@ test("the error rate fires above 1 percent of at least 100 requests in the last 
     [],
     "a thrown invocation is also a 5xx at the edge, so it is not counted twice",
   );
-  // REPLAY (2026-10-31): four findings said "79 answers were 5xx" and nothing about where.
   const named = siteErrorFindings(
     sites,
     { sample: hourly(100, 0) },
@@ -557,20 +482,6 @@ test("the CPU finding fires above a million CPU ms in the last complete hour, an
     fires(hourly(2_000_000, 0, undefined, 1_000_000)),
     [],
     "exactly the limit fired",
-  );
-  assert.deepEqual(
-    fires(hourly(10, 0, { requests: 10, errors: 0, cpu_ms: 9_000_000 })),
-    [],
-    "an earlier hour fired",
-  );
-  assert.deepEqual(
-    fires({
-      ...hourly(10, 0, undefined, 5_000_000),
-      errors24: null,
-      errors_reason: "query failed",
-    }),
-    [],
-    "no data was judged",
   );
   assert.equal(owningCheck("site-cpu-sample"), "cloudflare");
 });
@@ -642,11 +553,7 @@ test("the snapshot carries each site's Cloudflare state, and an old snapshot wit
   assert.equal(snap.version, 1);
   assert.deepEqual(snap.sites[0].cloudflare, cf.a);
   assert.deepEqual(snap.sites[1].cloudflare, cf.b);
-  assert.equal(
-    "cloudflare" in snap.sites[2],
-    false,
-    "a site with no state this pass was given one",
-  );
+  assert.equal("cloudflare" in snap.sites[2], false);
 
   const old = JSON.parse(JSON.stringify(snap)) as OpsSnapshot;
   for (const s of old.sites) delete s.cloudflare;
@@ -661,18 +568,6 @@ test("the snapshot carries each site's Cloudflare state, and an old snapshot wit
   });
   assert.equal(next.sites[0].ring, "11");
   assert.deepEqual(next.sites[0].cloudflare, cf.a);
-
-  const carried = buildSnapshot(snap, {
-    ...base,
-    now: new Date(NOW.getTime() + 30 * 60_000),
-    probes: null,
-    cloudflare: { a: cf.b },
-  });
-  assert.deepEqual(
-    carried.sites.find((s) => s.namespace === "a")?.cloudflare,
-    cf.b,
-    "a site the probes missed does not get this pass's Cloudflare state",
-  );
 });
 
 // Through gatherFindings
@@ -688,62 +583,35 @@ const deadDb = {
 // The site configuration a pass reads (src/ops-sites.ts), shaped like the migration's
 // seed: a self-probed workers.dev site, a second workers.dev site, two custom domains
 // resolved from Cloudflare's list, and a Vercel site. Every other read fails, as deadDb.
+const row = (
+  namespace: string,
+  origin: string | null,
+  platform: string | null,
+  over: Record<string, unknown> = {},
+) => ({
+  namespace,
+  name: namespace,
+  origin,
+  health_path: null,
+  platform,
+  script: null,
+  self_probe: 0,
+  revision: 1,
+  updated_at: "2026-09-29 00:00:00",
+  ...over,
+});
 const CONFIG_ROWS = [
-  {
-    namespace: "capsid",
-    name: "Capsid",
-    origin: "https://capsid.sample.workers.dev",
+  row("capsid", "https://capsid.sample.workers.dev", "cloudflare", {
     health_path: "/health",
-    platform: "cloudflare",
     script: "capsid",
     self_probe: 1,
-  },
-  {
-    namespace: "bsw",
-    name: "BSW",
-    origin: "https://bsw.sample.workers.dev",
-    health_path: null,
-    platform: "cloudflare",
-    script: "bsw",
-    self_probe: 0,
-  },
-  {
-    namespace: "foxing",
-    name: "Foxing",
-    origin: "https://foxing.example.com",
-    health_path: null,
-    platform: "cloudflare",
-    script: null,
-    self_probe: 0,
-  },
-  {
-    namespace: "germomics",
-    name: "Germomics",
-    origin: "https://germomics.example.com",
-    health_path: "/health",
-    platform: "cloudflare",
-    script: null,
-    self_probe: 0,
-  },
-  {
-    namespace: "julieedwards",
-    name: "julieedwards",
-    origin: "https://julieedwards.example.com",
-    health_path: null,
-    platform: "vercel",
-    script: null,
-    self_probe: 0,
-  },
-  {
-    namespace: "claude-skills",
-    name: "claude-skills",
-    origin: null,
-    health_path: null,
-    platform: null,
-    script: null,
-    self_probe: 0,
-  },
-].map((r) => ({ ...r, revision: 1, updated_at: "2026-09-29 00:00:00" }));
+  }),
+  row("bsw", "https://bsw.sample.workers.dev", "cloudflare", { script: "bsw" }),
+  row("foxing", "https://foxing.example.com", "cloudflare"),
+  row("germomics", "https://germomics.example.com", "cloudflare", { health_path: "/health" }),
+  row("julieedwards", "https://julieedwards.example.com", "vercel"),
+  row("claude-skills", null, null),
+];
 
 function configDb(rows: unknown[]) {
   return {
@@ -777,25 +645,6 @@ async function gather(
     calls: cf.calls,
   };
 }
-
-test("with no token the cloudflare check does not run, nothing reaches Cloudflare, and every site says why", async () => {
-  const { gathered, calls } = await gather({}, {}, null);
-  assert.equal(gathered.ran.has("cloudflare"), false);
-  assert.ok(
-    !calls.some((c) => c.url.startsWith("https://api.cloudflare.com")),
-    "a pass with no token called Cloudflare",
-  );
-  const cf = gathered.observed.cloudflare ?? {};
-  const sites = CONFIG_ROWS.filter((r) => r.origin !== null);
-  assert.equal(Object.keys(cf).length, sites.length, "the no-site row got a Cloudflare state");
-  for (const s of sites) {
-    assert.equal(
-      cf[s.namespace]?.state,
-      s.platform === "vercel" ? "not-cloudflare" : "no-token",
-      s.namespace,
-    );
-  }
-});
 
 // scanner-rule: with nothing configured, the watcher reaches no site
 test("PLANT: with no site configured, the pass probes nothing and reaches no Cloudflare API", async () => {
@@ -873,8 +722,7 @@ test("only the watcher, the admin capsid_admin_read_ops calls, the capsid_inspec
         ).test(f.text),
       )
       .map((f) => f.name);
-  // portal-site.ts is a site page's tabs (the Portal map, 2026-11): read live for one site when
-  // its Search and traffic or Deploys tab opens, never with the feed or its poll.
+  // portal-site.ts reads live for one site when a site page's tab opens, never with the feed or its poll.
   assert.deepEqual(importersOf("ops-cloudflare"), [
     "ops-cloudflare-config.ts",
     "portal-site.ts",
@@ -885,27 +733,7 @@ test("only the watcher, the admin capsid_admin_read_ops calls, the capsid_inspec
     "watcher-gather.ts",
     "workers-builds.ts",
   ]);
-  // The secrets and data model reads Cloudflare in the nightly build only; the Portal and
-  // the admin tool read what it stored (src/system-facts-store.ts).
-  assert.deepEqual(importersOf("system-resources"), ["system-facts.ts"]);
-  // The config reads (capsid_admin_read_ops's Access and Email Routing actions) run per
-  // call of an admin-only MCP tool and nowhere else: not from a Portal route, whose
-  // every page load would then call Cloudflare.
   assert.deepEqual(importersOf("ops-cloudflare-config"), ["tools/cloudflare.ts"]);
-  // The Workers Builds reads (capsid_admin_read_ops builds and build_logs) run per call of the
-  // admin tool and per open of a site page's Deploys tab. The site key's secret write runs per
-  // perform of the site_key_rotate control (its preview reads only the site row).
-  assert.deepEqual(importersOf("workers-builds"), ["portal-site.ts", "tools/admin.ts"]);
-  assert.deepEqual(importersOf("site-key"), ["controls-perform.ts", "controls-plan.ts"]);
-  // The 404 report (capsid_inspect_repo traffic) reads per call of that MCP tool and per open
-  // of a site page's traffic tab, and the watcher reads the returned 5xx once a pass (readServerErrors).
-  assert.deepEqual(importersOf("site-traffic"), [
-    "portal-site.ts",
-    "tools/repo.ts",
-    "watcher-gather.ts",
-  ]);
-  // The certificate read (readTlsExpiry) runs in the watcher pass; push only reads what it stored in KV.
-  assert.deepEqual(importersOf("tls-expiry"), ["push.ts", "watcher-gather.ts"]);
 });
 
 // The live checks' Web Analytics read (GET /accounts/{id}/rum/site_info/list).

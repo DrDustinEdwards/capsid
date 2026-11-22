@@ -3,8 +3,7 @@ import { auditStatement } from "./store-guards";
 import { parseOperator } from "./site-operator";
 
 // The sites the watcher probes for Capsid Portal (capsid/research/design-ops-console.md),
-// read from configuration, not code. Ruled 2026-09-29: "Portal
-// monitoring is optional and configured per install". The rows live in D1 (ops_sites,
+// read from configuration, not code. The rows live in D1 (ops_sites,
 // migrations/0022_ops_sites.sql) and are edited in the Portal's Settings view through
 // the same preview and perform as every other control (src/portal-actions.ts). This
 // module reads them, validates an edit, and writes one.
@@ -366,7 +365,7 @@ export async function addSite(db: D1Database, actor: string, site: SiteInput): P
  *  the in-process probe, which is right for Capsid's own origin only. */
 /** The refusal for an edit that moves a row's origin while it names an operator token,
  *  or null. Moving the origin would send the token to the new host on the watcher's next
- *  pass (Capsid security review, round 4, finding 2): clear the operator configuration
+ *  pass: clear the operator configuration
  *  first, or in the same edit. */
 export function originMoveRefusal(before: OpsSiteConfig, site: SiteInput): string | null {
   if (before.origin === site.origin) return null;

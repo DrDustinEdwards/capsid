@@ -46,7 +46,7 @@ const CLICK_AUDIT_PREFIX = "portal-";
 
 // The automation switch (overnight) takes a reason in both directions, and an Undo
 // from the Portal's result message sends the reverse change with undo: "true". Its click row is then `portal-undo-<action>`, so an undo reads as its
-// own row, never as a fresh decision (ruled 2026-09-30, DECIDE 5).
+// own row, never as a fresh decision.
 export const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["overnight"]);
 const UNDO_INFIX = "undo-";
 
@@ -56,8 +56,7 @@ const UNDO_INFIX = "undo-";
 // from chat.
 export type Surface = "portal" | "chat";
 const CHAT_AUDIT_PREFIX = "control-";
-// The controls a person must click in the Portal (security review round 4, finding 1; Dustin,
-// 2026-11-18): signing the auto-merge policy decides what merges with no person, a site key
+// The controls a person must click in the Portal (security review round 4, finding 1): signing the auto-merge policy decides what merges with no person, a site key
 // opens a site's API, and activating a minted agent makes its key work. Every project thread is the admin, so chat could be talked into
 // either by text it read; a click in a signed-in browser is a person.
 const PORTAL_ONLY: ReadonlySet<PortalAction> = new Set<PortalAction>([
@@ -130,7 +129,7 @@ export const UNIT_RESUME_REASON =
   "unit_resume needs a reason: why the rollback that suspended the unit is answered. It is recorded in the audit row.";
 export const AUTOMERGE_RESUME_REASON =
   "automerge_resume needs a reason: why the rollbacks or reverts that paused the namespace are answered. It is recorded in the audit row.";
-// close_shipped's complete (stale jobs D4, ruled 2026-10-09: the existing admin_complete
+// close_shipped's complete (stale jobs D4: the existing admin_complete
 // path, crediting the holder). The pull requests the job names, from result_ref and the
 // summary, become the evidence the outcome verifies, at most the 10 the capsid_work_jobs tool takes.
 const CLOSE_SHIPPED_MAX_PRS = 10;

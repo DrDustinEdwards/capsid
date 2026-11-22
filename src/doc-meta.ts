@@ -1,4 +1,4 @@
-// As lists too, for a tool schema's enum (area 11, T4).
+// As lists too, for a tool schema's enum.
 export const DOC_TYPE_LIST = [
   "core",
   "concept",

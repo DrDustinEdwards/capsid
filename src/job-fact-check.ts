@@ -8,8 +8,8 @@ import { parsePrUrl, PR_URL_SOURCE } from "@dustinedwards/site-runtime/github";
 // The third job body check (src/job-body-check.ts): a body that states a pull request is
 // merged, a version is tagged or a package version is published is checked against GitHub
 // and npm at post and edit, and refused when what Capsid reads says otherwise. The case:
-// a seat told job_d62abdbfc270 that Enarratio 0.3.0 was on npm while it was only staged,
-// and the session built on a release that did not exist.
+// a seat said a package version was on npm while it was only staged, and the session
+// built on a release that did not exist.
 //
 // The parser is deliberately narrow, because a false refusal costs more than a miss. It
 // reads only prose (proseOnly: code blocks, fences and inline code are exempt), skips the

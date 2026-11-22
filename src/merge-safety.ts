@@ -559,8 +559,12 @@ export async function readPaused(kv: KVNamespace): Promise<Record<string, Paused
   return parsed as Record<string, Paused>;
 }
 
-async function readLifted(kv: KVNamespace): Promise<Record<string, string>> {
-  const raw = await kv.get(LIFTED_KEY);
+/** The lifted-suspensions map stored at `key`: merge-safety's own, or merge-units'. */
+export async function readLifted(
+  kv: KVNamespace,
+  key: string = LIFTED_KEY,
+): Promise<Record<string, string>> {
+  const raw = await kv.get(key);
   return raw ? (JSON.parse(raw) as Record<string, string>) : {};
 }
 

@@ -5,8 +5,8 @@ import { systemAudit } from "./doc-statements";
 import type { Classification } from "./merge-class";
 import { DAY_MS } from "./time";
 
-// THE EXECUTOR (docs/design/design-merge-pipeline.md section 4, PR 4; Dustin's DECIDE of
-// 2026-10-09: approvals void on a new push, red CI or 7 days). The auto-merge tick
+// THE EXECUTOR (docs/design/design-merge-pipeline.md section 4: approvals
+// void on a new push, red CI or 7 days). The auto-merge tick
 // (src/auto-merge-tick.ts) calls it for a pull request the signed policy did not merge and
 // that holds an open approval (src/pr-approvals.ts). In order:
 //   1. the head is not the approved sha: void, "new push";

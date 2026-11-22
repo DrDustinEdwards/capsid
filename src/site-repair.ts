@@ -13,7 +13,7 @@ import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";
 import { MINUTE_MS, DAY_MS } from "./time";
 
-// ONE REPAIR, from the Portal, capsid_admin_run_controls or the watcher (job_09e5f6cbf782). The
+// ONE REPAIR, from the Portal, capsid_admin_run_controls or the watcher. The
 // site_repair control and the watcher's repair step both come here, so the allowlist, the
 // rate limit and the record are one implementation: an audit_log row (site-repair) and a
 // task_runs row (site-repair) for every call that left the Worker, and none for one
@@ -118,7 +118,7 @@ export async function takeLimit(
   if (wait) return wait;
   // The limit is written before the call, which narrows a race between two callers but does
   // not close it: KV has no compare-and-set, so two that read the same record both go. The
-  // operator API's own limits are the hard bound (Grok audit 2026-10-21, CA-7).
+  // operator API's own limits are the hard bound.
   await writeLimit(env, namespace, tool, before, now, auto);
   return null;
 }

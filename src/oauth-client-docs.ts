@@ -1,13 +1,7 @@
-// OAuth client documents the Worker serves itself (job_bf05bc756c5e, the master to main
-// plan; Dustin 2026-10-03: "the two OAuth client documents are served by the capsid Worker
-// itself at a stable path, so no client id depends on a branch name again").
-//
-// Since design PR 4 of capsid/research/design-capsid-access-login.md the Worker takes
-// clients by Client ID Metadata Document only, and a client id is the URL of its document.
-// The verify-live probe's document was a file on the master branch
-// (scripts/verify-live-client.json, through raw.githubusercontent.com), so renaming the
-// branch would have changed the probe's identity. Here it is served at a path that names
-// no branch. The document's client_id is the URL it was fetched at, which is what the
+// OAuth client documents the Worker serves itself. The Worker takes clients by Client ID
+// Metadata Document only (capsid/research/design-capsid-access-login.md), and a client id is
+// the URL of its document, so it is served at a stable path that names no branch.
+// The document's client_id is the URL it was fetched at, which is what the
 // provider requires (scripts/cimd-probe-lib.mjs, probeDocumentProblem).
 //
 // Public by nature: a CIMD document is fetched by the authorization server with no

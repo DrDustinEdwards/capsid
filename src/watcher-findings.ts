@@ -5,9 +5,8 @@ import { HOUR_MS } from "./time";
 // THE WATCHER'S MEMORY OF A FINDING, one watcher_findings row per fingerprint, kept
 // across jobs (migrations/0024_watcher_findings.sql says why it exists).
 //
-// An open job used to be the only memory, and a job leaves the open set when a person
-// supersedes it or fails it, so the next pass that still saw the condition filed it
-// again. The row outlives the job:
+// A job leaves the open set when a person supersedes or fails it, so a job alone would be
+// filed again by the next pass that still sees the condition. The row outlives the job:
 //
 //   seen, its job open                 count the sighting, post nothing
 //   seen, row open, job ended by a     'dismissed': the person's ending holds, and it is

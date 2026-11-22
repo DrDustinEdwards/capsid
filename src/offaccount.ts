@@ -5,8 +5,6 @@
 //
 // Each site dumps into its own bucket under d1-dump's prefix, BACKUP_DUMP_PREFIX in
 // src/signed-requests.ts. txasm dumps into its books bucket rather than a backups one.
-// dustinedwards joined 2026-10-15, after its nightly dump (dustinedwards-info #439, on the
-// watchdog Worker) completed and passed its first drill (job_e40ec706c10a).
 //
 // database is the D1 database the site's dump covers. The watcher compares these with every
 // D1 database a Worker binds (the nightly resources model), so a database with no Amazon
@@ -68,7 +66,7 @@ export function offaccountSiteOf(namespace: string): OffaccountSite | null {
   return owners[0] ?? null;
 }
 
-// The Amazon copy's report (job_51bf55f7b42c step 4). capsid-backups' watch.yml lists the
+// The Amazon copy's report capsid-backups' watch.yml lists the
 // Object Lock bucket every 6 hours with a list-only role and POSTs, signed with the backup
 // key, the newest complete run id under daily/<site>/ for every site. The Worker holds no
 // AWS key: the bucket's state reaches it only this way. The watcher reads the stored

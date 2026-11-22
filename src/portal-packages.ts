@@ -37,7 +37,7 @@ export async function handlePortalPackageHistory(
   return jsonResponse(body);
 }
 
-// The Sites view's 404 panel (area 8, N4): GET /portal/api/not-found. Capsid's own counts,
+// The Sites view's 404 panel: GET /portal/api/not-found. Capsid's own counts,
 // page_404_daily, read with site-runtime's notFoundReport; each other site keeps its table in
 // its own D1, which Capsid does not read. Gated like the reads above; it reads D1 only.
 export const PORTAL_NOT_FOUND_PATH = "/portal/api/not-found";

@@ -6,7 +6,7 @@ import { readSnapshot } from "./ops-snapshot";
 import { HOUR_MS, days } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The daily maintenance pass's undeployed-merge rule (job_549550d73d4e, piece 5). Carrel sat
+// The daily maintenance pass's undeployed-merge rule. Carrel sat
 // four days behind its default branch before anyone noticed. A site's live Worker is
 // behind when its newest Cloudflare deployment is older than the last commit on its repo's
 // default branch, and that commit is more than GRACE_HOURS old, so a deploy still running

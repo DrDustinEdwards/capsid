@@ -2,8 +2,7 @@ import type { Env } from "./env";
 import { auditStatement } from "./store-guards";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
-// THE OVERNIGHT RUN SWITCH (capsid/research/design-automation-for-speed.md, D2 and D3, ruled
-// by Dustin 2026-10-04). A scheduled run of the per-namespace drivers on Dustin's own
+// THE OVERNIGHT RUN SWITCH (capsid/research/design-automation-for-speed.md, D2 and D3). A scheduled run of the per-namespace drivers on Dustin's own
 // machine, off unless he turns it on, with a "Runs on"
 // choice of API key or subscription. Three values (OVERNIGHT_MODES: api,
 // subscription, off) and the Portal's switch pattern: a reason on every change, an
@@ -24,7 +23,7 @@ const OVERNIGHT_MODES = ["api", "subscription", "off"] as const;
 export type OvernightMode = (typeof OVERNIGHT_MODES)[number];
 
 // The ruling, in one place, so the record and the Portal's confirm text say the same
-// thing. The reasoning is Dustin's, from his ruling of 2026-10-04. Sources and quotes:
+// thing. Sources and quotes:
 // capsid/research/terms-scheduled-claude-code.md.
 export const SUBSCRIPTION_DECISION = {
   decided_by: "Dustin Edwards",
@@ -136,7 +135,7 @@ export function decisionFor(
 
 /**
  * Set the switch, audited, and read back. The reason is required: turning automation on
- * or off needs one (ruled 2026-09-30). Choosing the subscription writes the decision
+ * or off needs one. Choosing the subscription writes the decision
  * record in the same step; any other value deletes it, so a later choice of the
  * subscription records its own date and reason rather than inheriting an old one.
  */

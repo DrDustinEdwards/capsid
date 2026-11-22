@@ -34,7 +34,7 @@ import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 // No merge (it can start a CI deploy, so it stays behind can_merge) and no mint (a
 // mint hands out a key). test/portal-actions.test.ts asserts both absences.
 //
-// Two requests per action, as ruled 2026-09-11. The preview reads the current state,
+// Two requests per action. The preview reads the current state,
 // writes nothing, and returns what will change with a signed token that carries the
 // action, its params, the administrator's email and a five-minute expiry. The perform
 // carries only that token. A replay inside the five minutes is allowed: every
@@ -201,7 +201,7 @@ export async function handlePortalPerform(
 }
 
 /** GET /portal/api/namespaces: every roster namespace as capsid_read_status action status reports it,
- *  from the same function, so the Portal and the tool agree (ruled 2026-09-11). */
+ *  from the same function, so the Portal and the tool agree. */
 export async function handlePortalNamespaces(
   request: Request,
   env: Env,

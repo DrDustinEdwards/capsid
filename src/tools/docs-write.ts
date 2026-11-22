@@ -86,7 +86,7 @@ export function policyPathsRefusal(
 // A document under jobs/ is a job's mirror (jobDocPath in src/jobs-schema.ts): a
 // projection of the jobs row, written only by the jobs code in the same batch as the
 // row. The brief serves it as a task, so one written here could stand in for a signed job
-// that was never posted (Grok audit 2026-10, M2). No caller and no flag writes one by hand.
+// that was never posted. No caller and no flag writes one by hand.
 function jobMirrorRefusal(
   tool: "write" | "restore" | "delete" | "move",
   namespace: string,
@@ -102,7 +102,7 @@ function jobMirrorRefusal(
 // A supersedes or replaces edge makes the daily pass mark its target superseded
 // (src/supersede.ts), so it is a change to the target and asks what a write to the target
 // asks: the write grant on its namespace, through checkScope
-// (one enforcement point, test/scope.test.ts), and the seat for a canon document (Grok audit 2026-10, M4). Other edge
+// (one enforcement point, test/scope.test.ts), and the seat for a canon document. Other edge
 // types change nothing and may point anywhere. The refusal, or null.
 function supersedingEdgeRefusal(ctx: ToolCtx, namespace: string, edges: LinkEdge[]): string | null {
   for (const edge of edges) {

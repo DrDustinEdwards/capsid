@@ -89,9 +89,8 @@ export const finding = (
   evidence,
 });
 
-// The deploy-drift check waits for master's own CI run, which deploys. On 2026-10-10
-// it fired twice (a160f99, e654650) while the CI run for that exact sha was still
-// running, and both deployed green minutes later. A run that finished green this
+// The deploy-drift check waits for master's own CI run, which deploys; it must not
+// fire while the run for that exact sha is still going. A run that finished green this
 // recently may still be ahead of the /health answer, so it gets a settle window too.
 export const MASTER_CI_WORKFLOW = "CI";
 export const DEPLOY_SETTLE_MINUTES = 15;
@@ -324,8 +323,7 @@ export function ciFindings(namespace: string, runs: CiRun[], now: Date): Finding
 }
 
 // The Amazon copy. Measure the copy, not the attempt: a run can be green and copy nothing,
-// and the git mirror was dead from 2026-09-09 to 09-12 while every credential request
-// succeeded. watch.yml lists the bucket with a list-only role and reports, per site, the
+// and the git mirror can be dead while every credential request succeeds. watch.yml lists the bucket with a list-only role and reports, per site, the
 // run id of the newest copy under daily/<site>/ that carries _complete.json. The run id is
 // the dump's own timestamp, so the age here is the age of the data, not of the copy.
 
@@ -401,8 +399,7 @@ export function offaccountFindings(
   // A copy run that finished after the report was written is not in the report yet, so
   // the report's ages are a copy cycle behind. A run that started before the report but
   // finished after it counts too: watch.yml lists the bucket while the copy is still
-  // uploading (2026-11-20: a report at 11:30, a copy running 11:26 to 11:50, every site
-  // called stale at 15:41). watch.yml reports every 6 hours and GitHub's schedule can run
+  // uploading. watch.yml reports every 6 hours and GitHub's schedule can run
   // it late; the 36 hour window leaves only about an hour and a half over that. The age
   // is judged once the next report lands, and a report that never lands is its own
   // finding above.
@@ -613,8 +610,7 @@ export function siteDownFindings(prev: OpsSnapshot | null, probes: SiteProbe[]):
 
 // The CPU threshold: a Worker that used more than a million CPU milliseconds in the most
 // recent complete hour, a thirtieth of the Workers Paid plan's monthly allowance. Normal
-// hours stay under 100,000 on every site; on 2026-10-12, 18:00 to 19:00 UTC, dustinedwards
-// used 13.6 million in one hour from 2.46 million invocations, and nothing said so until the bill.
+// hours stay under 100,000 on every site.
 export const CPU_HOUR_LIMIT_MS = 1_000_000;
 
 type WatchedSite = { namespace: string; name: string };

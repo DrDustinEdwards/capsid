@@ -4,8 +4,7 @@ import { parsePrUrl } from "@dustinedwards/site-runtime/github";
 import { readNamedPrs } from "./complete-ci";
 import { checklistItems, unchangedItems } from "./job-checklist";
 
-// Which holder fails the breaker does not count (src/job-breaker.ts; Grok design review
-// 2026-10-23, build step 7). "Not done, here's why" is a good outcome, but a breaker
+// Which holder fails the breaker does not count (src/job-breaker.ts). "Not done, here's why" is a good outcome, but a breaker
 // that ignored every fail with a reason would stop nothing. So only two kinds are left
 // out, both shown by something other than the driver's word:
 //

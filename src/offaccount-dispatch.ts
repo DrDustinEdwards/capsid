@@ -5,9 +5,8 @@ import { utcDay } from "./time";
 
 // Starts capsid-backups' nightly copy (offaccount.yml) from this Worker's tick instead of
 // waiting on GitHub's schedule. GitHub documents that a scheduled workflow can be delayed
-// under load, and this one has started 5 to 6 hours late (2026-11-06, 2026-11-07) and not at
-// all by 17:00 UTC on 2026-11-08, which left every site's Amazon copy flagged late. A
-// workflow_dispatch starts at once. The schedule stays as the second chance: both runs copy
+// under load, and this one has started hours late or not at all, which left every site's
+// Amazon copy flagged late. A workflow_dispatch starts at once. The schedule stays as the second chance: both runs copy
 // the same newest dumps, so the later one changes nothing.
 //
 // Needs the GitHub App's Actions: Write on capsid-backups (docs/bootstrap.md). A refusal is a

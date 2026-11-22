@@ -55,7 +55,7 @@ export function owningCheck(fingerprint: string): WatcherCheck | null {
   return OWNERS.find(([pattern]) => pattern.test(fingerprint))?.[1] ?? null;
 }
 
-// WHAT A FINDING IS FOR (job_2c92174d5bff item 5; every alert actionable, the rest to a
+// WHAT A FINDING IS FOR (every alert actionable, the rest to a
 // digest). One class per OWNERS pattern, the same patterns in the same order:
 //   job        a person must act now: it posts a job.
 //   digest     a hygiene or drift finding: kept in finding memory and shown on the Portal's

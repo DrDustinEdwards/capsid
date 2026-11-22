@@ -235,7 +235,7 @@ export interface ScoreRequest {
   // Rekor log index. Such a report carries no passed count and no claim.
   sealed: { sha256: string; log_index: number } | null;
   // Claude Code ended a phase with "error during execution". The run is scored from its
-  // diff and claim file the first time (protocol section 3, revised 2026-10-22); the
+  // diff and claim file the first time (protocol section 3); the
   // outage-hour rule in src/bench.ts is the only case where it does not count.
   stopped_on_error: boolean;
   capsid_job_id: string | null;

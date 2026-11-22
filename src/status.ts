@@ -21,8 +21,7 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 // GET /portal/api/namespaces): per namespace the queue, the breaker, what waits on the
 // seat and the maintenance list, and across them the signed policies, the overnight
 // switch, the merge safety meter and, for the admin, the credential inventory. The
-// tool keeps the improve loop's name, which it was served under before the loop was
-// removed, so no credential's tools list has to change.
+// tool keeps its old name so no credential's tools list has to change.
 
 interface NamespaceStatus {
   namespace: string;

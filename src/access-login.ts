@@ -12,7 +12,7 @@ import { capsidCookie } from "./auth";
 import { readCookie } from "@dustinedwards/site-runtime/headers";
 import type { Env } from "./env";
 // The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
-// identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27) for
+// identity (capsid/research/design-capsid-access-login.md) for
 // Capsid Portal's login (src/portal-auth.ts); the MCP authorization flow is
 // site-runtime's loginHandler (src/routes.ts). What the Portal stores and does with the
 // admitted email stays in the caller. A state token is
@@ -78,7 +78,7 @@ export async function startAccessLogin(
   const stateToken = crypto.randomUUID();
   // The browser binding is random and unrelated to the state token. A cookie derived
   // from the token could be computed by anyone holding the callback URL, which carries
-  // the token, and would bind nothing (Grok audit 2026-10, S6).
+  // the token, and would bind nothing.
   const binding = toHex(crypto.getRandomValues(new Uint8Array(32)));
   const signIn: StoredSignIn = { stored, ...newSignIn(), binding: await sha256Hex(binding) };
   await env.OAUTH_KV.put(`${flow.kvPrefix}${stateToken}`, JSON.stringify(signIn), {
@@ -180,8 +180,7 @@ export async function completeAccessLogin<T>(
 
   // The state is consumed once the exchange is attempted, except when Access did not
   // answer or failed, so a transient Access error does not burn it. Replay is bounded by
-  // Access, which honors a code once. The exchange gives up after 15 seconds (Grok audit
-  // 2026-10-21, CA-10, now in site-runtime).
+  // Access, which honors a code once.
   const verdict = await finishSignIn(
     saas,
     {

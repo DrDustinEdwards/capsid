@@ -19,7 +19,7 @@ const JSON_PREFIX = "backups/json/";
 const MARKDOWN_PREFIX = "backups/markdown/";
 const PUT_CONCURRENCY = 20;
 
-// Dump retention (Dustin, 2026-11-02, a trim of the shared default): the newest complete run
+// Dump retention: the newest complete run
 // of each of the last 14 days, 4 ISO weeks and 3 calendar months, about 17 runs. `daily`
 // stays at d1-dump's 14 on purpose: the 13-day bucket lock (docs/backups.md, "Why 13 days")
 // refuses a delete of any run younger than 13 days, so a shorter daily window would only
@@ -82,7 +82,7 @@ const PAGED = {
 // writes its own. The weekly drill builds its scratch database from _schema.json, and a
 // run whose dumped tables differ from TABLES is refused as tables-mismatch.
 //
-// push_subscriptions (migrations/0041) is left out too (area 8, B8): each row is a
+// push_subscriptions (migrations/0041) is left out too: each row is a
 // device's push endpoint with its p256dh and auth keys, a credential that lets whoever
 // holds it send to that device, and a dump leaves the account. _schema.json still
 // carries its CREATE, so a restore has the table empty and each device subscribes again
@@ -217,8 +217,7 @@ async function deleteInChunks(bucket: R2Bucket, keys: string[]): Promise<number>
 }
 
 // R2 now and then refuses a put with "We encountered an internal error. Please try
-// again. (10001)", and one refused put threw the whole run away: the 2026-10-27 and
-// 2026-10-30 runs died on it, leaving the backup 38 hours old. Every put here writes a
+// again. (10001)", and one refused put threw the whole run away: Every put here writes a
 // string under a fixed key, so trying it again is safe.
 const PUT_ATTEMPTS = 3;
 const PUT_RETRY_MS = 1000;
@@ -385,7 +384,7 @@ async function mirrorMarkdown(env: Env, docs: DocRow[]): Promise<number> {
   return staleMarkdown.length;
 }
 
-// Deletes CSP reports past retention (the sink stopped storing them on 2026-10-20; this
+// Deletes CSP reports past retention (the sink no longer stores them; this
 // reaps the last of them). The JSON dump runs outside the graduated retention (14 daily,
 // 4 weekly and 3 monthly copies, DUMP_RETENTION above) are pruned by
 // runCheckedBackup with d1-dump's default policy: it counts runs and not objects,
@@ -437,7 +436,7 @@ async function pruneD1(env: Env): Promise<{ versions: number; audit: number }> {
 // documents cannot trust content derived from it. The JSON dumps are kept: an export
 // deletes nothing, and an empty dump is the evidence of the day the store looked empty.
 // The 404 counts (site-runtime pruneNotFound) and the daily uptime rows, kept 90 days
-// (area 8, N7 and U4), and the ended Portal sessions whose cookies have expired. After the export, like pruneD1, so the rows leaving D1 are in
+// and the ended Portal sessions whose cookies have expired. After the export, like pruneD1, so the rows leaving D1 are in
 // today's dump. A failure is logged and never fails the run: the dump is already marked.
 export const DAILY_RETENTION_DAYS = 90;
 async function pruneDaily(env: Env, now: Date): Promise<void> {

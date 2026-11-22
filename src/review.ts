@@ -28,7 +28,7 @@ async function issuerKeys(): Promise<KeySource> {
   return keys;
 }
 
-// THE AUTOMATIC PR REVIEWER (D5; Dustin 2026-11-03, "lets do it"). A reviewer that did not
+// THE AUTOMATIC PR REVIEWER (D5). A reviewer that did not
 // build the work reads a pull request and says whether it does what it claims. It catches
 // what CI and the claim checks cannot: work that passes and is still wrong (a misread job, a
 // skipped requirement, a weak test). An ADVISORY TRIAL of four weeks: it never fails a check
@@ -70,7 +70,7 @@ const REVIEW_WORKFLOWS = [
 export const REVIEW_OWNER_ID = "204601333";
 const RENOVATE = /^renovate(\[bot\])?$/i;
 // One verdict per pull request, kept for its life: a later push gets the first verdict (its head_sha names the commit
-// it read) and asks the model nothing. Reviewing every push cost 1.16 million Workers AI neurons in three days, 2026-11-05.
+// it read) and asks the model nothing, since reviewing every push cost too many Workers AI neurons.
 const CACHE_TTL_S = 14 * 24 * 3600;
 // The diff the model reads, at most. About 75,000 tokens, under a cent of input.
 const MAX_DIFF_CHARS = 300_000;
@@ -80,8 +80,8 @@ const MAX_FINDINGS = 5;
 // The model's deadline. A reasoning model on a large diff can take minutes; the workflow
 // waits up to ten, and a run that runs out is recorded as an error and asked again next push.
 const MODEL_TIMEOUT_MS = 6 * 60_000;
-// At the default (high) effort the model spent all 16,000 tokens second-guessing a two-line
-// workflow change and never answered (capsid #745, 2026-11-03). Low still reasons, and answers.
+// At the default (high) effort the model spent all its tokens second-guessing a small
+// change and never answered. Low still reasons, and answers.
 const REASONING = "low";
 
 const VERDICTS = ["APPROVE", "CHANGES", "BLOCK"] as const;

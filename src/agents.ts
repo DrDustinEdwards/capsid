@@ -38,8 +38,8 @@ export interface Agent {
   kind: AgentKind;
   // What lands in audit_log.actor and jobs.claimed_by. `agent:<name>` for a minted
   // agent; the admin as
-  // `access:<email>` on the MCP login (Cloudflare Access, since 2026-09-27) or
-  // `github:<login>` on rows the old console wrote before it moved to Access. Those are more specific than a
+  // `access:<email>` on the MCP login (Cloudflare Access) or
+  // `github:<login>` on older rows. Those are more specific than a
   // synthetic name, and every audit query already reads them.
   actor: string;
   scopes: AgentScopes;

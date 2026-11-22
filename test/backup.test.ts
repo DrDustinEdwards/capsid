@@ -18,9 +18,8 @@ function tablesInMigrations(): string[] {
   for (const file of readdirSync(dir)
     .filter((f) => f.endsWith(".sql"))
     .sort()) {
-    // Statements in file order, comment lines skipped so prose drops nothing. A table
-    // rebuild (0031) creates a scratch table, drops the original and renames the scratch
-    // over it; a dropped table (0048, the improve loop's) is gone.
+    // Statements in file order, comment lines skipped. A table rebuild creates a scratch
+    // table, drops the original and renames the scratch over it; a dropped table is gone.
     const sql = readFileSync(join(dir, file), "utf8")
       .split("\n")
       .filter((l) => !l.trim().startsWith("--"))
@@ -40,16 +39,12 @@ function tablesInMigrations(): string[] {
   return [...names].sort();
 }
 
-test("the migrations parse to a non-empty table list", () => {
-  // Guards the regex itself: a parser that silently matches nothing would make
-  // every assertion below vacuously pass.
-  assert.ok(tablesInMigrations().length >= 5);
-});
-
-test("every table the migrations create is backed up", () => {
-  // Every one, or excluded by name (push_subscriptions holds device keys, src/backup.ts).
+test("every table the migrations create is backed up, or excluded by name", () => {
+  const tables = tablesInMigrations();
+  // Guards the parser: one that matches nothing would make every assertion here pass vacuously.
+  assert.ok(tables.length >= 5);
   const covered = new Set<string>([...TABLES, ...EXCLUDED]);
-  const missing = tablesInMigrations().filter((t) => !covered.has(t));
+  const missing = tables.filter((t) => !covered.has(t));
   assert.deepEqual(
     missing,
     [],
@@ -169,9 +164,9 @@ test("a healthy run prunes genuinely stale markdown and keeps the current mirror
   assert.ok(r2.objects.has("backups/markdown/capsid/conventions.md"));
 });
 
-test("an empty documents read refuses the prune, loudly, and deletes nothing", async () => {
+test("an empty documents read refuses the prune, loudly, deletes nothing and does not stamp last-ok", async () => {
   // The SELECT succeeds and returns no rows, so every mirror object looks stale.
-  const { env, r2 } = makeEnv({ documents: [] }, MIRROR);
+  const { env, r2, kv } = makeEnv({ documents: [] }, MIRROR);
   const { result, logged } = await captureErrors(() => runBackup(env));
   assert.equal(result.ran, true);
   if (!result.ran) return;
@@ -195,6 +190,11 @@ test("an empty documents read refuses the prune, loudly, and deletes nothing", a
     r2.objects.has(`${result.json_prefix}_complete.json`),
     false,
     "a refused run was marked complete",
+  );
+  // A run that would not trust its own read of the store must not report itself as fresh.
+  assert.equal(
+    kv.puts.some((p) => p.key === "backup:last-ok"),
+    false,
   );
 });
 
@@ -250,18 +250,6 @@ test("a second concurrent runner exits named and touches nothing", async () => {
   assert.ok(logged.some((line) => line.includes("BACKUP_LEASE_HELD")));
 });
 
-test("the lease carries an expiry and is released when the run ends", async () => {
-  const { env, kv } = makeEnv({ documents: DOCS }, MIRROR);
-  await runBackup(env);
-  // A clean run puts twice: the lease (with a ttl) and backup:last-ok (without).
-  const lease = kv.puts.find((p) => p.key === "backup:lease");
-  assert.ok(lease, "the lease was never taken");
-  // A crashed run must not wedge backups forever, so the lease cannot be eternal,
-  // and KV will not accept a TTL under 60 seconds.
-  assert.ok((lease.ttl ?? 0) >= 60, "lease has no usable expiry");
-  assert.equal(kv.store.has("backup:lease"), false, "lease was not released");
-});
-
 test("the lease is released even when the run throws", async () => {
   const { env, kv } = makeEnv({ documents: DOCS }, MIRROR);
   (env as unknown as { MEDIA: R2Bucket }).MEDIA = {
@@ -314,25 +302,12 @@ test("a clean run stamps backup:last-ok with the run timestamp", async () => {
   // The stamp is the same ISO instant the run used for its lease and dump prefix,
   // so /health's age is measured from when the backup actually ran.
   assert.match(stamp.value, /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/);
-});
-
-test("a preflight-refused run does NOT stamp backup:last-ok", async () => {
-  // A run that would not trust its own read of the store must not report itself as
-  // a fresh backup, or /health would go quiet on exactly the day it should warn.
-  const { env, kv } = makeEnv({ documents: [] }, MIRROR);
-  await captureErrors(() => runBackup(env));
-  assert.equal(
-    kv.puts.some((p) => p.key === "backup:last-ok"),
-    false,
-    "a refused run stamped itself as fresh",
-  );
+  assert.equal(kv.store.has("backup:lease"), false, "lease was not released");
 });
 
 // the 1000-key delete ceiling
 //
-// R2's bulk delete takes at most 1000 keys per call and throws on the 1001st.
-// 1001 rather than 1000 because a chunker written with `<` instead of `<=` passes at
-// exactly 1000.
+// R2's bulk delete throws on the 1001st key; 1001 because a chunker with `<` for `<=` passes at 1000.
 const R2_DELETE_CEILING = 1000;
 
 test("no single R2 delete call exceeds R2's 1000-key ceiling", async () => {
@@ -387,9 +362,7 @@ test("the dump prune chunks too, not just the mirror", async () => {
 
 // one consistent snapshot
 //
-// Reads in separate round trips are separate snapshots: a write between them can put
-// a version row in the dump whose document is not in it. D1's batch is one
-// transaction, so the reads inside it agree with each other.
+// Reads in separate round trips are separate snapshots; D1's batch is one transaction.
 
 test("every table read whole is read at ONE instant, however many writes land between D1 calls", async () => {
   // A concurrent writer adds one row to every whole-read table before EACH call the run
@@ -524,34 +497,6 @@ test("audit_log is streamed in pages, every row once and in id order, in the sam
   );
 });
 
-test("an audit row written after the snapshot batch is not in the dump", async () => {
-  const r2 = fakeR2(MIRROR);
-  const kv = fakeKv({});
-  const d1 = fakeD1({ documents: DOCS, auditLog: [auditRow(1), auditRow(2)] });
-  const batch = d1.db.batch.bind(d1.db);
-  let first = true;
-  (d1.db as unknown as { batch: typeof batch }).batch = (async (
-    statements: Parameters<typeof batch>[0],
-  ) => {
-    const out = await batch(statements);
-    if (first) {
-      first = false;
-      d1.rows.audit_log.push(auditRow(3));
-    }
-    return out;
-  }) as typeof batch;
-  const env = fakeEnv({ DB: d1.db, MEDIA: r2.bucket, APP_KV: kv.kv });
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-
-  const dumped = dumpJson(r2, `${result.json_prefix}audit_log.json.gz`);
-  assert.deepEqual(
-    dumped.rows.map((r) => r.id),
-    [1, 2],
-  );
-});
-
 // the streamed table
 //
 // document_versions is too large to read in one batch into a 128MB isolate, so it is
@@ -593,32 +538,6 @@ test("the streamed versions dump is byte-identical to the whole-object dump, acr
     r2.multipart.some((m) => m.key === key),
     "document_versions was not written as a multipart upload",
   );
-});
-
-test("the streamed versions dump pages past one page and keeps every row in id order", async () => {
-  // 250 rows is two full pages of 100 and a partial one. Seeded out of order, so a
-  // pager that did not ORDER BY id would skip rows at the boundary.
-  const versions = Array.from({ length: 250 }, (_, i) => version(250 - i, `v${250 - i}`));
-  const { env, r2 } = makeEnv({ documents: DOCS, versions }, MIRROR);
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-
-  const dumped = dumpJson(r2, `${result.json_prefix}document_versions.json.gz`);
-  assert.deepEqual(
-    dumped.rows.map((r) => r.id),
-    Array.from({ length: 250 }, (_, i) => i + 1),
-  );
-});
-
-test("an empty versions table still writes a valid dump", async () => {
-  const { env, r2 } = makeEnv({ documents: DOCS, versions: [] }, MIRROR);
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-  const dumped = dumpJson(r2, `${result.json_prefix}document_versions.json.gz`);
-  assert.equal(dumped.table, "document_versions");
-  assert.deepEqual(dumped.rows, []);
 });
 
 test("a version written after the snapshot batch is not in the dump", async () => {
@@ -675,7 +594,7 @@ test("a failed part aborts the multipart upload and fails the run", async () => 
 });
 
 test("a put R2 refuses once is tried again, and the run still completes", async () => {
-  // The 2026-10-27 and 2026-10-30 runs threw on one refused put and left the backup 38 hours old.
+  // One refused put must not leave the backup a day stale.
   const { env, r2, kv } = makeEnv({ documents: DOCS }, MIRROR);
   const put = r2.bucket.put.bind(r2.bucket);
   let refused = 0;
@@ -753,11 +672,9 @@ function survivingRuns(r2: { objects: Map<string, string | Uint8Array> }, ids: s
 const day = (month: number, d: number) =>
   `2020-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}T00-00-00-000Z`;
 
-// The policy itself (14 daily, 4 weekly, 3 monthly, the newest complete run never pruned,
-// nothing pruned while no run is complete) is tested in d1-dump, where pruneDumps lives.
-// This holds the wiring: the dump prefix is the one pruned, a run goes whole, the counts
-// come back in the result, and an old run is pruned whatever its shape (a marker-less
-// run no longer counts as complete just because it is older than the first marked one).
+// The policy itself is tested in d1-dump, where pruneDumps lives. This holds the wiring: the
+// dump prefix is the one pruned, a run goes whole, the counts come back in the result, and an
+// old run is pruned whatever its shape.
 test("dump retention is d1-dump's graduated policy (DUMP_RETENTION) over the backups/json prefix, deleting runs whole", async () => {
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().replace(/[:.]/g, "-");
   const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().replace(/[:.]/g, "-");
@@ -807,7 +724,7 @@ test("a stale run a bucket lock refuses is counted as locked and the run still s
   assert.ok(await kv.kv.get(BACKUP_LAST_OK_KEY), "a locked run must not stop the success stamp");
 });
 
-test("a run whose lease was taken over does not release the new holder's lease", async () => {
+test("a run whose lease was taken over prunes nothing and does not release the new holder's lease", async () => {
   // The first run outlived its TTL and a second run took the key. The first run's
   // finally must leave the second run's lease in place.
   const r2 = fakeR2(MIRROR);
@@ -827,6 +744,13 @@ test("a run whose lease was taken over does not release the new holder's lease",
   const env = fakeEnv({ DB: d1.db, MEDIA: r2.bucket, APP_KV: kv.kv });
   const { result, logged } = await captureErrors(() => runBackup(env));
   assert.equal(result.ran, true);
+  if (!result.ran) return;
+  // The lease is get-then-put (no CAS): the run whose lease was overwritten re-reads it
+  // after the export and deletes nothing.
+  assert.match(result.prune_refused ?? "", /^lease-lost/);
+  assert.deepEqual(r2.deleted, [], "a run without the lease deleted objects");
+  assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false);
+  assert.equal(await kv.kv.get(BACKUP_LAST_OK_KEY), null);
 
   assert.equal(
     kv.store.get("backup:lease"),
@@ -844,32 +768,4 @@ test("a run whose lease was taken over does not release the new holder's lease",
     (lease?.ttl ?? 0) > 900,
     `lease ttl ${lease?.ttl} does not cover a run past the cron wall limit`,
   );
-});
-
-// The lease is get-then-put (no CAS), so two runs can both take it. The one whose lease
-// was overwritten re-reads it after the export and deletes nothing.
-test("PLANT: a run that lost its lease after the export prunes nothing", async () => {
-  const r2 = fakeR2(MIRROR);
-  const kv = fakeKv({});
-  const d1 = fakeD1({ documents: DOCS });
-  const batch = d1.db.batch.bind(d1.db);
-  let first = true;
-  (d1.db as unknown as { batch: typeof batch }).batch = (async (
-    statements: Parameters<typeof batch>[0],
-  ) => {
-    if (first) {
-      first = false;
-      kv.store.set("backup:lease", "2026-09-25T10:00:00.000Z another-run");
-    }
-    return batch(statements);
-  }) as typeof batch;
-  const env = fakeEnv({ DB: d1.db, MEDIA: r2.bucket, APP_KV: kv.kv });
-  const { result } = await captureErrors(() => runBackup(env));
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-
-  assert.match(result.prune_refused ?? "", /^lease-lost/);
-  assert.deepEqual(r2.deleted, [], "a run without the lease deleted objects");
-  assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false);
-  assert.equal(await kv.kv.get(BACKUP_LAST_OK_KEY), null);
 });

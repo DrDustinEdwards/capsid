@@ -116,7 +116,7 @@ function build(
 ): McpServer {
   const agent = typeof caller === "string" ? grantAgent(caller, actor) : caller;
   // maxToolInputElements caps how many array elements and object members one tools/call may
-  // carry, which the SDK leaves unlimited (GHSA-46jr-4wx8-v453; Grok audit 2026-10-21, CA-2).
+  // carry, which the SDK leaves unlimited (GHSA-46jr-4wx8-v453).
   // A document body is one string, so one element; 10,000 leaves room for any list a tool takes.
   const server = new McpServer(surface === "admin" ? ADMIN_SERVER_INFO : SERVER_INFO, {
     instructions: INSTRUCTIONS[surface],

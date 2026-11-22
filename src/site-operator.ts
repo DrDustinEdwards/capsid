@@ -5,17 +5,17 @@ import { callSignal } from "./call-signal";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { callOperator as operatorCall } from "@dustinedwards/site-runtime/operator";
-// A SITE'S OPERATOR API (job_09e5f6cbf782, Dustin 2026-10-03). Capsid is the operations
+// A SITE'S OPERATOR API Capsid is the operations
 // hub and may trigger an allowlist of a site's own repair tools, so the repairs, the
-// convergence view and the watchdog could leave the site (it did, 2026-11-06). A site opts in by configuration
+// convergence view and the watchdog could leave the site. A site opts in by configuration
 // (ops_sites.operator, migrations/0035), never by code here.
 //
 // Two allowlists, both enforced in this Worker before any request leaves it:
 //   - the CEILING, in code: a repair is a sync_* tool (sync_status is a read, not a
 //     repair) or refresh_citations, a backup is backup_status or run_job { backup: true }
-//     (Capsid Admin's backups, src/site-backup.ts, Dustin 2026-11-06: one control for
-//     every site in place of each site's own), and a job run is run_job { job } (the
-//     run_job control, src/site-jobs.ts, Dustin 2026-11-07: any of a site's cron jobs
+//     (Capsid Admin's backups, src/site-backup.ts: one control for
+//     every site), and a job run is run_job { job } (the
+//     run_job control, src/site-jobs.ts: any of a site's cron jobs
 //     run now, through site-runtime's runJobTool on the site). Nothing else the site's
 //     operator API serves is ever called (save_post, delete_post, decide_mention...).
 //   - the SITE'S OWN list, in its configuration: the tools its repairs map and its weekly
@@ -197,8 +197,7 @@ export interface OperatorCall {
 }
 
 // A repair re-derives a whole store, and dustinedwards.info's sync_ask uploads its Ask corpus
-// (about 540 items) one at a time: it ran past the old one-minute limit on every watcher call
-// from 2026-10-18, while the site's own watchdog, which waits, converged it. Five minutes fits
+// (about 540 items) one at a time: it outruns a one-minute limit. Five minutes fits
 // that work and stays well inside a cron invocation's fifteen minutes of wall time.
 const CALL_TIMEOUT_MS = 5 * MINUTE_MS;
 const ERROR_MAX = 300;

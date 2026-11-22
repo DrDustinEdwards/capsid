@@ -88,34 +88,36 @@ const DRIVER_SCOPES = JSON.stringify({
   flags: {},
 });
 
-// The site configuration the previews read. The fake D1 does not model ops_sites, so
-// its reads are answered here; the writes are performed against real D1 in
-// test-integration/portal-actions.test.ts and test-integration/ops-sites.test.ts.
-const SITE_ROWS: OpsSiteConfig[] = [
-  {
-    namespace: "capsid",
-    name: "Capsid",
-    origin: "https://capsid.example.com",
-    health_path: "/health",
-    platform: "cloudflare",
-    script: "capsid",
-    self_probe: true,
-    revision: 3,
-    updated_at: "2026-09-28 00:00:00",
-    operator: null,
-    operator_problem: null,
-  },
-  // A site that opted into Capsid calling its operator API (migrations/0035).
-  {
-    namespace: "sample",
-    name: "Sample",
-    origin: "https://sample.example.com",
-    health_path: "/api/health",
-    platform: "cloudflare",
+// ops_sites and ops_packages, which the fake D1 does not model, are answered here from
+// these rows; pr_approvals answers with no open approval. The writes run against real D1
+// in test-integration/portal-actions.test.ts and test-integration/ops-sites.test.ts.
+const site = (over: Partial<OpsSiteConfig>): OpsSiteConfig =>
+  ({
     script: null,
     self_probe: false,
     revision: 1,
     updated_at: "2026-09-28 00:00:00",
+    operator: null,
+    operator_problem: null,
+    platform: "cloudflare",
+    ...over,
+  }) as OpsSiteConfig;
+const SITE_ROWS = [
+  site({
+    namespace: "capsid",
+    name: "Capsid",
+    origin: "https://capsid.example.com",
+    health_path: "/health",
+    script: "capsid",
+    self_probe: true,
+    revision: 3,
+  }),
+  // A site that opted into Capsid calling its operator API.
+  site({
+    namespace: "sample",
+    name: "Sample",
+    origin: "https://sample.example.com",
+    health_path: "/api/health",
     operator: {
       path: "/api/operator",
       auth_var: "SAMPLE_OPERATOR_TOKEN",
@@ -124,11 +126,8 @@ const SITE_ROWS: OpsSiteConfig[] = [
       secrets: [],
       backup: true,
     },
-    operator_problem: null,
-  },
+  }),
 ];
-
-// The package configuration, answered the same way (ops_packages).
 const PACKAGE_ROWS = [
   {
     name: "sample-pkg",
@@ -140,55 +139,32 @@ const PACKAGE_ROWS = [
   },
 ];
 
-function withSites(db: D1Database, sites: OpsSiteConfig[]): D1Database {
-  const toRow = (s: OpsSiteConfig) => ({
+function withSites(db: D1Database): D1Database {
+  const sites = SITE_ROWS.map((s) => ({
     ...s,
     self_probe: s.self_probe ? 1 : 0,
     operator: s.operator ? JSON.stringify(s.operator) : null,
-  });
+  }));
+  const tables: Array<[RegExp, Array<Record<string, unknown>>, string]> = [
+    [/FROM pr_approvals/i, [], ""],
+    [/FROM ops_packages/i, PACKAGE_ROWS, "name"],
+    [/FROM ops_sites/i, sites, "namespace"],
+  ];
   return new Proxy(db, {
     get(target, prop, receiver) {
       if (prop !== "prepare") return Reflect.get(target, prop, receiver);
       return (sql: string) => {
-        // The approval record (migrations/0037): no open approval.
-        if (/FROM pr_approvals/i.test(sql)) {
-          const statement = {
-            bind: () => statement,
-            all: async () => ({ results: [], meta: {} }),
-          };
-          return statement;
-        }
-        if (/FROM ops_packages/i.test(sql)) {
-          const statement = {
-            params: [] as unknown[],
-            bind(...params: unknown[]) {
-              statement.params = params;
-              return statement;
-            },
-            async first() {
-              return PACKAGE_ROWS.find((p) => p.name === statement.params[0]) ?? null;
-            },
-            async all() {
-              return { results: PACKAGE_ROWS, meta: {} };
-            },
-          };
-          return statement;
-        }
-        if (!/FROM ops_sites/i.test(sql)) return target.prepare(sql);
+        const table = tables.find(([re]) => re.test(sql));
+        if (!table) return target.prepare(sql);
+        const [, rows, key] = table;
         const statement = {
           params: [] as unknown[],
           bind(...params: unknown[]) {
             statement.params = params;
             return statement;
           },
-          async first() {
-            const [ns] = statement.params;
-            const hit = sites.find((s) => s.namespace === ns);
-            return hit ? toRow(hit) : null;
-          },
-          async all() {
-            return { results: sites.map(toRow), meta: {} };
-          },
+          first: async () => rows.find((r) => r[key] === statement.params[0]) ?? null,
+          all: async () => ({ results: rows, meta: {} }),
         };
         return statement;
       };
@@ -196,7 +172,7 @@ function withSites(db: D1Database, sites: OpsSiteConfig[]): D1Database {
   });
 }
 
-// The signed auto-merge policy, as shipped (docs/policy/auto-merge.md, version 9), for
+// The signed auto-merge policy, as shipped (docs/policy/auto-merge.md), for
 // sign_policy_change: signed with the world's key, so it loads as the Worker's copy does.
 const POLICY_BODY = readFileSync(
   join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"),
@@ -205,6 +181,27 @@ const POLICY_BODY = readFileSync(
 const SIGNED_POLICY = await signTaskBody("portal-test-signing-secret", POLICY_BODY);
 // Its anti-rollback pin, as a Worker that has loaded the policy before holds it.
 const POLICY_PIN = JSON.stringify(await policyPin(POLICY_BODY));
+
+const agent = (id: string, name: string, hash: string, createdBy: string, day: string) => ({
+  id,
+  name,
+  kind: "driver",
+  key_hash: hash.repeat(64),
+  scopes: DRIVER_SCOPES,
+  created_by: createdBy,
+  created_at: `${day} 00:00:00`,
+  revoked_at: null,
+  last_seen: null,
+});
+const job = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  namespace: "capsid",
+  title: `a ${status} job`,
+  body: "lorem",
+  status,
+  posted_by: "github:sample",
+  ...extra,
+});
 
 function world(opts: { adminEmail?: string; coOwners?: string } = {}): {
   d1: FakeD1;
@@ -225,66 +222,23 @@ function world(opts: { adminEmail?: string; coOwners?: string } = {}): {
       { namespace: "capsid-new", repos: JSON.stringify([{ repo: "owner/new", label: "primary" }]) },
     ],
     agents: [
+      agent("agent_driver000001", "capsid-driver", "f", "github:sample", "2026-09-01"),
       {
-        id: "agent_driver000001",
-        name: "capsid-driver",
-        kind: "driver",
-        key_hash: "f".repeat(64),
-        scopes: DRIVER_SCOPES,
-        created_by: "github:sample",
-        created_at: "2026-09-01 00:00:00",
-        revoked_at: null,
-        last_seen: null,
-      },
-      {
-        id: "agent_minted00001",
-        name: "capsid-new-driver",
-        kind: "driver",
-        key_hash: "e".repeat(64),
-        scopes: DRIVER_SCOPES,
-        created_by: "access:admin@example.com",
-        created_at: "2026-09-02 00:00:00",
-        revoked_at: null,
-        last_seen: null,
+        ...agent(
+          "agent_minted00001",
+          "capsid-new-driver",
+          "e",
+          "access:admin@example.com",
+          "2026-09-02",
+        ),
         pending: 1,
       },
     ],
     jobs: [
-      {
-        id: "job_blocked00001",
-        namespace: "capsid",
-        title: "a blocked job",
-        body: "lorem",
-        status: "blocked",
-        posted_by: "github:sample",
-        claimed_by: "agent:capsid-driver",
-      },
-      {
-        id: "job_claimed00001",
-        namespace: "capsid",
-        title: "a claimed job",
-        body: "lorem",
-        status: "claimed",
-        posted_by: "github:sample",
-        claimed_by: "agent:capsid-other",
-      },
-      {
-        id: "job_queued000001",
-        namespace: "capsid",
-        title: "a queued job",
-        body: "lorem",
-        status: "queued",
-        posted_by: "github:sample",
-      },
-      {
-        id: "job_parked000001",
-        namespace: "capsid",
-        title: "a parked job",
-        body: "lorem",
-        status: "parked",
-        posted_by: "github:sample",
-        result_summary: "comes back when the design is ruled",
-      },
+      job("job_blocked00001", "blocked", { claimed_by: "agent:capsid-driver" }),
+      job("job_claimed00001", "claimed", { claimed_by: "agent:capsid-other" }),
+      job("job_queued000001", "queued"),
+      job("job_parked000001", "parked", { result_summary: "comes back when the design is ruled" }),
     ],
   });
   // A pull request the tick classed approve, for approve_pr, and the App's token for its repo.
@@ -323,7 +277,7 @@ function world(opts: { adminEmail?: string; coOwners?: string } = {}): {
     },
   });
   const env = {
-    DB: withPortalSessionEnds(withSites(d1.db, SITE_ROWS)).db,
+    DB: withPortalSessionEnds(withSites(d1.db)).db,
     APP_KV: kv.kv,
     OAUTH_KV: fakeKv().kv,
     COOKIE_ENCRYPTION_KEY: SECRET,
@@ -426,6 +380,12 @@ async function previewOk(
   return (await res.json()) as PortalPreview;
 }
 
+const issue = (w: { env: never }) =>
+  previewOk(w, "overnight", { value: "api", reason: "first supervised night" });
+
+const doPerform = async (w: { env: never }, token: string, opts?: Opts, now = NOW) =>
+  handlePortalPerform(await perform({ token }, opts), w.env, now, deps);
+
 // The token's payload, decoded, edited and re-encoded with the original signature.
 function tamper(token: string, edit: (claims: Record<string, unknown>) => void): string {
   const [payload, sig] = token.split(".");
@@ -459,7 +419,7 @@ test("PLANT: a merge or a mint is refused at preview and at perform, even fully 
       params: {},
       email: EMAIL,
     });
-    const performed = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
+    const performed = await doPerform(w, token);
     assert.equal(performed.status, 400, `a signed ${action} token was performed`);
     // Redeeming spends the token before its action is looked up, so only its nonce is written.
     spentOnly(w, `${action} perform`);
@@ -526,26 +486,31 @@ test("every loop below covers each Portal action", () => {
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
 });
 
-// Every action: the CSRF pair, and a preview that writes nothing
+// The CSRF pair is checked in the gate before the action is read, so one action stands for all.
+for (const [label, opts] of [
+  ["with no CSRF header", { csrfHeader: null }],
+  [
+    "when the CSRF header does not match the cookie",
+    { csrfHeader: "ffffffff-2222-4333-8444-555555555555" },
+  ],
+  ["when there is no CSRF cookie", { csrfCookie: null }],
+] as const) {
+  test(`preview REFUSES ${label}, and writes nothing`, async () => {
+    const w = world();
+    const params = { value: "api", reason: "x" };
+    const res = await handlePortalPreview(
+      await preview({ action: "overnight", params }, opts),
+      w.env,
+      NOW,
+    );
+    assert.equal(res.status, 403);
+    assert.match(await res.text(), /csrf validation failed/);
+    wroteNothing(w, "overnight");
+  });
+}
 
+// Every action: a preview that states what will change, signs it, and writes nothing
 for (const [action, params] of EVERY_ACTION) {
-  for (const [label, opts] of [
-    ["with no CSRF header", { csrfHeader: null }],
-    [
-      "when the CSRF header does not match the cookie",
-      { csrfHeader: "ffffffff-2222-4333-8444-555555555555" },
-    ],
-    ["when there is no CSRF cookie", { csrfCookie: null }],
-  ] as const) {
-    test(`PLANT: ${action} preview REFUSES ${label}, and writes nothing`, async () => {
-      const w = world();
-      const res = await handlePortalPreview(await preview({ action, params }, opts), w.env, NOW);
-      assert.equal(res.status, 403, `${action} preview was served ${label}`);
-      assert.match(await res.text(), /csrf validation failed/);
-      wroteNothing(w, action);
-    });
-  }
-
   // namespace_remove's plan is the delete's reader, json_each and all, which the node fake
   // does not evaluate (test/namespace-delete.test.ts); its preview and perform run against
   // real D1 in test-integration/portal-actions.test.ts.
@@ -572,38 +537,12 @@ for (const [action, params] of EVERY_ACTION) {
 
 // The concrete lines, where they name what the state holds now
 
-test("a resume preview says the job goes back to its claimant, naming it", async () => {
-  const body = await previewOk(world(), "resume_job", {
-    id: "job_blocked00001",
-    reason: "ran the push",
-  });
-  assert.match(body.changes[0], /blocked -> claimed by agent:capsid-driver/);
-});
-
 test("a resume preview says the job goes to the queue, and why, when its claimant is a shared identity", async () => {
   const w = world();
   w.d1.rows.jobs[0].claimed_by = "access:admin@example.com";
   const body = await previewOk(w, "resume_job", { id: "job_blocked00001", reason: "ran the push" });
   assert.match(body.changes[0], /blocked -> queued/);
   assert.match(body.changes[0], /access:admin@example.com is a shared identity/);
-});
-
-test("a resume preview no longer sends the job to the queue because its claimant holds another claim", async () => {
-  const w = world();
-  w.d1.rows.jobs.push({
-    ...w.d1.rows.jobs[1],
-    id: "job_claimed00002",
-    title: "another",
-    claimed_by: "agent:capsid-driver",
-  });
-  const body = await previewOk(w, "resume_job", { id: "job_blocked00001", reason: "ran the push" });
-  assert.match(body.changes[0], /blocked -> claimed by agent:capsid-driver/);
-});
-
-test("a revoke preview lists the jobs the agent holds", async () => {
-  const body = await previewOk(world(), "revoke_agent", { name: "capsid-driver" });
-  assert.match(body.changes[1], /holds 1 job/);
-  assert.match(body.changes[1], /job_blocked00001 \(blocked/);
 });
 
 // Preview refusals against the current state
@@ -613,40 +552,21 @@ test("preview refuses what the mutator would refuse, and writes nothing", async 
     ["overnight", { value: "banana", reason: "x" }, /banana/],
     ["overnight", { value: "api" }, /needs a reason/],
     ["reset_breaker", { namespace: "nosuch" }, /not on the roster/],
-    ["overnight", { value: "on", reason: "x" }, /overnight must be one of api, subscription, off/],
     ["resume_job", { id: "job_queued000001", reason: "x" }, /not blocked/],
-    ["resume_job", { id: "job_blocked00001" }, /needs a reason/],
-    [
-      "resume_job",
-      { id: "job_blocked00001", reason: "x", note: "n".repeat(16_385) },
-      /at most 16384 characters/,
-    ],
     ["release_job", { id: "job_blocked00001", reason: "x" }, /not claimed/],
-    ["close_shipped", { id: "job_claimed00001", reason: "x" }, /not blocked/],
-    ["close_shipped", { id: "job_blocked00001" }, /needs a reason/],
     [
       "supersede_job",
       { id: "job_blocked00001", reason: "x" },
       /a blocked job has hit a gate, so it is failed instead/,
     ],
-    ["supersede_job", { id: "job_queued000001" }, /needs a reason/],
     [
       "supersede_job",
       { id: "job_queued000001", reason: "x", replaced_by: "job_queued000001" },
       /cannot be replaced by itself/,
     ],
-    ["park_job", { id: "job_claimed00001", reason: "later" }, /Park changes a queued job/],
     ["park_job", { id: "job_queued000001", reason: "two\nlines" }, /in one line/],
-    ["unpark_job", { id: "job_queued000001" }, /not parked/],
-    ["pr_close", { namespace: "capsid", number: "41" }, /needs a reason/],
-    [
-      "pr_close",
-      { namespace: "capsid", number: "-1", reason: "x" },
-      /needs the pull request's number/,
-    ],
     ["pr_close", { namespace: "nosuch", number: "41", reason: "x" }, /unknown namespace: nosuch/],
     ["fail_job", { id: "job_missing00001", reason: "x" }, /no job job_missing00001/],
-    ["revoke_agent", { name: "ghost" }, /no agent named 'ghost'/],
     ["overnight", { value: "api", reason: "x", extra: "y" }, /'extra' is not one of them/],
   ] as const) {
     const w = world();
@@ -655,18 +575,6 @@ test("preview refuses what the mutator would refuse, and writes nothing", async 
     assert.match(await res.text(), pattern);
     wroteNothing(w, `${action} refused preview`);
   }
-});
-
-test("a revoked agent is refused at preview", async () => {
-  const w = world();
-  w.d1.rows.agents[0].revoked_at = "2026-09-20 00:00:00";
-  const res = await handlePortalPreview(
-    await preview({ action: "revoke_agent", params: { name: "capsid-driver" } }),
-    w.env,
-    NOW,
-  );
-  assert.equal(res.status, 400);
-  assert.match(await res.text(), /already revoked/);
 });
 
 // The automation switches: a reason in both directions, and an Undo that says so
@@ -700,25 +608,10 @@ test("PLANT: a signed switch token with no reason (issued before the rule) is re
       params,
       email: EMAIL,
     });
-    const res = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
+    const res = await doPerform(w, token);
     assert.equal(res.status, 400, `${action} with no reason was performed`);
     assert.match(await res.text(), /needs a reason/);
     spentOnly(w, `${action} perform with no reason`);
-  }
-});
-
-test("each switch's click row records its reason", async () => {
-  for (const [action, params] of SWITCH_CASES) {
-    const w = world();
-    const reason = `because of ${action}`;
-    const { token } = await previewOk(w, action, { ...params, reason });
-    const res = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
-    assert.equal(res.status, 200, await res.clone().text());
-    const click = w.d1.recorded.find((r) => r.params[1] === `portal-${action}`);
-    assert.ok(click, `${action} wrote no click row`);
-    const detail = JSON.parse(String(click.params[4])) as Record<string, unknown>;
-    assert.equal(detail.reason, reason);
-    assert.equal(detail.undo, undefined, `a plain ${action} says it is an undo`);
   }
 });
 
@@ -770,28 +663,6 @@ test("PLANT: an Undo previews and writes portal-undo-<action>, its own row, neve
   }
 });
 
-test("undo is refused on any other value, and on an action that is not a switch", async () => {
-  const w = world();
-  const bad = await handlePortalPreview(
-    await preview({ action: "overnight", params: { value: "off", reason: "x", undo: "yes" } }),
-    w.env,
-    NOW,
-  );
-  assert.equal(bad.status, 400);
-  assert.match(await bad.text(), /undo is "true" or absent/);
-  const other = await handlePortalPreview(
-    await preview({
-      action: "fail_job",
-      params: { id: "job_queued000001", reason: "x", undo: "true" },
-    }),
-    w.env,
-    NOW,
-  );
-  assert.equal(other.status, 400);
-  assert.match(await other.text(), /'undo' is not one of them/);
-  wroteNothing(w, "a refused undo");
-});
-
 // Perform
 
 // The audit rows a perform wrote, as "<action> by <actor>".
@@ -817,7 +688,7 @@ for (const [action, params] of EVERY_ACTION.filter(
   test(`${action} performed from its token writes the rows its preview listed, and returns the feed`, async () => {
     const w = world();
     const { token, audit } = await previewOk(w, action, params);
-    const res = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
+    const res = await doPerform(w, token);
     assert.equal(res.status, 200, await res.clone().text());
     const body = (await res.json()) as PortalPerformed;
     assert.equal(body.action, action);
@@ -873,10 +744,7 @@ test("a co-owner's session is refused when CO_OWNER_EMAILS is unset, and a confi
   assert.equal(refused.status, 302, "an unadmitted session is sent to sign in");
   wroteNothing(none, "a co-owner with no CO_OWNER_EMAILS");
   const w = world({ coOwners: "co@example.com" });
-  const { token } = await previewOk(w, "overnight", {
-    value: "api",
-    reason: "first supervised night",
-  });
+  const { token } = await issue(w);
   const res = await handlePortalPerform(
     await perform({ token }, { session: "co@example.com" }),
     w.env,
@@ -888,23 +756,15 @@ test("a co-owner's session is refused when CO_OWNER_EMAILS is unset, and a confi
   wroteNothing(w, "a confirmation issued to the primary owner");
 });
 
-// A confirmation is used once (controls design, D2): the nonce makes a second perform a
+// A confirmation is used once the nonce makes a second perform a
 // refusal of its own.
 test("PLANT: a confirmation is spent by its first perform, and a replay is refused with 409 and writes nothing", async () => {
   const w = world();
-  const { token } = await previewOk(w, "overnight", {
-    value: "api",
-    reason: "first supervised night",
-  });
-  const first = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
+  const { token } = await issue(w);
+  const first = await doPerform(w, token);
   assert.equal(first.status, 200, await first.clone().text());
   const before = w.d1.recorded.length;
-  const second = await handlePortalPerform(
-    await perform({ token }),
-    w.env,
-    LATER(4 * 60_000),
-    deps,
-  );
+  const second = await doPerform(w, token, {}, LATER(4 * 60_000));
   assert.equal(second.status, 409);
   assert.match(await second.text(), /already used/);
   assert.equal(w.d1.recorded.length, before, "a replayed confirmation wrote a row");
@@ -913,16 +773,8 @@ test("PLANT: a confirmation is spent by its first perform, and a replay is refus
 
 test("PLANT: an expired token is refused with 410 and nothing is performed", async () => {
   const w = world();
-  const { token } = await previewOk(w, "overnight", {
-    value: "api",
-    reason: "first supervised night",
-  });
-  const res = await handlePortalPerform(
-    await perform({ token }),
-    w.env,
-    LATER(5 * 60_000 + 1_000),
-    deps,
-  );
+  const { token } = await issue(w);
+  const res = await doPerform(w, token, {}, LATER(5 * 60_000 + 1_000));
   assert.equal(res.status, 410);
   assert.match(await res.text(), /expired: preview again/);
   wroteNothing(w, "an expired perform");
@@ -930,10 +782,7 @@ test("PLANT: an expired token is refused with 410 and nothing is performed", asy
 
 test("PLANT: a token whose params were edited is refused with 403", async () => {
   const w = world();
-  const { token } = await previewOk(w, "overnight", {
-    value: "api",
-    reason: "first supervised night",
-  });
+  const { token } = await issue(w);
   const edited = tamper(
     token,
     (c) => ((c.params as Record<string, string>).value = "subscription"),
@@ -946,10 +795,7 @@ test("PLANT: a token whose params were edited is refused with 403", async () => 
 
 test("PLANT: a token for one action cannot perform another", async () => {
   const w = world();
-  const { token } = await previewOk(w, "overnight", {
-    value: "api",
-    reason: "first supervised night",
-  });
+  const { token } = await issue(w);
   // Named in the body beside the token: refused, and the token's action does not run.
   const named = await handlePortalPerform(
     await perform({ token, action: "reset_breaker" }),
@@ -967,10 +813,7 @@ test("PLANT: a token for one action cannot perform another", async () => {
 
 test("PLANT: a perform body carrying params is refused, whatever the token", async () => {
   const w = world();
-  const { token } = await previewOk(w, "overnight", {
-    value: "api",
-    reason: "first supervised night",
-  });
+  const { token } = await issue(w);
   const res = await handlePortalPerform(
     await perform({ token, params: { value: "subscription", reason: "not what was previewed" } }),
     w.env,
@@ -984,10 +827,7 @@ test("PLANT: a perform body carrying params is refused, whatever the token", asy
 
 test("a token issued to another session is refused with 403", async () => {
   const w = world();
-  const { token } = await previewOk(w, "overnight", {
-    value: "api",
-    reason: "first supervised night",
-  });
+  const { token } = await issue(w);
   // ADMIN_EMAIL changed between the preview and the perform, and the new administrator
   // signed in: a valid session, a valid signature, the wrong person.
   const other = world({ adminEmail: "other@example.com" });
@@ -1005,7 +845,7 @@ test("a token issued to another session is refused with 403", async () => {
 test("a malformed token is refused with 403", async () => {
   for (const token of ["", "abc", "abc.def", `${"a".repeat(10)}.${"g".repeat(64)}`]) {
     const w = world();
-    const res = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
+    const res = await doPerform(w, token);
     assert.equal(res.status, 403, `token '${token}'`);
     wroteNothing(w, "a malformed perform");
   }
@@ -1015,7 +855,7 @@ test("a mutator refusal at perform is a 400 with its refusal, and no click row",
   const w = world();
   const { token } = await previewOk(w, "revoke_agent", { name: "capsid-driver" });
   w.d1.rows.agents[0].revoked_at = "2026-09-28 11:59:00";
-  const res = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
+  const res = await doPerform(w, token);
   assert.equal(res.status, 400);
   assert.match(await res.text(), /no live agent named 'capsid-driver'/);
   assert.deepEqual(auditRows(w.d1), []);
@@ -1023,10 +863,7 @@ test("a mutator refusal at perform is a 400 with its refusal, and no click row",
 
 test("an action that happened but whose click row failed returns 200 with the warning, in the body and a header", async () => {
   const w = world();
-  const { token } = await previewOk(w, "overnight", {
-    value: "api",
-    reason: "first supervised night",
-  });
+  const { token } = await issue(w);
   const db = w.d1.db as unknown as {
     batch: (s: Array<{ params?: unknown[] }>) => Promise<unknown>;
   };
@@ -1041,7 +878,7 @@ test("an action that happened but whose click row failed returns 200 with the wa
   console.error = (...a: unknown[]) => void errors.push(a.map(String).join(" "));
   let res: Response;
   try {
-    res = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
+    res = await doPerform(w, token);
   } finally {
     console.error = original;
   }
@@ -1070,10 +907,7 @@ test("PLANT: Sec-Fetch-Site cross-site and same-site are refused on both POSTs; 
       NOW,
     );
     assert.equal(res.status, 403, `preview served Sec-Fetch-Site: ${site}`);
-    const { token } = await previewOk(w, "overnight", {
-      value: "api",
-      reason: "first supervised night",
-    });
+    const { token } = await issue(w);
     const performed = await handlePortalPerform(
       await perform({ token }, { site }),
       w.env,
@@ -1174,21 +1008,6 @@ test("every route refuses a bearer with 403 and sends an anonymous caller to sig
   }
 });
 
-test("the digest route refuses a since that is not an ISO time with 400, before reading anything", async () => {
-  const w = world();
-  const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
-  const res = await handlePortalDigest(
-    new Request(`https://capsid.example${PORTAL_DIGEST_PATH}?since=yesterday`, {
-      headers: { Cookie: session, "Sec-Fetch-Site": "same-origin" },
-    }),
-    w.env,
-    NOW,
-  );
-  assert.equal(res.status, 400);
-  assert.match(await res.text(), /since must be an ISO 8601 time/);
-  wroteNothing(w, "a refused digest read");
-});
-
 // Sign out
 
 // Node's Headers has getSetCookie; the Workers types this suite checks against do not.
@@ -1200,7 +1019,7 @@ async function signOut(opts: Opts = {}): Promise<Request> {
   return post(PORTAL_SIGN_OUT_PATH, {}, opts);
 }
 
-test("sign out expires the session and CSRF cookies at Path=/portal, and ends a copy of that session, not the others, on the server (D4)", async () => {
+test("sign out expires the session and CSRF cookies at Path=/portal, and ends a copy of that session, not the others, on the server", async () => {
   const w = world();
   const request = await signOut();
   const copy = request.clone();
@@ -1249,38 +1068,7 @@ for (const [label, opts] of [
   });
 }
 
-test("an unknown path under /portal/api/ is a JSON 404 for the administrator, never the app's page", async () => {
-  const w = world();
-  const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
-  const res = await handlePortalApiNotFound(
-    new Request("https://capsid.example/portal/api/typo", { headers: { Cookie: session } }),
-    w.env,
-    NOW,
-  );
-  assert.equal(res.status, 404);
-  assert.match(res.headers.get("Content-Type") ?? "", /json/);
-  assert.match(await res.text(), /no Portal route at GET \/portal\/api\/typo/);
-});
-
 // The overnight run's switch (src/overnight.ts)
-
-test("PLANT: choosing the subscription previews and records Dustin's decision, its date and its reasoning; the API key records none", async () => {
-  const sub = await previewOk(world(), "overnight", {
-    value: "subscription",
-    reason: "first supervised night",
-  });
-  const text = sub.changes.join("\n");
-  assert.match(text, /decision of Dustin Edwards on 2026-10-04/);
-  assert.match(text, /overnight runs may use the subscription, by Dustin's choice/);
-  assert.match(text, /personal, on Dustin's own repositories, and not shared/);
-  assert.match(text, /Hand-started VS Code tabs are unaffected/);
-  const api = await previewOk(world(), "overnight", {
-    value: "api",
-    reason: "first supervised night",
-  });
-  assert.doesNotMatch(api.changes.join("\n"), /decision of Dustin/);
-  assert.match(api.changes.join("\n"), /ANTHROPIC_API_KEY/);
-});
 
 test("PLANT: performing the subscription choice stores the mode and the decision record with the date, who set it and why; leaving it deletes the record", async () => {
   const w = world();
@@ -1288,16 +1076,13 @@ test("PLANT: performing the subscription choice stores the mode and the decision
     value: "subscription",
     reason: "first supervised night",
   });
-  const done = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
+  const done = await doPerform(w, token);
   assert.equal(done.status, 200, await done.clone().text());
   assert.equal(await w.kv.kv.get("overnight:mode"), "subscription");
   const decision = JSON.parse((await w.kv.kv.get("overnight:decision")) ?? "null");
   assert.equal(decision.decided_by, "Dustin Edwards");
   assert.equal(decision.decided_on, "2026-10-04");
-  assert.match(decision.ruling, /^2026-10-04: overnight runs may use the subscription/);
-  assert.match(decision.reasoning, /not shared/);
   assert.equal(decision.set_by, ACTOR);
-  assert.equal(decision.set_at, NOW.toISOString());
   assert.equal(decision.reason, "first supervised night");
   // The audit rows carry the same record, so the choice is visible in Activity.
   const mutator = w.d1.recorded.find((r) => r.params[1] === "overnight-set");

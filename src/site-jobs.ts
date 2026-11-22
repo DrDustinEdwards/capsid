@@ -12,9 +12,9 @@ import { auditStatement } from "./store-guards";
 import { supersedePass } from "./supersede";
 import { runTask, taskRunStatements, type TaskId, type TaskResult } from "./task-runs";
 
-// RUN A SCHEDULED JOB NOW, ON ANY SITE (Dustin 2026-11-07, "can you just run them now"). One
+// RUN A SCHEDULED JOB NOW, ON ANY SITE One
 // control, run_job { namespace, name }, in place of a "run now" copy of a job's work on each
-// site (the four backup_media tools were such copies). Capsid never runs a site's work: it
+// site. Capsid never runs a site's work: it
 // asks the site to run its own job through the code its cron runs.
 //
 //   a site     POST run_job { job: name } to its operator API, which runs the job through

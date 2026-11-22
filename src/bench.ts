@@ -32,8 +32,8 @@ import {
 } from "./bench-requests";
 import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
 
-// THE METHODS PAPER'S PAIRED COMPARISON, the Worker's half (job_ecb1b5f80c2d;
-// capsid/research/design-paired-comparison.md, section 2; migrations/0047_bench.sql).
+// THE METHODS PAPER'S PAIRED COMPARISON, the Worker's half
+// (capsid/research/design-paired-comparison.md, section 2; migrations/0047_bench.sql).
 //
 // The capsid-bench repo runs one task per GitHub Actions job per arm and talks to Capsid
 // through four endpoints, signed like the improve scorer's (its own key, the Worker
@@ -71,8 +71,8 @@ export const BENCH_MAX_RUNNING = 4;
 // hand-dispatched workflow, so a run whose outcome was seen cannot be replaced by another
 // start. A running row past BENCH_STALE_MS counts as unjudged.
 export const BENCH_REPEATS = 3;
-// THE ERROR STOP AND THE OUTAGE HOUR (the methods paper's protocol, section 3, revised
-// 2026-10-22). A model run that ends with Claude Code's "error during execution" (a usage
+// THE ERROR STOP AND THE OUTAGE HOUR (the methods paper's protocol, section 3).
+// A model run that ends with Claude Code's "error during execution" (a usage
 // limit and a transport error look the same, and neither is classified) is scored from
 // its diff and claim file the first time, as a clock kill is, and fills its slot. Except
 // in an outage hour: a UTC hour in which at least BENCH_OUTAGE_MIN_ENDED model runs ended
@@ -80,7 +80,7 @@ export const BENCH_REPEATS = 3;
 // its slot is started once more, and no model run starts while the current hour already
 // meets the rule.
 //
-// THE ORDER (section 5, "Order", decided 2026-10-22). A drawn task's six slots run in the
+// THE ORDER (section 5, "Order"). A drawn task's six slots run in the
 // fixed order baseline, treatment, baseline, treatment, baseline, treatment, each ended
 // before the next starts, and a drawn task's first slot starts only when every task
 // before it on the draw has ended all six.
@@ -566,7 +566,7 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
   });
 }
 
-// THE JOB CLOSE (the methods paper's protocol, section 4, "The job"; decided 2026-10-19).
+// THE JOB CLOSE (the methods paper's protocol, section 4, "The job").
 // The score step finishes the run and closes that run's job in one batch, so the run is
 // not finished unless the close commits with it, and the run key stops resolving in the
 // same step (src/bench-run-key.ts reads a running row only). The close is a supersede by

@@ -13,7 +13,7 @@ import { DAY_MS } from "./time";
 import { callSignal } from "./call-signal";
 
 // Google Search Console for a namespace's site, served as capsid_inspect_repo action
-// search (Dustin, 2026-10-18: Search Console tools system wide, in Capsid). Three
+// search. Three
 // read-only reports through Google's Search Console API: search performance (clicks,
 // impressions, CTR and position by query, page, date, country or device), one URL's
 // index status (URL Inspection), and the property's sitemaps.

@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-// The running tool call's abort signal (area 11, P11), carried to the code that makes the
+// The running tool call's abort signal, carried to the code that makes the
 // outbound requests without threading it through every operation. The registrar
 // (src/scope.ts guardRegistrations) runs each handler inside withCallSignal with the
 // request's signal, and the GitHub client (src/github/client.ts) asks callSignal for the

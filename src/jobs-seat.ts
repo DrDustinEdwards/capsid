@@ -241,7 +241,7 @@ export async function recordAsCaller(
   return recordAsSeat(env, agent, now, id, args);
 }
 
-// The pull request is the claim (job_e68de044f8a4; Dustin, 2026-10-10, plan step 2). A
+// The pull request is the claim. A
 // cloud session signs in as the admin login, which may hold one claim, so it works a job
 // without claiming it, the way Copilot, Codex and Claude Code Projects work a task: one
 // branch and one pull request. Any caller holding the write grant on the job's
@@ -255,7 +255,7 @@ export async function recordAsCaller(
 // namespace's repos, and at least one must be named, because without one nothing a
 // reviewer or auto-merge can read ties the work to the job. And at least one named pull
 // request's body must name this job id, as auto-merge's body_names_job asks: otherwise any
-// pull request on a mapped repo would close any queued job (Grok audit 2026-10-21, CA-3).
+// pull request on a mapped repo would close any queued job.
 // GitHub unreachable refuses, since nothing then shows the pull request is this job's.
 async function completeUnclaimed(
   env: Env,
@@ -629,8 +629,7 @@ export async function supersedeJob(
 // A driver, the claimant or a sibling in the namespace, may not plain-resume. A driver
 // that blocked a job on a deploy, a secret or a force push could otherwise resume it
 // with any reason, or have another driver with the namespace's write grant do it, and
-// the audit row would read "approved: <reason>" as though a human had said yes (Grok
-// audit 2026-10, S1). The claimant may still resume its own job through
+// the audit row would read "approved: <reason>" as though a human had said yes The claimant may still resume its own job through
 // approved_by_policy for a branch push or a pull request.
 //
 // The claim goes back to the driver that blocked it, not to the caller that resumed

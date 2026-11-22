@@ -8,8 +8,7 @@ import {
 import { worthReviewer } from "./model-routing";
 import { isMoneyPath } from "./scope";
 
-// THE MERGE CLASSES (docs/design/design-merge-pipeline.md section 2; Dustin ruled DECIDE 2
-// on 2026-10-09). Every open pull request on a covered repo gets exactly one class, with
+// THE MERGE CLASSES (docs/design/design-merge-pipeline.md section 2). Every open pull request on a covered repo gets exactly one class, with
 // its reasons, computed each tick by this pure function. REPORT-ONLY for now (the design's
 // PR 2): the class rides on the awaiting-seat set and the inbox, and nothing acts on it.
 // The approval record (PR 3) and the executor (PR 4) are what will.
@@ -61,7 +60,7 @@ export function pathClassOf(path: string): PathClass {
   if (/(^|\/)migrations\/[^/]+\.sql$/i.test(path)) return "migration";
   if (/^\.github\/workflows\//i.test(path)) return "workflow";
   // Which dependency changed is in the diff, not the path, so a manifest or lockfile is
-  // judged as another's package until the diff is read (deps-own, job_3b09752450c1).
+  // judged as another's package until the diff is read (deps-own).
   // Before the refused list, which names lockfiles for a different reason.
   if (DEPS_FILE.test(path)) return "deps-other";
   if (AUTO_MERGE_REFUSED_PATHS.some(({ pattern }) => pattern.test(path))) return "src-worth";

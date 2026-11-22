@@ -3,7 +3,7 @@ import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The queue's circuit breaker (job_9e602b31888f, OWASP ASI08, cascading failures).
+// The queue's circuit breaker.
 //
 // A namespace whose drivers failed N jobs in the last 24 hours stops handing out work
 // until the seat or Dustin resets it. The breaker holds no "open" flag: it is computed

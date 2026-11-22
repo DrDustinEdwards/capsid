@@ -128,7 +128,7 @@ function describe(ops: Operations, spec: CompositeSpec): string {
 function compositeConfig(ops: Operations, spec: CompositeSpec) {
   for (const a of Object.values(spec.actions))
     if (!ops.has(a.op)) throw new Error(`${spec.name}: no operation '${a.op}'`);
-  // Closed (additionalProperties: false; area 11, T4), so an argument no action of the
+  // Closed (additionalProperties: false), so an argument no action of the
   // tool takes is refused by the SDK, never stripped; one another action takes is
   // refused by compositeHandler, which names what this action takes.
   const namespaceActions = Object.entries(spec.actions)
@@ -189,7 +189,7 @@ function compositeHandler(ops: Operations, spec: CompositeSpec) {
   };
 }
 
-// A tool that is one operation, served under its own schema, closed (area 11, T4) so an
+// A tool that is one operation, served under its own schema, closed so an
 // argument it does not take is refused rather than stripped.
 function singleConfig(ops: Operations, name: string, title: string, op: string, summary?: string) {
   const config = ops.config(op);
@@ -207,7 +207,7 @@ function singleConfig(ops: Operations, name: string, title: string, op: string, 
 // actions that only read (READ_ACTIONS in src/scope.ts), and the arguments those take.
 // The same tool and handler, so no new tool: the caller could never run the other actions
 // (the handler refuses them for want of the write grant), and now cannot ask for them, so
-// the tool it lists is read-only in fact and is annotated so (area 11, T7).
+// the tool it lists is read-only in fact and is annotated so.
 const READ_VIEWS: Record<string, { key: string; fields: readonly string[] }> = {
   capsid_work_jobs: {
     key: "action",

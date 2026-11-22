@@ -6,7 +6,7 @@ import type { MaintenanceItem } from "./maintenance";
 import { HOUR_MS, days } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The daily maintenance pass's pull request rules (job_549550d73d4e, piece 2). Two lists:
+// The daily maintenance pass's pull request rules. Two lists:
 // a green driver pull request that is still open is waiting for the seat, shown with its
 // age; a pull request whose checks have been red for more than 48 hours is shown with the
 // step that failed. Both read what the auto-merge tick reads (the open list and each head's

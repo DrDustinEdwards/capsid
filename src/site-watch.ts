@@ -10,8 +10,7 @@ import { failingCheckNames } from "@dustinedwards/site-runtime/health-read";
 import { healthUrl } from "./ops-sites";
 import { callSignal } from "./call-signal";
 
-// THE WATCHER'S SITE REPAIRS (job_09e5f6cbf782), the one watcher for every site: dustinedwards.info's own
-// watchdog Worker was retired on 2026-11-06 once this covered it. On each watcher pass, for every site with a health route (ops_sites.health_path):
+// THE WATCHER'S SITE REPAIRS the one watcher for every site. On each watcher pass, for every site with a health route (ops_sites.health_path):
 //   1. Read its health route. Healthy (200, ok, and no alert named in `alerts`): nothing to do.
 //   2. Unhealthy: the failing checks' names, alert checks included. A site with no operator
 //      API is reported as it is. One that opted in (ops_sites.operator) is repaired only when

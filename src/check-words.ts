@@ -1,6 +1,6 @@
 // Pure, with no imports, so the Portal (dashboard/) bundles it too.
 // What each auto-merge check that held a pull request back means, in the words the inbox
-// and the Portal show Dustin (his review of 2026-10-11: the rows showed check names). A check this list
+// and the Portal show Dustin. A check this list
 // does not know yet still shows, its underscores read as spaces.
 const CHECK_WORDS: Record<string, string> = {
   paths_not_refused: "it changes a file auto-merge never merges on its own",

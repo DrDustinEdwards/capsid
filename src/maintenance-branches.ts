@@ -12,8 +12,8 @@ import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The daily maintenance pass's branch rules (job_549550d73d4e, piece 3). A merged branch is
-// one capsid_close_pr action delete_branch with merged:true would prune (job_8779278b8e91, src/github/prune.ts): its
+// The daily maintenance pass's branch rules. A merged branch is
+// one capsid_close_pr action delete_branch with merged:true would prune: its
 // latest pull request merged and its tip is the commit that pull request merged from. The
 // same plan is read here, so the default branch, a branch with an open pull request and a
 // branch with commits after its merge are refused exactly as the tool refuses them.
@@ -26,9 +26,8 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 // APP_KV with an empty default, names branches that are never pruned and never listed.
 //
 // With the switch on, a branch with no open pull request and no commit for ORPHAN_DAYS is
-// deleted too, in the same cap and with the same audit row (job_9dbaf2ecfd2c; Dustin,
-// 2026-10-14: every repo's branches down to the default and those with an open pull request
-// or active work). Only when every list was read in full, and never the default, a
+// deleted too, in the same cap and with the same audit row (every repo's branches down to the
+// default and those with an open pull request or active work). Only when every list was read in full, and never the default, a
 // protected or keep-listed branch, or a screenshot branch an open pull request
 // still shows (src/github/prune.ts, shotsInUse).
 

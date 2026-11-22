@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import type { InboxItem } from "./ops-types/feed";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { auditStatement } from "./store-guards";
+import { readLifted } from "./merge-safety";
 import { DAY_MS } from "./time";
 
 // EARNED PROMOTION AND DEMOTION (docs/design/design-merge-pipeline.md section 7, PR 9;
@@ -182,11 +183,6 @@ export async function readSuspended(kv: KVNamespace): Promise<Suspension[]> {
   return raw ? (JSON.parse(raw) as Suspension[]) : [];
 }
 
-async function readLifted(kv: KVNamespace): Promise<Record<string, string>> {
-  const raw = await kv.get(LIFTED_KEY);
-  return raw ? (JSON.parse(raw) as Record<string, string>) : {};
-}
-
 /** What lifting a unit's suspension will do, or why it cannot. Reads only. */
 export async function planLift(
   kv: KVNamespace,
@@ -217,7 +213,7 @@ export async function liftSuspension(
   const plan = await planLift(env.APP_KV, rawUnit);
   if (!plan.ok) return plan;
   const rest = (await readSuspended(env.APP_KV)).filter((s) => s.unit !== plan.unit);
-  const lifted = { ...(await readLifted(env.APP_KV)), [plan.unit]: now.toISOString() };
+  const lifted = { ...(await readLifted(env.APP_KV, LIFTED_KEY)), [plan.unit]: now.toISOString() };
   await env.APP_KV.put(LIFTED_KEY, JSON.stringify(lifted));
   await env.APP_KV.put(SUSPENDED_KEY, JSON.stringify(rest));
   await env.DB.batch([
@@ -345,7 +341,7 @@ export async function unitsTick(
   read: typeof readUnitEvidence = readUnitEvidence,
 ): Promise<UnitsTickReport> {
   const before = await readSuspended(env.APP_KV);
-  const lifted = await readLifted(env.APP_KV);
+  const lifted = await readLifted(env.APP_KV, LIFTED_KEY);
   const evidence = await read(env, now);
   const report = judgeUnits(evidence.approvals, evidence.rollbacks, before, now, lifted);
   const added = report.suspended.filter((s) => !before.some((b) => b.unit === s.unit));

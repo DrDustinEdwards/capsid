@@ -1,4 +1,4 @@
-// A job body a session can act on (job_9a8d13d2d926, Dustin 2026-10-10). Three checks, run
+// A job body a session can act on. Three checks, run
 // by the capsid_work_jobs tool on a caller's post and edit, and by nothing else: the
 // watcher, the skills refresh and the finalize step post through postJob and are not
 // subject to them.

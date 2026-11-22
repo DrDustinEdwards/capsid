@@ -6,7 +6,7 @@ import { readSnapshot } from "./ops-snapshot";
 import { clearedByWatcher } from "./watcher-findings";
 import { MINUTE_MS, DAY_MS } from "./time";
 
-// The public aggregate numbers (ruling capsid/rulings/system-explorer-2026-10-10.md,
+// The public aggregate numbers (capsid/rulings/system-explorer-2026-10-10.md,
 // section 3 and answer 5; design capsid/research/design-system-explorer.md, section 2;
 // docs/public-data.md). Counts, rates and medians over every namespace, agent and site
 // at once, computed once a UTC day over whole days ending at midnight. Never a title, a
@@ -33,8 +33,8 @@ export const PublicStatsSchema = z.strictObject({
     cleared_30d: Count.optional(),
     // Eight whole weeks, oldest first, each ending at a midnight.
     completed_by_week: z.array(Count).length(8),
-    // The same eight weeks. The three weekly series added on 2026-10-23 are optional only so the
-    // explorer still parses a document the public build wrote before they existed.
+    // The same eight weeks. The last three weekly series are optional so the
+    // explorer still parses a document written before they existed.
     failed_by_week: z.array(Count).length(8).optional(),
     cleared_by_week: z.array(Count).length(8).optional(),
     open: Count,

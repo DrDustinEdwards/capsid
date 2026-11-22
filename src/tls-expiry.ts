@@ -4,7 +4,7 @@ import { registrableDomain } from "./domain-expiry";
 import { DAY_MS } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// TLS CERTIFICATE EXPIRY (area 8, U5), beside the domain registration check
+// TLS CERTIFICATE EXPIRY, beside the domain registration check
 // (src/domain-expiry.ts). A Worker cannot see the certificate a TLS peer presents, so the
 // date comes from where the edge certificate lives: the zone's certificate packs in the
 // Cloudflare API (GET /zones?name=<domain>, then GET /zones/{id}/ssl/certificate_packs).

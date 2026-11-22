@@ -28,10 +28,10 @@ const LIVE_JOB_SUFFIX = ` / ${LIVE_JOB}`;
 // through worker-deploy too. Prelum has no namespace of its own: it is the dustinedwards
 // namespace's "prelum" repo. A run with two live gates (carrel's app and public site) records
 // the one that did not pass, else the first. Enarratio's gallery deploys through worker-deploy
-// too (checklist F4, 2026-11-01).
+// too.
 // dustinedwards.info deploys from its own Deploy workflow, started by CI's completion (workflow_run)
 // and on a schedule, never by a push, so its runs are read by `workflow`, of any event; its "live gate"
-// job is in that workflow (area 8, D7).
+// job is in that workflow.
 export interface DeployRepo {
   key: string;
   namespace: string;

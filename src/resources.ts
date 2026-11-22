@@ -73,7 +73,7 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
     // Every result is filtered to the caller's namespaces, so its cache hint is private
     // (src/server.ts).
     // The whole scope check, as resources/read makes it, so a caller narrowed away from
-    // capsid_read_doc (or a bench run key) lists nothing either (Grok audit 2026-10-21, CA-5).
+    // capsid_read_doc (or a bench run key) lists nothing either.
     const listRefusal = checkScope(agent, {
       tool: "capsid_read_doc",
       action: "read",

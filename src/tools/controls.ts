@@ -15,7 +15,7 @@ export function defineControlOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
 
   // The admin controls the Portal's buttons run, reachable from chat as one tool (a ruled
-  // exception to the tool surface rule, 2026-10-03). One registry (src/controls.ts) is behind both surfaces, so a control
+  // exception to the tool surface rule). One registry (src/controls.ts) is behind both surfaces, so a control
   // is implemented once and a test holds the two lists equal. Admin only in whole
   // (TOOL_GRANTS.capsid_admin_run_controls): the registrar refuses every other caller before this handler
   // runs. The confirmation is the Portal's: preview returns the plan and a signed token for
@@ -31,7 +31,7 @@ export function defineControlOperations(server: McpServer, ctx: ToolCtx): void {
           .enum(PORTAL_ACTIONS as unknown as [PortalAction, ...PortalAction[]])
           .optional()
           .describe("For preview: the control to preview."),
-        // Closed (area 11, T4): every param some control takes, each a string. Which of
+        // Closed: every param some control takes, each a string. Which of
         // them this control takes is checked by previewControl, which names them.
         params: z
           .strictObject(
