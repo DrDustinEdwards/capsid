@@ -30,8 +30,7 @@ import { CAPSID_NAMESPACE, jobRefusal } from "./site-jobs";
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
-// The registry and operator controls' preview (src/controls-plan.ts is the dispatch): the
-// namespace, site, package, agent, repair, backup and job controls.
+// The registry and operator controls' preview (src/controls-plan.ts is the dispatch).
 
 type RegistryPlanAction =
   | "namespace_add"

@@ -4,8 +4,7 @@ import { hintsFor, READ_VIEW_HINTS } from "../tool-annotations";
 import { type OperationResult, type Operations, type Shape } from "./operations";
 import { toolOutput } from "./outputs";
 
-// How a tool's spec becomes its served config and handler (src/tools/surface.ts holds the
-// specs and the registrations): the merged input schema, the description and the dispatch.
+// How a tool's spec becomes its served config and handler (specs: src/tools/surface.ts).
 
 interface ActionSpec {
   op: string;

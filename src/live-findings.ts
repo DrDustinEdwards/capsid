@@ -6,8 +6,7 @@ import { MINUTE_MS } from "./time";
 
 import type { LiveRule } from "./live-checks";
 
-// What the live checks conclude from a page, a sha or a site's analytics state: the pure
-// part, given what src/live-checks.ts read. LiveRule and the document it comes from are there.
+// What the live checks conclude from what src/live-checks.ts read: the pure part.
 
 const BEACON_SCRIPT_HOST = "static.cloudflareinsights.com";
 

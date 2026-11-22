@@ -9,8 +9,7 @@ import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, PortalTrends } from "./o
 
 import { lastDays, mondayOf, weekStarts } from "./trends-days";
 
-// The trends' two reads that come from outside D1: the backup retention slots (visual 10)
-// and the default branch's CI by day (visual 11). The rest of the series is src/trends.ts.
+// The trends' reads from outside D1: backup retention slots and the default branch's CI by day.
 
 const TRENDS_CI_DAYS = 14;
 const CI_CACHE_KEY = "portal:trends-ci:v1";

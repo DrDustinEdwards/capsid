@@ -21,8 +21,7 @@ import { CAPSID_DUMP, runCapsidDump, runSiteBackups } from "./site-backup";
 import { runSiteJob } from "./site-jobs";
 import { auditStatement } from "./store-guards";
 
-// The registry and operator controls' perform (src/controls-perform.ts is the dispatch):
-// pull requests, agents, sites, packages, repairs, jobs and backups.
+// The registry and operator controls' perform (src/controls-perform.ts is the dispatch).
 
 type RegistryPerformAction =
   | "pr_close"

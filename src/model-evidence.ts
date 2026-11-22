@@ -1,8 +1,7 @@
 import { JOB_KINDS, MODELS, ROUTING_RULES, TRIAL_ARMS, type RoutedModel } from "./model-routing";
 import { formatMoney } from "@dustinedwards/site-runtime/money";
 
-// WHAT THE OUTCOMES SAY ABOUT THE ROUTING RULES (src/model-routing.ts holds the rules;
-// capsid/research/design-model-routing.md). Reads only: a proposal is never applied here.
+// What the outcomes say about the routing rules (src/model-routing.ts). Reads only.
 
 // A cell (kind, model) is read only from this many outcomes. Below it a rate is noise: a
 // single merged job reads as 100 percent.

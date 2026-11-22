@@ -1,5 +1,4 @@
-// The claims export (the `export` action of capsid_admin_read_claims, src/tools/claims.ts): a
-// table paged by cursor so a whole ledger can be copied out. Read-only, like job-claims-read.ts.
+// The claims export of capsid_admin_read_claims: a table paged by cursor, read-only.
 
 // The tables the export pages through, and the only names it will read.
 export const CLAIMS_EXPORT_TABLES = [

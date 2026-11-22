@@ -1,6 +1,4 @@
-// One site's own page (src/portal-site.ts): search, traffic and Workers Builds, each read
-// live for one namespace when its tab opens. A source the read could not answer is a state
-// with its reason, never a zero (docs/portal.md, "No data is a state, never a zero").
+// One site's own page (src/portal-site.ts): search, traffic and Workers Builds. No data is a state, never a zero.
 
 // Why a source has no data: the namespace has no site row (or, for builds, no Worker
 // script); the secret or token the read needs is not set; the read worked and found

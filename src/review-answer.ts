@@ -1,5 +1,4 @@
-// The model's side of the automatic reviewer (review.ts): the verdict and finding shapes, the
-// report_review tool it answers through, and reading that answer back.
+// The reviewer model's answer (review.ts): the verdict and finding shapes and reading them back.
 
 export const MAX_FINDINGS = 5;
 

@@ -7,8 +7,7 @@ import { behindGate } from "./portal-auth";
 import { attempt, countedRead, none, noSite } from "./portal-site";
 import { BUILDS_DEFAULT, BUILDS_MAX, buildLogs, listBuilds } from "./workers-builds";
 
-// A site page's Deploys tab (src/portal-site.ts has the rest of the site page): its Workers
-// Builds and one build's log, read live for one namespace.
+// A site page's Deploys tab: its Workers Builds and one build's log, read live.
 //   GET /portal/api/workers-builds?namespace=&limit=   listBuilds
 //   GET /portal/api/build-log?build=          buildLogs (capsid_admin_read_ops actions workers_builds and workers_build_logs)
 

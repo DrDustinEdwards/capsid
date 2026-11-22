@@ -10,9 +10,7 @@ import {
 } from "./ops-cloudflare";
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
-// What the nightly build reads from Cloudflare for the secrets and data model: each Worker's
-// bindings (names only, see bindingOf), its D1 tables, KV namespaces, R2 buckets and
-// Previews. The model they are folded into, and the drift against it, is src/system-resources.ts.
+// What the nightly build reads from Cloudflare for the secrets and data model (folded in src/system-resources.ts).
 
 export const PERMISSION = {
   scripts: "Account / Workers Scripts / Read",

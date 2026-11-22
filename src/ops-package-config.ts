@@ -1,8 +1,7 @@
 import type { OpsPackageConfig } from "./ops-types/sites";
 import { auditStatement } from "./store-guards";
 
-// The packages configuration: the ops_packages rows and their validated edits. What each
-// package is read from is src/ops-packages.ts.
+// The packages configuration: the ops_packages rows and their validated edits.
 
 const PACKAGE_ROWS_LIMIT = 50;
 

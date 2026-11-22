@@ -10,9 +10,7 @@ import type {
 import { PR_URL_SOURCE } from "@dustinedwards/site-runtime/github";
 import { HOUR_MS } from "./time";
 
-// THE MORNING DIGEST (src/overnight-plan.ts holds the plan; capsid/research/design-automation-for-speed.md, D2):
-// pull requests ready, what blocked and why, and what each job cost, from the outcome row
-// (telemetry) or the agent's own claim.usage, never summed.
+// THE MORNING DIGEST (src/overnight-plan.ts holds the plan): what is ready, what blocked, what each job cost.
 
 const DIGEST_ROWS_MAX = 200;
 const DIGEST_DEFAULT_HOURS = 24;

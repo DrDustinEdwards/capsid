@@ -24,8 +24,7 @@ import { WATCHER_ACTOR } from "./watcher";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { DAY_MS } from "./time";
 
-// The feed's live reads: open jobs, agents, pull requests, the awaiting-seat set and the
-// merge policy, each shaped for OpsLive. The feed that gathers them is src/ops-feed.ts.
+// The feed's live reads, each shaped for OpsLive (src/ops-feed.ts gathers them).
 
 const WEEK_MS = 7 * DAY_MS;
 
