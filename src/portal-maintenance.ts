@@ -1,10 +1,8 @@
 import { jsonResponse } from "@dustinedwards/site-runtime/http";
-import type { Env } from "./env";
 import { ROSTER } from "./roster";
 import { readMaintenance } from "./maintenance";
-import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalMaintenance } from "./ops-types/views";
-import { portalGate } from "./portal-auth";
+import { behindGate } from "./portal-auth";
 
 // The Portal's Maintenance list: GET /portal/api/maintenance. The list
 // the daily maintenance pass stored, the same one capsid_read_status action status serves per namespace, so
@@ -19,13 +17,7 @@ const sum = (counts: Record<string, number>): number =>
   Object.values(counts).reduce((a, b) => a + b, 0);
 
 /** GET /portal/api/maintenance: the last pass's list and what it read. */
-export async function handlePortalMaintenance(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalMaintenance = behindGate(async (_request, env) => {
   const list = await readMaintenance(env);
   const body: PortalMaintenance = list
     ? {
@@ -45,4 +37,4 @@ export async function handlePortalMaintenance(
         read: { prs: 0, branches: 0, repos: 0, roster: ROSTER.length, deploys: 0 },
       };
   return jsonResponse(body);
-}
+});

@@ -13,7 +13,6 @@ import {
   OPS_REFRESH_PATH,
   opsAgentFrom,
   PORTAL_CSRF_COOKIE,
-  type OpsFeedData,
   opsJobFrom,
   refreshAllowedAt,
   type JobFeedRow,
@@ -26,7 +25,14 @@ import {
   WATCHER_LAST_KEY,
   type Gathered,
 } from "../src/watcher.ts";
-import { agentRecord, fakeEnv, fakeKv, withPortalSessionEnds } from "./fakes.ts";
+import {
+  agentRecord,
+  captureErrors,
+  FEED,
+  fakeEnv,
+  fakeKv,
+  withPortalSessionEnds,
+} from "./fakes.ts";
 
 // The Watch Floor feed and its Refresh (src/ops-feed.ts). The live reads are driven
 // against real D1 in test-integration/ops-feed.test.ts, which also counts them; these
@@ -147,16 +153,11 @@ test("an agent is shown with the record the status computes for it, and without 
   });
 });
 
-test("an awaiting-seat value that does not parse is logged, never passed through", () => {
-  const errors: string[] = [];
-  const original = console.error;
-  console.error = (...a: unknown[]) => void errors.push(a.map(String).join(" "));
-  try {
+test("an awaiting-seat value that does not parse is logged, never passed through", async () => {
+  const { errors } = await captureErrors(() => {
     assert.deepEqual(awaitingFrom("{not json"), []);
     assert.deepEqual(awaitingFrom(JSON.stringify({ not: "an array" })), []);
-  } finally {
-    console.error = original;
-  }
+  });
   assert.equal(errors.length, 2);
   assert.match(errors[0], /OPS_FEED_AWAITING_UNREADABLE/);
   assert.deepEqual(awaitingFrom(null), []);
@@ -207,28 +208,6 @@ function recordingDb() {
   return { db, batches };
 }
 
-const FEED: OpsFeedData = {
-  snapshot: null,
-  scheduled: { tasks: [], error: null },
-  live: {
-    generated: NOW.toISOString(),
-    store: { size_bytes: null, cap_bytes: 10 * 1024 ** 3 },
-    inbox: { generated: NOW.toISOString(), count: 0, severity: "none", apps: [] },
-    findings: [],
-    jobs: [],
-    agents: [],
-    prs: [],
-    awaiting_seat: [],
-    merge_safety: null,
-    merge_policy: { loads: false, reason: "sample" },
-    overnight: { mode: "off", decision: null },
-    sites: [],
-    packages: [],
-    namespaces: [{ name: "sample" }],
-  },
-  refresh_allowed_at: null,
-  cloudflare_configured: false,
-};
 const feed = async () => FEED;
 
 async function signed(path: string, init: RequestInit = {}): Promise<Request> {
@@ -482,18 +461,10 @@ test("PLANT: a second refresh inside two minutes is refused with 429 and a Retry
 test("PLANT: a rate limit that cannot be read or written refuses with 503, failing closed", async () => {
   for (const opts of [{ failGet: true }, { failPut: true }]) {
     const kv = fakeKv(opts);
-    const errors: string[] = [];
-    const original = console.error;
-    console.error = (...a: unknown[]) => void errors.push(a.map(String).join(" "));
-    let res: Response;
-    try {
-      res = await handleOpsRefresh(await refreshRequest(), env(kv), NOW, {
-        feed,
-        gather: gathered,
-      });
-    } finally {
-      console.error = original;
-    }
+    const request = await refreshRequest();
+    const { result: res, errors } = await captureErrors(() =>
+      handleOpsRefresh(request, env(kv), NOW, { feed, gather: gathered }),
+    );
     assert.equal(res.status, 503, JSON.stringify(opts));
     assert.match(await res.text(), /no pass was run/);
     assert.equal(kv.store.get(WATCHER_LAST_KEY), undefined, "a pass ran without a rate limit");

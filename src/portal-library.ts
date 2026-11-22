@@ -1,9 +1,7 @@
-import type { Env } from "./env";
 import { documentEdges, readDocument, searchDocuments } from "./doc-reads";
 import { MAX_NAMESPACE, MAX_QUERY, MAX_ROWS, pathProblem, SEARCH_ROWS } from "./limits";
-import { OPS_RETURN_TO } from "./ops-feed";
 import type { LibraryEntry, LibraryShelf, PortalLibrary } from "./ops-types/views";
-import { portalGate } from "./portal-auth";
+import { behindGate } from "./portal-auth";
 import { jsonResponse as json } from "@dustinedwards/site-runtime/http";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
@@ -35,13 +33,7 @@ function param(url: URL, name: string): string | null {
 }
 
 /** GET /portal/api/library: the shelves, ?q= a search, or ?ns=&path= one document. */
-export async function handlePortalLibrary(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalLibrary = behindGate(async (request, env, now) => {
   const url = new URL(request.url);
   const generated = now.toISOString();
   const q = param(url, "q");
@@ -118,4 +110,4 @@ export async function handlePortalLibrary(
     truncated: results.length > MAX_ROWS,
   };
   return json(body);
-}
+});

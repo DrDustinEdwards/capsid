@@ -1,8 +1,6 @@
 import { jsonResponse } from "@dustinedwards/site-runtime/http";
-import type { Env } from "./env";
-import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalStale } from "./ops-types/views";
-import { portalGate } from "./portal-auth";
+import { behindGate } from "./portal-auth";
 import { staleJobs } from "./stale-jobs";
 
 // The Portal's stale jobs: GET /portal/api/stale (capsid/research/design-stale-jobs.md,
@@ -16,13 +14,7 @@ import { staleJobs } from "./stale-jobs";
 export const PORTAL_STALE_PATH = "/portal/api/stale";
 
 /** GET /portal/api/stale: the jobs that look stuck, each with its rule and reason. */
-export async function handlePortalStale(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalStale = behindGate(async (_request, env, now) => {
   const read = await staleJobs(env, now);
   const body: PortalStale = {
     generated: now.toISOString(),
@@ -31,4 +23,4 @@ export async function handlePortalStale(
     note: read.note ?? null,
   };
   return jsonResponse(body);
-}
+});

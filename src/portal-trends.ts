@@ -1,7 +1,5 @@
 import { jsonResponse } from "@dustinedwards/site-runtime/http";
-import type { Env } from "./env";
-import { OPS_RETURN_TO } from "./ops-feed";
-import { portalGate } from "./portal-auth";
+import { behindGate } from "./portal-auth";
 import { readTrends } from "./trends";
 
 // The Portal's trends: GET /portal/api/trends?weeks= (design-portal-evaluation.md, DECIDE 5:
@@ -15,13 +13,7 @@ const DEFAULT_WEEKS = 8;
 const MAX_WEEKS = 26;
 
 /** GET /portal/api/trends: every series, the weekly ones over ?weeks= (1 to 26, default 8). */
-export async function handlePortalTrends(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalTrends = behindGate(async (request, env, now) => {
   const raw = new URL(request.url).searchParams.get("weeks")?.trim();
   const weeks = raw ? Number(raw) : DEFAULT_WEEKS;
   if (!Number.isInteger(weeks) || weeks < 1 || weeks > MAX_WEEKS) {
@@ -29,4 +21,4 @@ export async function handlePortalTrends(
   }
   const body = await readTrends(env, now, weeks);
   return jsonResponse(body);
-}
+});

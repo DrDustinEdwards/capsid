@@ -7,6 +7,7 @@ import { gunzipSync } from "node:zlib";
 // with the handler cannot test it.
 //
 // improve_jti, the one improve table left, is the live replay cache (loopTableExec below).
+import type { OpsFeedData } from "../src/ops-feed.ts";
 import { recordFor, type AgentRecord } from "../src/agent-record.ts";
 import { EXCLUDED as BACKUP_EXCLUDED, TABLES as BACKUP_TABLES } from "../src/backup.ts";
 import { OPEN_JOB_STATUSES, type JobStatus } from "../src/jobs-schema.ts";
@@ -1451,3 +1452,41 @@ function pendingMatches(flat: string, a: { pending?: number }): boolean {
   const want = flat.slice(flat.search(/\bWHERE\b/i)).match(/pending = ([01])/i);
   return !want || (a.pending ?? 0) === Number(want[1]);
 }
+
+/** Runs `run` with console.error captured; the lines logged are returned beside its result. */
+export async function captureErrors<T>(
+  run: () => T | Promise<T>,
+): Promise<{ result: T; errors: string[] }> {
+  const errors: string[] = [];
+  const original = console.error;
+  console.error = (...a: unknown[]) => void errors.push(a.map(String).join(" "));
+  try {
+    return { result: await run(), errors };
+  } finally {
+    console.error = original;
+  }
+}
+
+/** The feed a handler returns in place of the live read. */
+export const FEED: OpsFeedData = {
+  snapshot: null,
+  scheduled: { tasks: [], error: null },
+  live: {
+    generated: "2026-09-28T12:00:00.000Z",
+    store: { size_bytes: null, cap_bytes: 10 * 1024 ** 3 },
+    inbox: { generated: "2026-09-28T12:00:00.000Z", count: 0, severity: "none", apps: [] },
+    findings: [],
+    jobs: [],
+    agents: [],
+    prs: [],
+    awaiting_seat: [],
+    merge_safety: null,
+    merge_policy: { loads: false, reason: "sample" },
+    overnight: { mode: "off", decision: null },
+    sites: [],
+    packages: [],
+    namespaces: [{ name: "sample" }],
+  },
+  refresh_allowed_at: null,
+  cloudflare_configured: false,
+};

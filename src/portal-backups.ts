@@ -1,7 +1,5 @@
 import { jsonResponse } from "@dustinedwards/site-runtime/http";
-import type { Env } from "./env";
-import { OPS_RETURN_TO } from "./ops-feed";
-import { portalGate } from "./portal-auth";
+import { behindGate } from "./portal-auth";
 import { readSiteBackups } from "./site-backup";
 
 // The Portal's site backups: GET /portal/api/backups, Health's Backups tab. Every site that
@@ -13,12 +11,6 @@ import { readSiteBackups } from "./site-backup";
 
 export const PORTAL_BACKUPS_PATH = "/portal/api/backups";
 
-export async function handlePortalBackups(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalBackups = behindGate(async (_request, env) => {
   return jsonResponse(await readSiteBackups(env));
-}
+});

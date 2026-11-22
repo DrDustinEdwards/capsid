@@ -4,8 +4,7 @@ import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { RETRY_CAP_REASON } from "./jobs-schema";
 import { PORTAL_HOST } from "./portal-host";
 import { gateActionRequest } from "./portal-actions";
-import { portalGate } from "./portal-auth";
-import { OPS_RETURN_TO } from "./ops-feed";
+import { behindGate } from "./portal-auth";
 import type { PortalPush } from "./ops-types/views";
 import { readPaused } from "./merge-safety";
 import { auditStatement } from "./store-guards";
@@ -453,15 +452,9 @@ async function listDevices(env: Env, now: Date): Promise<PortalPush> {
 
 /** GET /portal/api/push: the VAPID public key and the devices with alerts on. Never an
  *  endpoint: it is a URL anyone could send to. */
-export async function handlePortalPushGet(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalPushGet = behindGate(async (_request, env, now) => {
   return json(await listDevices(env, now));
-}
+});
 
 /** POST /portal/api/push: { op: "on", subscription, label } | { op: "off", id } | { op: "test" }.
  *  Behind the actions' checks: the session, same-origin, the body cap and CSRF. */

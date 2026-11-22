@@ -21,7 +21,7 @@ import type {
   TrafficWebVitals,
   WorkersBuild,
 } from "./ops-types/views";
-import { portalGate } from "./portal-auth";
+import { behindGate, portalGate } from "./portal-auth";
 import { searchConsole } from "./search-console";
 import { MAX_TRAFFIC_DAYS, siteTraffic } from "./site-traffic";
 import { BUILDS_DEFAULT, BUILDS_MAX, buildLogs, listBuilds } from "./workers-builds";
@@ -458,17 +458,11 @@ export async function readBuildLog(
 // The routes.
 
 /** GET /portal/api/site-search?namespace=. */
-export async function handlePortalSiteSearch(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalSiteSearch = behindGate(async (request, env, now) => {
   const ns = namespaceParam(new URL(request.url));
   if (!ns.ok) return ns.response;
   return jsonResponse(await readSiteSearch(env, ns.namespace, fetch, now));
-}
+});
 
 /** A namespace read with one whole-number parameter (days, limit): the gate, the namespace
  *  and the number, each refused with its reason, then the read. */
@@ -521,13 +515,7 @@ export function handlePortalWorkersBuilds(
 }
 
 /** GET /portal/api/build-log?build=<uuid>. */
-export async function handlePortalBuildLog(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalBuildLog = behindGate(async (request, env, now) => {
   const build = new URL(request.url).searchParams.get("build") ?? "";
   if (!BUILD_UUID.test(build))
     return textResponse(
@@ -535,4 +523,4 @@ export async function handlePortalBuildLog(
       400,
     );
   return jsonResponse(await readBuildLog(env, build, fetch, now));
-}
+});
