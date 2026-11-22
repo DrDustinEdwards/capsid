@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
-import {
-  AUTO_MERGE_ALLOWED_PATHS,
-  AUTO_MERGE_POLICY_PATH,
-  AUTO_MERGE_REFUSED_PATHS,
-  AUTO_MERGE_REQUIRED_CI,
-  POLICY_CHECKS,
-  requiredCiLabel,
-} from "../src/auto-merge-policy.ts";
+import { policyDocument } from "./policy-doc.ts";
+import { AUTO_MERGE_POLICY_PATH, AUTO_MERGE_REQUIRED_CI } from "../src/auto-merge-policy.ts";
 import { autoMergeTick } from "../src/auto-merge-tick.ts";
 import { signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
@@ -18,39 +12,7 @@ export const ALLOWED_AUTHORS = ["DrDustinEdwards", "capsid-repo-access[bot]"];
 export const success = <T extends object>(rows: T[]) =>
   rows.map((r) => ({ ...r, conclusion: "success" }));
 
-export const GOOD_POLICY = [
-  "# Auto-merge policy",
-  "",
-  "- version: 1",
-  "- enabled: true",
-  "- namespaces: capsid",
-  "",
-  "## Checks",
-  "",
-  ...POLICY_CHECKS.map((c) => `- \`${c}\` refuses on its own.`),
-  "",
-  "## Allowed PR authors",
-  "",
-  ...ALLOWED_AUTHORS.map((a) => `- author \`${a}\``),
-  "",
-  "## Refused paths",
-  "",
-  ...AUTO_MERGE_REFUSED_PATHS.map((p) => `- path \`${p.pattern.source}\` ${p.why}`),
-  "",
-  ...Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) => [
-    `## Allowed paths, ${ns}`,
-    "",
-    ...rows.map((r) => `- allow \`${r.pattern.source}\` ${r.why}`),
-    "",
-  ]),
-  // loadMergePolicy compares the document's steps with the code's in both directions.
-  ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [
-    `## Required CI, ${ns}`,
-    "",
-    ...rows.map((r) => `- step \`${requiredCiLabel(r)}\``),
-    "",
-  ]),
-].join("\n");
+export const GOOD_POLICY = policyDocument(1, { authors: ALLOWED_AUTHORS });
 
 const NS_ROW = [
   {

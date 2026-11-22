@@ -11,7 +11,6 @@ import {
   unparkJob,
 } from "../src/jobs";
 import { gatherInbox } from "../src/inbox";
-import { grantAgent, type Agent } from "../src/agents";
 import { jobDocPath } from "../src/jobs-schema";
 import { verifySignedBody } from "../src/signed-docs";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
@@ -24,6 +23,9 @@ import {
   DRIVER,
   OTHER,
   at,
+  LATER,
+  SEAT_AGENT,
+  plain,
   NOW,
   jobRow,
   jobsEnv,
@@ -34,17 +36,12 @@ import {
 
 beforeEach(resetJobs);
 
+const PLAIN_DRIVER = plain(DRIVER);
+
 describe("edit", () => {
   // The seat correcting a job nobody is working (src/jobs-edit.ts). The legacy callers
   // above are admin, so the driver here has the admin bit and can_merge taken away, as a
   // minted driver does.
-  const PLAIN_DRIVER: Agent = {
-    ...DRIVER,
-    admin: false,
-    scopes: { ...DRIVER.scopes, flags: { ...DRIVER.scopes.flags, can_merge: false } },
-  };
-  const SEAT_AGENT = grantAgent("write", SEAT);
-  const LATER = at("2026-09-10T12:05:00.000Z");
 
   async function versionCount(id: string): Promise<number> {
     const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_versions WHERE job_id = ?1")
@@ -188,13 +185,6 @@ describe("edit", () => {
 describe("park", () => {
   // The seat setting a queued job aside: wanted, but not now (src/jobs-park.ts). The driver
   // has the admin bit and can_merge taken away, as a minted driver does.
-  const PLAIN_DRIVER: Agent = {
-    ...DRIVER,
-    admin: false,
-    scopes: { ...DRIVER.scopes, flags: { ...DRIVER.scopes.flags, can_merge: false } },
-  };
-  const SEAT_AGENT = grantAgent("write", SEAT);
-  const LATER = at("2026-09-10T12:05:00.000Z");
   const WHY = "comes back when the keys question is answered";
 
   it("a driver is refused, for park and for unpark, and the job is left as it was", async () => {

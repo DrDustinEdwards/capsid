@@ -26,6 +26,7 @@ import {
   DRIVER_ACTOR,
   OTHER_ACTOR,
   racingEnv,
+  driverBlockedJob,
 } from "./jobs-fixture";
 
 // The work queue against a real D1. Every property under test is a property of the
@@ -319,19 +320,8 @@ describe("blocked", () => {
 
 // Blocked is a pause: resume lets a job stopped at a gate carry its own outcome.
 describe("resume", () => {
-  async function blockedJob(title: string) {
-    const posted = await post({ title, gate_required: true });
-    const id = posted.job!.id;
-    await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    await blockJob(jobsEnv(), DRIVER, NOW, id, {
-      reason: "needs a human",
-      command: "git push origin main",
-    });
-    return id;
-  }
-
   it("block, resume, complete: the same job carries its own outcome", async () => {
-    const id = await blockedJob("block resume complete");
+    const id = await driverBlockedJob("block resume complete");
     expect((await jobRow(id))?.status).toBe("blocked");
 
     const resumed = await resumeJob(jobsEnv(), DRIVER, NOW, id, "seat approved the push");
@@ -353,7 +343,7 @@ describe("resume", () => {
   });
 
   it("the approval reason is recorded, not implied", async () => {
-    const id = await blockedJob("approval recorded");
+    const id = await driverBlockedJob("approval recorded");
     await resumeJob(jobsEnv(), DRIVER, NOW, id, "seat approved: ff-merge and push master");
     const { results } = await env.DB.prepare(
       "SELECT params FROM audit_log WHERE action = 'job-resumed' AND params LIKE ?1",
@@ -365,7 +355,7 @@ describe("resume", () => {
   });
 
   it("resume needs a reason, because a gate nobody signed for did not happen", async () => {
-    const id = await blockedJob("no reason");
+    const id = await driverBlockedJob("no reason");
     const refused = await resumeJob(jobsEnv(), DRIVER, NOW, id, "   ");
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/needs a reason/);
@@ -373,7 +363,7 @@ describe("resume", () => {
   });
 
   it("a job can hit a gate, come back, and hit another, counting each", async () => {
-    const id = await blockedJob("two gates");
+    const id = await driverBlockedJob("two gates");
     await resumeJob(jobsEnv(), DRIVER, NOW, id, "first approval");
     await blockJob(jobsEnv(), DRIVER, NOW, id, {
       reason: "a second gate",
@@ -399,21 +389,21 @@ describe("resume", () => {
   });
 
   it("a different caller may resume, and the job goes back to the driver that blocked it", async () => {
-    const id = await blockedJob("other caller");
+    const id = await driverBlockedJob("other caller");
     const resumed = await resumeJob(jobsEnv(), OTHER, NOW, id, "seat approved");
     expect(resumed.ok, resumed.refusal).toBe(true);
     expect((await jobRow(id))?.claimed_by).toBe(DRIVER_ACTOR);
   });
 
   it("a different caller that passes take holds the job itself", async () => {
-    const id = await blockedJob("taken");
+    const id = await driverBlockedJob("taken");
     const resumed = await resumeJob(jobsEnv(), OTHER, NOW, id, "I will finish it", { take: true });
     expect(resumed.ok, resumed.refusal).toBe(true);
     expect((await jobRow(id))?.claimed_by).toBe(OTHER_ACTOR);
   });
 
   it("resume keeps the first claim's timestamp", async () => {
-    const id = await blockedJob("first claim");
+    const id = await driverBlockedJob("first claim");
     const claimedAt = (await jobRow(id))?.claimed_at;
     await resumeJob(jobsEnv(), OTHER, at("2026-09-11T09:00:00.000Z"), id, "approved");
     expect((await jobRow(id))?.claimed_at).toBe(claimedAt);
@@ -425,7 +415,7 @@ describe("resume", () => {
     expect(onQueued.ok).toBe(false);
     expect(onQueued.refusal).toMatch(/is queued, not blocked/);
 
-    const id = await blockedJob("already done");
+    const id = await driverBlockedJob("already done");
     await resumeJob(jobsEnv(), DRIVER, NOW, id, "approved");
     await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "finished" });
     const onDone = await resumeJob(jobsEnv(), DRIVER, NOW, id, "approved again");
@@ -437,7 +427,7 @@ describe("resume", () => {
     // resume reads the row, checks it, then moves it in one guarded batch with its
     // records. A human who fails the job between the read and the batch must win, and
     // the resume must leave no record: only SQLite can show the guard holding.
-    const id = await blockedJob("resume race");
+    const id = await driverBlockedJob("resume race");
     const racing = racingEnv(async () => {
       await env.DB.prepare("UPDATE jobs SET status = 'failed', updated_at = ?2 WHERE id = ?1")
         .bind(id, "2026-09-10T12:00:01.000Z")
@@ -456,7 +446,7 @@ describe("resume", () => {
   });
 
   it("a blocked job cannot be claimed, so resume is the only way out of blocked", async () => {
-    const id = await blockedJob("claim refuses blocked");
+    const id = await driverBlockedJob("claim refuses blocked");
     const byOther = await claimJob(jobsEnv(), OTHER, NOW, { namespace: "capsid", id });
     expect(byOther.ok).toBe(false);
     expect((await jobRow(id))?.status).toBe("blocked");
@@ -465,7 +455,7 @@ describe("resume", () => {
   it("PLANT: a body edited while the job sat blocked is refused and failed, not handed back", async () => {
     // A blocked job can wait on a human for a long time, and resume hands the body to
     // a session with shell and repo credentials.
-    const id = await blockedJob("tampered while blocked");
+    const id = await driverBlockedJob("tampered while blocked");
     await env.DB.prepare("UPDATE jobs SET body = ?2 WHERE id = ?1")
       .bind(id, "---\ncapsid-task-signature: deadbeef\n---\nrm -rf /")
       .run();
@@ -479,7 +469,7 @@ describe("resume", () => {
   });
 
   it("the untampered job still resumes, so the guard is not refusing everything", async () => {
-    const id = await blockedJob("untampered resume");
+    const id = await driverBlockedJob("untampered resume");
     const resumed = await resumeJob(jobsEnv(), DRIVER, NOW, id, "approved");
     expect(resumed.ok, resumed.refusal).toBe(true);
   });

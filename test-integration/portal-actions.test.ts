@@ -5,19 +5,21 @@ import type { PortalDigest, PortalPlan } from "../src/ops-types/views";
 import type { PortalPerformed, PortalPreview } from "../src/ops-types/portal";
 import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight";
 import { PORTAL_ACTIONS } from "../src/controls-base";
-import { PORTAL_PERFORM_PATH, PORTAL_PREVIEW_PATH } from "../src/portal-actions";
+import { PORTAL_PREVIEW_PATH } from "../src/portal-actions";
 import { OVERNIGHT_MODE_KEY } from "../src/overnight";
 import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick";
 import { jobRow } from "./jobs-fixture";
 import {
   CSRF,
-  NOW,
   ACTOR,
   call,
   postedJob,
   auditRows,
   KEYS,
   resetPortal,
+  seedAwaitingPr,
+  performToken,
+  previewAndPerform,
 } from "./portal-actions-fixtures";
 import { CASES } from "./portal-actions-cases";
 
@@ -54,10 +56,7 @@ describe("every action, previewed then performed through the Worker", () => {
       if (params.id)
         expect(await jobRow(params.id), "the preview moved the job").toEqual(jobBefore);
 
-      const performed = await call(PORTAL_PERFORM_PATH, {
-        method: "POST",
-        body: { token: preview.token },
-      });
+      const performed = await performToken(preview.token);
       expect(performed.status, await performed.clone().text()).toBe(200);
       const body = (await performed.json()) as PortalPerformed;
       expect(body.action).toBe(action);
@@ -88,9 +87,7 @@ describe("parked jobs, the Tonight plan and the digest", () => {
         body: { action: "park_job", params: { id, reason: "comes back on Monday" } },
       })
     ).json()) as PortalPreview;
-    const parked = (await (
-      await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: park.token } })
-    ).json()) as PortalPerformed;
+    const parked = (await (await performToken(park.token)).json()) as PortalPerformed;
     const inFeed = parked.feed.live.jobs.find((j) => j.id === id);
     expect(inFeed?.status).toBe("parked");
     expect(inFeed?.parked_reason).toBe("comes back on Monday");
@@ -104,9 +101,7 @@ describe("parked jobs, the Tonight plan and the digest", () => {
       })
     ).json()) as PortalPreview;
     expect(undo.audit).toContain(`portal-undo-unpark_job by ${ACTOR}`);
-    expect(
-      (await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: undo.token } })).status,
-    ).toBe(200);
+    expect((await performToken(undo.token)).status).toBe(200);
     expect((await jobRow(id))?.status).toBe("queued");
   });
 
@@ -129,35 +124,8 @@ describe("parked jobs, the Tonight plan and the digest", () => {
 
 describe("the approval record against real D1", () => {
   it("approving again voids the open approval as replaced, and Undo voids the new one as undone, each with its row", async () => {
-    await env.DB.prepare("DELETE FROM pr_approvals").run();
-    await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
-    await env.APP_KV.put(
-      AWAITING_SEAT_KEY,
-      JSON.stringify([
-        {
-          namespace: "capsid",
-          repo: "example/capsid",
-          number: 41,
-          failed: "path_class",
-          why: "a src change",
-          at: NOW.toISOString(),
-          class: "approve",
-          path_class: "src-routine",
-          class_reasons: [],
-        },
-      ]),
-    );
-    const act = async (params: Record<string, string>) => {
-      const preview = (await (
-        await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "approve_pr", params } })
-      ).json()) as PortalPreview;
-      const performed = await call(PORTAL_PERFORM_PATH, {
-        method: "POST",
-        body: { token: preview.token },
-      });
-      expect(performed.status, await performed.clone().text()).toBe(200);
-      return preview;
-    };
+    await seedAwaitingPr();
+    const act = (params: Record<string, string>) => previewAndPerform("approve_pr", params);
     await act({ namespace: "capsid", prs: "41", shas: "c".repeat(40) });
     const again = await act({ namespace: "capsid", prs: "41", shas: "c".repeat(40) });
     expect(again.audit).toContain(`pr-approval-voided by ${ACTOR}`);
@@ -192,17 +160,7 @@ describe("the automation switches against real D1 and KV", () => {
   });
 
   it("a switch and its Undo write their own click rows: portal-overnight, then portal-undo-overnight, each with its reason", async () => {
-    const flip = async (params: Record<string, string>) => {
-      const preview = (await (
-        await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "overnight", params } })
-      ).json()) as PortalPreview;
-      const performed = await call(PORTAL_PERFORM_PATH, {
-        method: "POST",
-        body: { token: preview.token },
-      });
-      expect(performed.status, await performed.clone().text()).toBe(200);
-      return preview;
-    };
+    const flip = (params: Record<string, string>) => previewAndPerform("overnight", params);
     await flip({ value: "api", reason: "queued jobs are waiting" });
     expect(await env.APP_KV.get(OVERNIGHT_MODE_KEY)).toBe("api");
     const undo = await flip({

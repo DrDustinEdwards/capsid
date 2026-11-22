@@ -3,7 +3,7 @@ import { expect } from "vitest";
 import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
-import { blockJob, claimJob, postJob } from "../src/jobs";
+import { blockJob, claimJob, completeJob, postJob } from "../src/jobs";
 import { signTaskBody } from "../src/signed-docs";
 
 // The job tests' shared setup: the Worker's env with a signing secret, the seat and driver
@@ -139,6 +139,16 @@ export const OTHER_ACTOR = "agent:driver-dddd";
 export const DRIVER = grantAgent("write", DRIVER_ACTOR);
 export const OTHER = grantAgent("write", OTHER_ACTOR);
 
+export const SEAT_AGENT = grantAgent("write", SEAT);
+export const LATER = new Date("2026-09-10T12:05:00.000Z");
+
+/** The agent as a minted driver holds it: no admin bit, no can_merge. */
+export const plain = (agent: Agent): Agent => ({
+  ...agent,
+  admin: false,
+  scopes: { ...agent.scopes, flags: { ...agent.scopes.flags, can_merge: false } },
+});
+
 export const at = (iso: string) => new Date(iso);
 export const NOW = at("2026-09-10T12:00:00.000Z");
 
@@ -199,3 +209,24 @@ export async function resetJobs() {
     .bind("germomics", JSON.stringify([{ repo: "example/germomics", label: "primary" }]))
     .run();
 }
+
+/** A gated job the driver claimed and then blocked, ready to resume. */
+export async function driverBlockedJob(title: string): Promise<string> {
+  const posted = await post({ title, gate_required: true });
+  const id = posted.job!.id;
+  await claimJob(jobsEnv(), DRIVER, NOW, { id });
+  await blockJob(jobsEnv(), DRIVER, NOW, id, {
+    reason: "two questions for the seat",
+    command: "git push origin feat/x",
+  });
+  return id;
+}
+
+/** An env whose first batch runs the driver's complete first, so the transition under test loses the race. */
+export const racingComplete = (id: string) =>
+  racingEnv(async () => {
+    const done = await completeJob(jobsEnv(), DRIVER, NOW, id, {
+      result_summary: "finished first",
+    });
+    expect(done.ok, done.refusal).toBe(true);
+  });

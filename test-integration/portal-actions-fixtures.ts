@@ -7,7 +7,13 @@ import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
 import { APP_ROSTER } from "../src/roster";
 import { blockJob, claimJob, postJob } from "../src/jobs";
-import { PORTAL_CSRF_HEADER } from "../src/portal-actions";
+import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick";
+import {
+  PORTAL_CSRF_HEADER,
+  PORTAL_PERFORM_PATH,
+  PORTAL_PREVIEW_PATH,
+} from "../src/portal-actions";
+import type { PortalPreview } from "../src/ops-types/portal";
 import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY } from "../src/overnight";
 import { BREAKER_THRESHOLD_KEY, breakerResetKey } from "../src/job-breaker";
 import {
@@ -283,3 +289,42 @@ export type Case = {
   params: () => Promise<Record<string, string>>;
   after: (params: Record<string, string>) => Promise<void>;
 };
+
+/** An open approval list holding PR 41 as one the tick classed approve, with the token to read it. */
+export async function seedAwaitingPr(): Promise<void> {
+  await env.DB.prepare("DELETE FROM pr_approvals").run();
+  await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
+  await env.APP_KV.put(
+    AWAITING_SEAT_KEY,
+    JSON.stringify([
+      {
+        namespace: "capsid",
+        repo: "example/capsid",
+        number: 41,
+        failed: "path_class",
+        why: "a src change",
+        at: NOW.toISOString(),
+        class: "approve",
+        path_class: "src-routine",
+        class_reasons: [],
+      },
+    ]),
+  );
+}
+
+/** POST the token a preview returned to perform. */
+export const performToken = (token: string) =>
+  call(PORTAL_PERFORM_PATH, { method: "POST", body: { token } });
+
+/** Preview an action, perform its token, and return the preview. */
+export async function previewAndPerform(
+  action: string,
+  params: Record<string, string>,
+): Promise<PortalPreview> {
+  const preview = (await (
+    await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action, params } })
+  ).json()) as PortalPreview;
+  const performed = await performToken(preview.token);
+  expect(performed.status, await performed.clone().text()).toBe(200);
+  return preview;
+}

@@ -10,7 +10,6 @@ import { LIFTED_KEY, SUSPENDED_KEY } from "../src/merge-units";
 import { LIFTED_KEY as SAFETY_LIFTED_KEY, PAUSED_KEY } from "../src/merge-safety";
 import { jobRow } from "./jobs-fixture";
 import {
-  NOW,
   ACTOR,
   OPERATOR_TOKEN,
   operatorCalls,
@@ -28,7 +27,37 @@ import {
   signedPolicy,
   Case,
   GITHUB_PR,
+  seedAwaitingPr,
 } from "./portal-actions-fixtures";
+
+/** The Worker's signed policy body, after checking its signature is there. */
+async function signedPolicyBody(): Promise<string> {
+  const row = await env.DB.prepare(
+    "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
+  )
+    .bind(AUTO_MERGE_POLICY_PATH)
+    .first<{ body: string }>();
+  const { signature, body } = splitSignedTask(row!.body);
+  expect(signature).toBeTruthy();
+  return body;
+}
+
+/** The newest snapshot of the policy: the version a signing replaced. */
+async function previousPolicyBody(): Promise<string | undefined> {
+  const version = await env.DB.prepare(
+    "SELECT body FROM document_versions WHERE namespace = 'capsid' AND path = ?1 ORDER BY id DESC LIMIT 1",
+  )
+    .bind(AUTO_MERGE_POLICY_PATH)
+    .first<{ body: string }>();
+  return version?.body;
+}
+
+/** The one call the Portal action made to dustinedwards.info's operator API, with the token. */
+function expectOperatorCall(tool: string, args: Record<string, unknown>) {
+  expect(operatorCalls.map((c) => [c.url, c.auth, JSON.parse(c.body)])).toEqual([
+    ["https://dustinedwards.info/api/operator", `Bearer ${OPERATOR_TOKEN}`, { tool, args }],
+  ]);
+}
 
 export const CASES: Record<string, Case> = {
   overnight: {
@@ -168,24 +197,7 @@ export const CASES: Record<string, Case> = {
     // nothing merged (no PUT to GitHub's merge).
     params: async () => {
       githubCalls.length = 0;
-      await env.DB.prepare("DELETE FROM pr_approvals").run();
-      await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
-      await env.APP_KV.put(
-        AWAITING_SEAT_KEY,
-        JSON.stringify([
-          {
-            namespace: "capsid",
-            repo: "example/capsid",
-            number: 41,
-            failed: "path_class",
-            why: "a src change",
-            at: NOW.toISOString(),
-            class: "approve",
-            path_class: "src-routine",
-            class_reasons: [],
-          },
-        ]),
-      );
+      await seedAwaitingPr();
       return { namespace: "capsid", prs: "41", shas: "c".repeat(7), reason: "read the diff" };
     },
     after: async () => {
@@ -345,23 +357,12 @@ export const CASES: Record<string, Case> = {
       return { change: "promote", unit: "capsid/tests", confirm: "8" };
     },
     after: async () => {
-      const row = await env.DB.prepare(
-        "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
-      )
-        .bind(AUTO_MERGE_POLICY_PATH)
-        .first<{ body: string }>();
-      const { signature, body } = splitSignedTask(row!.body);
-      expect(signature).toBeTruthy();
+      const body = await signedPolicyBody();
       expect(body).toMatch(/^- version: 8$/m);
       expect(body).toContain("- unit `capsid / tests`");
       const loaded = await loadMergePolicy(env as unknown as Env);
       expect("policy" in loaded && loaded.policy.units).toEqual(["capsid / tests"]);
-      const version = await env.DB.prepare(
-        "SELECT body FROM document_versions WHERE namespace = 'capsid' AND path = ?1 ORDER BY id DESC LIMIT 1",
-      )
-        .bind(AUTO_MERGE_POLICY_PATH)
-        .first<{ body: string }>();
-      expect(version?.body, "version 7 was not snapshotted").toMatch(/- version: 7/);
+      expect(await previousPolicyBody(), "version 7 was not snapshotted").toMatch(/- version: 7/);
     },
   },
   sign_policy_from_repo: {
@@ -375,22 +376,11 @@ export const CASES: Record<string, Case> = {
       return { confirm: "8" };
     },
     after: async () => {
-      const row = await env.DB.prepare(
-        "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
-      )
-        .bind(AUTO_MERGE_POLICY_PATH)
-        .first<{ body: string }>();
-      const { signature, body } = splitSignedTask(row!.body);
-      expect(signature).toBeTruthy();
+      const body = await signedPolicyBody();
       expect(body).toBe(policyText("8"));
       const loaded = await loadMergePolicy(env as unknown as Env);
       expect("policy" in loaded && loaded.policy.version).toBe("8");
-      const version = await env.DB.prepare(
-        "SELECT body FROM document_versions WHERE namespace = 'capsid' AND path = ?1 ORDER BY id DESC LIMIT 1",
-      )
-        .bind(AUTO_MERGE_POLICY_PATH)
-        .first<{ body: string }>();
-      expect(version?.body, "version 7 was not snapshotted").toMatch(/- version: 7/);
+      expect(await previousPolicyBody(), "version 7 was not snapshotted").toMatch(/- version: 7/);
       const audit = await env.DB.prepare(
         "SELECT params FROM audit_log WHERE action = 'policy-loaded-from-repo' ORDER BY id DESC LIMIT 1",
       ).first<{ params: string }>();
@@ -520,13 +510,7 @@ export const CASES: Record<string, Case> = {
       return { namespace: "dustinedwards" };
     },
     after: async () => {
-      expect(operatorCalls.map((c) => [c.url, c.auth, JSON.parse(c.body)])).toEqual([
-        [
-          "https://dustinedwards.info/api/operator",
-          `Bearer ${OPERATOR_TOKEN}`,
-          { tool: "run_job", args: { backup: true } },
-        ],
-      ]);
+      expectOperatorCall("run_job", { backup: true });
       const row = await env.DB.prepare(
         "SELECT params FROM audit_log WHERE action = 'site-backup' ORDER BY id DESC LIMIT 1",
       ).first<{ params: string }>();
@@ -572,13 +556,7 @@ export const CASES: Record<string, Case> = {
       return { namespace: "dustinedwards", tool: "sync_pages" };
     },
     after: async () => {
-      expect(operatorCalls.map((c) => [c.url, c.auth, JSON.parse(c.body)])).toEqual([
-        [
-          "https://dustinedwards.info/api/operator",
-          `Bearer ${OPERATOR_TOKEN}`,
-          { tool: "sync_pages", args: {} },
-        ],
-      ]);
+      expectOperatorCall("sync_pages", {});
       const row = await env.DB.prepare(
         "SELECT params FROM audit_log WHERE action = 'site-repair' ORDER BY id DESC LIMIT 1",
       ).first<{ params: string }>();

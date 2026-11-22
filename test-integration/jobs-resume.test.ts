@@ -5,7 +5,16 @@ import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { CORRECTION_CAP, RETRY_CAP_REASON, jobDocPath } from "../src/jobs-schema";
 import { MAX_TITLE } from "../src/limits";
-import { post, resetJobs, SEAT, DRIVER, NOW, jobRow, jobsEnv } from "./jobs-fixture";
+import {
+  post,
+  resetJobs,
+  SEAT,
+  DRIVER,
+  NOW,
+  jobRow,
+  jobsEnv,
+  driverBlockedJob,
+} from "./jobs-fixture";
 
 // The work queue against a real D1 (jobs.test.ts): resume, the resume note and the retry cap.
 
@@ -28,19 +37,19 @@ describe("the resume note", () => {
     };
   }
 
-  async function blockedJob(title: string) {
-    const posted = await post({ title, gate_required: true });
-    const id = posted.job!.id;
-    await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    await blockJob(jobsEnv(), DRIVER, NOW, id, {
-      reason: "two questions for the seat",
-      command: "git push origin feat/x",
-    });
-    return id;
+  // The seat releases the job some time later, and a minted driver claims it.
+  async function releasedThenClaimed(id: string) {
+    const later = new Date(NOW.getTime() + 3_600_000);
+    expect((await releaseJob(jobsEnv(), SEAT_AGENT, later, id, "the holder is gone")).ok).toBe(
+      true,
+    );
+    const claimed = await claimJob(jobsEnv(), agentDriver(), later, { namespace: "capsid", id });
+    expect(claimed.ok, claimed.refusal).toBe(true);
+    return claimed;
   }
 
   it("the seat resumes, releases the claim, and a driver's claim carries the seat's note", async () => {
-    const id = await blockedJob("note reaches the next claim");
+    const id = await driverBlockedJob("note reaches the next claim");
     const resumed = await resumeJob(
       jobsEnv(),
       SEAT_AGENT,
@@ -52,19 +61,13 @@ describe("the resume note", () => {
     expect(resumed.resume_note?.reason).toBe("answers: use option B; batches 1 and 2 approved");
     expect(resumed.resume_note?.by).toBe(SEAT);
 
-    const later = new Date(NOW.getTime() + 3_600_000);
-    expect((await releaseJob(jobsEnv(), SEAT_AGENT, later, id, "the holder is gone")).ok).toBe(
-      true,
-    );
-
-    const claimed = await claimJob(jobsEnv(), agentDriver(), later, { namespace: "capsid", id });
-    expect(claimed.ok, claimed.refusal).toBe(true);
+    const claimed = await releasedThenClaimed(id);
     expect(claimed.resume_note?.reason).toBe("answers: use option B; batches 1 and 2 approved");
     expect(claimed.resume_note?.by).toBe(SEAT);
   });
 
   it("the driver the job went back to reads the note from list", async () => {
-    const id = await blockedJob("note reaches the holder");
+    const id = await driverBlockedJob("note reaches the holder");
     await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "ruling: keep the old route");
     const beat = await listJobs(jobsEnv(), { namespace: "capsid", id: id });
     expect(beat.ok, beat.refusal).toBe(true);
@@ -75,7 +78,7 @@ describe("the resume note", () => {
   });
 
   it("the mirrored document carries it, so brief does", async () => {
-    const id = await blockedJob("note in the mirror");
+    const id = await driverBlockedJob("note in the mirror");
     await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "approved the migration");
     const doc = await env.DB.prepare(
       "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
@@ -171,7 +174,7 @@ describe("the resume note", () => {
   // Every resume note, not only the latest (docs/work-queue.md; Track A 2a): an approval
   // given at one resume is still there after the next.
   async function resumedThrice(title: string) {
-    const id = await blockedJob(title);
+    const id = await driverBlockedJob(title);
     for (const reason of [
       "first ruling: use option B",
       "second ruling: keep the old route",
@@ -206,10 +209,7 @@ describe("the resume note", () => {
     const listed = await listJobs(jobsEnv(), { namespace: "capsid", id });
     expect(listed.resume_notes?.map((n) => n.reason)).toEqual(all);
 
-    const later = new Date(NOW.getTime() + 3_600_000);
-    await releaseJob(jobsEnv(), SEAT_AGENT, later, id, "the holder is gone");
-    const claimed = await claimJob(jobsEnv(), agentDriver(), later, { namespace: "capsid", id });
-    expect(claimed.ok, claimed.refusal).toBe(true);
+    const claimed = await releasedThenClaimed(id);
     expect(claimed.resume_notes?.map((n) => n.reason)).toEqual(all);
     expect(claimed.resume_notes?.every((n) => n.signature === "verified")).toBe(true);
   });
@@ -228,7 +228,7 @@ describe("the resume note", () => {
   });
 
   it("the notes are capped at 64 KB, the oldest dropped and counted, the newest always kept", async () => {
-    const id = await blockedJob("notes past the cap");
+    const id = await driverBlockedJob("notes past the cap");
     const big = (n: number) => `ruling ${n}: ` + "x".repeat(15_000);
     for (let n = 1; n <= 6; n++) {
       await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, `note ${n}`, { note: big(n) });
@@ -265,7 +265,7 @@ describe("the resume note", () => {
 
   it("a note longer than a reason reaches resume, claim, list and the mirror in full", async () => {
     expect(LONG_NOTE.length).toBeGreaterThan(MAX_TITLE);
-    const id = await blockedJob("full note reaches everyone");
+    const id = await driverBlockedJob("full note reaches everyone");
     const resumed = await resumeJob(
       jobsEnv(),
       SEAT_AGENT,
@@ -295,12 +295,7 @@ describe("the resume note", () => {
       .first<{ body: string }>();
     expect(doc?.body).toContain(LONG_NOTE);
 
-    const later = new Date(NOW.getTime() + 3_600_000);
-    expect((await releaseJob(jobsEnv(), SEAT_AGENT, later, id, "the holder is gone")).ok).toBe(
-      true,
-    );
-    const claimed = await claimJob(jobsEnv(), agentDriver(), later, { namespace: "capsid", id });
-    expect(claimed.ok, claimed.refusal).toBe(true);
+    const claimed = await releasedThenClaimed(id);
     expect(claimed.resume_note?.note).toBe(LONG_NOTE);
 
     // The mirror rewritten by the claim reads the note back from the audit row.
@@ -313,7 +308,7 @@ describe("the resume note", () => {
   });
 
   it("a resume without a note carries no note", async () => {
-    const id = await blockedJob("no note");
+    const id = await driverBlockedJob("no note");
     const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "one line is enough");
     expect(resumed.resume_note?.note).toBeUndefined();
     expect(
@@ -322,7 +317,7 @@ describe("the resume note", () => {
   });
 
   it("the newest resume wins", async () => {
-    const id = await blockedJob("two resumes");
+    const id = await driverBlockedJob("two resumes");
     await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "first answer");
     await blockJob(jobsEnv(), DRIVER, NOW, id, {
       reason: "a second question",

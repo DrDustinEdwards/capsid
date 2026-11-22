@@ -2,9 +2,9 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { grantAgent } from "../src/agents";
 import type { PortalPreview } from "../src/ops-types/portal";
-import { PORTAL_PERFORM_PATH, PORTAL_PREVIEW_PATH } from "../src/portal-actions";
+import { PORTAL_PREVIEW_PATH } from "../src/portal-actions";
 import { jobRow } from "./jobs-fixture";
-import { call, blockedJob, auditRows, resetPortal } from "./portal-actions-fixtures";
+import { call, blockedJob, auditRows, resetPortal, performToken } from "./portal-actions-fixtures";
 
 // The Portal's job actions through the Worker (portal-actions.test.ts).
 
@@ -23,10 +23,7 @@ describe("the job actions against real D1", () => {
     const preview = (await previewed.json()) as PortalPreview;
     expect(preview.changes[0]).toMatch(/blocked -> queued/);
     expect(preview.changes[0]).toMatch(/shared identity/);
-    const performed = await call(PORTAL_PERFORM_PATH, {
-      method: "POST",
-      body: { token: preview.token },
-    });
+    const performed = await performToken(preview.token);
     expect(performed.status, await performed.clone().text()).toBe(200);
     expect((await jobRow(id))?.status).toBe("queued");
   });
@@ -39,14 +36,9 @@ describe("the job actions against real D1", () => {
         body: { action: "resume_job", params: { id, reason: "approved" } },
       })
     ).json()) as PortalPreview;
-    expect(
-      (await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } })).status,
-    ).toBe(200);
+    expect((await performToken(preview.token)).status).toBe(200);
     const clicks = (await auditRows()).filter((r) => r.action === "portal-resume_job").length;
-    const again = await call(PORTAL_PERFORM_PATH, {
-      method: "POST",
-      body: { token: preview.token },
-    });
+    const again = await performToken(preview.token);
     expect(again.status).toBe(409);
     expect(await again.text()).toMatch(/already used/);
     const fresh = await call(PORTAL_PREVIEW_PATH, {
@@ -96,7 +88,7 @@ describe("the job actions against real D1", () => {
     await env.DB.prepare("UPDATE jobs SET body = ?2 WHERE id = ?1")
       .bind(id, "---\ncapsid-task-signature: deadbeef\n---\ntampered")
       .run();
-    const res = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
+    const res = await performToken(preview.token);
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/signature|does not match its body/i);
     expect((await jobRow(id))?.status).not.toBe("claimed");

@@ -10,12 +10,15 @@ import {
   releaseJob,
   supersedeJob,
 } from "../src/jobs";
-import { grantAgent, type Agent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { loadRecordRows } from "../src/agent-record";
 import { jobDocPath } from "../src/jobs-schema";
 import {
   auditActions,
   racingEnv,
+  racingComplete,
+  plain,
+  SEAT_AGENT,
   post,
   resetJobs,
   SEAT,
@@ -38,14 +41,8 @@ describe("supersede", () => {
   // The legacy callers above are admin, so a holder check tested with them would pass
   // whether or not it existed. These two have the admin bit and can_merge taken away,
   // as a minted driver does.
-  const plain = (agent: Agent): Agent => ({
-    ...agent,
-    admin: false,
-    scopes: { ...agent.scopes, flags: { ...agent.scopes.flags, can_merge: false } },
-  });
   const PLAIN_DRIVER = plain(DRIVER);
   const PLAIN_OTHER = plain(OTHER);
-  const SEAT_AGENT = grantAgent("write", SEAT);
 
   async function outcomeCount(id: string): Promise<number> {
     const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcomes WHERE job_id = ?1")
@@ -60,6 +57,13 @@ describe("supersede", () => {
       .first<{ body: string; status: string }>();
   }
 
+  async function superseded(out: { ok: boolean; refusal?: string }, id: string) {
+    expect(out.ok, out.refusal).toBe(true);
+    const stored = await jobRow(id);
+    expect(stored?.status).toBe("superseded");
+    return stored;
+  }
+
   beforeEach(async () => {
     await env.DB.prepare("DELETE FROM job_outcomes").run();
   });
@@ -71,9 +75,7 @@ describe("supersede", () => {
       reason: "reposted with a corrected body",
       replaced_by: replacement.job!.id,
     });
-    expect(out.ok, out.refusal).toBe(true);
-    const stored = await jobRow(old.job!.id);
-    expect(stored?.status).toBe("superseded");
+    const stored = await superseded(out, old.job!.id);
     expect(stored?.result_summary).toBe(
       `Superseded by ${replacement.job!.id}: reposted with a corrected body`,
     );
@@ -106,9 +108,7 @@ describe("supersede", () => {
     const out = await supersedeJob(jobsEnv(), PLAIN_DRIVER, NOW, old.job!.id, {
       reason: "the seat reordered the queue",
     });
-    expect(out.ok, out.refusal).toBe(true);
-    const stored = await jobRow(old.job!.id);
-    expect(stored?.status).toBe("superseded");
+    const stored = await superseded(out, old.job!.id);
     expect(stored?.claimed_by).toBe(DRIVER_ACTOR);
     expect(await outcomeCount(old.job!.id)).toBe(0);
     expect((await mirror(old.job!.id))!.status).toBe("closed");
@@ -363,12 +363,7 @@ describe("every transition is one guarded batch", () => {
   it("PLANT: an admin fail that loses the race to the driver's complete records nothing", async () => {
     const id = (await post({ title: "admin fail race" })).job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    const racing = racingEnv(async () => {
-      const done = await completeJob(jobsEnv(), DRIVER, NOW, id, {
-        result_summary: "finished first",
-      });
-      expect(done.ok, done.refusal).toBe(true);
-    });
+    const racing = racingComplete(id);
     const failed = await adminFailJob(
       racing,
       grantAgent("write", SEAT),
@@ -397,12 +392,7 @@ describe("every transition is one guarded batch", () => {
   it("PLANT: a release that loses the race to the holder's complete records nothing", async () => {
     const id = (await post({ title: "release race" })).job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    const racing = racingEnv(async () => {
-      const done = await completeJob(jobsEnv(), DRIVER, NOW, id, {
-        result_summary: "finished first",
-      });
-      expect(done.ok, done.refusal).toBe(true);
-    });
+    const racing = racingComplete(id);
     const released = await releaseJob(
       racing,
       grantAgent("write", SEAT),

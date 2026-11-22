@@ -11,10 +11,16 @@ import type {
 import {
   PORTAL_ACTIVITY_PATH,
   PORTAL_NAMESPACES_PATH,
-  PORTAL_PERFORM_PATH,
   PORTAL_PREVIEW_PATH,
 } from "../src/portal-actions";
-import { workerEnv, call, auditRows, resetPortal, siteRow } from "./portal-actions-fixtures";
+import {
+  workerEnv,
+  call,
+  auditRows,
+  resetPortal,
+  siteRow,
+  performToken,
+} from "./portal-actions-fixtures";
 
 // The Portal's project and site actions and reads through the Worker (portal-actions.test.ts).
 
@@ -45,7 +51,7 @@ describe("the project actions against real D1", () => {
     await env.DB.prepare(
       "INSERT INTO documents (namespace, path, title, body) VALUES ('sample-kept', 'later.md', 'Later', 'ipsum')",
     ).run();
-    const res = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
+    const res = await performToken(preview.token);
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/changed since the preview/);
     expect(
@@ -74,7 +80,7 @@ describe("the site actions against real D1", () => {
     await env.DB.prepare(
       "UPDATE ops_sites SET name = 'Foxing (renamed)', revision = revision + 1 WHERE namespace = 'foxing'",
     ).run();
-    const res = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
+    const res = await performToken(preview.token);
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/changed since the preview/);
     expect(await siteRow("foxing")).toMatchObject({
@@ -145,9 +151,7 @@ describe("the site actions against real D1", () => {
       })
     ).json()) as PortalPreview;
     expect(preview.changes.join(" ")).toMatch(/still registered|remove julieedwards/);
-    const performed = (await (
-      await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } })
-    ).json()) as PortalPerformed;
+    const performed = (await (await performToken(preview.token)).json()) as PortalPerformed;
     expect(performed.feed.live.sites.some((s) => s.namespace === "julieedwards")).toBe(false);
     expect(performed.feed.live.sites.some((s) => s.namespace === "capsid")).toBe(true);
   });

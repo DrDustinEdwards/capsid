@@ -1,16 +1,9 @@
 import assert from "node:assert/strict";
+import { policyDocument } from "./policy-doc.ts";
 import { test } from "node:test";
 import { signPolicyDocument } from "../src/policy-sign.ts";
 import { signTaskBody, splitSignedTask, verifySignedBody } from "../src/signed-docs.ts";
-import {
-  loadMergePolicy,
-  AUTO_MERGE_POLICY_PATH,
-  AUTO_MERGE_ALLOWED_PATHS,
-  AUTO_MERGE_REFUSED_PATHS,
-  AUTO_MERGE_REQUIRED_CI,
-  POLICY_CHECKS,
-  requiredCiLabel,
-} from "../src/auto-merge-policy.ts";
+import { loadMergePolicy, AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
 import { COMPOSITES } from "../src/tools/surface.ts";
@@ -24,32 +17,7 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 const SECRET = "test-improve-secret";
 
-const POLICY_BODY = [
-  "# Auto-merge policy",
-  "",
-  "- version: 1",
-  "- enabled: false",
-  "- namespaces: capsid",
-  "",
-  "## Checks",
-  "",
-  ...POLICY_CHECKS.map((c) => `- \`${c}\` refuses on its own.`),
-  "",
-  "- author `DrDustinEdwards`",
-  "",
-  ...AUTO_MERGE_REFUSED_PATHS.map((p) => `- path \`${p.pattern.source}\` ${p.why}`),
-  ...Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) => [
-    `## Allowed paths, ${ns}`,
-    ...rows.map((p) => `- allow \`${p.pattern.source}\` ${p.why}`),
-  ]),
-  ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [
-    `## Required CI, ${ns}`,
-    "",
-    ...rows.map((r) => `- step \`${requiredCiLabel(r)}\``),
-    "",
-  ]),
-  "",
-].join("\n");
+const POLICY_BODY = policyDocument(1, { enabled: false });
 
 // The body the signer committed, read out of the documents upsert it recorded.
 // documentUpsert binds (namespace, path, title, body, ...), so the body is params[3].
