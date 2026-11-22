@@ -384,7 +384,7 @@ const UNGUARDED_EXCEPTIONS: Array<{ site: string; why: string }> = [
     why: "the signed auto-merge policy's own merge on the cron tick, pinned to the judged sha; no caller, audited by systemAudit",
   },
   {
-    site: "controls-perform.ts: managePr",
+    site: "controls-perform-registry.ts: managePr",
     why: "the portal's pr_close control: the owner's signed control token (Access login, no MCP grant); writes its pr-closed audit row",
   },
   {

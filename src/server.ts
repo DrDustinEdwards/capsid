@@ -9,6 +9,7 @@ import { mcpCacheHints } from "@dustinedwards/site-runtime/mcp-server";
 import { defineDocOperations, type ToolCtx, type ToolGrant } from "./tools/docs";
 import { defineLintOperations } from "./tools/lint";
 import { defineRepoOperations } from "./tools/repo";
+import { defineSiteReportOperations } from "./tools/site-reports";
 import { defineStatusOperations } from "./tools/status";
 import { defineJobOperations } from "./tools/jobs";
 import { defineAgentOperations } from "./tools/agents";
@@ -169,6 +170,7 @@ function build(
   defineDocOperations(server, ctx);
   defineLintOperations(server, ctx);
   defineRepoOperations(server, ctx);
+  defineSiteReportOperations(server, ctx);
   defineStatusOperations(server, ctx);
   defineJobOperations(server, ctx);
   defineAgentOperations(server, ctx);
