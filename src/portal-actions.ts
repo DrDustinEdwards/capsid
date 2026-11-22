@@ -7,6 +7,7 @@ import {
   logPortalSignOut,
   type PortalUser,
   portalDisplay,
+  behindGate,
   portalGate,
   portalSessionId,
   portalSignOutCookies,
@@ -202,13 +203,7 @@ export async function handlePortalPerform(
 
 /** GET /portal/api/namespaces: every roster namespace as capsid_read_status action status reports it,
  *  from the same function, so the Portal and the tool agree. */
-export async function handlePortalNamespaces(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalNamespaces = behindGate(async (_request, env, now) => {
   const status = await capsidStatus(env);
   // Each project's repo mapping, so the Projects page can show it and edit it in place.
   const mapped = await env.DB.prepare("SELECT namespace, repos FROM namespaces").all<{
@@ -248,17 +243,11 @@ export async function handlePortalNamespaces(
     })),
   };
   return jsonResponse(body);
-}
+});
 
 /** GET /portal/api/activity?namespace=&actor=: the last audit rows, filtered. ?id=:
  *  that one row, for the Activity drawer. */
-export async function handlePortalActivity(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalActivity = behindGate(async (request, env, now) => {
   const parsed = activityFilterFrom(new URL(request.url));
   if (!parsed.ok) return textResponse(parsed.refusal, 400);
   const filter = parsed.filter;
@@ -270,7 +259,7 @@ export async function handlePortalActivity(
     limit: ACTIVITY_LIMIT,
   };
   return jsonResponse(body);
-}
+});
 
 /** POST /portal/api/sign-out, body {}: end this Portal session on the server
  *  (endPortalSession, so a copied cookie ends too, and other sessions do not) and expire the session and CSRF
@@ -297,13 +286,7 @@ export async function handlePortalSignOut(
 
 /** Any other path under /portal/api/, any method: behind the gate like every Portal
  *  route, then a JSON 404, so a typo in the app never reads the app's own page as data. */
-export async function handlePortalApiNotFound(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalApiNotFound = behindGate(async (request) => {
   const path = new URL(request.url).pathname;
   return jsonResponse({ error: `no Portal route at ${request.method} ${path}` }, 404);
-}
+});

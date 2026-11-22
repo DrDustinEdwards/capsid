@@ -9,7 +9,7 @@
   },
   "copies": {
     "src/github/client.ts": "readKey here names a KV cache key for a GitHub read, not a frontmatter field",
-    "test/portal-actions.test.ts": "its GitHub fake answers GET /pulls/41 (the head sha approve_pr pins), a route devkit's stubGitHub does not have",
+    "test/portal-actions-fixtures.ts": "its GitHub fake answers GET /pulls/41 (the head sha approve_pr pins), a route devkit's stubGitHub does not have",
     "test/repo-tools.test.ts": "manage_pr's cases need the pull request routes (GET and PATCH /pulls/5, PUT /pulls/5/merge, POST /pulls, DELETE of a ref), which devkit's stubGitHub does not have",
     "test-integration/gate-policy-resume.test.ts": "its GitHub fake answers GET /pulls/40 for the job's head sha, a route devkit's stubGitHub does not have",
     "test-integration/portal-actions.test.ts": "its GitHub fake answers GET and PATCH /pulls/41, GET /repos/:repo and a branch DELETE, routes devkit's stubGitHub does not have"

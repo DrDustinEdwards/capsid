@@ -1,8 +1,6 @@
-import type { Env } from "./env";
-import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalMergeUnits } from "./ops-types/views";
 import { REPORT_KEY, readSuspended, type UnitsReport } from "./merge-units";
-import { portalGate } from "./portal-auth";
+import { behindGate } from "./portal-auth";
 import { jsonResponse as json } from "@dustinedwards/site-runtime/http";
 
 // The Portal's Merge units panel (docs/autonomy.md, "Earned promotion and demotion"):
@@ -37,12 +35,6 @@ export async function readMergeUnits(kv: KVNamespace): Promise<PortalMergeUnits>
 }
 
 /** GET /portal/api/merge-units. */
-export async function handlePortalMergeUnits(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalMergeUnits = behindGate(async (_request, env) => {
   return json(await readMergeUnits(env.APP_KV));
-}
+});

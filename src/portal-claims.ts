@@ -1,8 +1,6 @@
-import type { Env } from "./env";
 import { claimsFilterFrom, readClaimsAggregate, readJobClaims } from "./job-claims-read";
-import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "./ops-types/claims";
-import { portalGate } from "./portal-auth";
+import { behindGate } from "./portal-auth";
 import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 
 // The Portal's Claims view: GET /portal/api/claims. The same readers the `capsid_admin_read_claims` tool
@@ -17,13 +15,7 @@ const MAX_JOB_ID = 64;
 
 /** GET /portal/api/claims?job=<id>: one job's claims, evaluations and touches.
  *  GET /portal/api/claims?namespace=&agent=&since=&until=: the per-agent aggregate. */
-export async function handlePortalClaims(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
+export const handlePortalClaims = behindGate(async (request, env, now) => {
   const url = new URL(request.url);
   const id = url.searchParams.get("job")?.trim();
   if (id) {
@@ -46,4 +38,4 @@ export async function handlePortalClaims(
     ...(await readClaimsAggregate(env.DB, parsed.filter)),
   };
   return jsonResponse(body);
-}
+});

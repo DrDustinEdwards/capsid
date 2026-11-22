@@ -1,8 +1,6 @@
 import { jsonResponse } from "@dustinedwards/site-runtime/http";
-import type { Env } from "./env";
-import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalConvergence } from "./ops-types/views";
-import { portalGate } from "./portal-auth";
+import { behindGate } from "./portal-auth";
 import { readConvergence } from "./site-convergence";
 
 // The Portal's convergence view: GET /portal/api/convergence. Each site
@@ -16,17 +14,12 @@ import { readConvergence } from "./site-convergence";
 export const PORTAL_CONVERGENCE_PATH = "/portal/api/convergence";
 
 /** GET /portal/api/convergence: every opted-in site's convergence, read now. */
-export async function handlePortalConvergence(
-  request: Request,
-  env: Env,
-  now: Date = new Date(),
-  fetchImpl: typeof fetch = fetch,
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
-  const body: PortalConvergence = {
-    generated: now.toISOString(),
-    sites: await readConvergence(env, fetchImpl, now),
-  };
-  return jsonResponse(body);
-}
+export const handlePortalConvergence = behindGate(
+  async (_request, env, now, fetchImpl: typeof fetch = fetch) => {
+    const body: PortalConvergence = {
+      generated: now.toISOString(),
+      sites: await readConvergence(env, fetchImpl, now),
+    };
+    return jsonResponse(body);
+  },
+);

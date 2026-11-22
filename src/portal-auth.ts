@@ -379,6 +379,22 @@ export async function portalGate(
   return { ok: true, user };
 }
 
+/** A Portal API read behind the gate: `run` is called only once the administrator is signed in,
+ *  and a request that is not gets the gate's own response. */
+export function behindGate<A extends unknown[]>(
+  run: (request: Request, env: Env, now: Date, ...rest: A) => Promise<Response>,
+) {
+  return async (
+    request: Request,
+    env: Env,
+    now: Date = new Date(),
+    ...rest: A
+  ): Promise<Response> => {
+    const gate = await portalGate(request, env, now, PORTAL_PREFIX);
+    return gate.ok ? run(request, env, now, ...rest) : gate.response;
+  };
+}
+
 // The address a Portal request came from, for its audit row. Cloudflare's edge sets
 // CF-Connecting-IP on every request and replaces any value a client sends, so it is
 // the visitor's address. A value that is not an IPv4 or IPv6 address is recorded as
