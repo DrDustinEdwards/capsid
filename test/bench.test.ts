@@ -7,7 +7,7 @@ import {
   orderRefusal,
   slotAt,
   slotsDone,
-} from "../src/bench.ts";
+} from "../src/bench-slots.ts";
 import {
   parseDrawRequest,
   parseScoreRequest,
@@ -325,14 +325,9 @@ test("PLANT: a start reads earlier runs as they stood at its start (Grok audit 2
     { slot: 1, attempt: 2 },
   );
   // The start takes the slot from slotAt, and nothing else asks nextSlot.
-  const src = sourceFile("bench.ts");
-  const start = src.slice(
-    src.indexOf("export async function handleBenchStart"),
-    src.indexOf("export async function handleBenchScore"),
-  );
-  assert.match(start, /\bslotAt\(/);
+  assert.match(sourceFile("bench.ts"), /\bslotAt\(/);
   assert.equal(
-    [...src.matchAll(/\bnextSlot\(/g)].length,
+    [...sourceFile("bench-slots.ts").matchAll(/\bnextSlot\(/g)].length,
     2,
     "nextSlot is defined once and called only from slotAt",
   );

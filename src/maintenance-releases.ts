@@ -3,7 +3,8 @@ import type { Env } from "./env";
 import { ghFetch, getDefaultBranch } from "./github/client";
 import { createTag, publishRelease, releaseNotes } from "./github/releases";
 import type { MaintenanceItem } from "./maintenance";
-import { readRootManifest, readSharedConfig, releaseDecision } from "./shared-code";
+import { readSharedConfig, releaseDecision } from "./shared-code";
+import { readRootManifest } from "./shared-code-read";
 import { auditStatement } from "./store-guards";
 import { fromBase64Text } from "@dustinedwards/site-runtime/encoding";
 

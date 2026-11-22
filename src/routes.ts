@@ -16,11 +16,10 @@ import {
   BENCH_START_PATH,
   BENCH_TASKS_PATH,
   handleBenchDraw,
-  handleBenchRepro,
-  handleBenchScore,
   handleBenchStart,
   handleBenchTasks,
 } from "./bench";
+import { handleBenchRepro, handleBenchScore } from "./bench-score";
 import { resolveAgent } from "./agents";
 import { checkScope } from "./scope";
 import { gatherInbox, restrictInbox } from "./inbox";
@@ -51,7 +50,7 @@ import {
   verifyBackupCredentialRequest,
 } from "./signed-requests";
 import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_REPORT_PATH, parseOffaccountReport } from "./offaccount";
-import type { OffaccountReport } from "./watcher-detect";
+import type { OffaccountReport } from "./watcher-offaccount";
 import { handleHealth } from "./health";
 import { handlePortalApp } from "./portal-app";
 import { PORTAL_HOST } from "./portal-host";

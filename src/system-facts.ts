@@ -3,7 +3,7 @@ import { listInstalledRepos, type InstalledRepo } from "./github/client";
 import type { OpsMaintenanceItem } from "./ops-types/views";
 import type { SharedCodeView } from "./ops-types/feed";
 import { bundledModel, PUBLIC_VERSIONS_KEY } from "./public-data";
-import { readSharedCode } from "./shared-code";
+import { readSharedCode } from "./shared-code-read";
 import type { SystemModel } from "./system-model";
 import {
   FACTS_BEHIND_KEY,

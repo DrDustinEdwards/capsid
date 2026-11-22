@@ -1,6 +1,6 @@
 import { packageHistory, readPackageRow, type FetchLike } from "./ops-packages";
 import { behindGate } from "./portal-auth";
-import { readSharedCode } from "./shared-code";
+import { readSharedCode } from "./shared-code-read";
 import { readCompleteness } from "./completeness";
 import { readResources } from "./system-facts-store";
 import { textResponse, jsonResponse } from "@dustinedwards/site-runtime/http";

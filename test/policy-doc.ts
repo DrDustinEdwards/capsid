@@ -4,7 +4,7 @@ import {
   AUTO_MERGE_REQUIRED_CI,
   POLICY_CHECKS,
   requiredCiLabel,
-} from "../src/auto-merge-policy.ts";
+} from "../src/auto-merge-policy";
 
 /** A policy document that loadMergePolicy accepts: the code's own checks, paths and CI steps. */
 export const policyDocument = (

@@ -11,12 +11,10 @@ import {
   planResume,
   readPaused,
   resumeNamespace,
-  revertsTick,
-  REVERTS_STAMP_KEY,
-  revertTargets,
   type AuditEvidence,
   type OutcomeEvidence,
 } from "../src/merge-safety.ts";
+import { revertsTick, REVERTS_STAMP_KEY, revertTargets } from "../src/merge-reverts.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // The auto-merge safety meter and shutoff (src/merge-safety.ts): what a revert names,

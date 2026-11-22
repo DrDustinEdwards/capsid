@@ -16,16 +16,10 @@ import {
 import type { PortalPreview } from "../src/ops-types/portal";
 import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY } from "../src/overnight";
 import { BREAKER_THRESHOLD_KEY, breakerResetKey } from "../src/job-breaker";
-import {
-  AUTO_MERGE_ALLOWED_PATHS,
-  AUTO_MERGE_POLICY_PATH,
-  AUTO_MERGE_REFUSED_PATHS,
-  AUTO_MERGE_REQUIRED_CI,
-  POLICY_CHECKS,
-  requiredCiLabel,
-} from "../src/auto-merge-policy";
+import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy";
 import { policyPin, policyPinKey, signTaskBody } from "../src/signed-docs";
 import { seedCapsidNamespace } from "./jobs-fixture";
+import { policyDocument } from "../test/policy-doc";
 
 // The Portal action tests' shared setup (portal-actions.test.ts): the Worker's env, the stubbed fetch, the job builders and the reset.
 
@@ -234,44 +228,9 @@ export async function siteRow(namespace: string) {
     .first<Record<string, unknown>>();
 }
 
-// A signed auto-merge policy that agrees with the code, at version 7 (as shipped since #367), and its pin, as a
-// Worker that has loaded it before holds them: for sign_policy_change.
-export const policyText = (version: string): string =>
-  [
-    "# Auto-merge policy",
-    "",
-    `- version: ${version}`,
-    "- enabled: true",
-    "- namespaces: capsid",
-    "",
-    "## Checks",
-    "",
-    ...POLICY_CHECKS.map((c) => `- \`${c}\` refuses on its own.`),
-    "",
-    "## Allowed PR authors",
-    "",
-    "- author `DrDustinEdwards`",
-    "",
-    "## Refused paths",
-    "",
-    ...AUTO_MERGE_REFUSED_PATHS.map((p) => `- path \`${p.pattern.source}\` ${p.why}`),
-    "",
-    ...Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) => [
-      `## Allowed paths, ${ns}`,
-      "",
-      ...rows.map((r) => `- allow \`${r.pattern.source}\` ${r.why}`),
-      "",
-    ]),
-    ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [
-      `## Required CI, ${ns}`,
-      "",
-      ...rows.map((r) => `- step \`${requiredCiLabel(r)}\``),
-      "",
-    ]),
-  ].join("\n");
-
+// A signed auto-merge policy at version 7 (as shipped since #367), and its pin, as a Worker that has loaded it before holds them: for sign_policy_change.
 export async function signedPolicy(): Promise<void> {
-  const body = policyText("7");
+  const body = policyDocument("7");
   const secret = (env as unknown as { IMPROVE_SCORE_SECRET: string }).IMPROVE_SCORE_SECRET;
   await env.DB.prepare("DELETE FROM documents WHERE namespace = 'capsid' AND path = ?1")
     .bind(AUTO_MERGE_POLICY_PATH)

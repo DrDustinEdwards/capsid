@@ -11,7 +11,7 @@ import { operatorRefusal, runCapsidJob } from "./site-jobs";
 import { takeLimit } from "./site-repair";
 import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";
-import { parseDumpStamp, type OffaccountReport } from "./watcher-detect";
+import { parseDumpStamp, type OffaccountReport } from "./watcher-offaccount";
 
 // BACKUPS FOR EVERY SITE, IN ONE PLACE checking the
 // backups and backing up now are Capsid Admin's, not a tool on each site's own admin MCP.

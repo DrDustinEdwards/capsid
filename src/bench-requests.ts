@@ -1,3 +1,5 @@
+import type { Env } from "./env";
+import { signedRequestBody, verifyBenchRequest } from "./signed-requests";
 import { BENCH_NAMESPACE } from "./bench-run-key";
 
 // The bench endpoints' request bodies (src/bench.ts serves them): each one parsed and
@@ -6,7 +8,7 @@ import { BENCH_NAMESPACE } from "./bench-run-key";
 
 // The replay scope in improve_jti. A colon, which no namespace name may hold, so it
 // can never collide with a roster namespace's scope.
-export const JTI_SCOPE = "bench:";
+const JTI_SCOPE = "bench:";
 
 const SOURCES = ["swe-rebench", "swe-bench-live", "own"] as const;
 const SPLITS = ["pilot", "full", "excluded"] as const;
@@ -474,4 +476,22 @@ export function runOutcome(
   // The claim file's verdict, the same for every arm. No claim is not a claim of done.
   const claimed = report.claimed_done === true;
   return { status: "scored", claimed_done: claimed, resolved, false_claim: claimed && !resolved };
+}
+
+// The shared front of every bench endpoint (signedRequestBody, src/signed-requests.ts),
+// against the bench key and under the bench's jti scope.
+export function signedBody<T extends { jti: string }>(
+  request: Request,
+  env: Env,
+  event: string,
+  parse: (body: string) => ({ ok: true } & T) | Refusal,
+): Promise<{ ok: true; value: T } | { ok: false; response: Response }> {
+  return signedRequestBody(request, {
+    headers: "Bench",
+    verify: (signed, now) => verifyBenchRequest(env, signed, now),
+    db: env.DB,
+    scope: JTI_SCOPE,
+    event,
+    parse,
+  });
 }

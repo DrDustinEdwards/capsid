@@ -2,11 +2,8 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { IMPROVE_OVERRIDE_FLAGS } from "../scope";
 import { surfaceOf } from "./surface";
-import {
-  NAMESPACE_DELETE_MAX_DOCUMENTS,
-  performNamespaceDelete,
-  previewNamespaceDelete,
-} from "../namespace-delete";
+import { NAMESPACE_DELETE_MAX_DOCUMENTS } from "../namespace-delete";
+import { performNamespaceDelete, previewNamespaceDelete } from "../namespace-delete-perform";
 import { registerNamespace, registerRepos, updateNamespace, updateRepos } from "../namespace-admin";
 import { driverMintInstruction } from "../agents-schema";
 import { bounded, MAX_CONFIRM_TOKEN, MAX_REPO_SELECTOR, MAX_REPOS_JSON, nsName } from "../limits";
