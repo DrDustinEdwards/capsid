@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { parsePrUrl } from "@dustinedwards/site-runtime/github";
 import { ghFetch, resolveRepo } from "./github/client";
-import { autoResumeJob, MERGE_RESUME_ACTOR } from "./jobs-seat";
+import { autoResumeJob, MERGE_RESUME_ACTOR } from "./jobs-seat-auto";
 import { readJob } from "./jobs-transition";
 import { prUrlsFromJob } from "./outcome-prs";
 import {

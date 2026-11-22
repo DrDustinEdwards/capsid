@@ -128,7 +128,7 @@ export function prHoldTitle(
 // seat had applied, or a job whose pull requests had merged). Two facts the Worker already holds settle it: every pull request it names is
 // merged or closed, as the merge-resume step last read them after the job last changed
 // (src/stale-jobs.ts, the same test as the stale view's prs-settled), or every migration
-// file its block names (the command is in its summary, src/jobs-holder.ts) is in d1_migrations,
+// file its block names (the command is in its summary, src/jobs-holder-block.ts) is in d1_migrations,
 // or every manual step its "check:" lines name was seen by the watcher's last pass after the
 // job last changed (src/manual-steps.ts, the stale view's steps-seen). Such a job stays
 // blocked and shows in the stale view, where it is closed; the inbox leaves it out.
@@ -165,7 +165,7 @@ export async function appliedMigrations(db: D1Database): Promise<Set<string> | n
 }
 
 /** A blocked job as an inbox item. A block that asks a question is marked in its summary
- *  (src/jobs-holder.ts), and it is the kind that most needs a person's words. */
+ *  (src/jobs-holder-block.ts), and it is the kind that most needs a person's words. */
 export function blockedJobItem(job: {
   id: string;
   title: string;

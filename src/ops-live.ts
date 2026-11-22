@@ -5,7 +5,7 @@ import { readSafetyReport } from "./merge-safety";
 import type { Env } from "./env";
 import { agentSummaries, type AgentSummary } from "./status";
 import { APP_ROSTER } from "./roster";
-import { commandFromSummary, isQuestionSummary, resumeMarkerIn } from "./jobs-holder";
+import { commandFromSummary, isQuestionSummary, resumeMarkerIn } from "./jobs-holder-block";
 import { checkJobText, type SignatureCheck } from "./job-signing";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { readSiteConfig } from "./ops-sites";

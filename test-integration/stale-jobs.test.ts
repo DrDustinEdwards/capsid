@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import type { Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
-import { MERGE_RESUME_ACTOR } from "../src/jobs-seat";
+import { MERGE_RESUME_ACTOR } from "../src/jobs-seat-auto";
 import { mergeResumeTick } from "../src/merge-resume";
 import worker from "../src/index";
 import type { Env } from "../src/env";

@@ -31,8 +31,13 @@ const MIGRATIONS_DIR = join(import.meta.dirname, "..", "migrations");
 const JOB_MODULES = [
   "jobs.ts",
   "jobs-claim.ts",
+  "jobs-claim-list.ts",
   "jobs-holder.ts",
+  "jobs-holder-block.ts",
   "jobs-seat.ts",
+  "jobs-seat-auto.ts",
+  "jobs-seat-supersede.ts",
+  "jobs-seat-resume.ts",
   "jobs-mirror.ts",
   "jobs-transition.ts",
   "jobs-edit.ts",

@@ -1,7 +1,8 @@
 import type { Env } from "./env";
 import type { Agent } from "./agents";
 import { noFlags } from "./agents-schema";
-import { adminFailJob, supersedeJob, workRecorded } from "./jobs-seat";
+import { adminFailJob } from "./jobs-seat";
+import { supersedeJob, workRecorded } from "./jobs-seat-supersede";
 import { readJob } from "./jobs-transition";
 import { auditStatement, isMissingRowAbort, requireBenchRunRunning } from "./store-guards";
 import { textResponse } from "@dustinedwards/site-runtime/http";

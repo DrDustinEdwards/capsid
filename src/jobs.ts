@@ -1,4 +1,4 @@
-import { isQuestionSummary } from "./jobs-holder";
+import { isQuestionSummary } from "./jobs-holder-block";
 import { checkJobText, type SignatureCheck } from "./job-signing";
 
 // The work queue. The seat posts a job from a chat; a driver session on a machine claims it,
@@ -14,23 +14,25 @@ import { checkJobText, type SignatureCheck } from "./job-signing";
 // rewritten in the same batch as every transition, so a reader who found the job through
 // capsid_start_session or capsid_find_docs sees the table's state. It is a projection.
 //
-// Split by who acts: jobs-claim.ts posts, lists and claims; jobs-holder.ts the claiming
+// Split by who acts: jobs-claim.ts posts and claims (jobs-claim-list.ts lists); jobs-holder.ts the claiming
 // driver's transitions; jobs-seat.ts those on a job the caller does not hold; jobs-edit.ts and
 // jobs-park.ts the seat's edit and parking; jobs-begin.ts the started label; jobs-mirror.ts the
 // mirror and audit row; jobs-transition.ts what they share. This module is the one others import
 // from, and keeps the capsid_read_status action status summary.
 
-export { claimJob, listJobs, postJob } from "./jobs-claim";
-export { blockJob, commandFromSummary, completeJob, failJob, RESUME_MARKER } from "./jobs-holder";
+export { claimJob, postJob } from "./jobs-claim";
+export { listJobs } from "./jobs-claim-list";
+export { completeJob } from "./jobs-holder";
+export { blockJob, commandFromSummary, failJob, RESUME_MARKER } from "./jobs-holder-block";
 export {
   adminFailJob,
   completeAsCaller,
   failAsCaller,
   recordAsCaller,
   releaseJob,
-  resumeJob,
-  supersedeJob,
 } from "./jobs-seat";
+export { resumeJob } from "./jobs-seat-resume";
+export { supersedeJob } from "./jobs-seat-supersede";
 export { editJob, jobVersions } from "./jobs-edit";
 export { parkJob, returnDueParked, unparkJob } from "./jobs-park";
 export { beginJob } from "./jobs-begin";
