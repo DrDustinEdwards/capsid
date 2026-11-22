@@ -4,7 +4,7 @@ import worker from "../src/index";
 import { portalSessionCookie } from "../src/portal-auth";
 import { bundledModel } from "../src/public-data";
 import { PORTAL_SHARED_CODE_PATH } from "../src/portal-packages";
-import { SHARED_CODE_CACHE_KEY } from "../src/shared-code";
+import { SHARED_CODE_CACHE_KEY } from "../src/shared-code-read";
 import type { SharedCodeView } from "../src/ops-types/feed";
 
 // The Shared code view's route through the Worker, against the D1 the migrations build:

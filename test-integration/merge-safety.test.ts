@@ -1,14 +1,8 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import {
-  PAUSED_KEY,
-  readSafetyReport,
-  recordOutcomeReverts,
-  recordReverts,
-  REPORT_KEY,
-  safetyTick,
-} from "../src/merge-safety";
+import { PAUSED_KEY, readSafetyReport, REPORT_KEY, safetyTick } from "../src/merge-safety";
+import { recordOutcomeReverts, recordReverts } from "../src/merge-reverts";
 import { readModelLearning } from "../src/model-learning";
 import { readUnitEvidence, SUSPENDED_KEY, unitsTick } from "../src/merge-units";
 import { seedCapsidNamespace } from "./jobs-fixture";

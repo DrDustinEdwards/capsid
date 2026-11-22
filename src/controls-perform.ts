@@ -20,7 +20,7 @@ import {
   updateNamespace,
   updateRepos,
 } from "./namespace-admin";
-import { deleteAsPlanned } from "./namespace-delete";
+import { deleteAsPlanned } from "./namespace-delete-perform";
 import { setSiteKey } from "./site-key";
 import type { Env } from "./env";
 import { managePr } from "./github";

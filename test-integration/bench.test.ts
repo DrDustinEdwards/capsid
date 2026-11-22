@@ -1,6 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { BENCH_ENABLED_KEY, BENCH_MAX_RUNNING, BENCH_REPEATS } from "../src/bench";
+import { BENCH_ENABLED_KEY, BENCH_MAX_RUNNING } from "../src/bench";
+import { BENCH_REPEATS } from "../src/bench-slots";
 
 // The paired comparison's three signed endpoints (src/bench.ts) against a real D1 and
 // KV: the task freeze, the off switch, the running cap's single-statement INSERT, the

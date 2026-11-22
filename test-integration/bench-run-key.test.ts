@@ -1,7 +1,8 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { BENCH_CLOSE_REASON, BENCH_ENABLED_KEY } from "../src/bench";
+import { BENCH_ENABLED_KEY } from "../src/bench";
+import { BENCH_CLOSE_REASON } from "../src/bench-score";
 import { breakerState } from "../src/job-breaker";
 import { runJobTitle } from "../src/bench-run-key";
 import { grantAgent, resolveAgent, type Agent } from "../src/agents";

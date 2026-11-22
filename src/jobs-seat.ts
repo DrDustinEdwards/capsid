@@ -55,7 +55,7 @@ type PrUrl = NonNullable<ReturnType<typeof parsePrUrl>>;
 // another driver's job. A finished job is refused, not rewritten.
 //
 // `opts.extra` rides in the same guarded batch; `opts.outcome: false` writes no outcome
-// row, for a fail that is not the holder's (src/bench.ts finishBenchRun).
+// row, for a fail that is not the holder's (src/bench-score.ts finishBenchRun).
 export async function adminFailJob(
   env: Env,
   agent: Agent,
@@ -442,7 +442,7 @@ export function workRecorded(job: JobRow): string | null {
 }
 
 // `extra` rides in the same guarded batch, so a caller's own write commits only with the
-// supersede (the bench score step, src/bench.ts finishBenchRun).
+// supersede (the bench score step, src/bench-score.ts finishBenchRun).
 export async function supersedeJob(
   env: Env,
   agent: Agent,

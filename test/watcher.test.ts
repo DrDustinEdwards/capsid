@@ -31,12 +31,14 @@ import {
   ciFindings,
   healthFindings,
   statusFindings,
+  type Finding,
+  CI_RED_HOURS,
+} from "../src/watcher-detect.ts";
+import {
   offaccountFindings,
   offaccountDrillFindings,
   offaccountCoverageFindings,
-  type Finding,
-} from "../src/watcher-detect.ts";
-import { CI_RED_HOURS } from "../src/watcher-detect.ts";
+} from "../src/watcher-offaccount.ts";
 
 // A watcher that cannot fix anything.
 //

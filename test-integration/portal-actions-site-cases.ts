@@ -4,6 +4,7 @@ import type { Env } from "../src/env";
 import { breakerResetKey } from "../src/job-breaker";
 import { AUTO_MERGE_POLICY_PATH, loadMergePolicy } from "../src/auto-merge-policy";
 import { splitSignedTask } from "../src/signed-docs";
+import { policyDocument } from "../test/policy-doc";
 import { LIFTED_KEY, SUSPENDED_KEY } from "../src/merge-units";
 import { LIFTED_KEY as SAFETY_LIFTED_KEY, PAUSED_KEY } from "../src/merge-safety";
 import {
@@ -14,7 +15,6 @@ import {
   auditRows,
   packageRow,
   siteRow,
-  policyText,
   signedPolicy,
   Case,
 } from "./portal-actions-fixtures";
@@ -152,12 +152,12 @@ export const SITE_CASES: Record<string, Case> = {
       await signedPolicy();
       // The App's token for the repo, as pr_close seeds it, and the file the repo holds.
       await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
-      repo.policy = policyText("8");
+      repo.policy = policyDocument("8");
       return { confirm: "8" };
     },
     after: async () => {
       const body = await signedPolicyBody();
-      expect(body).toBe(policyText("8"));
+      expect(body).toBe(policyDocument("8"));
       const loaded = await loadMergePolicy(env as unknown as Env);
       expect("policy" in loaded && loaded.policy.version).toBe("8");
       expect(await previousPolicyBody(), "version 7 was not snapshotted").toMatch(/- version: 7/);

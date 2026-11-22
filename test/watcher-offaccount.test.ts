@@ -10,7 +10,7 @@ import {
   offaccountFindings,
   parseDumpStamp,
   type OffaccountReport,
-} from "../src/watcher-detect.ts";
+} from "../src/watcher-offaccount.ts";
 import {
   OFFACCOUNT_SITES,
   parseOffaccountReport,

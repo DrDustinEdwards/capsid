@@ -36,13 +36,6 @@ import {
   deployVerdict,
   healthFindings,
   statusFindings,
-  BACKUPS_REPO_LABEL,
-  type OffaccountReport,
-  type WorkflowRun,
-  offaccountFindings,
-  offaccountDrillFindings,
-  offaccountCoverageFindings,
-  parseDumpStamp,
   type CiRun,
   ciFindings,
   siteMapFindings,
@@ -54,13 +47,18 @@ import {
   siteErrorFindings,
   siteCpuFindings,
 } from "./watcher-detect";
+import {
+  BACKUPS_REPO_LABEL,
+  type OffaccountReport,
+  type WorkflowRun,
+  offaccountFindings,
+  offaccountDrillFindings,
+  offaccountCoverageFindings,
+  parseDumpStamp,
+} from "./watcher-offaccount";
 
-// The watcher's reads (src/watcher.ts runs the pass): every surface it checks, read
-// once per pass and turned into findings by src/watcher-detect.ts.
-//
-// Every read is wrapped so one failing surface does not stop the others being
-// checked. A watcher that goes silent because GitHub was slow is worse than one that
-// reports three of its four checks, because silence reads as health.
+// The watcher's reads (src/watcher.ts runs the pass), turned into findings by src/watcher-detect.ts.
+// Every read is wrapped so one failing surface does not stop the others: silence reads as health.
 
 // How many reads of one roster run together: the pass waits on GitHub and Cloudflare, so
 // one at a time spent most of the tick's four minutes (src/map-limit.ts).
