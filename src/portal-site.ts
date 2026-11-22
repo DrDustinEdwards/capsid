@@ -3,7 +3,6 @@ import type { Env } from "./env";
 import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 import { namespaceNameRefusal } from "./namespace-admin";
 import { cloudflareCredentials, type FetchLike } from "./ops-cloudflare";
-import { OPS_RETURN_TO } from "./ops-feed";
 import { readSiteRow, sitesFrom } from "./ops-sites";
 import type {
   BingSearchData,
@@ -21,7 +20,7 @@ import type {
   TrafficWebVitals,
   WorkersBuild,
 } from "./ops-types/views";
-import { behindGate, portalGate } from "./portal-auth";
+import { behindGate } from "./portal-auth";
 import { searchConsole } from "./search-console";
 import { MAX_TRAFFIC_DAYS, siteTraffic } from "./site-traffic";
 import { BUILDS_DEFAULT, BUILDS_MAX, buildLogs, listBuilds } from "./workers-builds";
@@ -466,23 +465,24 @@ export const handlePortalSiteSearch = behindGate(async (request, env, now) => {
 
 /** A namespace read with one whole-number parameter (days, limit): the gate, the namespace
  *  and the number, each refused with its reason, then the read. */
-async function countedRead(
-  request: Request,
-  env: Env,
-  now: Date,
-  param: { name: string; max: number; fallback: number },
-  read: (namespace: string, n: number) => Promise<unknown>,
-): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
-  const url = new URL(request.url);
-  const ns = namespaceParam(url);
-  if (!ns.ok) return ns.response;
-  const n = wholeParam(url, param.name, param.max, param.fallback);
-  if (n === null)
-    return textResponse(`${param.name} must be a whole number from 1 to ${param.max}.`, 400);
-  return jsonResponse(await read(ns.namespace, n));
-}
+const countedRead = behindGate(
+  async (
+    request,
+    _env,
+    _now,
+    _user,
+    param: { name: string; max: number; fallback: number },
+    read: (namespace: string, n: number) => Promise<unknown>,
+  ) => {
+    const url = new URL(request.url);
+    const ns = namespaceParam(url);
+    if (!ns.ok) return ns.response;
+    const n = wholeParam(url, param.name, param.max, param.fallback);
+    if (n === null)
+      return textResponse(`${param.name} must be a whole number from 1 to ${param.max}.`, 400);
+    return jsonResponse(await read(ns.namespace, n));
+  },
+);
 
 /** GET /portal/api/site-traffic?namespace=&days=. */
 export function handlePortalSiteTraffic(

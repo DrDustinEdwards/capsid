@@ -6,22 +6,21 @@ import { heading, proseOnly } from "./job-body-check";
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { parsePrUrl, PR_URL_SOURCE } from "@dustinedwards/site-runtime/github";
 // The third job body check (src/job-body-check.ts): a body that states a pull request is
-// merged, a version is tagged or a package version is published is checked against GitHub
-// and npm at post and edit, and refused when what Capsid reads says otherwise. The case:
-// a seat said a package version was on npm while it was only staged, and the session
-// built on a release that did not exist.
+// merged, a version is tagged or a package version is published is checked against GitHub and
+// npm at post and edit, and refused when what Capsid reads says otherwise (a seat once said a
+// version was on npm while it was only staged, and the session built on a release that did not
+// exist).
 //
-// The parser is deliberately narrow, because a false refusal costs more than a miss. It
-// reads only prose (proseOnly: code blocks, fences and inline code are exempt), skips the
-// DONE WHEN and OUT OF SCOPE parts (they state targets and exclusions, not facts), block
-// quotes and text in double quotes, and any sentence that is a question or carries a word
-// of plan, condition, negation or report ("once", "will", "not", "said", ...). What is left
-// is a claim stated as done: "#12 is merged", "merged #12", "tagged v1.2.0",
-// "enarratio@0.3.0 is published", "Enarratio 0.3.0 is on npm".
+// The parser is deliberately narrow, because a false refusal costs more than a miss. It reads
+// only prose (code blocks, fences and inline code are exempt), skips the DONE WHEN and OUT OF
+// SCOPE parts, block quotes and double-quoted text, and any sentence that is a question or
+// carries a word of plan, condition, negation or report ("once", "will", "not", "said"). What
+// is left is a claim stated as done: "#12 is merged", "tagged v1.2.0", "enarratio@0.3.0 is
+// published", "Enarratio 0.3.0 is on npm".
 //
-// A claim Capsid could not check (a read failed, the repo is not one the namespace maps,
-// the package is not known) is accepted with a warning that says so, never refused. At most
-// MAX_CLAIMS claims and MAX_READS network reads are spent on one body.
+// A claim Capsid could not check (a read failed, the repo is not mapped, the package is not
+// known) is accepted with a warning, never refused. At most MAX_CLAIMS claims and MAX_READS
+// network reads are spent on one body.
 
 const MAX_CLAIMS = 10;
 const MAX_READS = 20;

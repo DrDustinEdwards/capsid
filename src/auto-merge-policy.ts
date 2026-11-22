@@ -4,47 +4,35 @@ import { onRoster } from "./roster";
 import { isMoneyPath } from "./scope";
 import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./signed-docs";
 
-// What the Worker may merge without a human, and where that list lives. The document
-// is capsid/policy/auto-merge.md, signed with the same key and envelope as a task
-// document, because it decides whether this Worker may write to a default branch that
-// deploys on push. An unsigned or edited policy merges nothing.
+// What the Worker may merge without a human, and where that list lives: the document
+// capsid/policy/auto-merge.md, signed like a task document, because it decides whether this
+// Worker may write to a default branch that deploys on push. An unsigned or edited policy
+// merges nothing.
 //
-// The document names the checks and the code enforces them. A policy document parsed
-// into predicates would be a configuration language, and a change to it would be a
-// code change nobody reviewed as one. So the document carries the version, whether the
-// policy is enabled and which namespaces it covers, and it names every check by id,
-// every refused path pattern and every required CI step. The code holds the same three
-// lists. test/auto-merge.test.ts asserts the two agree in both directions, and
-// loadMergePolicy refuses at run time as well, because the test proves the pair in the
-// repo while the document lives in the database.
-//
-// One list lives only in the document: the PR author allowlist. The code has no copy
-// to compare it with, so it is a value the signature governs, and a document without
-// one does not load.
+// The document names the checks and the code enforces them (a document parsed into
+// predicates would be a configuration language nobody reviews as code). The document carries
+// the version, the enabled flag, the namespaces, and every check id, refused path pattern and
+// required CI step; the code holds the same three lists. test/auto-merge.test.ts asserts they
+// agree both ways, and loadMergePolicy refuses at run time too, because the document lives in
+// the database. The PR author allowlist lives only in the document, so a document without one
+// does not load.
 export const AUTO_MERGE_POLICY_PATH = "policy/auto-merge.md";
 
-// Every check, in the order evaluated. Each one refuses on its own. The three path
-// checks run first because they are the never list: a change to one of those paths is
-// not merged without a human, whatever the rest of the PR looks like.
+// Every check, in the order evaluated, each refusing on its own. The three path checks run
+// first: they are the never list.
 //
-// Job ids are public, in commit subjects and PR bodies, so judging only the job a PR
-// body names would let any open PR that named a finished job merge on green CI.
-// The PR itself is judged too: head_in_base_repo refuses a fork head, job_handed_on
-// refuses a job that is not blocked or done, and pr_recorded_for_job refuses a PR the
-// holder never recorded against that job.
+// Job ids are public (commit subjects, PR bodies), so judging only the job a PR names would
+// let any PR naming a finished job merge on green CI. The PR itself is judged too:
+// head_in_base_repo refuses a fork head, job_handed_on a job not blocked or done, and
+// pr_recorded_for_job a PR the holder never recorded against that job.
 //
-// pr_author_allowed refuses a PR whose GitHub author login is not on the allowlist the
-// signed document carries. The list is in the document and not here, so changing who
-// may author an unattended merge is a signed act.
+// pr_author_allowed refuses an author login not on the signed document's allowlist, so
+// changing who may author an unattended merge is a signed act.
 //
-// Version 7 drops author_is_driver,
-// which required the job to have been claimed by a minted driver agent. Cloud sessions
-// sign in as the admin login and complete a job without a claim, naming its pull request
-// (src/jobs-seat.ts completeUnclaimed), so nothing they opened could merge. Who may open
-// an unattended merge stays pr_author_allowed's question, and pr_recorded_for_job still
-// requires the pull request to be recorded against the job by whoever completed it. The
-// same version adds size_within_cap: a pull request over AUTO_MERGE_SIZE_CAP changed lines
-// waits for a person's approval.
+// Version 7 dropped author_is_driver: cloud sessions sign in as the admin login and complete
+// a job without a claim (src/jobs-seat.ts completeUnclaimed), so nothing they opened could
+// merge. pr_recorded_for_job still ties the PR to the job. It added size_within_cap: a PR over
+// AUTO_MERGE_SIZE_CAP changed lines waits for a person.
 export const POLICY_CHECKS = [
   "paths_not_refused",
   "paths_not_money",
@@ -64,8 +52,7 @@ export type PolicyCheck = (typeof POLICY_CHECKS)[number];
 
 // The most changed lines (additions plus deletions, as GitHub counts them) a pull request
 // may carry and still merge with no human. Over it, the merge class is approve: one tap,
-// with the reason "over the size cap". Ona caps its auto-approval at 1,000 lines, and
-// Intercom's agent refuses large pull requests; a big diff is where a review earns its time.
+// reason "over the size cap". A big diff is where a review earns its time.
 export const AUTO_MERGE_SIZE_CAP = 1000;
 
 /** Whether a pull request's changed lines are over the size cap. Uncounted is not over it;
@@ -111,10 +98,8 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
     pattern: /^src\/github\/client\.ts$/i,
     why: "the reader that supplies the changed paths and the CI facts every check judges",
   },
-  // dustinedwards-info's judge files. The list stays one list rather than one per
-  // namespace: every pattern is a refusal, so a namespace inheriting another's pattern
-  // can only refuse more, and a list split per namespace would be a second place to
-  // forget a pattern.
+  // dustinedwards-info's judge files. One list, not one per namespace: every pattern is a
+  // refusal, so inheriting another's can only refuse more.
   { pattern: /^\.github\/workflows\//i, why: "any workflow, which is what CI runs" },
   {
     pattern: /^scripts\/check-[^/]*\.mjs$/i,
@@ -136,8 +121,7 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
     pattern: /^scripts\/verify-live\.mjs$/i,
     why: "the live gate, whose rollback is the backstop for an unattended merge",
   },
-  // Install, build and deploy glue. A namespace with no allowed-path limit merged these
-  // on green, though each runs in CI or ships. Lockfiles are
+  // Install, build and deploy glue, which runs in CI or ships. Lockfiles are
   // no_migration_workflow_lockfile's, below.
   { pattern: /(^|\/)scripts\//i, why: "a script CI, a build or a deploy runs" },
   { pattern: /(^|\/)\.github\//i, why: "CI configuration beyond the workflows" },
@@ -177,14 +161,11 @@ function refusedPathHits(paths: string[]): Array<{ path: string; why: string }> 
   return hits;
 }
 
-// The paths a namespace's pull requests may touch at all, for a namespace that carries
-// a limit. Every changed path must match one of its patterns; a namespace with no entry
-// here has no limit beyond the refused paths. capsid carries one: a capsid merge deploys the control plane, so only
-// docs outside docs/policy/ and the Portal's stylesheets merge unattended there, and
-// tests, the Portal's scripts and every other path wait for the seat. This is the one
-// path list that admits rather than refuses, so it is per namespace: inheriting another
-// namespace's allow list would widen, not narrow. Matched case-insensitively, like the
-// refused paths, so docs/Policy/ is still docs/policy/.
+// The paths a namespace's pull requests may touch at all, for a namespace that carries a
+// limit: every changed path must match one pattern. capsid carries one, because a capsid merge
+// deploys the control plane: only docs outside docs/policy/ and the Portal's stylesheets merge
+// unattended there. The one list that admits rather than refuses, so it is per namespace:
+// inheriting another's would widen. Matched case-insensitively, like the refused paths.
 export const AUTO_MERGE_ALLOWED_PATHS: Record<string, Array<{ pattern: RegExp; why: string }>> = {
   capsid: [
     {
@@ -208,15 +189,11 @@ export const namespacedAllowedPaths = (): string[] =>
     rows.map((r) => `${ns} / ${r.pattern.source}`),
   );
 
-// The CI steps a green PR must have run, per namespace. A repo's CI runs its suites as
-// steps of one job, so check-run names cannot show that any of them ran. ci_green reads
-// the steps of the newest run of each named workflow on the head sha, and every step
-// named for that namespace must have concluded success. A skipped step is not a pass.
-//
-// Per namespace because the step names belong to the repo, not to this policy.
-// Checking one repo's step names against another repo's workflow would refuse every
-// pull request there. A namespace with no list here merges nothing, which is the same
-// refusal for a namespace whose CI nobody has written down.
+// The CI steps a green PR must have run, per namespace. A repo's suites are steps of one job,
+// so check-run names cannot show they ran: ci_green reads the steps of the newest run of each
+// named workflow on the head sha, and every named step must have concluded success (a skipped
+// step is not a pass). Per namespace because step names belong to the repo. A namespace with
+// no list merges nothing.
 export interface RequiredStep {
   workflow: string;
   job: string;
@@ -235,11 +212,9 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
     "Tests",
     "Integration tests",
   ].map(ciStep("checks")),
-  // Every named step of both jobs of dustinedwards-info's ci.yml, read off main.
-  // Install and the build steps are named alongside the ones that judge, so
-  // a reordered workflow that drops one refuses rather than merging on a run that
-  // skipped it. The Admin MCP job's command steps carry no name, so GitHub reports them
-  // as "Run <command>", and those are the names below.
+  // Every named step of both jobs of dustinedwards-info's ci.yml, read off main. Install and
+  // build steps are named too, so a reordered workflow that drops one refuses. Command steps
+  // carry no name, so GitHub reports them as "Run <command>".
   dustinedwards: [
     ...["Install", "Migrations, stack and content build, local sync", "Lint", "Gates", "Build"].map(
       ciStep("Gates, clean checkout"),
@@ -254,11 +229,8 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
       "Run npm run build",
     ].map(ciStep("Admin MCP, clean checkout")),
   ],
-  // Every step of Carrel's two jobs, read off its ci.yml on main. Carrel's
-  // steps that run a command carry no name, so GitHub names them "Run <command>"; that
-  // is the name the jobs API reports, and a script rename in package.json that changes
-  // the command text refuses until this list is updated. Both jobs judge: `check` runs
-  // the types, tests and accessibility scan, `gates` the conformance suite and the plants.
+  // Every step of Carrel's two jobs, read off its ci.yml on main. Command steps carry no name,
+  // so GitHub names them "Run <command>" and a script rename refuses until this list is updated.
   carrel: [
     ...[
       "Run npm ci",
@@ -273,12 +245,9 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
       ciStep("gates"),
     ),
   ],
-  // Every blocking step of Capsomer's `check` job, read off its ci.yml on main.
-  // The steps its own file marks warn-only (forced-colors screenshots, size,
-  // token check, the site summary and the artifact upload) are left out: they run with
-  // continue-on-error or always(), so a pass proves nothing about the change. The
-  // `results` job runs on a push to main only and is skipped on a pull request. The
-  // separate No bloat workflow is warn-only by its own ruling and is not required.
+  // Every blocking step of Capsomer's `check` job, read off its ci.yml on main. Warn-only steps
+  // (continue-on-error or always()) are left out: a pass proves nothing. The `results` job runs
+  // on a push to main only; the No bloat workflow is warn-only by ruling.
   capsomer: [
     "Install",
     "Palette, scales, unit tests, types",
@@ -315,17 +284,14 @@ export interface MergePolicy {
   // Each entry is `<namespace> / <pattern>`, from the `## Allowed paths, <namespace>`
   // heading it was written under, compared with the code's list like the steps are.
   allowedPaths: string[];
-  // GitHub logins whose PRs may merge without a human, from the document only.
   authors: string[];
   // The merge units promoted to auto (docs/design/design-merge-pipeline.md section 7,
   // PR 10), each `<namespace> / <path class>`, from the `## Auto units` section. Like the
   // author allowlist, the list lives only in the signed document; the code holds only the
   // path classes a unit may name (PROMOTABLE_PATH_CLASSES).
   units: string[];
-  // Each entry is `<namespace> / <workflow> / <job> / <step>`, built from the heading
-  // the step was written under. One flat list keeps the load-time agreement check a
-  // single comparison in both directions, so a namespace section missing from the
-  // document is caught by the same line that catches a missing step.
+  // Each entry is `<namespace> / <workflow> / <job> / <step>`. One flat list keeps the
+  // load-time agreement check one comparison both ways.
   requiredCi: string[];
 }
 
@@ -574,11 +540,9 @@ export interface PrFacts {
   // The owner/name of the repo the PR's head branch lives on, as GitHub reports it, or
   // null when GitHub reports none (a fork that was deleted).
   headRepo: string | null;
-  // The login of the GitHub account that opened the PR (pr.user.login), or null when
   // GitHub reports none.
   prAuthor: string | null;
-  // Resolved from the job id in the PR body. jobClaimedBy is who held or completed the
-  // job, for the audit row; no check reads it.
+  // Resolved from the job id in the PR body; jobClaimedBy is for the audit row only.
   jobId: string | null;
   jobClaimedBy: string | null;
   jobStatus: string | null;
@@ -592,17 +556,14 @@ export type PolicyVerdict =
   | { merge: true; passed: PolicyCheck[] }
   | { merge: false; failed: PolicyCheck; why: string; passed: PolicyCheck[] };
 
-// The job id a driver puts in a PR body, matched anywhere in it.
 const JOB_ID_IN_BODY = /\bjob_[0-9a-f]{12}\b/;
 
 export function jobIdFromBody(body: string): string | null {
   return JOB_ID_IN_BODY.exec(body ?? "")?.[0] ?? null;
 }
 
-// The statuses in which a job has handed its PR on. A session opens the PR and then
-// completes (done) or stops at a gate (blocked). A queued, claimed, failed or
-// superseded job has not handed anything on, so its id in a PR body proves nothing,
-// and a job id no row in this namespace carries has no status at all.
+// The statuses in which a job has handed its PR on (done, or blocked at a gate). Any other
+// status proves nothing from its id in a PR body.
 const HANDED_ON_STATUSES = ["blocked", "done"];
 
 // A PR URL as the job records hold it, compared case-insensitively. The match ends at
@@ -613,11 +574,9 @@ function normalizedPrUrls(text: string | null): string[] {
   return [...(text ?? "").matchAll(PR_URL)].map((m) => m[0].toLowerCase());
 }
 
-// Named separately from the refused list because their consequence is not local: a
-// migration runs against the live database, a workflow is what measures the code, and
-// a lockfile decides what gets installed and executed. The refused list also covers
-// some of these; this is the second statement for them, so removing a pattern from
-// one list does not quietly open the other.
+// Named separately from the refused list because their consequence is not local (a
+// migration runs against the live database, a workflow measures the code, a lockfile decides
+// what is installed). Removing a pattern from one list does not quietly open the other.
 const MIGRATION_WORKFLOW_LOCKFILE: Array<{ pattern: RegExp; why: string }> = [
   { pattern: /(^|\/)migrations\//i, why: "a migration, which runs against the live database" },
   { pattern: /(^|\/)\.github\/workflows\//i, why: "a workflow, which is what measures the code" },
@@ -628,10 +587,6 @@ const MIGRATION_WORKFLOW_LOCKFILE: Array<{ pattern: RegExp; why: string }> = [
   },
 ];
 
-/**
- * The whole policy, as a pure function of facts and the signed document's author
- * allowlist. Every check refuses on its own.
- */
 export function evaluatePolicy(
   facts: PrFacts,
   allowedAuthors: string[],
@@ -784,12 +739,10 @@ export function evaluatePolicy(
   return { merge: true, passed };
 }
 
-/** The ci_green check on the facts' head sha, with the same required steps the policy
- *  reads, shared by the policy and the approval executor (docs/design/design-merge-pipeline.md
- *  section 4: "through the same function and the same required steps as the policy").
- *  green: every check and every required step succeeded. wait: CI has not finished, or its
- *  steps could not be read. red: CI failed, or a required step did not run to success.
- *  never: no required steps are written down for the namespace, so no run shows anything. */
+/** The ci_green check on the head sha with the policy's required steps, shared by the policy
+ *  and the approval executor (docs/design/design-merge-pipeline.md section 4). green: all
+ *  succeeded. wait: CI unfinished or steps unreadable. red: failed, or a required step did not
+ *  succeed. never: no required steps are written down for the namespace. */
 export function ciGreenOn(
   facts: Pick<
     PrFacts,

@@ -2,17 +2,9 @@ import type { RepoEnv as Env } from "../env";
 import { redact, redactText, type Redacted } from "@dustinedwards/site-runtime/redact";
 import { assertRepoArg, cachedGet, ghFetch, resolveRepo } from "./client";
 
-// Recent CI workflow runs for a namespace's repo, via the GitHub App. Read-only.
-// For the most recent failed run it also returns the failing jobs and steps and a
-// bounded log tail. Needs the App's Actions: Read permission; a 403 is surfaced as
-// a named error.
+// Recent CI workflow runs for a namespace's repo, via the GitHub App (Actions: Read; a 403 is surfaced as a named error). Read-only. For the most recent failed run it also returns the failing jobs and steps and a bounded log tail.
 //
-// The log tail is withheld from read-only keys. Run metadata (name, sha, conclusion)
-// is inert; a build log carries whatever the workflow echoed: resolved binding ids,
-// account ids, wrangler output, and any variable a step printed by accident. The runs
-// list stays open to read-only keys. Every log text returned, to anyone, is redacted
-// first (site-runtime ./redact). With run_id, jobs/job/step drill into any run the same way
-// (ciRunJobs below), behind the same log gate.
+// The log tail is withheld from read-only keys: run metadata (name, sha, conclusion) is inert, but a build log carries whatever the workflow echoed (binding ids, account ids, wrangler output, any variable a step printed by accident). Every log text returned, to anyone, is redacted first (site-runtime ./redact). With run_id, jobs/job/step drill into any run the same way (ciRunJobs below), behind the same log gate.
 
 // A ref matching this shape is filtered as a head sha, anything else as a branch.
 // GitHub has two query parameters for these and none that accepts either, so the
@@ -169,29 +161,13 @@ interface CiRun {
   html_url: string;
 }
 
-// The failing step's log, 64KB from its end, for write-grant keys. A job log ends
-// with post-run cleanup, so the last few thousand characters of a failed run are
-// `git config --unset-all` lines and the failure is far earlier. The region is found
-// by the failing step and then tailed. The read-only tier is unchanged.
+// The failing step's log, 64KB from its end, for write-grant keys. A job log ends with post-run cleanup, so the last few thousand characters of a failed run are `git config --unset-all` lines and the failure is far earlier; the region is found by the failing step, then tailed.
 export const CI_LOG_BUDGET = 64 * 1024;
 
-// Actions labels groups by command, not step name, so a step's name appears nowhere
-// in its own log and a name search matches an incidental later occurrence. The
-// failing step is found by its started_at..completed_at window instead: every log
-// line carries an ISO timestamp.
-//
-// The jobs API truncates those to the second while log lines carry sub-second
-// stamps, so the upper bound is extended to the end of that second, or the last
-// second of output (where the error is) is dropped. Truncating down only widens the
-// lower bound, so `from` needs no adjustment.
+// Actions labels groups by command, not step name, so a name search matches an incidental later occurrence. The failing step is found by its started_at..completed_at window instead, since every log line carries an ISO timestamp. The jobs API truncates those to the second while log lines carry sub-second stamps, so the upper bound is extended to the end of that second or the last second of output (where the error is) is dropped. Truncating down only widens the lower bound, so `from` needs no adjustment.
 const STEP_STAMP_PRECISION_MS = 1000;
 
-// Every log text ci_status returns is redacted (site-runtime ./redact), and redacted BEFORE the
-// budget cut: a cut first could split a secret so its remaining half no longer matches
-// any pattern, or keep a private key's body without its BEGIN line.
-//
-// `label` is how the region is named: "failing step" for the failed-run drill-in, whose
-// wording callers already read, and "step" for a step the caller asked for by name.
+// Every log text ci_status returns is redacted (site-runtime ./redact), and BEFORE the budget cut: a cut first could split a secret so its remaining half no longer matches any pattern, or keep a private key's body without its BEGIN line. `label` names the region: "failing step" for the failed-run drill-in, "step" for a step asked for by name.
 function stepLog(
   log: string,
   step: { name?: string; started_at?: string | null; completed_at?: string | null } | undefined,
@@ -271,10 +247,7 @@ async function ciStatusFromRuns(
   } = { repo: full, runs };
   if (filter.ref || filter.run_id) result.filter = filter;
 
-  // Drill into the most recent failed run so the caller sees why, not just that.
-  // Every degraded path is named: an errored jobs fetch or log fetch is reported
-  // rather than dropped, so a write-grant caller can tell "no log" from "the log was
-  // refused for you".
+  // Drill into the most recent failed run so the caller sees why. Every degraded path is named: an errored jobs or log fetch is reported rather than dropped, so a write-grant caller can tell "no log" from "the log was refused for you".
   const failed = workflowRuns.find((r) => r.conclusion === "failure");
   if (failed) {
     const failedRun: Record<string, unknown> = {

@@ -1,20 +1,18 @@
-// What a repo's lockfile says it installed: the version of each named dependency, per
-// manifest directory. The versions model (src/shared-code.ts) reads it so a pin is what the
-// repo actually installs, not only what its package.json asks for ("^0.7.0" asks for a
-// range; the lockfile names 0.7.3).
+// What a repo's lockfile says it installed: the version of each named dependency, per manifest
+// directory. The versions model (src/shared-code.ts) reads it so a pin is what the repo
+// installs, not only what its package.json asks for ("^0.7.0" asks for a range; the lockfile
+// names 0.7.3).
 //
 // Two formats:
-//   npm's package-lock.json, lockfileVersion 2 and 3: `packages`, keyed by install path.
-//     A workspace's own dependency sits at "<workspace>/node_modules/<name>" when it
-//     differs from the hoisted one at "node_modules/<name>"
-//     (docs.npmjs.com/cli/configuring-npm/package-lock-json).
-//   pnpm's pnpm-lock.yaml, lockfileVersion 9: `importers`, keyed by the manifest's
-//     directory ("." for the root), each dependency with a `specifier` and a `version`.
-//     A git dependency's version is its tarball URL with peers in parentheses; the
-//     version number is under `packages`, keyed "<name>@<that URL>"
-//     (pnpm.io/git, the lockfile section).
-// YAML (pnpm's lockfile, the workflows) is read with the `yaml` parser, as devkit's no-bloat bin reads a workflow, so
-// any spelling YAML allows (flow maps, quoted keys, anchors, CRLF) is the same data.
+//   npm's package-lock.json, lockfileVersion 2 and 3: `packages`, keyed by install path. A
+//     workspace's own dependency sits at "<workspace>/node_modules/<name>" when it differs from
+//     the hoisted one at "node_modules/<name>".
+//   pnpm's pnpm-lock.yaml, lockfileVersion 9: `importers`, keyed by the manifest's directory
+//     ("." for the root), each dependency with a `specifier` and a `version`. A git dependency's
+//     version is its tarball URL with peers in parentheses; the version number is under
+//     `packages`, keyed "<name>@<that URL>" (pnpm.io/git).
+// YAML is read with the `yaml` parser, as devkit's no-bloat bin reads a workflow, so any
+// spelling YAML allows (flow maps, quoted keys, anchors, CRLF) is the same data.
 
 import { parse } from "yaml";
 

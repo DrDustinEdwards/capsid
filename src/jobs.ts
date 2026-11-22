@@ -1,30 +1,24 @@
 import { isQuestionSummary } from "./jobs-holder";
 import { checkJobText, type SignatureCheck } from "./job-signing";
 
-// The work queue. The seat posts a job from a chat; a driver session on a machine
-// claims it, does it, and reports back.
+// The work queue. The seat posts a job from a chat; a driver session on a machine claims it,
+// does it, and reports back.
 //
-// Every transition is `UPDATE ... WHERE status = <expected> RETURNING id`, never
-// meta.changes. D1's meta.changes is inflated by the FTS5 triggers on documents, and
-// these batches carry a document write, so the count would be of the triggers as
-// much as the row. No row back means somebody else got there first. The holder
-// transitions (complete, fail, block) put the UPDATE in the same batch as
-// its records, behind requireJobUnchanged (src/store-guards.ts), which aborts the
-// whole batch when the row is not in the state the caller read.
+// Every transition is `UPDATE ... WHERE status = <expected> RETURNING id`, never meta.changes:
+// D1's count is inflated by the FTS5 triggers on documents, and these batches carry a document
+// write. No row back means somebody else got there first. The holder transitions (complete,
+// fail, block) put the UPDATE in the same batch as its records, behind requireJobUnchanged
+// (src/store-guards.ts), which aborts the batch when the row is not in the state the caller read.
 //
-// The row is the source of truth for status. The mirror document at
-// <namespace>/jobs/<id>.md is rewritten in the same batch as every transition, so a
-// reader who found the job through capsid_start_session or capsid_find_docs sees the state the table holds.
-// It is a projection, and its body says so.
+// The row is the source of truth for status. The mirror document at <namespace>/jobs/<id>.md is
+// rewritten in the same batch as every transition, so a reader who found the job through
+// capsid_start_session or capsid_find_docs sees the table's state. It is a projection.
 //
-// The queue is split by who acts. jobs-claim.ts posts, lists and claims;
-// jobs-holder.ts holds the transitions the claiming driver makes; jobs-seat.ts holds
-// the ones made on a job the caller does not hold (admin fail, supersede, resume);
-// jobs-edit.ts holds the seat's edit of a queued or blocked job, and jobs-park.ts its
-// parking of a queued one; jobs-begin.ts holds the started label any writer may set;
-// jobs-mirror.ts writes the mirror document and audit row; jobs-transition.ts holds
-// what they share. This module is the one other modules import from, and it keeps the capsid_read_status
-// action status summary.
+// Split by who acts: jobs-claim.ts posts, lists and claims; jobs-holder.ts the claiming
+// driver's transitions; jobs-seat.ts those on a job the caller does not hold; jobs-edit.ts and
+// jobs-park.ts the seat's edit and parking; jobs-begin.ts the started label; jobs-mirror.ts the
+// mirror and audit row; jobs-transition.ts what they share. This module is the one others import
+// from, and keeps the capsid_read_status action status summary.
 
 export { claimJob, listJobs, postJob } from "./jobs-claim";
 export { blockJob, commandFromSummary, completeJob, failJob, RESUME_MARKER } from "./jobs-holder";
@@ -42,13 +36,10 @@ export { parkJob, returnDueParked, unparkJob } from "./jobs-park";
 export { beginJob } from "./jobs-begin";
 export type { JobResult } from "./jobs-transition";
 
-// The capsid_read_status action status block. Counted per namespace, plus what a human has to look at:
-// the blocked jobs, with the command each is waiting on. Blocked is the only status
-// whose rows come back rather than a count, because a count of blocked jobs tells
-// nobody what to run, and the Portal shows exactly these.
-//
-// done_today rather than done: a lifetime total only goes up and stops being
-// information. What the seat wants to know is whether the queue moved today.
+// The capsid_read_status action status block: counted per namespace, plus what a human has to look
+// at. Blocked is the only status whose rows come back rather than a count (with the command each
+// is waiting on), since a count tells nobody what to run. done_today rather than done: a lifetime
+// total only goes up and stops being information.
 export interface JobsSummary {
   queued: number;
   claimed: number;

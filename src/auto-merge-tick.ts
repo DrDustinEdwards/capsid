@@ -174,11 +174,8 @@ async function factsForPr(
   };
 }
 
-// The audit row shapes, built by pure functions so test/auto-merge.test.ts asserts them.
-
 function declineParams(
   policyVersion: string,
-  // Only the PR and head, so a PR declined before its facts were read is audited alike.
   facts: Pick<PrFacts, "repo" | "number" | "headSha">,
   // A policy refusal, "head_moved" when GitHub refused the pinned merge, or
   // "unit_suspended" when a rollback suspended the PR's merge unit (src/merge-units.ts),
@@ -235,14 +232,11 @@ export function mergeParams(
   };
 }
 
-// A decline is logged when the decision for that PR changes, not on every look. The tick
-// runs every five minutes and a PR the policy keeps refusing was logged about 1,400 times
-// a day, with the same PR and the same reason. The last logged decision per PR lives in
-// APP_KV, which the tick already writes: "<head sha> <failed check>". A first decline, a
-// different check, or a new head sha is a change. The reason text (`why`) is not part of
-// the key, because it can carry counts and times that move without the decision moving.
-// The TTL bounds what a closed PR leaves behind; a decline that outlives it is logged
-// once more.
+// A decline is logged when the decision for that PR changes, not on every look (a PR kept
+// refused was logged about 1,400 times a day). The last logged decision per PR lives in
+// APP_KV as "<head sha> <failed check>"; a first decline, a different check or a new head sha
+// is a change. `why` is not in the key: it carries counts and times that move without the
+// decision moving. The TTL bounds what a closed PR leaves behind.
 const LAST_DECLINE_PREFIX = "improve:auto-merge-last-decline:";
 const LAST_DECLINE_TTL_SECONDS = 14 * 24 * 60 * 60;
 
@@ -293,25 +287,20 @@ interface AutoMergeOutcome {
   repo: string;
   number: number;
   merged: boolean;
-  // The check that refused, for a PR left open.
   failed: string | null;
-  // The head the tick judged, which the Portal's Approve records as the sha Dustin saw.
   head_sha?: string;
   why: string | null;
   passed: string[];
   // The merge pipeline's class (src/merge-class.ts), report-only; null when the PR's
   // files were never read (the body names no job, or the tick threw).
   merge_class?: Classification | null;
-  // For a pull request labeled visual: what Dustin looks at before he approves it
   // (src/visual-pr.ts).
   visual?: VisualPr;
 }
 
-// Where the awaiting-seat set lives. Rewritten whole on every tick rather than
-// appended to, because the tick recomputes the full set of open pull requests each
-// time: a PR a human merged or closed stops appearing, with no second mechanism needed
-// to expire it. capsid_read_status action status reads this key rather than calling GitHub, so asking
-// for status costs nothing.
+// Where the awaiting-seat set lives. Rewritten whole each tick, so a PR a human merged or
+// closed stops appearing with no expiry mechanism. capsid_read_status reads this key rather
+// than calling GitHub.
 export const AWAITING_SEAT_KEY = "improve:awaiting-seat";
 
 export interface AwaitingSeat {
@@ -329,7 +318,6 @@ export interface AwaitingSeat {
   // The head the tick judged (absent on sets written before this field). The Portal's
   // Approve sends it as the sha Dustin approved, so a later push voids the approval.
   head_sha?: string;
-  // A pull request labeled visual: its title, preview and screenshots (src/visual-pr.ts).
   visual?: VisualPr;
 }
 
@@ -394,13 +382,11 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     let repo: string;
     let defaultBranch: string;
     let prs: OpenPr[];
-    // The open approvals on this repo (src/pr-approvals.ts), for the executor below. A
-    // read that fails (the table not migrated yet) leaves none, so the tick goes on as
-    // the policy alone and merges nothing on an approval it could not read.
+    // The open approvals on this repo (src/pr-approvals.ts). A failed read (table not migrated)
+    // leaves none, so nothing merges on an approval that could not be read.
     let approvals = new Map<number, OpenApproval>();
-    // A namespace that cannot be read is skipped, not the whole tick. The default-branch
-    // read and the list parse throw on a GitHub failure, and a throw here would stop
-    // every later namespace and the awaiting-seat write.
+    // A namespace that cannot be read is skipped, not the whole tick: a throw would stop every
+    // later namespace and the awaiting-seat write.
     try {
       ({ owner, repo } = await resolveRepo(env, namespace));
       defaultBranch = await getDefaultBranch(env, owner, repo);
@@ -439,12 +425,10 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     }
 
     for (const pr of prs) {
-      // A PR whose body names no job is declined before any GitHub read when its
-      // namespace has no promoted unit, since body_names_job refuses it anyway and the
-      // reads share the rate limit. With a promoted unit its files are read: a PR in that
-      // unit merges on the unit instead of a job (policy version 10). A visual PR, or one
-      // Dustin approved, is judged all the same: body_names_job leaves it class approve,
-      // so his approval merges it on green CI.
+      // A PR whose body names no job is declined before any GitHub read when its namespace has no
+      // promoted unit (the reads share the rate limit). With one, its files are read so the PR can
+      // merge on the unit (policy version 10). A visual or approved PR is judged all the same:
+      // body_names_job leaves it class approve, so his approval merges it on green CI.
       const visual = isVisual(pr);
       const hasUnit = policy.units.some((u) => u.startsWith(`${namespace} / `));
       if (!jobIdFromBody(pr.body ?? "") && !visual && !approvals.has(pr.number) && !hasUnit) {
@@ -489,10 +473,9 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
         }
         continue;
       }
-      // One PR that throws does not end the tick. A 405 on a PR that is not mergeable,
-      // a failed read or a D1 error would otherwise abort every later PR and namespace,
-      // leave no audit row, and skip the awaiting-seat write. The PR is reported as not
-      // merged with the error, and an auto-merge-failed row says why.
+      // One PR that throws does not end the tick (a 405, a failed read, a D1 error would abort
+      // every later PR, leave no audit row and skip the awaiting-seat write). It is reported as not
+      // merged with the error.
       const before = outcomes.length;
       try {
         try {
@@ -647,15 +630,10 @@ async function judgeOnePr(
   pr: OpenPr,
   outcomes: AutoMergeOutcome[],
   now: Date,
-  // The pull request's open approval (src/pr-approvals.ts), or null.
   approval: OpenApproval | null = null,
-  // The merge units a rollback suspended, or "all" when they could not be read.
   suspended: Suspended = new Set(),
-  // The units the signed policy promoted to auto, each `<namespace> / <path class>`.
   units: readonly string[] = [],
-  // The namespaces the safety shutoff paused, or "all" when they could not be read.
   paused: PausedNamespaces = new Map(),
-  // Labeled visual: it waits for Dustin's look even when the policy would merge it.
   visual = false,
 ): Promise<void> {
   const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);
@@ -667,10 +645,9 @@ async function judgeOnePr(
       : null;
   const verdict = evaluatePolicy(facts, allowedAuthors, promotedUnit);
   let merge_class = mergeClass(facts, verdict, pr.draft === true);
-  // Five holds that only narrow. A draft waits as class wait. The other four leave the PR for Dustin as class approve (his
-  // approval still executes below): a visual change (src/visual-pr.ts), an existing test it changes (src/merge-class.ts), a
-  // paused namespace (src/merge-safety.ts), and a unit a rollback suspended
-  // (src/merge-units.ts). The policy would merge it, so it is held with the reason.
+  // Five holds that only narrow. A draft waits as class wait. The other four leave the PR for
+  // Dustin as class approve (his approval still executes below): a visual change, an existing
+  // test it changes, a paused namespace, and a unit a rollback suspended.
   const unit = merge_class.path_class ? unitKey(namespace, merge_class.path_class) : null;
   let hold: {
     failed:
@@ -716,10 +693,9 @@ async function judgeOnePr(
     merge_class = { class: "approve", path_class: merge_class.path_class, reasons: [hold.reason] };
   const held = hold !== null;
   const merges = verdict.merge && !held;
-  // The executor (docs/design/design-merge-pipeline.md section 4): a pull request the
-  // policy leaves open but Dustin approved merges here once CI is green on the approved
-  // sha, or its approval is voided, expired or refused, and the PR is judged as before.
-  // Not for a draft: GitHub refuses to merge one, and the hold below says why.
+  // The executor (docs/design/design-merge-pipeline.md section 4): a PR the policy leaves open
+  // but Dustin approved merges here once CI is green on the approved sha, or its approval is
+  // voided, expired or refused. Not for a draft.
   if (!merges && approval && pr.draft !== true) {
     const done = await executeApproval(env, namespace, facts, merge_class, approval, now);
     if (done.done === "merged") {
@@ -827,7 +803,6 @@ async function judgeOnePr(
     passed: verdict.passed,
     merge_class,
   });
-  // Merged by the policy on its own: an approval it held has nothing left to do.
   if (approval)
     await closeAsAutoMerged(
       env,
@@ -837,9 +812,8 @@ async function judgeOnePr(
       (result as { sha?: string }).sha ?? null,
       now,
     );
-  // The merge has landed, and the tick's catch does not retry a PR whose outcome is pushed,
-  // so the row the safety meter and the merge units read is tried a second time before the
-  // failure is left to that catch.
+  // The merge has landed and the catch does not retry a PR whose outcome is pushed, so the row
+  // the safety meter and merge units read is tried a second time.
   const writeMerged = () =>
     env.DB.batch([
       systemAudit(

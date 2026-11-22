@@ -47,7 +47,6 @@ function parseJson(body: string): Record<string, unknown> | Refusal {
   }
 }
 
-// A signed run request's common head: a JSON object with a jti and a run_id.
 function runRequest(
   body: string,
 ): { r: Record<string, unknown>; jti: string; runId: string } | Refusal {
@@ -123,7 +122,6 @@ export interface BenchRegistration {
 export interface DrawRequest {
   jti: string;
   registration: BenchRegistration;
-  // The 1-based draw position of tasks[0].
   from: number;
   tasks: string[];
 }

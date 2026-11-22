@@ -14,25 +14,20 @@ import { plural } from "@drdustinedwards/site-helpers/text";
 import { JOB_DOC_PREFIX } from "./jobs-schema";
 import { HOUR_MS, MINUTE_MS, timeMs } from "./time";
 
-// "WHAT NEEDS DUSTIN, PER APP". The shared admin
-// shell shows a badge per app and a combined inbox count; Capsid answers it once, so no
-// app queries another. Everything here is read from what the queue, auto-merge and the
-// watcher already keep; this module only gathers and counts. It writes nothing.
+// "WHAT NEEDS DUSTIN, PER APP". The shared admin shell shows a badge per app and a combined inbox
+// count; Capsid answers it once, so no app queries another. Read from what the queue, auto-merge
+// and the watcher already keep; this module only gathers and counts, and writes nothing.
 //
-// The app list is configuration (the ops_sites rows the Portal edits), never a list in
-// code. A namespace that has something waiting but no site row (Carrel, Capsomer) still
-// appears, under its namespace name, because a job waiting on Dustin there is just as
-// real.
+// The app list is configuration (the ops_sites rows the Portal edits), never code. A namespace
+// with something waiting but no site row (Carrel, Capsomer) still appears under its namespace.
 //
-// Severity, per app: needs-you when anything is waiting on a person (a job blocked for
-// the seat, a question, a pull request auto-merge declined), failing when only a machine
-// fault is open (the latest CI run on the repo failed, the site's health probe is down),
-// none otherwise. "Needs you" wins, because it is the thing only Dustin can clear.
+// Severity, per app: needs-you when anything waits on a person (a job blocked for the seat, a
+// question, a pull request auto-merge declined), failing when only a machine fault is open (the
+// latest CI run failed, the health probe is down), none otherwise. Needs-you wins.
 //
-// What an app reports about itself (Carrel's drafts waiting) arrives through
-// POST /ops/inbox/report (src/inbox-report.ts) and is read here as kind "report". A
-// reported item is always needs-you: an app may say a person must act, never that its
-// badge should be quieter.
+// What an app reports about itself (Carrel's drafts waiting) arrives through POST
+// /ops/inbox/report (src/inbox-report.ts), read here as kind "report". A reported item is always
+// needs-you: an app may say a person must act, never that its badge should be quieter.
 
 // The shapes are in the feed contract (src/ops-types/), which the Portal also reads.
 export type { Inbox, InboxApp, InboxItem, InboxSeverity } from "./ops-types/feed";
@@ -110,7 +105,6 @@ export function severityOf(items: readonly Pick<InboxItem, "kind">[]): InboxSeve
   return worstOf(items, WAITING_ON_PERSON);
 }
 
-// What answering it takes, by the class the tick gave it (src/merge-class.ts).
 const CLASS_WORDS: Record<MergeClass, string> = {
   auto: "merges on its own",
   approve: "one tap to approve",
@@ -266,7 +260,6 @@ export async function gatherInbox(
     // none
   }
 
-  // The watcher's last pass: the newest CI run on each repo and each site's probe.
   const snapshot = await readSnapshot(env).catch(() => null);
   for (const ci of snapshot?.ci ?? []) {
     if (ci.latest?.conclusion === "failure") {
@@ -293,7 +286,6 @@ export async function gatherInbox(
   // narrowing only Dustin signs.
   for (const { namespace, item } of await unitInboxItems(env.APP_KV)) add(namespace, item);
 
-  // What each app last reported about itself, while it is under 6 hours old.
   for (const [namespace, items] of await readReports(env.APP_KV, now)) {
     for (const item of items) add(namespace, item);
   }

@@ -78,18 +78,9 @@ export const STALE_DECISION_DAYS = 180;
 // Consolidate when a namespace holds more than five unconsolidated documents. Capsid's own threshold.
 export const UNCONSOLIDATED_CADENCE = 5;
 
-// Matches a repo path in prose: at least one slash, a file extension, and no
-// spaces. `capsid/conventions.md` matches too and is excluded below, because a
-// Capsid document path is not a repo path.
+// Matches a repo path in prose: at least one slash, a file extension, and no spaces. `capsid/conventions.md` matches too and is excluded below, because a Capsid document path is not a repo path.
 //
-// The lookbehind, not a word boundary. A word boundary does not fall between a space
-// and a dot, so a match would start one character late: `.github/workflows/ci.yml`
-// would be captured as `github/workflows/ci.yml` and reported absent from a repo that
-// has it, and the dotted paths are the ones canon names most. The lookbehind also
-// stops the same path matching again after the dot.
-//
-// The extension must start with a letter, which excludes section numbers such as
-// `2/2.1` and `5a-1/5a-3/1.5`: two slashes and a dot, and not a file.
+// The lookbehind, not a word boundary: a word boundary does not fall between a space and a dot, so `.github/workflows/ci.yml` would be captured as `github/workflows/ci.yml` and reported absent from a repo that has it. The lookbehind also stops the same path matching again after the dot. The extension must start with a letter, which excludes section numbers such as `2/2.1`.
 const REPO_PATH =
   /(?<![A-Za-z0-9_./-])(\.?(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z][A-Za-z0-9]{0,4})\b/g;
 
@@ -111,13 +102,7 @@ const NAMESPACE_PREFIXES = [
 // The stored report's path prefix.
 export const REPORTS_PREFIX = "reports/";
 
-// Prefixes that are not subjects of the report. `archive/` is consumed history.
-// `reports/` holds earlier reports: `report` stores its result as an ordinary
-// document, and the next run would read it back, so every finding it wrote becomes a
-// finding it finds, a quote describing a fixed contradiction is parsed as a fresh
-// one, and drift paths are attributed to the report that merely listed them. Left
-// alone it ratchets integrity down on every run while the store improves. A report is
-// an observation of the store, not a member of it.
+// Prefixes that are not subjects of the report. `archive/` is consumed history. `reports/` holds earlier reports: `report` stores its result as an ordinary document, and the next run would read it back, so every finding it wrote becomes a finding it finds and integrity ratchets down on every run. A report is an observation of the store, not a member of it.
 const UNSCANNED_PREFIXES = ["archive/", REPORTS_PREFIX];
 
 export function isUnscanned(path: string): boolean {
@@ -239,22 +224,11 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     })),
   });
 
-  // 5. Doc-vs-code drift: a repo path named in canon that is no longer in the repo.
-  //    The repo is gated and the store is not, so the store is where a path rots.
-  //    Unrun is not clean: when the repo could not be read the check has zero
-  //    subjects and is excluded from integrity, rather than reporting zero findings,
-  //    which would read as perfect.
+  // 5. Doc-vs-code drift: a repo path named in canon that is no longer in the repo. The repo is gated and the store is not, so the store is where a path rots. Unrun is not clean: when the repo could not be read the check has zero subjects and is excluded from integrity, rather than reporting zero findings, which would read as perfect.
   if (input.repoPaths) {
-    // A candidate counts only when its first segment is a top-level entry of this
-    // namespace's mapped repo. That separates `src/gone.ts`, which this repo could
-    // really be missing, from `apps/web/...` in another portfolio repo or a path in
-    // another repo entirely, which are not drift here.
+    // A candidate counts only when its first segment is a top-level entry of this namespace's mapped repo, which separates `src/gone.ts` from `apps/web/...` in another portfolio repo (not drift here).
     const repoRoots = new Set([...input.repoPaths].map((p) => p.split("/")[0]));
-    // A document path in this namespace is a store address, whatever it looks like.
-    // The prefix list cannot reach these: the Worker writes `jobs/<id>.md` itself, and
-    // `improve/` is both a store prefix and a real directory, so the root check would
-    // pass it through. Every document counts, excluded ones included, because an
-    // address does not stop being an address.
+    // A document path in this namespace is a store address, whatever it looks like. The prefix list cannot reach these: the Worker writes `jobs/<id>.md` itself, and `improve/` is both a store prefix and a real directory. Every document counts, excluded ones included.
     const documentPaths = new Set(docs.map((d) => d.path));
     const cited = new Map<string, Set<string>>();
     for (const doc of standing) {
@@ -371,10 +345,7 @@ export function renderTruthReport(report: TruthReport): string {
   const lines: string[] = [];
   lines.push(`# Truth report - ${report.namespace} - ${report.generated.slice(0, 10)}`);
   lines.push("");
-  // Not measured is not zero. `integrity` is null when no check had a subject, and
-  // "0%" would read as a store in the worst state it can be in. INTEGRITY_LINE does
-  // not match the words, so integrityOf returns null and capsid_read_status action status reports no
-  // report, the same answer a missing document gets.
+  // Not measured is not zero: `integrity` is null when no check had a subject, and "0%" would read as the worst state. INTEGRITY_LINE does not match the words, so integrityOf returns null and capsid_read_status action status reports no report, as for a missing document.
   lines.push(`integrity: ${report.integrity === null ? "not measured" : `${report.integrity}%`}`);
   lines.push("");
   lines.push(

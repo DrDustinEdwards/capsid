@@ -136,10 +136,10 @@ export async function healthReport(env: Env): Promise<HealthReport> {
 }
 
 /**
- * The runTask ledger as one warn check (src/task-runs.ts): a task whose newest run threw or
- * was refused, or a task with a period that has gone quiet past two periods or never ran,
- * the same flags the Portal's task list shows. Tasks without a period run with the work,
- * so only a failure counts for them. The detail names the tasks, never a reason (public).
+ * The runTask ledger as one warn check (src/task-runs.ts): a task whose newest run threw or was
+ * refused, or one with a period that has gone quiet past two periods or never ran, as the Portal's
+ * task list flags them. Tasks without a period count only on failure. The detail names the tasks,
+ * never a reason (public).
  */
 function taskCheck(env: Env, now: () => Date = () => new Date()): HealthCheck {
   return {
@@ -164,13 +164,11 @@ function taskCheck(env: Env, now: () => Date = () => new Date()): HealthCheck {
 }
 
 /**
- * /health in the family shape: site-runtime's healthResponse (status pass, warn or fail,
- * a check list, no-store, noindex), so the ops audit and every monitor read Capsid as they
- * read the other sites. The store is the fail level, as before: D1 and the FTS probe, so
- * a Worker bound to the wrong database is a 503. The backup, MEDIA, AUDIT_BUCKET, APP_KV, OAUTH_KV and the task
- * ledger warn. The fields the deploy gate and rollback read (sha,
- * schema_version, store) are kept beside the family fields. The watcher still probes
- * itself in-process through healthReport.
+ * /health in the family shape: site-runtime's healthResponse (status pass, warn or fail, a check
+ * list, no-store, noindex). The store is the fail level (D1 and the FTS probe, so a Worker bound
+ * to the wrong database is a 503). The backup, MEDIA, AUDIT_BUCKET, APP_KV, OAUTH_KV and the task
+ * ledger warn. The fields the deploy gate and rollback read (sha, schema_version, store) stay
+ * beside the family fields. The watcher still probes itself through healthReport.
  */
 export async function handleHealth(env: Env): Promise<Response> {
   const store = { d1: "unbound", fts: "skipped" };

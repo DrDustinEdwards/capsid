@@ -27,7 +27,6 @@ const PUT_CONCURRENCY = 20;
 // turn into locked refusals each night.
 export const DUMP_RETENTION = { daily: DEFAULT_RETENTION.daily, weekly: 4, monthly: 3 };
 
-// KV lease is best-effort (no CAS). Export before prune. Dump retention is d1-dump's graduated policy with Capsid's DUMP_RETENTION.
 // Two runs can both read the key empty and both take it, so the run re-reads the lease
 // after its export and refuses every destructive step unless the lease is still its own.
 //
@@ -58,12 +57,9 @@ function cutoffDay(now: Date, days: number): string {
   return new Date(now.getTime() - days * DAY_MS).toISOString().slice(0, 10);
 }
 
-// The dump itself is @dustinedwards/d1-dump's runCheckedBackup, the nightly job every
-// site runs, so Capsid and the sites run one implementation: dump without the marker,
-// the standard checks (not empty, documents present, nothing excluded in the dump), the
-// credential-column check, Capsid's own checks below, then the marker and the
-// graduated prune. What stays here is Capsid's own: the lease, the KV sidecar, the
-// tables-mismatch and preflight checks, the markdown mirror and the history prunes.
+// The dump is @dustinedwards/d1-dump's runCheckedBackup, the nightly job every site runs.
+// What stays here is Capsid's own: the lease, the KV sidecar, the tables-mismatch and
+// preflight checks, the markdown mirror and the history prunes.
 //
 // Tables paged rather than read whole. Reading every table in one batch holds the
 // whole database in the isolate, and once version bodies grew past what the isolate
@@ -121,46 +117,31 @@ export const TABLES = [
   "job_outcomes",
   "agents",
   "job_outcome_prs",
-  // The Portal's site configuration: edited by hand in the Portal, so the dump is
-  // its only copy outside D1 besides the audit rows of each edit.
   "ops_sites",
   // The Portal's package configuration and its weekly GitHub numbers (migrations/0028):
   // the configuration is edited by hand, and the weekly rows are kept nowhere else.
   "ops_packages",
   "ops_package_weeks",
-  // The claims dataset (migrations/0023_job_claims.sql): what each agent said it did,
-  // each check of that against GitHub, and every human touch. Append-only by trigger,
-  // and nothing prunes them, so the dump is the only copy outside D1.
   "job_claims",
   "job_evaluations",
   "job_touches",
-  // The watcher's memory of each finding across jobs (migrations/0024_watcher_findings.sql).
   "watcher_findings",
   // The run ledger (migrations/0029_task_runs.sql): each scheduled task's runs,
   // pruned at 14 days in code (src/task-runs.ts).
   "task_runs",
-  // Each job's earlier versions, kept by capsid_work_jobs action "edit" (migrations/0033_job_versions.sql).
-  // Nothing prunes it, and the job's row holds only the newest version.
   "job_versions",
   // The shared packages the Shared code view follows (migrations/0036_shared_packages.sql):
   // configuration, seeded by its migration, so a restore empties it before importing.
   "shared_packages",
-  // The merge pipeline's approvals (migrations/0037_pr_approvals.sql): who approved which
-  // pull request at which head, and how each approval ended. Nothing prunes it.
+  // The merge pipeline's approvals (migrations/0037_pr_approvals.sql). Never pruned.
   "pr_approvals",
-  // Revoked agents moved out of agents by the watcher pass (migrations/0038_agents_archive.sql).
-  // Nothing prunes it: an archived row keeps a name reserved and a revoked key refused.
+  // Revoked agents moved out of agents (migrations/0038_agents_archive.sql); the row keeps a name reserved.
   "agents_archive",
-  // What became of each deploy whose live gate ran (migrations/0039_deploy_outcomes.sql),
-  // the evidence the promotion and demotion proposals read. Nothing prunes it.
   "deploy_outcomes",
-  // The methods paper's paired comparison (migrations/0047_bench.sql): the registered
-  // tasks and every run's outcome, the data its primary outcome is computed from.
-  // Insert-only and close-once by trigger; nothing prunes them.
+  // The methods paper's paired comparison (migrations/0047_bench.sql). Insert-only and close-once by trigger.
   "bench_tasks",
   "bench_runs",
-  // The registration and the drawn task order (migrations/0049_bench_draw.sql),
-  // insert-only by trigger; nothing prunes them.
+  // The registration and drawn task order (migrations/0049_bench_draw.sql), insert-only by trigger.
   "bench_registration",
   "bench_draw",
   // The replay cache, pruned below: a jti matters only inside the signature window.
@@ -414,20 +395,16 @@ async function pruneD1(env: Env): Promise<{ versions: number; audit: number }> {
 }
 
 // The run. runCheckedBackup writes one JSON object per table, _schema.json and the KV
-// sidecar (underscore-prefixed so it cannot collide with a table name, holding the KV
-// pins, which are not in D1) under one run prefix, then runs its checks and Capsid's.
-// The package reads every unpaged table in one D1 batch, which is one transaction, so
-// every table describes the same instant and exported_at describes it; the restore
-// invariants script (scripts/dump-invariants.ts) checks for the signature a torn read
-// leaves.
+// sidecar (underscore-prefixed so it cannot collide with a table name) under one run prefix,
+// then runs its checks and Capsid's. Unpaged tables are read in one D1 batch, one transaction,
+// so every table describes the same instant; scripts/dump-invariants.ts checks for the
+// signature a torn read leaves.
 //
-// Any failed check refuses everything destructive as a unit: the marker, the markdown
-// write, the R2 prunes and the D1 deletes. A run that cannot trust its read of
-// documents cannot trust content derived from it. The JSON dumps are kept: an export
-// deletes nothing, and an empty dump is the evidence of the day the store looked empty.
-// The 404 counts (site-runtime pruneNotFound) and the daily uptime rows, kept 90 days
-// and the ended Portal sessions whose cookies have expired. After the export, like pruneD1, so the rows leaving D1 are in
-// today's dump. A failure is logged and never fails the run: the dump is already marked.
+// Any failed check refuses everything destructive as a unit (marker, markdown write, R2
+// prunes, D1 deletes): a run that cannot trust its read of documents cannot trust content
+// derived from it. The JSON dumps are kept; an empty dump is the evidence of the day the
+// store looked empty. The 404 counts, daily uptime rows and ended Portal sessions are pruned
+// after the export; a failure is logged and never fails the run, the dump being marked.
 export const DAILY_RETENTION_DAYS = 90;
 async function pruneDaily(env: Env, now: Date): Promise<void> {
   try {
@@ -527,7 +504,6 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
   const history = await pruneD1(env);
   await pruneDaily(env, new Date(now));
 
-  // Stamp the last clean success, read by /health. A refused run returned above.
   await env.APP_KV.put(BACKUP_LAST_OK_KEY, now);
 
   return {

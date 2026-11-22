@@ -2,20 +2,17 @@ import { slugify } from "@drdustinedwards/site-helpers/slug";
 import type { Finding } from "./watcher-detect";
 import { HOUR_MS } from "./time";
 
-// ANOMALY RULES ON THE AUDIT LOG (capsid/research/design-owasp-hardening.md): a hit is a
-// watcher finding plus a Portal attention item, nothing more. No suspension and no revoke.
+// ANOMALY RULES ON THE AUDIT LOG (capsid/research/design-owasp-hardening.md): a hit is a watcher
+// finding plus a Portal attention item, nothing more. No suspension and no revoke.
 //
-// Per minted agent (actor "agent:<name>", the watcher itself excepted), the last 24 hours
-// against the 14 days before them, from audit_log counted per actor, action and hour:
-//   - a new action: an action the agent wrote in the last day and never in its baseline.
-//     An agent with no baseline at all is judged by the first-use rule instead;
-//   - a rate spike: its busiest hour in the last day over RATE_FACTOR times its busiest
-//     baseline hour, and at least RATE_FLOOR rows, so a quiet agent's second call is not
-//     a spike;
-//   - an off-hours first use: an agent with no baseline whose first row falls between
-//     00:00 and 06:00 America/Chicago.
+// Per minted agent (actor "agent:<name>", the watcher excepted), the last 24 hours against the 14
+// days before, from audit_log counted per actor, action and hour:
+//   - a new action the agent wrote in the last day and never in its baseline (an agent with no
+//     baseline is judged by the first-use rule instead);
+//   - a rate spike: its busiest hour over RATE_FACTOR times its busiest baseline hour, and at
+//     least RATE_FLOOR rows, so a quiet agent's second call is not a spike;
+//   - an off-hours first use: no baseline, first row between 00:00 and 06:00 America/Chicago.
 // The window is a day so a hit stays a finding for a day, then clears itself.
-//
 
 const BASELINE_DAYS = 14;
 const RECENT_HOURS = 24;

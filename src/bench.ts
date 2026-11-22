@@ -36,9 +36,8 @@ import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
 // (capsid/research/design-paired-comparison.md, section 2; migrations/0047_bench.sql).
 //
 // The capsid-bench repo runs one task per GitHub Actions job per arm and talks to Capsid
-// through four endpoints, signed like the improve scorer's (its own key, the Worker
-// secret BENCH_SECRET, the same timestamp window, the same replay cache under its own
-// scope) and not under /ops/ for the scorer's reason:
+// through endpoints signed like the improve scorer's (its own key, BENCH_SECRET, the same
+// timestamp window, the replay cache under its own scope), not under /ops/:
 //
 //   /bench/tasks  register a task and its hidden test counts, once
 //   /bench/draw   record the registration and append the drawn task order
@@ -46,10 +45,9 @@ import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
 //   /bench/repro  the harness's receipt for a treatment run's reproduction test
 //   /bench/score  close it: the Worker computes resolved and the false success claim
 //
-// ONE CLAIM RULE FOR EVERY ARM. Each arm's claim is the claim file its run wrote with
-// the bench's claim tool, read by capsid-bench's one parser and reported as claimed_done
-// (the methods paper's protocol, section 3). The treatment's Capsid job is still checked
-// to be this run's, but its status is not the claim.
+// ONE CLAIM RULE FOR EVERY ARM. Each arm's claim is the claim file its run wrote with the
+// bench's claim tool, read by capsid-bench's one parser and reported as claimed_done
+// (protocol section 3). The treatment's Capsid job status is not the claim.
 
 export const BENCH_TASKS_PATH = "/bench/tasks";
 export const BENCH_DRAW_PATH = "/bench/draw";
@@ -65,11 +63,10 @@ export const BENCH_MAX_RUNNING = 4;
 // A running row older than BENCH_STALE_MS (src/bench-run-key.ts) no longer holds a
 // slot: its job hit GitHub's own timeout without reporting. The row stays 'running' as
 // the record of that.
-// The design's k=3 repeats (D17): each model arm gets this many slots per task. A slot
-// may be started twice, and the second start only when the first came back unjudged (a
-// machine failure); a scored or running attempt holds its slot. Enforced here, not in the
-// hand-dispatched workflow, so a run whose outcome was seen cannot be replaced by another
-// start. A running row past BENCH_STALE_MS counts as unjudged.
+// The design's k=3 repeats (D17): each model arm gets this many slots per task. A slot may
+// be started twice, the second only when the first came back unjudged (a machine failure); a
+// scored or running attempt holds its slot. Enforced here, not in the hand-dispatched
+// workflow. A running row past BENCH_STALE_MS counts as unjudged.
 export const BENCH_REPEATS = 3;
 // THE ERROR STOP AND THE OUTAGE HOUR (the methods paper's protocol, section 3).
 // A model run that ends with Claude Code's "error during execution" (a usage
@@ -297,7 +294,6 @@ export function countedRuns<T extends PriorRun>(
   );
 }
 
-// A task and arm's runs in start order, for the start's slot and the order rule.
 async function priorRuns(
   db: D1Database,
   taskId: string,
@@ -566,15 +562,12 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
   });
 }
 
-// THE JOB CLOSE (the methods paper's protocol, section 4, "The job").
-// The score step finishes the run and closes that run's job in one batch, so the run is
-// not finished unless the close commits with it, and the run key stops resolving in the
-// same step (src/bench-run-key.ts reads a running row only). The close is a supersede by
-// the harness with the same reason on every treatment run; a job with work recorded on
-// it, which supersede refuses, is failed by the seat path with that reason, no claim and
-// no outcome row, since it is not the holder's fail. Neither the run key nor the driver
-// key that posted the job can supersede it. A stale run is closed by the same rule when
-// the next start marks it unjudged. The analysis reads the claim file, never job status.
+// THE JOB CLOSE (protocol section 4, "The job"). The score step finishes the run and closes
+// its job in one batch, so the run is not finished unless the close commits with it, and the
+// run key stops resolving in the same step. The close is a supersede by the harness; a job
+// with work recorded, which supersede refuses, is failed by the seat path with that reason,
+// no claim and no outcome row. Neither the run key nor the driver key can supersede it. The
+// analysis reads the claim file, never job status.
 export const BENCH_CLOSE_REASON = "closed by the harness; the claim is the claim file";
 const BENCH_HARNESS: Agent = {
   id: "bench-harness",

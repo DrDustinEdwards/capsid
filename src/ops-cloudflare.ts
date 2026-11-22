@@ -6,11 +6,7 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 import { callSignal } from "./call-signal";
 
-// The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns
-// (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never
-// per dashboard request. Two modules import it (test/ops-cloudflare.test.ts):
-// src/watcher-gather.ts, and src/ops-cloudflare-config.ts, the admin-only capsid_admin_read_ops
-// tool's Access and Email Routing reads, which reuse this envelope and paging.
+// The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never per dashboard request. Two modules import it (test/ops-cloudflare.test.ts): src/watcher-gather.ts, and src/ops-cloudflare-config.ts, the admin-only capsid_admin_read_ops tool's Access and Email Routing reads, which reuse this envelope and paging.
 //
 // The token, CF_OPS_TOKEN, is read-only and holds these permissions:
 //   Workers Scripts Read              GET /accounts/{id}/workers/domains and
@@ -21,18 +17,10 @@ import { callSignal } from "./call-signal";
 //   Zone Read                         GET /zones
 //   Email Routing Rules Read          GET /zones/{zone}/email/routing/rules
 //   Account Settings Read             GET /accounts/{id}/rum/site_info/list (the live checks'
-//                                     Web Analytics setting; developers.cloudflare.com/api/resources/rum/subresources/site_info/methods/list/)
-// The Access, Email Routing and Zone permissions are capsid_admin_read_ops's; Access is also
-// the watcher's, for a blocked job's "check: access app" line (src/manual-steps.ts). To add them to the existing token:
-// dash.cloudflare.com/profile/api-tokens, the token capsid-portal-read, Edit; add
-// Account / Access: Apps and Policies / Read, Account / Email Routing Addresses / Read,
-// Zone / Email Routing Rules / Read and Zone / Zone / Read; Zone Resources: All zones
-// from the account; Continue to summary, Update token. The secret value does not change.
+//                                     Web Analytics setting)
+// The Access, Email Routing and Zone permissions are capsid_admin_read_ops's; Access is also the watcher's, for a blocked job's "check: access app" line (src/manual-steps.ts). To add them: dash.cloudflare.com/profile/api-tokens, the token capsid-portal-read, Edit; add Account / Access: Apps and Policies / Read, Account / Email Routing Addresses / Read, Zone / Email Routing Rules / Read and Zone / Zone / Read; Zone Resources: All zones. The secret value does not change.
 //
-// What this read cannot see: a failed deploy. Cloudflare's deployments list records
-// only the deployments that happened, so a deploy that failed before it reached
-// Cloudflare leaves nothing here to find. No finding is invented for it; a failed
-// deploy workflow is already the watcher's ci-red finding on the default branch.
+// What this read cannot see: a failed deploy. Cloudflare's deployments list records only deployments that happened, so a deploy that failed before reaching Cloudflare leaves nothing here. No finding is invented for it; a failed deploy workflow is already the watcher's ci-red finding.
 
 export const CF_API = "https://api.cloudflare.com/client/v4";
 export const CF_GRAPHQL = `${CF_API}/graphql`;
@@ -555,11 +543,7 @@ export async function readCloudflare(
   return { bySite, ran };
 }
 
-// THE SECRET-PRESENCE READ (job_09e5f6cbf782, shared with job_5ac1139641e0's credentials
-// inventory): which secrets a Worker has, by NAME. Cloudflare's secrets list returns each
-// secret's name and type and has no way to return a value, so none can reach Capsid. Read
-// on the watcher's pass only, like every Cloudflare read here; the Portal shows what the
-// last pass stored (src/secret-presence.ts).
+// THE SECRET-PRESENCE READ (shared with the credentials inventory): which secrets a Worker has, by NAME. Cloudflare's secrets list has no way to return a value, so none can reach Capsid. Read on the watcher's pass only; the Portal shows what the last pass stored (src/secret-presence.ts).
 const SECRETS_PERMISSION = "Account / Workers Scripts / Read";
 
 /** The `name` of every row of a Cloudflare list, nothing else: whatever else a row carries
@@ -607,10 +591,7 @@ export async function readSecretNames(
   );
 }
 
-// The Access applications' names, for a blocked job's "check: access app <name>" line
-// (src/manual-steps.ts), read on the watcher's pass. Names only: an Access for SaaS app
-// carries a client secret beside its settings (src/ops-cloudflare-config.ts), and nothing
-// but the name is copied out here.
+// The Access applications' names, for a blocked job's "check: access app <name>" line (src/manual-steps.ts). Names only: an Access for SaaS app carries a client secret beside its settings (src/ops-cloudflare-config.ts), and nothing but the name is copied out.
 const ACCESS_PERMISSION = "Account / Access: Apps and Policies / Read";
 
 /** GET /accounts/{id}/access/apps: the names. A 403 names the permission the token lacks. */

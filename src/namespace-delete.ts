@@ -15,45 +15,17 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { plural } from "@drdustinedwards/site-helpers/text";
-// Deleting a namespace (capsid_admin_manage_namespaces actions delete_preview and
-// delete_perform): the plan, the refusals, the signed confirmation and the one batch.
-// Its operation is registered in src/tools/namespaces.ts, admin only (TOOL_GRANTS in
-// src/scope.ts). The
-// namespace_remove control (src/controls.ts) is its second door: its preview reads this
-// plan and refusals and binds the same fingerprint, and its perform is deleteAsPlanned.
+// Deleting a namespace (capsid_admin_manage_namespaces actions delete_preview and delete_perform): the plan, the refusals, the signed confirmation and the one batch. Registered in src/tools/namespaces.ts, admin only (TOOL_GRANTS in src/scope.ts). The namespace_remove control (src/controls.ts) is its second door: it binds the same fingerprint, and its perform is deleteAsPlanned.
 //
-// Two calls, as the Portal's controls are (src/portal-actions.ts). The preview reads
-// everything that names the namespace, writes nothing, and when nothing refuses returns
-// a token signed over the namespace, cascade, allow_improve_paths, the plan's counts,
-// the caller's actor and a five-minute expiry. The perform re-reads the plan, requires
-// the token to match it exactly, and commits one batch whose first statement aborts it
-// unless the store still is what the plan read.
+// Two calls, as the Portal's controls are (src/portal-actions.ts). The preview writes nothing and, when nothing refuses, returns a token signed over the namespace, cascade, allow_improve_paths, the plan's counts, the caller's actor and a five-minute expiry. The perform re-reads the plan, requires the token to match exactly, and commits one batch whose first statement aborts it unless the store still is what the plan read.
 //
-// WHAT IS DELETED: every live document (any path not under archive/), each snapshotted
-// to document_versions inside the batch before it goes and removed by
-// pathMutation(db, ns, path, null), the one path mutation site
-// (path mutation invariant, test/path-mutation.test.ts); every edge touching one of those documents, removed by the same
-// helper and recorded whole in the audit row; the ops_sites row, recorded whole in the
-// audit row; and the namespaces row.
+// DELETED: every live document (any path not under archive/), each snapshotted to document_versions in the batch and removed by pathMutation(db, ns, path, null), the one path mutation site (test/path-mutation.test.ts); every edge touching one of those documents, recorded whole in the audit row; the ops_sites row, recorded whole in the audit row; and the namespaces row.
 //
-// WHAT IS KEPT, because it is history: archived documents (archive/...), every
-// document_versions and audit_log row, finished jobs, job_outcomes, job_claims,
-// job_touches, revoked agents that name the namespace, and the nightly backup
-// objects. The kept
-// archived documents still name a namespace that is no longer registered. The read
-// tools (capsid_read_doc, capsid_find_docs, capsid_start_session) still return them by
-// that name; capsid_write_doc and capsid_delete_doc refuse there until the namespace is registered again, and a
-// later capsid_admin_manage_namespaces action register of the same name brings them back into scope.
+// KEPT, as history: archived documents (archive/...), every document_versions and audit_log row, finished jobs, job_outcomes, job_claims, job_touches, revoked agents that name the namespace, and the nightly backup objects. The read tools still return archived documents by that name; writes refuse there until the namespace is registered again, and a later register of the same name brings them back into scope.
 //
-// WHAT ALWAYS REFUSES, whatever cascade says: an open job (queued, claimed, blocked),
-// a live agent whose scopes name the namespace, and a namespace on the roster.
-// cascade reaches documents only. A namespace with more live documents than one batch
-// can delete (NAMESPACE_DELETE_MAX_DOCUMENTS) is refused too, never half deleted.
+// ALWAYS REFUSES, whatever cascade says: an open job (queued, claimed, blocked), a live agent whose scopes name the namespace, and a namespace on the roster. cascade reaches documents only. More live documents than one batch can delete (NAMESPACE_DELETE_MAX_DOCUMENTS) is refused, never half deleted.
 //
-// An edge whose end in this namespace names a path no document holds (already
-// dangling) touches no deleted document, so pathMutation leaves it, as a document
-// delete would; docs/schema.md, "Links", says dangling edges are reported, never
-// repaired.
+// An edge already dangling at this namespace's end touches no deleted document, so pathMutation leaves it, as a document delete would (docs/schema.md, "Links": dangling edges are reported, never repaired).
 
 // The statements every perform batch carries besides the per-document ones: the plan
 // guard, the snapshot, the audit row, the ops_sites delete and the namespaces delete.
@@ -435,13 +407,7 @@ export async function previewNamespaceDelete(
   };
 }
 
-// The batch's first statement: an INSERT that violates NOT NULL (the same abort as
-// requireExists in src/store-guards.ts), fired unless the store is still what the plan
-// read. The preview's reads are another transaction, so this is what makes the
-// refusals and the counts hold at commit. The live set is pinned exactly: the count
-// equals the plan's, and no live path lies outside the plan's list (?6, JSON), so a
-// document swapped for another in between aborts too, and every live document the
-// batch finds is one pathMutation below deletes.
+// The batch's first statement: an INSERT that violates NOT NULL (the same abort as requireExists in src/store-guards.ts), fired unless the store is still what the plan read. The preview's reads are another transaction, so this is what makes the refusals and counts hold at commit. The live set is pinned exactly: the count equals the plan's and no live path lies outside the plan's list (?6, JSON).
 function planGuard(db: D1Database, plan: DeletePlan, pathsJson: string): D1PreparedStatement {
   return db
     .prepare(

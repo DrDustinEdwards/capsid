@@ -8,15 +8,14 @@ import { pathClassOf } from "./merge-class";
 import { weakenedTests } from "./test-protection";
 import { checklistItems, unchangedItems } from "./job-checklist";
 
-// The CI gate on complete (docs/work-queue.md, "CI on complete"). A job handed on as done
-// names its pull requests, and each must show CI that ran and passed on its head. Green
-// is the only pass. Still running is a wait, failed is red, and no check run that passed
-// on a change to code is not green either: a change nothing ran on is not shown to work.
-// GitHub unreadable is a wait as well, since not answered is not green. A pull request
-// that takes a test away is refused too (src/test-protection.ts).
+// The CI gate on complete (docs/work-queue.md, "CI on complete"). A job handed on as done names
+// its pull requests, and each must show CI that ran and passed on its head. Green is the only
+// pass: still running or GitHub unreadable is a wait, failed is red, and no passing check run on
+// a change to code is not green either. A PR that takes a test away is refused too
+// (src/test-protection.ts).
 //
-// A pull request Capsid has no way to read is not gated: with no GitHub App, or in a repo
-// the job's namespace does not map, its outcome stays unverified as before.
+// A PR Capsid has no way to read (no GitHub App, or a repo the namespace does not map) is not
+// gated: its outcome stays unverified.
 
 const CHECKS_MAX_PAGES = 10;
 const AGAIN = "Nothing was written; call complete again once it has.";
@@ -67,7 +66,6 @@ export async function ciRefusal(
   };
 }
 
-// A refusal, the paths the pull request changes when it passes, or null when it could not be read.
 async function notGreen(
   env: Env,
   namespace: string,

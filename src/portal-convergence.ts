@@ -15,7 +15,7 @@ export const PORTAL_CONVERGENCE_PATH = "/portal/api/convergence";
 
 /** GET /portal/api/convergence: every opted-in site's convergence, read now. */
 export const handlePortalConvergence = behindGate(
-  async (_request, env, now, fetchImpl: typeof fetch = fetch) => {
+  async (_request, env, now, _user, fetchImpl: typeof fetch = fetch) => {
     const body: PortalConvergence = {
       generated: now.toISOString(),
       sites: await readConvergence(env, fetchImpl, now),

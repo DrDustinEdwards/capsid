@@ -3,21 +3,18 @@ import type { Agent } from "./agents";
 import type { InboxItem } from "./inbox";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// WHAT AN APP REPORTS ABOUT ITSELF TO THE INBOX (design
-// capsid/research/design-inbox-report.md). Some things that
-// need Dustin live only in an app's own database (Carrel's AI drafts waiting). Capsid does
-// not read that database; the app posts its present state to POST /ops/inbox/report with
-// its own scoped key, and the inbox reads the last report back as kind "report".
+// WHAT AN APP REPORTS ABOUT ITSELF TO THE INBOX (design capsid/research/design-inbox-report.md).
+// Some things that need Dustin live only in an app's own database (Carrel's AI drafts waiting).
+// Capsid does not read that database; the app posts its present state to POST /ops/inbox/report
+// with its own scoped key, and the inbox reads the last report back as kind "report".
 //
-// - The key must hold the write grant on the namespace the report names, through
-//   checkScope (one enforcement point, test/scope.test.ts). A report for any other namespace
-//   is refused.
-// - A report replaces the last one whole and expires after 6 hours: an app that stops
-//   reporting stops being counted, because a stale "needs you" is worse than none.
-// - No severity field: a reported item always counts as needs-you, so an app cannot quiet
-//   its own badge.
-// - The items are the app's words. A link must stay on the app's own origin (its ops_sites
-//   row), and capsid_read_status action status fences the title as external before an agent reads it.
+// - The key must hold the write grant on the namespace the report names, through checkScope (one
+//   enforcement point, test/scope.test.ts); any other namespace is refused.
+// - A report replaces the last one whole and expires after 6 hours: a stale "needs you" is worse
+//   than none.
+// - No severity field: a reported item always counts as needs-you, so an app cannot quiet its badge.
+// - The items are the app's words. A link must stay on the app's own origin (its ops_sites row),
+//   and capsid_read_status action status fences the title as external before an agent reads it.
 // - One report per minute per key, fail closed: this is a write path.
 
 const INBOX_REPORT_PATH = "/ops/inbox/report";
@@ -43,10 +40,9 @@ const ITEM_KEYS = new Set(["title", "link", "since"]);
 const BODY_KEYS = new Set(["namespace", "items"]);
 
 /**
- * The report a body describes, or why it is refused. `origin` is the namespace's site
- * origin (https://host) or null when it serves no site, in which case no item may carry
- * a link. Anything outside the contract refuses the whole report, so a half-read report
- * is never stored.
+ * The report a body describes, or why it is refused. `origin` is the namespace's site origin or
+ * null when it serves no site (then no item may carry a link). Anything outside the contract
+ * refuses the whole report, so a half-read report is never stored.
  */
 export function parseReport(
   body: unknown,

@@ -35,16 +35,12 @@ import {
 } from "./jobs-transition";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Getting work into and out of the queue: post, list and claim.
 
-// The body is signed at post, with the same key and envelope as the signed policy
-// documents (src/signed-docs.ts). The driver refuses a job whose body does not
-// verify, so a row edited by a raw D1 splice, or a document mirrored back over by
-// hand, cannot steer a session that holds local shell and repo credentials.
-//
-// Unconfigured is a refusal, not a skip. With no IMPROVE_SCORE_SECRET there is no key
-// to sign with, and a queue of unsignable jobs would be refused by the driver one at
-// a time instead of here.
+// The body is signed at post, with the same key and envelope as the signed policy documents
+// (src/signed-docs.ts). The driver refuses a job whose body does not verify, so a row edited
+// by a raw D1 splice cannot steer a session that holds local shell and repo credentials.
+// Unconfigured (no IMPROVE_SCORE_SECRET) is a refusal, not a skip, rather than a queue of
+// unsignable jobs refused one at a time by the driver.
 
 /** The open statuses in prose, derived rather than retyped, so a status added to
  *  OPEN_JOB_STATUSES cannot leave the refusal claiming a shorter list than the index
@@ -55,13 +51,9 @@ function openMeans(): string {
   return names.length ? `${names.join(", ")} or ${last}` : String(last);
 }
 
-/** What a duplicate post collided with. The unique index is the rule and D1's error
- *  names only the constraint, so the row is read back to say which job holds the
- *  title and what state it is in. A blocked holder is the case that matters, because
- *  it is waiting on a human rather than on a driver.
- *
- *  The lookup only shapes the message, never the rule: if the holder finished between
- *  the constraint firing and this read, the refusal still stands. */
+/** What a duplicate post collided with. D1's error names only the constraint, so the row is
+ *  read back to say which job holds the title and in what state (a blocked holder matters
+ *  most: it waits on a human). The lookup only shapes the message, never the rule. */
 async function duplicateRefusal(env: Env, namespace: string, title: string): Promise<string> {
   const placeholders = OPEN_JOB_STATUSES.map((_, i) => `?${i + 3}`).join(", ");
   const holder = await env.DB.prepare(
@@ -97,9 +89,8 @@ export async function signedJobBody(
       ok: false,
       problem: "a job needs a body. The body is the prompt the driver executes.",
     };
-  // A body is the prompt a driver executes, so a malformed post is worse here than
-  // anywhere else: the swallowed text is signed along with everything else and the
-  // driver runs whatever survived.
+  // A body is the prompt a driver executes, so a swallowed malformed post is worse here than
+  // anywhere: the driver runs whatever survived.
   const swallowed = swallowedParamTag(body);
   if (swallowed) return { ok: false, problem: swallowedTagRefusal("body", swallowed) };
   // An external fence is how relayed text is told from instruction (src/provenance.ts), so
@@ -252,12 +243,10 @@ export async function postJob(
   return { ok: true, action: "post", job };
 }
 
-// List never carries a body unless one job was asked for by a writer. A body is the
-// signed prompt a driver executes with shell and repo credentials, and a list that
-// selected every column would let a read grant on a namespace read every prompt queued
-// in it. The columns are named so the body never leaves D1 for a list. claim returns
-// it, and so does list when `withBody` is set, which the tool sets only for a single
-// named id and a caller holding write.
+// List never carries a body unless one job was asked for by a writer: a body is the signed
+// prompt a driver executes, and selecting every column would let a read grant read every
+// queued prompt. The columns are named so the body never leaves D1 for a list; `withBody` is
+// set only for a single named id and a caller holding write.
 const JOB_LIST_COLUMNS = [
   "id",
   "namespace",
@@ -317,7 +306,6 @@ export async function listJobs(
   // would cost one read per resumed job.
   const listNotes = args.id && rows.length === 1 ? await resumeNotes(env, rows[0]) : null;
   const listNote = listNotes?.notes[0] ?? null;
-  // One named job somebody began says who and when (src/jobs-begin.ts).
   const listStarted = args.id && rows.length === 1 ? startedNotice(rows[0]) : null;
   return {
     ok: true,
@@ -394,15 +382,12 @@ export async function claimJob(
   if (breaker.open)
     return refuse("claim", `${actor} cannot claim ${candidate.id}: ${breakerRefusal(breaker)}`);
 
-  // What the job needs of the driver is checked before the job is taken. A claim
-  // that took the job and then refused would park it on a driver that cannot do it.
-  // The check runs through checkScope, so a job
-  // requirement and an agent scope are compared by the same function that decides
-  // every tool call.
+  // What the job needs of the driver is checked before the job is taken: a claim that took it
+  // and then refused would park it on a driver that cannot do it. Run through checkScope, the
+  // function that decides every tool call.
   //
-  // A requirement that cannot be read fails the job, as a bad signature does below:
-  // left queued, the same row would be refused to every driver in turn, and a claim
-  // with no id takes the top queued job, so it would stop the namespace's queue.
+  // A requirement that cannot be read fails the job, as a bad signature does below: left
+  // queued, the same row would be refused to every driver in turn and stop the namespace.
   const corrupt = corruptRequirement(candidate);
   if (corrupt) {
     const reason = `${candidate.id} has a corrupt requirement: ${corrupt}. A requirement that cannot be read is not the same as none, so it was not handed out.`;
@@ -439,17 +424,13 @@ export async function claimJob(
     );
   }
 
-  // The signature is checked before the job is handed over, not by the driver after
-  // it has one. A job body is executable input that arrives as a database row, and the
-  // driver is a session holding local shell and repo credentials.
+  // The signature is checked before the job is handed over: a body is executable input
+  // arriving as a database row, for a session with local shell and repo credentials. One that
+  // does not verify was edited after `post` signed it, so it is failed here rather than left
+  // to be handed to every driver in turn.
   //
-  // A body that does not verify was edited after `post` signed it. That job is failed
-  // here rather than left queued: leaving it would hand the same broken row to every
-  // driver in turn, and the queue would never drain.
-  //
-  // Unlike a run document (verifyTaskDoc) there is no actor check. Only the loop writes
-  // a run document, so its audit actor is the loop; a job is posted by a human seat,
-  // and this Worker's signature is what proves it went through `post`.
+  // Unlike a run document (verifyTaskDoc) there is no actor check: a job is posted by a human
+  // seat, and this Worker's signature is what proves it went through `post`.
   const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, candidate.body, "job body");
   if (!verdict.ok) {
     const marked = await markJobFailed(

@@ -142,18 +142,14 @@ export function allowsScope(list: ScopeList, value: string): boolean {
   return list === "*" ? true : list.includes(value);
 }
 
-// The same comparison for a tool whose action decides what it does (jobs: "may post
-// a job" and "may claim one" are different authorities). An entry may be qualified,
-// `jobs.post`, and the rule is:
-//
+// The same comparison for a tool whose action decides what it does (jobs: "may post a job" and
+// "may claim one" are different authorities). An entry may be qualified, `jobs.post`:
 //   - "*" allows everything.
-//   - A list naming at least one action of this tool is narrowed to the actions it
-//     names. Anything else of that tool is refused.
+//   - A list naming at least one action of this tool is narrowed to the actions it names; anything
+//     else of that tool is refused.
 //   - A bare tool name with no qualified sibling means the whole tool.
 //   - The narrowing reaches only the tool it names.
-//
-// Kept beside allowsScope rather than in the enforcement point so the rule is one
-// pure function the tests can drive without an agent or a server.
+// Kept beside allowsScope so the rule is one pure function the tests can drive without a server.
 export function allowsToolAction(
   list: ScopeList,
   tool: string,
@@ -175,7 +171,6 @@ export function allowsToolAction(
   return list.includes(`${prefix}${action}`);
 }
 
-// How a scope list reads in a refusal, so the refusal says what the scope is.
 export function describeScope(list: ScopeList): string {
   if (list === "*") return "*";
   return list.length === 0 ? "(none)" : list.join(", ");

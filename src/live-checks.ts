@@ -10,18 +10,17 @@ import { MINUTE_MS } from "./time";
 import { callSignal } from "./call-signal";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// THE WATCHER'S LIVE CHECKS (capsid/research/design-automation-for-speed.md, D5). Four checks after a
-// deploy, read by the Worker: the deployed sha against the default branch, the
-// Web Analytics beacon on public pages, a CSP that lets the beacon load and report,
-// and no beacon on pages that must not carry one.
+// THE WATCHER'S LIVE CHECKS (capsid/research/design-automation-for-speed.md, D5). Four checks
+// after a deploy: the deployed sha against the default branch, the Web Analytics beacon on
+// public pages, a CSP that lets it load and report, and no beacon on pages that must not
+// carry one.
 //
-// WHAT TO CHECK IS A DOCUMENT, NOT CODE. Which pages carry a beacon is a cross-repo
-// rule, so it lives in Capsid's store at capsid/policy/live-checks.md,
-// beside the other policies, and is read each pass. No document means the check does not
-// run: nothing is probed on a guess. It judges nothing but what it is told to look at,
-// and it can only post a job, like every watcher finding. See docs/live-checks.md.
+// WHAT TO CHECK IS A DOCUMENT, NOT CODE. Which pages carry a beacon is a cross-repo rule, so
+// it lives at capsid/policy/live-checks.md and is read each pass. No document means no check:
+// nothing is probed on a guess. It can only post a job, like every watcher finding. See
+// docs/live-checks.md.
 //
-// Reads only. Each page is one GET of the site's own configured origin plus a path the
+// Reads only: each page is one GET of the site's own configured origin plus a path the
 // document names, so a document cannot point the watcher at another host.
 
 const LIVE_CHECKS_NAMESPACE = "capsid";
@@ -29,9 +28,8 @@ const LIVE_CHECKS_PATH = "policy/live-checks.md";
 
 const BEACON_SCRIPT_HOST = "static.cloudflareinsights.com";
 
-// A push whose deploy has had this long and still has not reached the site is a finding.
-// Shorter and the watcher would file a job every time a pass landed inside a normal
-// deploy (CI takes about seven minutes).
+// A push whose deploy has had this long and still has not reached the site is a finding
+// (CI takes about seven minutes).
 export const DEPLOY_GRACE_MINUTES = 45;
 
 // Bounds, so one document cannot turn a pass into a flood of subrequests. The tick
@@ -107,8 +105,6 @@ export function parseLiveConfig(body: string): LiveConfig {
   return { rules };
 }
 
-// THE PAGE.
-
 /** Scripts on the page that load the Web Analytics beacon. A script tag whose own
  *  attributes name the beacon host. A beacon a page injects with inline script, or one
  *  Cloudflare adds in the browser, is not in the delivered HTML and is not counted. */
@@ -120,8 +116,6 @@ const BEACON_SRC = new RegExp(
   `\\bsrc\\s*=\\s*["']?((?:https?:)?//${BEACON_SCRIPT_HOST.replace(/\./g, "\\.")}/[^"'\\s>]*)`,
   "i",
 );
-
-// FINDINGS.
 
 export interface LiveFinding {
   namespace: string;
@@ -142,7 +136,6 @@ export interface PageRead {
   status: number | null;
   headers: Headers | null;
   html: string | null;
-  // Why this is not a readable HTML page, or null when it is.
   problem: string | null;
   // The page was not served to an anonymous visitor: a login redirect off the site, or a
   // 401 or 403. For a page that must carry no beacon that is the answer wanted, not a
@@ -292,8 +285,6 @@ export function analyticsFinding(
     ],
   };
 }
-
-// READING.
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -507,7 +498,6 @@ export async function liveChecks(
     }
     const page = await readPage(deps.fetchImpl, site.origin, rule.path);
     if (page.problem !== null && page.gated && rule.kind === "nobeacon") {
-      // Not served to the public, which is what the rule asks for.
       summary.pages_read += 1;
       continue;
     }

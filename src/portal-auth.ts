@@ -23,33 +23,15 @@ import { base64url, fromBase64urlText, hmacSha256Hex } from "@dustinedwards/site
 import { isSameOriginPath } from "@dustinedwards/site-runtime/url";
 import { isolationVerdict, originRefusal } from "@dustinedwards/site-runtime/origin";
 
-// Capsid Portal's own session. The OAuth provider mints tokens for MCP clients, and a
-// browser opening /portal has nothing to present, so the Portal signs in through the
-// same Access for SaaS app as the MCP login (src/access-login.ts, design PR 3 of
-// capsid/research/design-capsid-access-login.md) with its own redirect URL, state
-// cookie and KV prefix, and turns the verified email into a signed cookie. It does not
-// go through the MCP provider, whose flow ends at a client redirect_uri.
+// Capsid Portal's own session. A browser opening /portal has no OAuth token, so the Portal signs in through the same Access for SaaS app as the MCP login (src/access-login.ts, capsid/research/design-capsid-access-login.md) with its own redirect URL, state cookie and KV prefix, and turns the verified email into a signed cookie. It does not go through the MCP provider, whose flow ends at a client redirect_uri.
 //
-// The cookie is a signed assertion (HMAC over a base64url payload with the email, a
-// random session id, the sign-in time and an expiry). Three things end it:
-// - 24 hours after the sign-in (PORTAL_SESSION_TTL_SECONDS), the Portal sends the
-//   browser back through Access. 24 hours via Access plus the idle hour below are the
-//   approved admin durations (NIST SP 800-63B-4).
-// - An hour with no request: site-runtime's adminIdle times the session, as it times
-//   the sites' Access sessions (withPortalIdle below). Past it the Portal session is
-//   ended and the browser is sent to Access's logout, which ends the Access session too,
-//   so the next visit asks for a sign-in instead of passing straight through.
-// - Sign out and the idle end record the session id in D1 (portal_session_ends,
-//   migrations/0055), and a cookie carrying it is refused, so a copy taken elsewhere ends
-//   too, at once, and the person's other sessions are left alone. Sessions live in D1,
-//   never KV (D9).
+// The cookie is a signed assertion (HMAC over a base64url payload with the email, a random session id, the sign-in time and an expiry). Three things end it:
+// - 24 hours after the sign-in (PORTAL_SESSION_TTL_SECONDS), which sends the browser back through Access. With the idle hour below, these are the approved admin durations (NIST SP 800-63B-4).
+// - An hour with no request: site-runtime's adminIdle times the session (withPortalIdle below), then the browser is sent to Access's logout so the next visit asks for a sign-in instead of passing straight through.
+// - Sign out and the idle end record the session id in D1 (portal_session_ends, migrations/0055), and a cookie carrying it is refused, so a copy taken elsewhere ends at once and the person's other sessions are left alone. Sessions live in D1, never KV (D9).
 // The admin check (ADMIN_EMAIL or CO_OWNER_EMAILS) runs again on every request.
 //
-// Every cookie here is host-only (no Domain attribute, ever) and scoped by portalCookiePath
-// (src/portal-host.ts): Path=/ on portal.dustinedwards.info, a host that serves nothing
-// but the Portal, and Path=/portal on any other host, so /mcp and /ops there never see it. The Portal was at /console until PR B
-// of capsid/research/design-portal-unify.md. A Path=/console cookie from then is never
-// sent here, so a browser signed in there signs in once more.
+// Every cookie here is host-only (no Domain attribute, ever) and scoped by portalCookiePath (src/portal-host.ts): Path=/ on portal.dustinedwards.info, which serves nothing but the Portal, and Path=/portal on any other host, so /mcp and /ops there never see it. A Path=/console cookie from before the move is never sent here, so a browser signed in there signs in once more.
 
 export const PORTAL_PATH = "/portal";
 export const PORTAL_PREFIX = "/portal/";
@@ -66,10 +48,7 @@ export const PORTAL_SESSION_TTL_SECONDS = 24 * 60 * 60;
 // silent sign-in.
 const PORTAL_COOKIE_MAX_AGE = PORTAL_SESSION_TTL_SECONDS + ADMIN_IDLE_SECONDS;
 
-// The Portal's half of the Access login. The state stored against the token is the
-// Portal path to return to. The callback and the state cookie follow the host: on
-// portal.dustinedwards.info the callback is /callback, which the host rewrite hands to
-// PORTAL_CALLBACK_PATH; Access must list each host's callback URL (docs/auth.md).
+// The Portal's half of the Access login. The state stored against the token is the Portal path to return to. The callback and state cookie follow the host: on portal.dustinedwards.info the callback is /callback, which the host rewrite hands to PORTAL_CALLBACK_PATH; Access must list each host's callback URL (docs/auth.md).
 function portalLogin(url: URL): LoginFlow {
   return {
     callbackPath: publicPortalPath(url, PORTAL_CALLBACK_PATH),
@@ -94,10 +73,7 @@ interface SessionPayload extends PortalUser {
   exp: number;
 }
 
-// The session's signing key: COOKIE_ENCRYPTION_KEY under its own label (confirmKeys), as
-// the confirmations and the idle cookie each have, so the root secret signs nothing
-// itself. A new label signs every Portal
-// session out once.
+// The session's signing key: COOKIE_ENCRYPTION_KEY under its own label (confirmKeys), as the confirmations and the idle cookie each have, so the root secret signs nothing itself. A new label signs every Portal session out once.
 const SESSION_LABEL = "portal-session";
 const sessionKey = async (secret: string): Promise<string> =>
   (await confirmKeys({ COOKIE_ENCRYPTION_KEY: secret }, SESSION_LABEL))[0];
@@ -340,10 +316,7 @@ export async function handlePortalCallback(
   return new Response(null, { status: 302, headers });
 }
 
-// A bearer token is refused, not redirected. An agent key presented to
-// the Portal is a caller that cannot follow a login redirect: a 302 would send a
-// machine to the Access sign-in and look, from its side, like the Portal being down.
-// The refusal names what was presented and what the page admits instead.
+// A bearer token is refused, not redirected: an agent key presented to the Portal cannot follow a login redirect, and a 302 to Access would look from its side like the Portal being down.
 const BEARER_REFUSAL =
   "forbidden: Capsid Portal admits the administrator's Access session only. An agent key authenticates to /ops/mcp, not to this page; the same state is served by capsid_read_status action status and capsid_work_jobs there. Open the Portal in a browser to sign in as the administrator.";
 
@@ -379,10 +352,11 @@ export async function portalGate(
   return { ok: true, user };
 }
 
-/** A Portal API read behind the gate: `run` is called only once the administrator is signed in,
- *  and a request that is not gets the gate's own response. */
+/** A Portal API route behind the gate: `run` is called only once the administrator is signed in
+ *  (with the user, ahead of any extra arguments the caller passes), and a request that is not
+ *  gets the gate's own response. */
 export function behindGate<A extends unknown[]>(
-  run: (request: Request, env: Env, now: Date, ...rest: A) => Promise<Response>,
+  run: (request: Request, env: Env, now: Date, user: PortalUser, ...rest: A) => Promise<Response>,
 ) {
   return async (
     request: Request,
@@ -391,14 +365,11 @@ export function behindGate<A extends unknown[]>(
     ...rest: A
   ): Promise<Response> => {
     const gate = await portalGate(request, env, now, PORTAL_PREFIX);
-    return gate.ok ? run(request, env, now, ...rest) : gate.response;
+    return gate.ok ? run(request, env, now, gate.user, ...rest) : gate.response;
   };
 }
 
-// The address a Portal request came from, for its audit row. Cloudflare's edge sets
-// CF-Connecting-IP on every request and replaces any value a client sends, so it is
-// the visitor's address. A value that is not an IPv4 or IPv6 address is recorded as
-// null rather than stored as given.
+// The address a Portal request came from, for its audit row. Cloudflare's edge sets CF-Connecting-IP and replaces any client value; one that is not an IPv4 or IPv6 address is recorded as null.
 const ADDRESS = /^[0-9A-Fa-f:.]{2,45}$/;
 export function sourceAddress(request: Request): string | null {
   const raw = request.headers.get("CF-Connecting-IP")?.trim() ?? "";

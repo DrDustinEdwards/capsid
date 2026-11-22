@@ -2,12 +2,11 @@ import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
 import { readStoredSecrets, type StoredSecrets } from "./secret-presence";
 
-// DUSTIN'S MANUAL STEPS, DONE ONLY WHEN CAPSID CAN SEE THEM (improvement list item 14).
-// A session that needs a person to click something (approve an npm publish, add an Access
-// app, set a secret, fill a repo's About box) blocks its job as for any gate
-// (src/jobs-holder.ts): the reason carries the click steps, and a line of the form
-// "check: <form>" in the reason or the command names the result Capsid looks for. The
-// forms (docs/work-queue.md):
+// DUSTIN'S MANUAL STEPS, DONE ONLY WHEN CAPSID CAN SEE THEM (improvement list item 14). A
+// session that needs a person to click something (approve an npm publish, add an Access app,
+// set a secret, fill a repo's About box) blocks its job as for any gate (src/jobs-holder.ts):
+// the reason carries the steps, and a line "check: <form>" in the reason or command names the
+// result Capsid looks for (docs/work-queue.md):
 //   check: secret NAME on <namespace>     the site's Worker has the secret NAME, from the
 //                                         names the watcher stored (src/secret-presence.ts)
 //   check: npm <package>@<version>        npm lists that version (registry.npmjs.org)
@@ -18,11 +17,10 @@ import { readStoredSecrets, type StoredSecrets } from "./secret-presence";
 // A check line in any other form is a result Capsid cannot see, so it never counts as seen.
 //
 // The watcher's pass reads them (src/watcher.ts) and writes the counts per job to one APP_KV
-// value, as the merge-resume step does for pull requests (src/stale-jobs.ts): the inbox and
-// the stale view read the counts and never call out. A job whose every named step is seen
-// after it last changed is settled exactly as a merged pull request settles one: the inbox
-// stops showing it as waiting on Dustin, and the stale view lists it as steps-seen so it is
-// closed or resumed. Nothing here moves a job. A failed read is "unread", never "seen".
+// value (src/stale-jobs.ts): the inbox and the stale view read the counts and never call out. A
+// job whose every named step is seen after it last changed is settled as a merged pull request
+// settles one: the inbox stops showing it as waiting on Dustin, and the stale view lists it as
+// steps-seen. Nothing here moves a job. A failed read is "unread", never "seen".
 
 export const STALE_STEPS_KEY = "stale:steps";
 const MAX_JOBS = 25;

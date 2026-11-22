@@ -1,12 +1,8 @@
-// The MCP endpoint on the family domain ("one address pattern for the family"):
-// https://mcp.dustinedwards.info, a Custom Domain on this Worker.
-//
-// That host serves the machine surface and nothing else: the MCP endpoints, the OAuth
-// flow that authorizes them, the /ops routes keys and runners call, the signed backup
-// and bench endpoints, /health and the CSP report sink. Any other path there is the plain 404, so
-// the host never answers with the Portal or a page; the Portal has its own host
-// (src/portal-host.ts). It runs first in the Worker's fetch, with the Portal's rewrite,
-// before the OAuth provider.
+// The MCP endpoint on the family domain: https://mcp.dustinedwards.info, a Custom Domain on this
+// Worker. That host serves the machine surface only: the MCP endpoints, the OAuth flow, the /ops
+// routes keys and runners call, the signed backup and bench endpoints, /health and the CSP report
+// sink. Any other path is the plain 404; the Portal has its own host (src/portal-host.ts). It runs
+// first in the Worker's fetch, with the Portal's rewrite, before the OAuth provider.
 
 export const MCP_HOST = "mcp.dustinedwards.info";
 export const MCP_URL = `https://${MCP_HOST}/mcp`;

@@ -1,12 +1,12 @@
 // Whether sessions read the portfolio rules. Every repo's CLAUDE.md says to read
-// capsid/conventions.md first; audit_log recorded writes only, so there was no evidence
-// either way. A read of that document, through `capsid_read_doc` or `capsid_start_session`, now leaves one
-// `conventions-read` row, at most one per caller per hour so it cannot become noise.
+// capsid/conventions.md first, but audit_log recorded writes only. A read of that document,
+// through `capsid_read_doc` or `capsid_start_session`, now leaves one `conventions-read` row, at
+// most one per caller per hour.
 //
-// The row is NOT addressed to capsid/conventions.md. `lastActor` and the Portal read the
-// newest audit row for a document's path as its last writer, so a reader's row there
-// would make every reader the document's last_actor. It sits in the capsid namespace
-// with no path, and params say how the document was reached.
+// The row is NOT addressed to capsid/conventions.md: `lastActor` and the Portal read the newest
+// audit row for a document's path as its last writer, so a reader's row there would make every
+// reader the document's last_actor. It sits in the capsid namespace with no path, and params say
+// how the document was reached.
 
 import { HEALTH_PROBE_NS, HEALTH_PROBE_PATH } from "./store-probe";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";

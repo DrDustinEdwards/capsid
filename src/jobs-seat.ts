@@ -46,27 +46,16 @@ import { plural } from "@drdustinedwards/site-helpers/text";
 
 type PrUrl = NonNullable<ReturnType<typeof parsePrUrl>>;
 
-// The transitions made on a job the caller does not hold: the seat's fail and release,
 // supersede and resume.
 
-// The seat stepping in, on a job it does not hold.
+// The seat stepping in on a job it does not hold. Every other transition keys on
+// `claimed_by = <caller>`, which leaves no way to close a job whose driver is gone.
 //
-// Every other transition keys on `claimed_by = <caller>`, which stops two drivers
-// treading on each other but leaves no way to close a job whose driver is gone: the
-// machine was turned off, the session died, the work was superseded from a chat.
+// The seat only (callerIsSeat): no driver holds can_merge, so a driver still cannot fail
+// another driver's job. A finished job is refused, not rewritten.
 //
-// The seat only: the admin, or a caller holding can_merge (callerIsSeat), the rule
-// supersede and resume use. The seat that decides is routinely not the session that
-// held the job, and the seat key holds can_merge without being the admin. No driver
-// holds can_merge, so a driver still cannot fail another driver's job.
-//
-// It refuses a job that is already finished rather than rewriting one, and says so
-// rather than reporting a no-op as success. The mirror and audit row ride in the same
-// guarded batch as every other transition.
-//
-// `opts.extra` rides in the same guarded batch, so a caller's own write commits only
-// with the fail; `opts.outcome: false` writes no outcome row, for a fail that is not the
-// holder's (the bench score step, src/bench.ts finishBenchRun).
+// `opts.extra` rides in the same guarded batch; `opts.outcome: false` writes no outcome
+// row, for a fail that is not the holder's (src/bench.ts finishBenchRun).
 export async function adminFailJob(
   env: Env,
   agent: Agent,
@@ -128,12 +117,8 @@ export async function adminFailJob(
       at: now.toISOString(),
     }),
   ];
-  // An outcome row, for the same reason `fail` writes one: a job the seat had to close
-  // because its driver never came back is the kind of ending the record should show.
-  //
-  // Only when somebody held it. A queued job the seat canceled was never worked, and
-  // inventing an agent would put a failure on a credential that had not touched the
-  // job. No evidence argument either: the seat did not do the work.
+  // An outcome row, as `fail` writes one, but only when somebody held the job: a queued
+  // job the seat canceled was never worked, so no agent is blamed and no evidence is given.
   if (job.claimed_by && opts.outcome !== false) {
     const verdict = await verifyEvidence(env, job.namespace, undefined);
     statements.push(outcomeStatement(env.DB, outcomeFrom(job, verdict, now)));
@@ -148,12 +133,9 @@ export async function adminFailJob(
   return { ok: true, action: "admin-fail", job };
 }
 
-// fail through the capsid_work_jobs tool. The holder failing its own job is an ordinary fail. The
-// seat failing a job somebody else holds, or nobody holds, is adminFailJob. Anyone else
-// gets failJob's own refusal for a job it does not hold.
-//
-// The claim goes to the holder path only. The seat failing somebody else's job made no
-// claim about that work, so adminFailJob records none.
+// The seat failing a job somebody else holds, or nobody holds, is adminFailJob; the
+// holder failing its own is an ordinary fail. The seat made no claim about that work, so
+// the claim goes to the holder path only.
 export async function failAsCaller(
   env: Env,
   agent: Agent,
@@ -180,17 +162,13 @@ export async function failAsCaller(
   return failJob(env, agent, now, id, reason, said);
 }
 
-// The seat completing a job another credential blocked, the way it can fail one. The job
-// stays held by the driver that did the work, so job_outcomes.agent credits that driver;
-// resume with take then complete makes the seat the holder and credits the seat. The
-// outcome is verified through the same path as a holder's complete (the pull request in
-// result_ref or evidence.prs is read from GitHub), the audit row `job-admin-complete`
-// names the seat as actor and the holder in held_by, and the seat's claim is recorded
-// under the seat, not the driver. Blocked only: a queued job was never worked, a claimed
-// one has a holder who completes it, and a finished one is not reopened.
+// The seat completing a job another credential blocked. The job stays held by the driver
+// that did the work, so job_outcomes.agent credits that driver. The outcome is verified as
+// a holder's complete is (the pull request is read from GitHub); the audit row
+// `job-admin-complete` names the seat as actor and the holder in held_by. Blocked only.
 //
-// The close is a human touch (kind admin_complete, migrations/0031), written in the same
-// batch as the audit row, so the human-effort log shows the job needed the seat.
+// The close is a human touch (kind admin_complete, migrations/0031), so the human-effort
+// log shows the job needed the seat.
 async function adminCompleteJob(
   env: Env,
   agent: Agent,
@@ -217,9 +195,8 @@ async function adminCompleteJob(
 }
 
 // record through the work queue tool: the seat writing the outcome of work done on a
-// queued job without a claim. The seat only, as for completing a job
-// somebody else blocked, because an outcome credits work and a driver could otherwise
-// record work it did not do. The evidence is verified against GitHub as for a complete.
+// queued job without a claim. Seat only, because an outcome credits work and a driver
+// could otherwise record work it did not do.
 export async function recordAsCaller(
   env: Env,
   agent: Agent,
@@ -241,22 +218,15 @@ export async function recordAsCaller(
   return recordAsSeat(env, agent, now, id, args);
 }
 
-// The pull request is the claim. A
-// cloud session signs in as the admin login, which may hold one claim, so it works a job
-// without claiming it, the way Copilot, Codex and Claude Code Projects work a task: one
-// branch and one pull request. Any caller holding the write grant on the job's
-// namespace completes the QUEUED job by naming that pull request, and the outcome credits
-// the caller. It runs the record path (completeWithoutClaim): the same review gate, GitHub
-// verification, outcome row and overlap check as a complete. record stays the seat's, for
-// closing work somebody else did.
+// The pull request is the claim. A cloud session signs in as the admin login, which may
+// hold one claim, so it works a job without claiming it. Any caller with the write grant
+// on the job's namespace completes the QUEUED job by naming its pull request (the record
+// path, completeWithoutClaim); the outcome credits the caller.
 //
-// What a claim would have asked of the caller is asked here, since no claim was made: the
-// job's required_flags and min_record. Every named pull request must be on one of the
-// namespace's repos, and at least one must be named, because without one nothing a
-// reviewer or auto-merge can read ties the work to the job. And at least one named pull
-// request's body must name this job id, as auto-merge's body_names_job asks: otherwise any
-// pull request on a mapped repo would close any queued job.
-// GitHub unreachable refuses, since nothing then shows the pull request is this job's.
+// What a claim would have asked is asked here: required_flags and min_record. At least one
+// named pull request must be on one of the namespace's repos, and its body must name this
+// job id (auto-merge's body_names_job), or any pull request on a mapped repo would close
+// any queued job. GitHub unreachable refuses.
 async function completeUnclaimed(
   env: Env,
   agent: Agent,
@@ -317,7 +287,6 @@ async function completeUnclaimed(
   return completeWithoutClaim(env, agent, now, id, args);
 }
 
-// Whether the pull request's body names the job id. A failed read is false.
 async function prBodyNames(
   env: Env,
   owner: string,
@@ -335,10 +304,9 @@ async function prBodyNames(
   }
 }
 
-// complete through the capsid_work_jobs tool. The holder completing its own job is an ordinary
-// complete. A queued job nobody holds is completed without a claim (completeUnclaimed). The
-// seat completing a job somebody else holds is adminCompleteJob. Anyone else gets
-// completeJob's own refusal for a job it does not hold.
+// complete through the capsid_work_jobs tool. A queued job nobody holds is completed
+// without a claim (completeUnclaimed); the seat completing a job somebody else holds is
+// adminCompleteJob. Anyone else gets completeJob's own refusal.
 export async function completeAsCaller(
   env: Env,
   agent: Agent,
@@ -376,18 +344,13 @@ export async function completeAsCaller(
   return completeJob(env, agent, now, id, args);
 }
 
-// Release: the seat returning a claimed job to the queue when its holder is gone (the
-// session ended, the machine was turned off). A claim has no lease and never expires,
-// so without it the job stays held by a holder that is gone.
+// Release: the seat returning a claimed job to the queue when its holder is gone. A claim
+// has no lease and never expires, so without it the job stays held by a dead holder.
 //
-// Not an ending, so no outcome row: the job is worked again and ends with a real one.
-// A job whose work already landed is released too, and the next session completes it
-// with the pull request as evidence, which the Worker verifies. The seat did not do
-// the work, so it does not report it done.
-//
-// claimed_at is kept, so the job's duration runs from its first claim. The UPDATE is
-// keyed on the holder read, so a claim that changed hands in between is not released
-// out from under the new holder.
+// Not an ending, so no outcome row. A job whose work already landed is released too; the
+// next session completes it with the pull request as evidence, which the Worker verifies.
+// claimed_at is kept so duration runs from the first claim. The UPDATE is keyed on the
+// holder read, so a claim that changed hands in between is not released.
 export async function releaseJob(
   env: Env,
   agent: Agent,
@@ -457,22 +420,15 @@ export async function releaseJob(
   return { ok: true, action: "release", job };
 }
 
-// Supersede: the seat replacing a job before any work was done on it, for a corrected
-// or reposted body, a reorder or a withdrawal. Without it the only way to close such a
-// job is to claim it and fail it, and the history fills with failures that never
-// happened.
+// Supersede: the seat replacing a job before any work was done on it (a corrected or
+// reposted body, a reorder, a withdrawal). Without it the only way to close such a job is
+// to claim and fail it, filling the history with failures that never happened. No outcome
+// row, no pull request rows.
 //
-// No outcome row, no pull request rows, no attribution. Nothing was attempted, so a
-// row here would put a failure on a credential that did no work.
-//
-// Allowed from `queued` by any caller that may write the job's namespace, since nobody
-// holds it. From `claimed`, only while the row records no work (no gate hit, no
-// resume, no correction, no result_ref), and only by the holder or the seat
-// (callerIsSeat). Anything later is ended by `fail` or the Portal's Mark failed.
-//
-// The whole rule is in the one keyed UPDATE. The checks before it only choose the
-// refusal message; a driver that hits a gate between the read and the write leaves no
-// row to supersede, rather than being superseded out from under its work.
+// Allowed from `queued` by any caller that may write the namespace. From `claimed`, only
+// while the row records no work (no gate hit, resume, correction or result_ref), and only
+// by the holder or the seat. The whole rule is in the one keyed UPDATE; the checks before
+// it only choose the refusal message.
 
 /** Why a job's row shows work was done on it, or null. */
 export function workRecorded(job: JobRow): string | null {
@@ -609,62 +565,35 @@ export async function supersedeJob(
   return { ok: true, action: "supersede", job };
 }
 
-// Resume. A gate is a pause, not an ending. If `blocked` were terminal, a job the
-// driver stopped at a gate could never be picked back up: the human would run the
-// command, the work would land, and the row would still describe the state before the
-// gate, because `claim` refuses anything that is not queued.
+// Resume. A gate is a pause, not an ending: `claim` refuses anything that is not queued,
+// so a job a driver stopped at a gate could otherwise never be picked back up.
 //
-// The signature is checked again. `claim` verifies the body before handing a job to a
-// driver, but a blocked job then sits in the table for as long as a human takes, which
-// is the window in which a row could be edited. Resume hands that body back to a
-// session holding local shell and repo credentials, so it re-verifies on the same
-// terms and marks a tampered job failed rather than returning it.
+// The signature is checked again: a blocked job sits in the table for as long as a human
+// takes, the window in which a row could be edited, and resume hands the body back to a
+// session with shell and repo credentials. A tampered job is marked failed.
 //
-// A plain resume is the seat's act (callerIsSeat: the admin or a can_merge caller). It is
-// not restricted to the original claimer, because the point is that a human approved
-// something, and the seat that approves is routinely not the session that blocked. The
-// reason is required and lands in the audit row, so what was approved is recorded
-// rather than implied.
-//
-// A driver, the claimant or a sibling in the namespace, may not plain-resume. A driver
-// that blocked a job on a deploy, a secret or a force push could otherwise resume it
-// with any reason, or have another driver with the namespace's write grant do it, and
-// the audit row would read "approved: <reason>" as though a human had said yes The claimant may still resume its own job through
+// A plain resume is the seat's act (callerIsSeat), not restricted to the original claimer,
+// because the seat that approves is routinely not the session that blocked. The reason is
+// required and lands in the audit row. A driver may not plain-resume: its reason would read
+// as "approved" as though a human had said yes. It may still resume its own job through
 // approved_by_policy for a branch push or a pull request.
 //
-// The claim goes back to the driver that blocked it, not to the caller that resumed
-// it: a blocked row keeps claimed_by. A seat that took the claim would hold a job it
-// has no shell to finish. `take` is the explicit way for a resumer to acquire the job
-// instead, and it runs every check a claim runs.
-//
-// Unless that credential cannot take it back. A credential that is not a minted agent
-// (the admin identity every chat tab connects as) names no
-// particular session, so a claim given to it is worked by nobody. The same holds for a
-// runner whose session ended and a revoked agent. The job then goes back to the queue
-// with its approval, and whichever session claims it next gets the resume note. The job's flags
-// and record bar are asked at that claim, as for any queued job.
+// The claim goes back to the driver that blocked it (a blocked row keeps claimed_by); `take`
+// is the explicit way for a resumer to acquire the job, and runs every check a claim runs.
+// If that credential cannot take it back (the shared admin identity, a runner whose
+// session ended, a revoked agent) the job goes back to the queue with its approval and the
+// next claimer gets the resume note.
 export interface ResumeOptions {
-  // The pre-approved gate. When set, this resume is approved on the signed gate policy
-  // rather than on a human having said yes, and the value is the policy version the
-  // caller read. The blocked command is matched against the policy classes and the
-  // resume is refused when it matches none, so this narrows what the caller may do on
-  // its own rather than widening it.
+  // Set: approved on the signed gate policy (the value is the policy version the caller
+  // read). The blocked command must match a policy class or the resume is refused.
   approvedByPolicy?: string;
-  // The resumer acquires the job rather than returning it to the driver that blocked.
   take?: boolean;
-  // This resume sends the work back to be corrected, so it spends from the retry
-  // cap's budget. A plain resume does not, because an ordinary push through a gate
-  // corrects nothing.
   correction?: boolean;
-  // The seat's full note, beside the one-line reason. Recorded in the audit row as
-  // `note` and handed on whole in resume_note and the mirror document.
   note?: string;
 }
 
-// What a driver may approve for itself: pushing its own branch and opening its own
-// pull request. Not a migration, which stays a human gate, so `additive_migration`
-// stays the seat's to approve. The classes and the never list are the policy's own;
-// this only narrows which of them a driver may use.
+// What a driver may approve for itself: pushing its own branch and opening its own pull
+// request. A migration stays the seat's.
 const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
 
 // A minted agent's actor is `agent:<name>`: one credential, one driver. The admin
@@ -698,7 +627,6 @@ export async function resumeDestination(
 /** A minted agent whose key was revoked: it can never act on a job handed back to it. */
 async function isRevokedActor(db: D1Database, actor: string): Promise<boolean> {
   if (!actor.startsWith("agent:")) return false;
-  // An archived agent is a revoked one (src/agents-archive.ts).
   const row = await db
     .prepare(
       "SELECT revoked_at FROM agents WHERE name = ?1 UNION ALL SELECT revoked_at FROM agents_archive WHERE name = ?1",
@@ -793,10 +721,8 @@ export async function resumeJob(
   const { toQueue } = await resumeDestination(env, holder, current, take);
   const acquiring = !toQueue && holder === actor;
 
-  // A resume is a claim when the caller acquires the job, so it asks the same scope
-  // question a claim asks: a driver that could not have claimed this job must not
-  // acquire it by resuming it. When the job goes back to its own claimant, that
-  // claimant passed these checks at its claim, and the resumer is not taking anything.
+  // A resume that acquires the job is a claim, so it asks a claim's scope question. A job
+  // going back to its own claimant passed these at its claim.
   const corrupt = corruptRequirement(current);
   if (corrupt) {
     return refuse(
@@ -822,7 +748,6 @@ export async function resumeJob(
         `${actor} cannot resume ${id} ('${current.title}'): ${missing} It stays blocked for a driver that can finish it.`,
       );
     }
-    // And the record question, on the same reasoning.
     const resumeShortfall = await recordShortfall(env.DB, actor, current);
     if (resumeShortfall) {
       return refuse(
@@ -867,20 +792,12 @@ export async function resumeJob(
     );
   }
 
-  // The policy check runs before the claim is given, so a refusal leaves the job
-  // blocked as it was rather than claimed by a caller whose approval did not hold.
   let policyMatch: { klass: string; detail: string; version: string } | null = null;
   if (approvedByPolicy !== undefined) {
-    // Approving on policy is the seat's act. `resume` takes the write grant every
-    // driver holds, so without this check any driver could pass the policy version and
-    // approve its own blocked command. The policy's shape is "what the seat may approve
-    // alone", and a check nobody performs would make that meaningless.
-    //
-    // A driver may approve its own branch push and pull request, and nothing wider:
-    // only on a job it blocked itself and still holds, and only when every class the
-    // command matched is in DRIVER_SELF_APPROVED. The classification is still the
-    // Worker's, through the same approveByPolicy call the seat's approval makes, so the
-    // never list still runs first and a force push still waits.
+    // Approving on policy is the seat's act: `resume` takes the write grant every driver
+    // holds, so without this a driver could approve its own blocked command. A driver may
+    // approve only its own branch push and pull request, on a job it still holds, and only when
+    // every matched class is in DRIVER_SELF_APPROVED; the never list still runs first.
     if (!isSeat && (current.claimed_by !== actor || take)) {
       return refuse(
         "resume",
@@ -890,10 +807,8 @@ export async function resumeJob(
       );
     }
     const command = commandFromSummary(current.result_summary);
-    // The driver's narrower list is checked before the policy, over the same
-    // classifier, so a driver's migration is refused without a repo read on its behalf.
-    // A command that classifies as nothing falls through to approveByPolicy, which
-    // refuses it for its own reason.
+    // The driver's narrower list is checked first, so a driver's migration is refused without
+    // a repo read on its behalf.
     if (!isSeat && command) {
       const match = classifyCommand(command);
       const beyond =
@@ -906,12 +821,8 @@ export async function resumeJob(
         );
       }
     }
-    // A migration is read at the job's branch head, not on the default branch. The
-    // approved command runs the file in the driver's checkout, so reading the default
-    // branch would refuse a new migration and could approve a same-named file whose
-    // content is not what runs. Read once, and only when the command names a
-    // migration. A read that fails throws its reason, which approveByPolicy puts in the
-    // refusal.
+    // A migration is read at the job's branch head, not the default branch: the approved
+    // command runs the file in the driver's checkout. Read once, only when the command names one.
     let head: Promise<{ repo: string; sha: string }> | null = null;
     const verdict = await approveByPolicy(env, approvedByPolicy, command, async (path) => {
       head ??= jobBranchHead(env, current);
@@ -934,14 +845,9 @@ export async function resumeJob(
     policyMatch = { klass: verdict.klass, detail: verdict.detail, version: verdict.policyVersion };
   }
 
-  // Only a correction spends the budget, and never an admin's. The 0 or 1 is bound
-  // rather than interpolated for the same reason bumpBlocked is: the statement stays
-  // one static string that the source guards can read and the query-plan test can
-  // EXPLAIN.
-  //
-  // claimed_at is not touched. It is the first claim, and duration_minutes measures
-  // from it, so a job that waited at a gate is measured over its whole working life
-  // rather than over the stretch after its last resume.
+  // Only a correction spends the budget, never an admin's. The 0 or 1 is bound, not
+  // interpolated, so the statement stays one static string for the source guards and the
+  // query-plan test. claimed_at is not touched, so duration spans the whole working life.
   const spend = correction && !agent.admin ? 1 : 0;
   const job: JobRow = {
     ...current,
@@ -1015,9 +921,7 @@ export async function resumeJob(
         ]
       : []),
   ];
-  // One static statement for both returns, so the source guards and the query-plan
-  // test read one shape: ?5 is 'claimed' or 'queued', and ?2 is NULL for the
-  // queue.
+  // One static statement for both returns (?5 is 'claimed' or 'queued', ?2 NULL for the queue).
   const won = await guardedTransition(env, current, [
     env.DB.prepare(
       `UPDATE jobs SET status = ?5, claimed_by = ?2,

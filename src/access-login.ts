@@ -11,16 +11,14 @@ import { isAdminEmail } from "@dustinedwards/site-runtime/access";
 import { capsidCookie } from "./auth";
 import { readCookie } from "@dustinedwards/site-runtime/headers";
 import type { Env } from "./env";
-// The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
-// identity (capsid/research/design-capsid-access-login.md) for
-// Capsid Portal's login (src/portal-auth.ts); the MCP authorization flow is
-// site-runtime's loginHandler (src/routes.ts). What the Portal stores and does with the
-// admitted email stays in the caller. A state token is
-// stored in OAUTH_KV for ten minutes, bound to the browser by a cookie holding a random
-// value of its own whose digest the stored state keeps, and used once. PKCE and an OIDC nonce are kept in the stored state.
-// The endpoints, the authorization URL, the code exchange and the ID token check are
-// site-runtime's access-login, the sign-in every family MCP server uses. The person is the email in the token,
-// admitted only when it equals ADMIN_EMAIL or a CO_OWNER_EMAILS entry exactly.
+// The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream identity
+// (capsid/research/design-capsid-access-login.md) for the Portal's login (src/portal-auth.ts);
+// the MCP flow is site-runtime's loginHandler (src/routes.ts). What the Portal does with the
+// admitted email stays in the caller. A state token is stored in OAUTH_KV for ten minutes, bound
+// to the browser by a cookie whose random value's digest the state keeps, and used once; PKCE and
+// an OIDC nonce are kept in it. The endpoints, code exchange and ID token check are site-runtime's
+// access-login. The person is the email in the token, admitted only when it equals ADMIN_EMAIL or
+// a CO_OWNER_EMAILS entry exactly.
 
 // How long a started login stays usable: the KV state entry and the state cookie.
 const STATE_TTL_SECONDS = 600;

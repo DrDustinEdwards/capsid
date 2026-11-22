@@ -53,12 +53,7 @@ export async function requireRegisteredNamespace(
   );
 }
 
-// The policy-document check for write, restore, delete and move. First the override
-// is itself scoped: allow_improve_paths is how a caller writes a signed policy
-// document, and it is the document-side twin of the repo-side protected-path flag, so
-// it asks for the same one (IMPROVE_OVERRIDE_FLAGS in src/scope.ts). Then
-// policyWriteRefusal runs on every path the call changes, and so does the job-mirror
-// check. Returns the first refusal, or null.
+// The policy-document check for write, restore, delete and move. allow_improve_paths is itself scoped: the document-side twin of the repo-side protected-path flag, so it asks for the same one (IMPROVE_OVERRIDE_FLAGS in src/scope.ts). policyWriteRefusal and the job-mirror check then run on every path the call changes. Returns the first refusal, or null.
 export function policyPathsRefusal(
   ctx: ToolCtx,
   tool: "write" | "restore" | "delete" | "move",
@@ -99,11 +94,7 @@ function jobMirrorRefusal(
   );
 }
 
-// A supersedes or replaces edge makes the daily pass mark its target superseded
-// (src/supersede.ts), so it is a change to the target and asks what a write to the target
-// asks: the write grant on its namespace, through checkScope
-// (one enforcement point, test/scope.test.ts), and the seat for a canon document. Other edge
-// types change nothing and may point anywhere. The refusal, or null.
+// A supersedes or replaces edge makes the daily pass mark its target superseded (src/supersede.ts), so it asks what a write to the target asks: the write grant on its namespace (checkScope) and the seat for a canon document. Other edge types change nothing and may point anywhere.
 function supersedingEdgeRefusal(ctx: ToolCtx, namespace: string, edges: LinkEdge[]): string | null {
   for (const edge of edges) {
     if (edge.type !== "supersedes" && edge.type !== "replaces") continue;
@@ -196,13 +187,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
           updated_at: string;
         }>();
 
-      // Optimistic concurrency. if_match is the sha256 of the body the caller believes
-      // is stored, which every write already returns. A lost update otherwise leaves
-      // no trace in the result: the write succeeds, the prior body is snapshotted, and
-      // nothing says anything went wrong. Fail closed, the same shape as a patch
-      // anchor: on mismatch nothing is written and the error carries the current sha
-      // so the caller can rebase and retry. Opt-in, because requiring it would break
-      // append, which is safe by construction.
+      // Optimistic concurrency. if_match is the sha256 of the body the caller believes is stored (every write returns it). Without it a lost update leaves no trace. Fail closed: on mismatch nothing is written and the error carries the current sha so the caller can rebase. Opt-in, because requiring it would break append, which is safe by construction.
       const commit = guardedCommit({
         db,
         namespace,
@@ -230,12 +215,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       const staleIfMatch = await commit.precheckIfMatch();
       if (staleIfMatch) return fail(staleIfMatch);
 
-      // Normalize wide dashes server-side so no client can store an em dash (see
-      // ./normalize). Only the caller's text is normalized, before assembly: body for
-      // replace and append, replace_with for patch. Normalizing the assembled body
-      // would rewrite stored text the caller did not touch, which conventions.md
-      // forbids. find is not normalized, because it has to match the stored bytes.
-      // meta takes no body, so the stored body stays byte-identical.
+      // Normalize wide dashes server-side so no client can store an em dash (see ./normalize). Only the caller's text, before assembly: body for replace and append, replace_with for patch. Normalizing the assembled body would rewrite stored text the caller did not touch (conventions.md forbids it); find is not normalized because it must match the stored bytes.
       if (title !== undefined) title = normalizeDashes(title, "title");
       if (body !== undefined) body = normalizeDashes(body, "prose");
       if (replace_with !== undefined) replace_with = normalizeDashes(replace_with, "prose");
@@ -283,12 +263,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       if (canonGuarded(ctx.agent, namespace, path))
         return fail(canonRefusal("write", namespace, path));
 
-      // append and meta are exempt from confirmation. Confirmation exists to stop an
-      // accidental clobber of existing text, and an append destroys none: the prior
-      // body is still snapshotted and the addition goes after it. Requiring a confirm
-      // there would put more friction on the safe operation than on the dangerous one.
-      // patch and replace both mutate existing text and are not exempt. `elicited` is whether a human answered a prompt. It arms the commit-time body
-      // guard; why that consent goes stale is stated on requireConfirmation.
+      // append and meta are exempt from confirmation: it exists to stop an accidental clobber, and an append destroys nothing. patch and replace mutate existing text and are not exempt. `elicited` is whether a human answered a prompt; it arms the commit-time body guard (why that consent goes stale: requireConfirmation).
       let elicited = false;
       if (prior && confirm !== true && writeMode !== "append" && writeMode !== "meta") {
         const refusal = await requireConfirmation(server, confirm, {
@@ -302,11 +277,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       // The guard itself is armed by commit.run() below, from this same pre-read.
       const statements: D1PreparedStatement[] = [];
       if (prior) {
-        // Snapshot from the live row, inside the batch. Binding the pre-read body would
-        // file what this handler read, not what the table held at commit: on an
-        // unguarded update, a body written in the gap would be overwritten while the
-        // snapshot recorded its predecessor. The SELECT runs in the same transaction as
-        // the overwrite.
+        // Snapshot from the live row, inside the batch: binding the pre-read body would record what this handler read, not what the table held at commit, so a body written in the gap would be overwritten while the snapshot recorded its predecessor.
         statements.push(snapshotLive(db, namespace, path));
       }
       statements.push(
@@ -321,11 +292,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
           status ?? null,
         ),
       );
-      // The prior type, status, tags and title go into the audit params whenever a
-      // write changes any of them, and this is the only place they survive:
-      // document_versions snapshots title and body only. The snapshot schema stays
-      // title plus body, because widening a version row would mean a migration plus a
-      // rewrite of every restore path to answer a question the log already answers.
+      // The prior type, status, tags and title go into the audit params whenever a write changes any of them; document_versions snapshots title and body only, and widening it would mean a migration plus a rewrite of every restore path.
       const metaChanged =
         title !== undefined || type !== undefined || tags !== undefined || status !== undefined;
       statements.push(

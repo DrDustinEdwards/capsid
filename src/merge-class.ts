@@ -8,20 +8,19 @@ import {
 import { worthReviewer } from "./model-routing";
 import { isMoneyPath } from "./scope";
 
-// THE MERGE CLASSES (docs/design/design-merge-pipeline.md section 2). Every open pull request on a covered repo gets exactly one class, with
-// its reasons, computed each tick by this pure function. REPORT-ONLY for now (the design's
-// PR 2): the class rides on the awaiting-seat set and the inbox, and nothing acts on it.
-// The approval record (PR 3) and the executor (PR 4) are what will.
+// THE MERGE CLASSES (docs/design/design-merge-pipeline.md section 2). Every open pull request on a
+// covered repo gets exactly one class, with its reasons, computed each tick by this pure function.
+// REPORT-ONLY for now (the design's PR 2): the class rides on the awaiting-seat set and the inbox;
+// the approval record (PR 3) and executor (PR 4) are what act.
 //
 //   auto     passes every check of the signed policy: the tick merges it
 //   approve  fails only on rules a person may waive: one tap, batchable
 //   typed    any money path: a typed confirmation, never batched, never automatic
-//   seat     needs a step outside a merge: a migration, a workflow, a fork head, a base
-//            that is not the default branch, a file list that could not be read
+//   seat     needs a step outside a merge: a migration, a workflow, a fork head, a base that is not
+//            the default branch, a file list that could not be read
 //   wait     CI has not finished, or the PR is a draft: nobody acts yet
 //
-// Money is decided before anything else, so no other rule can move a money PR out of
-// typed (design section 8, "the permanent exception").
+// Money is decided first, so no other rule can move a money PR out of typed (design section 8).
 
 const MERGE_CLASSES = ["auto", "approve", "typed", "seat", "wait"] as const;
 export type MergeClass = (typeof MERGE_CLASSES)[number];

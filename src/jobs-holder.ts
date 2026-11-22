@@ -45,11 +45,8 @@ import { ciRefusal } from "./complete-ci";
 import { breakerExemption, type BreakerExemption } from "./fail-exemption";
 import { parsePrUrl } from "@dustinedwards/site-runtime/github";
 
-// The transitions the driver holding a job makes: complete, fail and block.
-
-// The transitions a holder makes. complete, fail and block are the same shape: a keyed
-// UPDATE that only fires for the claimed job this caller holds, so a job the seat
-// released back to the queue cannot be completed out from under its new owner.
+// complete, fail and block share a shape: a keyed UPDATE that fires only for the claimed job
+// this caller holds, so a job the seat released cannot be completed out from under its new owner.
 function holderRefusal(
   action: string,
   id: string,
@@ -100,7 +97,6 @@ function seatCloseRefusal(
   return refuse(action, `${id} is already ${current.status}; there is nothing to complete.`);
 }
 
-// The seat recording a queued job's outcome. Null when the job is queued and unheld.
 function recordRefusal(action: string, id: string, current: JobRow | null): JobResult | null {
   if (!current) return refuse(action, `no job ${id}.`);
   if (current.status === "queued" && current.claimed_by === null) return null;
@@ -117,7 +113,6 @@ function recordRefusal(action: string, id: string, current: JobRow | null): JobR
   return refuse(action, `${id} is ${current.status}; record is for a queued job.`);
 }
 
-// What the agent said on one complete, fail or block call, for its job_claims row.
 type Said = { claim?: JobClaim; raw: ClaimRaw };
 
 async function holderTransition(
@@ -130,37 +125,22 @@ async function holderTransition(
     status: JobStatus;
     result_summary?: string | null;
     result_ref?: string | null;
-    // Only block bumps the gate counter. Bound as a number, not interpolated as a SQL
-    // fragment: the statement stays one static string, so test/jobs.test.ts can read
-    // that it is keyed and test-integration/query-plans.test.ts can reconstruct it and
-    // EXPLAIN it. A statement assembled at runtime is invisible to both.
+    // Only block bumps the gate counter. Bound as a number, not interpolated, so the statement
+    // stays one static string that test/jobs.test.ts and the query-plan test can read.
     bumpBlocked?: boolean;
     // A holder's fail the breaker does not count, and why (src/fail-exemption.ts).
     breakerExempt?: BreakerExemption | null;
-    // What the driver says this job produced. Verified against GitHub and written into
-    // job_outcomes below, on the terminal transitions only.
     evidence?: JobEvidence;
-    // Human-touch rows (src/job-touches.ts) for this transition, built from the row as
-    // the UPDATE leaves it, so they commit or abort with it. Only block writes any.
     touches?: (job: JobRow) => D1PreparedStatement[];
-    // What the agent said on this complete, fail or block, as sent. Present, the
-    // transition writes one job_claims row.
     said?: Said;
-    // The seat completing a BLOCKED job another credential holds (completeAsSeat). The
-    // row must be blocked and held by someone else, the UPDATE leaves claimed_by alone,
-    // and so the outcome row, which copies claimed_by, credits the driver that did the
-    // work. The caller is only the actor on the audit, mirror and claim rows.
+    // The seat completing a BLOCKED job another credential holds (completeAsSeat): the UPDATE
+    // leaves claimed_by alone, so the outcome row credits the driver that did the work.
     seatCloses?: boolean;
-    // The seat recording the outcome of work done on a QUEUED job nobody claimed
-    // (recordAsSeat). The row must
-    // be queued and unheld; the UPDATE credits the recorder as claimed_by, so the outcome
-    // row names who said the work was done. recordVerb names the audit and mirror action:
-    // "record" for the seat's record, "complete-unclaimed" for a session completing its own
-    // work without a claim (src/jobs-seat.ts completeUnclaimed), so the two stay apart.
+    // The seat recording the outcome of work on a QUEUED, unheld job (recordAsSeat): the UPDATE
+    // credits the recorder as claimed_by. recordVerb is "record" for the seat, or
+    // "complete-unclaimed" for a session completing its own work (src/jobs-seat.ts).
     records?: boolean;
     recordVerb?: "record" | "complete-unclaimed";
-    // The overlap report for the pull request this call named, recorded on the audit row
-    // and returned. Its line is already in result_summary.
     overlaps?: OverlapReport | null;
   },
 ): Promise<JobResult> {
@@ -181,9 +161,8 @@ async function holderTransition(
     : patch.seatCloses
       ? "admin-complete"
       : action;
-  // The row as the UPDATE below will leave it, computed from the read so the mirror
-  // and the outcome can be built before anything is written. The guard at the head of
-  // the batch is what keeps the read true when the batch commits.
+  // The row as the UPDATE will leave it, computed from the read so the mirror and outcome can
+  // be built first; the guard at the head of the batch keeps the read true.
   const job: JobRow = {
     ...read,
     ...(patch.records ? { claimed_by: actor } : {}),
@@ -195,23 +174,16 @@ async function holderTransition(
   };
 
   // The transition and every record of it (mirror, audit, outcome, pull request and
-  // attribution rows) are one batch. The first statement aborts the whole batch unless
-  // the row is still claimed by this caller at the updated_at just read, so either all
-  // of it commits or none of it does, and a throw cannot leave a finished job with no
-  // record. id is the primary key, so the guard passing means the UPDATE moves exactly
-  // that one row.
+  // attribution rows) are one batch. The first statement aborts the whole batch unless the row
+  // is still claimed by this caller at the updated_at just read, so all of it commits or none,
+  // and a throw cannot leave a finished job with no record.
   //
-  // The outcome row is written on the terminal transitions only. A running job has no
-  // outcome, and one that reached `done` or `failed` will not transition again, so this
-  // runs once per job and the primary key enforces that rather than trusting it.
+  // The outcome row is written on terminal transitions only, once per job (the primary key
+  // enforces it). A failed job gets one too: recording only successes would make every agent
+  // look equally good.
   //
-  // A failed job gets a row too. A driver whose jobs mostly fail is what this table
-  // exists to show, and recording only successes would make every agent look equally
-  // good.
-  //
-  // Verification runs before the batch and cannot fail the transition. verifyEvidence
-  // reports its own errors as notes, so an unreachable GitHub costs the verified flags
-  // and not the driver's ability to close a finished job.
+  // Verification runs before the batch and cannot fail the transition: verifyEvidence reports
+  // its own errors as notes, so an unreachable GitHub costs the verified flags, not the close.
   let outcome: { row: JobOutcomeRow; notes: string[] } | undefined;
   // The summary is signed as it is written, so the command a blocked job shows a person
   // can be told apart from one changed afterwards (src/job-signing.ts).
@@ -281,9 +253,8 @@ async function holderTransition(
     const row = outcomeFrom(job, verdict, now, undefined, claimed?.model_id ?? null);
     outcome = { row, notes: verdict.notes };
     statements.push(outcomeStatement(env.DB, row));
-    // One row per pull request the evidence named, in the same batch as the outcome.
-    // Without them the outcome keeps counts with no way back to what they counted, and
-    // the merge state recorded at complete time could never be corrected.
+    // One row per pull request the evidence named, so the outcome's counts can be traced and
+    // the merge state corrected later.
     statements.push(
       ...outcomePrStatements(
         env.DB,
@@ -540,10 +511,9 @@ export async function failJob(
   });
 }
 
-// A blocked job carries the exact command. A job that hit a gate is not a failure; it
-// is work waiting on a human, and the human needs the command to run, not a
-// description of the situation. Capsid Portal shows these. blockJob writes this marker
-// and commandFromSummary reads it back, so the format cannot drift between the two.
+// A blocked job carries the exact command: a gate is work waiting on a human, who needs the
+// command to run. blockJob writes this marker and commandFromSummary reads it back, so the
+// format cannot drift.
 export const RESUME_MARKER =
   "Run this, then send it back in with capsid_work_jobs action 'resume':";
 
@@ -553,11 +523,9 @@ export function resumeMarkerIn(summary: string): { at: number; length: number } 
   return at === -1 ? null : { at, length: RESUME_MARKER.length };
 }
 
-// A question block (Track A D4): a session that needs an answer rather than a command run
-// blocks with question: true. The reason is the question, the Worker fixes the command, and
-// the summary starts with this prefix, which is how every reader tells it from a gate. No new
-// status and no column: the seat answers with resume and a note, which claim and
-// list then hand to the driver permanently (resume_notes).
+// A question block: a session that needs an answer blocks with question: true. The Worker
+// fixes the command, and the summary starts with this prefix, which is how every reader tells
+// it from a gate. No new status or column: the seat answers with resume and a note.
 const QUESTION_PREFIX = "QUESTION: ";
 const QUESTION_COMMAND = "Answer in a resume note";
 
@@ -629,10 +597,9 @@ export async function blockJob(
 ${overlap}`
     : base;
   const summary = command ? `${text}\n\n${RESUME_MARKER}\n\n    ${command}` : text;
-  // The cap is applied where the block is written, so a capped job says so in the one
-  // field every reader already looks at: the Portal prints result_summary, the driver
-  // reads it to continue, and a human deciding reads it there too. The budget is read
-  // before the transition, because the transition is what makes this block count.
+  // The cap is applied where the block is written, so a capped job says so in result_summary,
+  // the one field every reader looks at. The budget is read before the transition, which is
+  // what makes this block count.
   const current = await readJob(env.DB, id);
   const capped =
     current !== null &&

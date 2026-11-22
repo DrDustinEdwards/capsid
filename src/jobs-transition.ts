@@ -119,15 +119,12 @@ export async function markJobFailed(
   return { failed: true };
 }
 
-// Every transition and its records are one batch. Committing the UPDATE alone and
-// writing the mirror and audit row in a second batch would let a throw in between
-// leave a moved row with no record of the move.
+// Every transition and its records are one batch: committing the UPDATE alone and writing the
+// mirror and audit row separately would let a throw leave a moved row with no record.
 //
-// `read` is the row the caller decided on. requireJobUnchanged, first in the batch,
-// aborts the whole batch unless the row still has that status, holder and updated_at,
-// and D1 runs a batch as one transaction, so the UPDATE and every record built from
-// `read` commit together or not at all. Returns false when the guard aborted, which
-// means nothing was written and the row changed since `read`.
+// `read` is the row the caller decided on. requireJobUnchanged, first in the batch, aborts it all
+// unless the row still has that status, holder and updated_at, and D1 runs a batch as one
+// transaction. Returns false when the guard aborted: nothing was written and the row changed.
 export async function guardedTransition(
   env: Env,
   read: JobRow,
@@ -158,14 +155,10 @@ export function movedBeforeFailing(
   );
 }
 
-// The track-record bar, checked at claim (migrations/0011).
-//
-// Read only when a job sets one, which is rare. The record is computed from every
-// outcome row, so making every claim pay for that read would put a table scan in
-// front of the queue's hottest path.
-//
-// It goes through recordFor, the same function capsid_read_status action status and the Portal call,
-// so the bar a claim is measured against is the number a human can read on the page.
+// The track-record bar, checked at claim (migrations/0011). Read only when a job sets one (rare):
+// the record is computed from every outcome row, and making every claim pay for it would put a
+// table scan on the queue's hottest path. It goes through recordFor, the same function
+// capsid_read_status action status and the Portal call, so the bar is the number a human can read.
 export async function recordShortfall(
   db: D1Database,
   actor: string,
@@ -175,21 +168,15 @@ export async function recordShortfall(
   return missingForRecord(recordFor(actor, await loadRecordRows(db)), job.min_record);
 }
 
-// The corrections budget is a property of the work, not of the row.
+// The corrections budget is a property of the work, not of the row. corrections_count lives on
+// a row, and the unique open-title index covers `queued`, `claimed` and `blocked`
+// (migrations/0019) but not `failed`, so a failed job leaves (namespace, title) free to be
+// posted again with a count of 0. So the count is per (namespace, title), summed across every row
+// for that work whatever its status. Unindexed on purpose: jobs is a single-user queue of a few
+// hundred rows, and the only (namespace, title) index is the partial one.
 //
-// corrections_count lives on a row, and the unique open-title index covers `queued`,
-// `claimed` and `blocked` (migrations/0019) but not `failed`, so a failed job leaves
-// (namespace, title) free to be posted again. The new row starts at 0, and a per-row
-// cap would count how many times a row existed rather than how many times the work
-// had been sent back. So the count is per (namespace, title).
-//
-// Summed across every row for that work, whatever its status, and the current row is
-// one of them. Unindexed on purpose: jobs is a single-user queue of a few hundred rows
-// at most, and the only index on (namespace, title) is the partial one, which does not
-// cover finished rows.
-//
-// Fails closed. A read that throws, or a SUM that is not a finite number, returns
-// NaN, and atCorrectionCap treats a budget it cannot read as a budget already spent.
+// Fails closed: a read that throws, or a SUM that is not a finite number, returns NaN, and
+// atCorrectionCap treats a budget it cannot read as already spent.
 export async function correctionsForWork(
   db: D1Database,
   namespace: string,

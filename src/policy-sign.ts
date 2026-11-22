@@ -24,25 +24,15 @@ import { readRepoFile } from "./github/contents";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Signing a policy document: the one path that mints the signature the auto-merge and
-// gate policies are verified against. Its constraints:
+// Signing a policy document: the one path that mints the signature the auto-merge and gate policies are verified against. Its constraints:
 //
-//   1. Admin only, enforced at the tool layer: an agent that could sign a policy could
-//      widen itself.
-//   2. capsid/policy/ only, checked here as well as at the tool, so no second caller
-//      can point it elsewhere.
-//   3. It signs what is already stored. There is no body argument, so this cannot sign
-//      arbitrary bytes.
+//   1. Admin only, enforced at the tool layer: an agent that could sign a policy could widen itself.
+//   2. capsid/policy/ only, checked here as well as at the tool, so no second caller can point it elsewhere.
+//   3. It signs what is already stored: no body argument, so it cannot sign arbitrary bytes.
 //   4. It re-signs rather than nesting: existing frontmatter is stripped first.
-//   5. The raw switch (capsid_admin_manage_switches action sign_policy) signs only the
-//      bytes its caller read: it names their sha256, and a body that differs is refused.
-//      It never signs the auto-merge policy, whose author allowlist and Auto units widen
-//      unattended merging: that is signed only by sign_policy_change and
-//      sign_policy_from_repo, which show the change first (Capsid security review,
-//      round 4, finding 5).
+//   5. The raw switch (capsid_admin_manage_switches action sign_policy) signs only the bytes its caller read: it names their sha256, and a differing body is refused. It never signs the auto-merge policy, whose author allowlist and Auto units widen unattended merging: that is signed only by sign_policy_change and sign_policy_from_repo, which show the change first (Capsid security review, round 4, finding 5).
 //
-// The write snapshots the prior row and appends to audit_log in one batch
-// (test/write-invariants.test.ts).
+// The write snapshots the prior row and appends to audit_log in one batch (test/write-invariants.test.ts).
 
 export interface PolicySignResult {
   ok: true;
@@ -213,12 +203,7 @@ async function commitSigned(
   return { ok: true, signed, signature, sha256: digest };
 }
 
-// sign_policy_change (docs/design/design-merge-pipeline.md section 7, PR 10): promoting a merge unit to auto, or removing one, writes the
-// next version of the auto-merge policy and signs it in one admin control. It widens
-// autonomy, so the perform needs the new version number typed as confirm. It edits only
-// two things in the stored, signed policy: the version line, and one line of the
-// `## Auto units` section. The new body must load as the old one did (the same checks,
-// paths and steps the code enforces), or nothing is written.
+// sign_policy_change (docs/design/design-merge-pipeline.md section 7): promoting a merge unit to auto, or removing one, writes the next version of the auto-merge policy and signs it in one admin control. It widens autonomy, so the perform needs the new version number typed as confirm. It edits only the version line and one line of the `## Auto units` section, and the new body must load as the old one did, or nothing is written.
 
 type PolicyChange = "promote" | "demote";
 
@@ -390,16 +375,7 @@ export async function performPolicyChange(
   };
 }
 
-// sign_policy_from_repo: the reviewable source of the auto-merge policy is
-// docs/policy/auto-merge.md on the default branch, and the stored, signed copy is written
-// from it. This control does that in one admin step instead of a capsid_write_doc and a
-// sign_policy by hand. The preview reads the file from GitHub, holds it to the checks
-// loadMergePolicy makes (checkMergePolicyBody) and shows the old and new hash and the
-// lines that differ. The perform reads it again and refuses if it is not the text the
-// preview showed, then writes and signs it through commitSigned. It widens or narrows
-// autonomy as the document says, so the version number typed as confirm is the version in
-// the file. The stored policy in force need not load: this is also the way to replace one
-// that does not.
+// sign_policy_from_repo: the reviewable source of the auto-merge policy is docs/policy/auto-merge.md on the default branch, and the stored, signed copy is written from it in one admin step. The preview reads the file from GitHub, holds it to checkMergePolicyBody and shows the old and new hash and the differing lines. The perform reads it again, refuses if it is not the text the preview showed, then writes and signs it through commitSigned. The version number typed as confirm is the version in the file. The stored policy in force need not load: this is also the way to replace one that does not.
 
 /** The reviewable source, on the capsid repo's default branch. */
 export const REPO_POLICY_PATH = "docs/policy/auto-merge.md";

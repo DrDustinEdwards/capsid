@@ -1,15 +1,14 @@
 // The Portal's page CSP, in its own module so the Worker (src/portal-app.ts) and the app's
-// browser tests (dashboard/dev/serve.ts) build one policy. A browser test run without the
-// Worker's CSP would pass code the Worker's page then refuses.
+// browser tests (dashboard/dev/serve.ts) build one policy; a test run without the Worker's CSP
+// would pass code the Worker's page then refuses.
 //
-// Scripts and styles from this origin, and React Router's inline scripts (its hydration data
-// and module loader) by this response's nonce, so an injected tag in anything the feed carries
-// cannot run: it carries no nonce. The page is never shared-cached, so a nonce per response is
-// the right form (site-runtime ./csp). Nothing unlisted (denyUnlisted). The consent dialog's CSP
-// is separate. Violations go to the sink on the MCP host (REPORT_URL), the group
-// Reporting-Endpoints names. Trusted Types is enforced (the Portal's registry entry,
-// site-runtime 0.132.0): require-trusted-types-for 'script' with the family's policy names, after
-// the Report-Only policy's reports named no sink React reaches.
+// Scripts and styles from this origin, and React Router's inline scripts (hydration data and
+// module loader) by this response's nonce, so an injected tag in the feed cannot run. The page is
+// never shared-cached, so a nonce per response is right (site-runtime ./csp). Nothing unlisted
+// (denyUnlisted). The consent dialog's CSP is separate. Violations go to the sink on the MCP host
+// (REPORT_URL), the group Reporting-Endpoints names. Trusted Types is enforced (site-runtime
+// 0.132.0): require-trusted-types-for 'script' with the family's policy names, after the
+// Report-Only policy's reports named no sink React reaches.
 import {
   buildContentSecurityPolicy,
   CSP_REPORT_GROUP,

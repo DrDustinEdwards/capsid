@@ -30,7 +30,6 @@ export async function docStatements(
     actor: string;
   },
 ): Promise<D1PreparedStatement[]> {
-  // Server-side dash normalization, as capsid_write_doc applies.
   const body = normalizeDashes(doc.body, "prose");
   const title = normalizeDashes(doc.title, "title");
 

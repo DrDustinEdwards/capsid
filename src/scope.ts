@@ -33,25 +33,9 @@ import {
 import { MINUTE_MS, HOUR_MS } from "./time";
 import { withCallSignal } from "./call-signal";
 
-// The one enforcement point. Every tool call, and every repo mutation inside one, is
-// checked here and nowhere else.
+// The one enforcement point: every tool call, and every repo mutation inside one, is checked here and nowhere else. A per-tool gate in each handler can be omitted by a new tool, cannot see writes a module away (the queue, the auto-merge tick), and must be widened at N sites.
 //
-// A per-tool gate in each handler has three failure modes: a new tool can simply
-// omit the line, and a scan for mutating SQL cannot see a tool whose writes happen a
-// module away (the queue, the auto-merge tick, every repo write); a bare "may write"
-// says nothing about which namespace, which repo, or whether the caller may merge
-// into a repo that deploys on push; and a check spelled N times has to be widened at
-// N sites, which is how a fix lands in all but one of them.
-//
-// `checkScope` returns a refusal string naming the missing scope, or null. It is
-// called from two places, split by where the information is:
-//
-//   - The registrar (`guardRegistrations`), before any handler runs, for what is
-//     knowable from the tool and its arguments: the tool allowlist, the grant, the
-//     namespace and the repo selector.
-//   - The handler, for the flags, which depend on what the call asks to do.
-//     A forced branch delete needs can_merge and a plain one does not, and no
-//     wrapper can know that before reading the arguments.
+// `checkScope` returns a refusal naming the missing scope, or null. The registrar (`guardRegistrations`) calls it before any handler for what the tool and arguments decide (allowlist, grant, namespace, repo selector); the handler calls it for the flags, which depend on what the call asks (a forced branch delete needs can_merge, a plain one does not).
 
 // What each tool requires, stated once. The registrar enforces this table and
 // src/tool-annotations.ts derives readOnlyHint from it, so the two cannot disagree.
@@ -62,16 +46,7 @@ import { withCallSignal } from "./call-signal";
 // list reads) and `capsid_lint_namespace` (mode gather reads) also depend on a namespace the handler resolves,
 // so their handlers call checkScope at the point where both are known.
 //
-// "admin" is write plus the admin identity, for a tool that edits the authorization
-// boundary itself or changes what other callers may do. "admin_read" is the admin
-// identity with only the read grant, for an admin tool that only reads (claims, the
-// operations state, what needs the seat): admin because it spans every namespace, and
-// served read-only because it changes nothing (capsid/research/design-mcp-servers.md,
-// section 3, which fixed claims and ops reading as not read-only). They live here, not
-// in a handler, because these tools are admin-only in whole, which the registrar can
-// decide from the tool name alone, and because checkScope is the one grant check
-// (test/scope.test.ts) and this table is the one statement of what each tool requires. No handler
-// decides a grant for itself.
+// "admin" is write plus the admin identity, for a tool that edits the authorization boundary or changes what other callers may do. "admin_read" is the admin identity with only the read grant: admin because it spans every namespace, read-only because it changes nothing (capsid/research/design-mcp-servers.md, section 3). Both live here because checkScope is the one grant check (test/scope.test.ts); no handler decides a grant for itself.
 export type ToolRequirement = "read" | "write" | "action" | "admin" | "admin_read";
 
 // Capsid (11) and Capsid Admin (8): src/tools/surface.ts.
@@ -166,13 +141,7 @@ function declaredScope(tool: string, action: string | undefined): string {
   return SCOPES.write;
 }
 
-// The family's grant gate (site-runtime authorizeCall; area 11, S3 and A13) on every tool
-// call, deciding on declaredScope against the scopes the caller's grants map to. The
-// caller is one Capsid's own door already resolved (the OAuth login or a key), so it is
-// passed as a `person` and only the scopes decide. A refusal is worded by checkScope, which
-// names the tool axis first and tells a key holder to ask for a wider key rather than to
-// reconnect. An "action" tool (jobs, lint) is left to its handler, which checks the same
-// split after its arguments; its OAuth step-up still comes first.
+// The family's grant gate (site-runtime authorizeCall; area 11, S3 and A13) on every tool call, deciding on declaredScope against the scopes the caller's grants map to. The caller is already resolved by Capsid's own door, so only the scopes decide. A refusal is worded by checkScope. An "action" tool (jobs, lint) is left to its handler after its arguments; its OAuth step-up still comes first.
 function sharedGrantRefusal(agent: Agent, tool: string, action: string | undefined): string | null {
   if (requiredForAction(tool, action) === "action") return null;
   const scope = declaredScope(tool, action);
@@ -198,13 +167,7 @@ export function needFor(requirement: ToolRequirement): Pick<ScopeNeed, "grant" |
   return { grant: requirement };
 }
 
-// HTTP routes, which guardRegistrations never sees: it wraps MCP tools, and a plain
-// route in src/routes.ts is outside it by construction. A route checked only for the
-// write grant would let a driver minted for one namespace act across all of them.
-//
-// Every route in defaultHandler is in exactly one of these two tables, and
-// test/route-gates.test.ts fails when one is in neither, so a new route is a decision
-// rather than a gap.
+// HTTP routes, which guardRegistrations never sees (it wraps MCP tools). A route checked only for the write grant would let a driver minted for one namespace act across all of them. Every route in defaultHandler is in exactly one of these two tables, and test/route-gates.test.ts fails when one is in neither.
 
 // A route that goes through checkScope, and what it requires.
 export const ROUTE_GRANTS: Record<string, ToolRequirement> = {};
@@ -335,12 +298,7 @@ export interface ScopeNeed {
   // not the same as "allowed" (see namespaceRefusal).
   namespace?: string;
   // The resolved repo, "owner/name", never the selector the caller passed.
-  //
-  // The `repo` argument is a selector: a label ("primary", "legacy") or a full
-  // owner/name that the namespace maps. The repos axis holds owner/name entries, so
-  // comparing the selector to the axis gets both directions wrong: the legitimate
-  // label "primary" is refused, and omitting the argument (almost every call) skips
-  // the axis while resolveRepo picks the namespace primary. Resolve first, then ask.
+  // The `repo` argument is a selector (a label like "primary", or owner/name), but the repos axis holds owner/name entries, so comparing the selector to the axis refuses legitimate labels and skips the axis when omitted. Resolve first, then ask.
   repo?: string;
   // The document path a call names, for the one exception to the namespace axis: a
   // read of a portfolio document in capsid (portfolioReadAdmits).
@@ -422,15 +380,7 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
   return null;
 }
 
-// What a bench run key may do (the methods paper's protocol, "The run key";
-// src/bench-run-key.ts): claim its one job, and list that job by id. Every other tool,
-// every other action, another job, no job, and a list that asks for more than the one
-// row are refused, so an action added later is closed to it until listed here. A
-// re-check inside the jobs handler carries no call and is not bound here: the
-// registrar's check, which binds every call, has already run.
-// complete and fail end the run's own account of its job (complete only with a
-// reproduction, src/jobs-seat.ts completeAsCaller); the score step still decides nothing
-// from them.
+// What a bench run key may do (src/bench-run-key.ts): claim its one job and list that job by id; complete and fail end the run's own account of its job (complete only with a reproduction, src/jobs-seat.ts completeAsCaller). Every other tool or action, another job, no job, or a list wider than one row is refused, so a later action is closed to it until listed here. A re-check inside the jobs handler carries no call and is not bound: the registrar's check has already run.
 const BENCH_RUN_ACTIONS: readonly string[] = ["claim", "list", "complete", "fail"];
 
 function benchRunRefusal(
@@ -471,22 +421,9 @@ export function portfolioOnly(agent: Agent, namespace: string | undefined): bool
   return namespace === PORTFOLIO_DOCS.namespace && !allowsScope(agent.scopes.namespaces, namespace);
 }
 
-// STEP-UP, for Capsid Admin:
-// the admin actions that change who may do what, or that cannot be taken back, need a
-// recent Access sign-in. A grant lives for weeks and is refreshed without a person;
-// this is the point where a person proves they are there. It is a re-authentication,
-// not a mid-call confirmation, which the ruling's rule 12 rules out until client
-// support is verified. "*" is every action of the tool.
+// STEP-UP, for Capsid Admin: the admin actions that change who may do what, or that cannot be taken back, need a recent Access sign-in (a grant lives for weeks and refreshes without a person). It is a re-authentication, not a mid-call confirmation (the ruling's rule 12). "*" is every action of the tool.
 //
-// The window slides, as GitHub's sudo mode does: a step-up action is allowed when the
-// Access sign-in or the last SUCCESSFUL step-up action was within STEP_UP_IDLE_MS, and
-// each success resets that clock.
-// STEP_UP_MAX_MS caps it from the sign-in whatever the activity (NIST SP 800-63B-4
-// allows an AAL3 session no more than 12 hours overall), so only a new sign-in extends
-// past it.
-//
-// Only an OAuth session carries a sign-in time (Agent.signedInAt). A key holder has no
-// session to refresh and is not stepped up; its key is the credential.
+// The window slides, as GitHub's sudo mode does: allowed when the Access sign-in or the last SUCCESSFUL step-up action was within STEP_UP_IDLE_MS, each success resetting the clock. STEP_UP_MAX_MS caps it from the sign-in (NIST SP 800-63B-4: AAL3 no more than 12 hours), so only a new sign-in extends past it. Only an OAuth session carries a sign-in time (Agent.signedInAt); a key holder is not stepped up, its key is the credential.
 const STEP_UP_IDLE_MS = 2 * HOUR_MS;
 const STEP_UP_MAX_MS = 12 * HOUR_MS;
 
@@ -618,12 +555,7 @@ function deny(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true };
 }
 
-// An omitted namespace means "every namespace" on tools such as capsid_find_docs
-// (list, glob, search), capsid_read_status action status and capsid_work_jobs action list. For a caller scoped to "*" that changes nothing. For a
-// narrowed caller it would be a hole with no check in it, invisible because the tool
-// works. So a namespace-restricted caller that omits it is refused and told to name
-// it. Whether a tool takes a namespace is read from its own input schema, so a tool
-// that gains the argument is covered without anybody remembering to add it.
+// An omitted namespace means "every namespace" on tools such as capsid_find_docs (list, glob, search), capsid_read_status action status and capsid_work_jobs action list. For a narrowed caller that would be an unchecked hole, so a namespace-restricted caller that omits it is refused. Whether a tool takes a namespace is read from its input schema, so a new argument is covered automatically.
 function namespaceRefusal(agent: Agent, tool: string): string | null {
   if (agent.scopes.namespaces === "*") return null;
   return (
@@ -663,12 +595,7 @@ function toolSucceeded(result: unknown): boolean {
   }
 }
 
-// Which argument names what a tool is asked to do. lint spells it `mode`, because its
-// modes separate a read (gather) from two writes. The registrar needs this to populate
-// need.action, and a per-tool answer scattered across the handlers leaves the
-// qualifier unwired. A tool absent here cannot be narrowed below the tool name. `mode` on
-// capsid_write_doc is not an action: it already decides a write shape, and one setting
-// should not have two authorities.
+// Which argument names what a tool is asked to do (lint spells it `mode`). The registrar needs it to populate need.action; a tool absent here cannot be narrowed below the tool name. `mode` on capsid_write_doc is not an action: it already decides a write shape, and one setting should not have two authorities.
 const ACTION_ARG: Record<string, string> = {
   capsid_find_docs: "action",
   capsid_read_doc: "action",
@@ -687,13 +614,7 @@ const ACTION_ARG: Record<string, string> = {
   capsid_admin_manage_switches: "action",
 };
 
-// The action a tool falls back to when the caller omits an optional one, so a
-// narrowed list does not refuse the tool's own default. Every handler default needs
-// an entry: an unknown action on a narrowed tool is refused (allowsToolAction), so an
-// agent minted ["lint", "lint.gather"] would be refused its own default mode if the
-// registrar saw no action where the handler reads "gather".
-// test/audit-2026-09-16.test.ts derives the required entries from the served schemas:
-// an action argument a tool marks optional is a handler default.
+// The action a tool falls back to when the caller omits an optional one. Every handler default needs an entry: an unknown action on a narrowed tool is refused (allowsToolAction), so an agent minted ["lint", "lint.gather"] would be refused its own default mode. test/audit-2026-09-16.test.ts derives the required entries from the served schemas.
 const DEFAULT_ACTION: Record<string, string> = {
   capsid_find_docs: "list",
   capsid_read_doc: "read",

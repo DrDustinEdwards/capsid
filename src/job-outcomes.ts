@@ -8,23 +8,19 @@ import { MINUTE_MS } from "./time";
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 // One outcome row per finished job, written once, carrying counts.
 //
-// The Worker never stores a driver's count for something it could have checked. This
-// Worker holds a GitHub App token that reaches every repo in the portfolio, so for
-// anything that ended in a pull request the authority is GitHub and the driver's
-// number is an opinion. Where a check ran, the stored number is GitHub's and the field
-// is marked verified; where it could not run, the driver's number is stored and marked
-// unverified. A reader can always tell which.
+// The Worker never stores a driver's count for something it could have checked. This Worker
+// holds a GitHub App token reaching every repo in the portfolio, so for anything that ended
+// in a pull request GitHub is the authority and the driver's number is an opinion. Where a
+// check ran the stored number is GitHub's, marked verified; otherwise the driver's is stored,
+// marked unverified.
 //
-// Null is not zero: a field nobody reported is null, a field counted and found empty
-// is 0. Collapsing the two would make "no driver reports test counts"
-// indistinguishable from "no driver adds tests".
+// Null is not zero: a field nobody reported is null, one counted and found empty is 0.
 
 export const OUTCOME_RESULT_KINDS = ["pr", "doc", "none"] as const;
 export type OutcomeResultKind = (typeof OUTCOME_RESULT_KINDS)[number];
 
 // The fields a driver may report. An omitted field stays null in the row.
 export interface JobEvidence {
-  // Pull request URLs: the only field that unlocks verification.
   prs?: string[];
   commits?: number;
   files_changed?: number;
@@ -71,7 +67,6 @@ export interface JobOutcomeRow {
   model_actual?: string | null;
 }
 
-// A job's telemetry totals, as the outcome row stores them.
 export type JobUsage = Pick<
   JobOutcomeRow,
   | "cost_usd"
@@ -142,7 +137,6 @@ export interface EvidenceVerdict {
   tests_added: number | null;
   ci_green: number | null;
   verified: VerifiedFields;
-  // Every verification that could not run, and why.
   notes: string[];
   // Each named pull request's merge state as GitHub reported it, keyed by URL. A URL
   // the Worker could not read is absent, never false. Written to job_outcome_prs at
@@ -151,13 +145,10 @@ export interface EvidenceVerdict {
   // Each pull request read, by URL: which one it was, pinned on its join row so a later
   // read of the same URL can tell whether the number still names it.
   pr_identity?: Record<string, { node_id: string | null; created_at: string | null }>;
-  // What GitHub itself said, kept apart from the fields above, which mix it with the
-  // driver's numbers. job_evaluations (src/job-claims.ts) sets these beside the claim,
-  // so a check that disagreed with the driver is recorded as a disagreement rather
-  // than as the one number job_outcomes keeps. Null wherever the Worker did not read
-  // it; merged has an entry only for a pull request that was read.
+  // What GitHub itself said, kept apart from the fields above (which mix it with the driver's
+  // numbers); job_evaluations (src/job-claims.ts) sets these beside the claim. Null wherever
+  // the Worker did not read it.
   github?: GitHubFacts;
-  // The driver's numbers as sent, before any of them was replaced by GitHub's.
   reported?: {
     prs: string[] | null;
     commits: number | null;
@@ -172,7 +163,6 @@ export interface GitHubFacts {
   // some of them is not the job's total.
   commits: number | null;
   files_changed: number | null;
-  // CI on the last named pull request's head, 1 or 0, null when not answered.
   ci_green: number | null;
 }
 
@@ -239,7 +229,6 @@ async function ciGreenForSha(
     };
   let status;
   try {
-    // The repo the pull request is on, not the namespace primary.
     status = await ciStatus(env, namespace, repo, { ref: sha, limit: 20 });
   } catch (err) {
     return {
@@ -262,10 +251,9 @@ async function ciGreenForSha(
   return { green: runs.every((r) => NOT_A_FAILURE.has(r.conclusion ?? "")) };
 }
 
-// Evidence arrives as an object or as a JSON string, because some clients flatten an
-// object argument to a string, and a client with a stale cached schema may refuse
-// the object. A string that does not parse is refused, not ignored, so evidence is
-// never silently discarded.
+// Evidence arrives as an object or a JSON string (some clients flatten an object argument,
+// and a stale cached schema may refuse it). A string that does not parse is refused, not
+// ignored.
 export type EvidenceInput = JobEvidence | string | undefined;
 
 export function parseEvidence(
@@ -307,11 +295,9 @@ export function parseEvidence(
   };
 }
 
-// The pull requests a finished job names: evidence.prs, plus the job's result_ref when it
-// is a pull request URL. A session that sends only result_ref (the seat closing a job it
-// took, or a driver that left evidence out) named its pull request all the same, and
-// GitHub, not the sender, is the authority on it. Deduplicated, in
-// order, so the pull request named twice is read and counted once.
+// The pull requests a finished job names: evidence.prs plus the job's result_ref when it is
+// a pull request URL (a session sending only result_ref named its PR all the same, and GitHub
+// is the authority on it). Deduplicated, in order.
 export function namedPrUrls(
   evidence: JobEvidence | undefined,
   resultRef: string | null | undefined,
@@ -375,12 +361,10 @@ export async function verifyEvidence(
   );
   github.merged = { ...verdict.pr_states };
 
-  // A partly read list keeps what was read. prs_merged counts the pull requests that
-  // were read and is marked verified, as the re-verification sweep already does.
-  // prs_opened stays the number named and UNVERIFIED, so no reader takes the merged
-  // count for a total: the agent record's merge rate reads only rows whose prs_opened
-  // is verified, and the run goes unjudged. Commits and files stay the
-  // driver's, since a sum over some of the pull requests is not the job's total.
+  // A partly read list keeps what was read. prs_merged counts the PRs read and is marked
+  // verified; prs_opened stays the number named and UNVERIFIED, so no reader takes the merged
+  // count for a total (the agent record's merge rate reads only rows whose prs_opened is
+  // verified). Commits and files stay the driver's: a sum over some PRs is not the total.
   if (facts.length !== urls.length) {
     if (facts.length > 0) {
       verdict.prs_merged = facts.filter((f) => f.merged).length;

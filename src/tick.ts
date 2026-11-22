@@ -19,10 +19,7 @@ import { unitsTick } from "./merge-units";
 import { mergeSafetyTick } from "./merge-safety";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 
-// The five-minute tick's steps, in order. Each is its own task in the run ledger
-// (src/task-runs.ts): runTask records a run, and records and logs a throw without
-// rethrowing it, so one step's throw does not stop the rest of the tick. A step that was
-// not due returns null from its judge and records nothing.
+// The five-minute tick's steps, in order. Each is its own task in the run ledger (src/task-runs.ts): runTask records a run, and records and logs a throw without rethrowing, so one step's throw does not stop the rest. A step not due returns null from its judge and records nothing.
 export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> {
   // Auto-merge. The policy document decides whether it does anything; it ships
   // disabled, and a disabled policy is not a run. A policy that cannot be read or is
@@ -55,10 +52,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "WATCHER_THREW:", rethrow: false },
   );
 
-  // Merge units (src/merge-units.ts): after the watcher, which records rollbacks in
-  // deploy_outcomes. It proposes promotions and demotions and suspends a unit whose
-  // unattended merge was rolled back; the suspension only narrows, and the auto-merge
-  // step reads it on the next tick. Recorded only when something changed.
+  // Merge units (src/merge-units.ts): after the watcher, which records rollbacks in deploy_outcomes. It proposes promotions and demotions and suspends a unit whose unattended merge was rolled back; the suspension only narrows. Recorded only when something changed.
   await runTask(
     env,
     "merge-units",
@@ -75,10 +69,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "MERGE_UNITS_THREW:", rethrow: false },
   );
 
-  // The auto-merge safety meter and shutoff (src/merge-safety.ts): after merge-units. Its
-  // revert pass runs at most half-hourly; the counts and the shutoff read D1 only, every
-  // tick. A namespace it pauses only narrows: the auto-merge step reads the pause on the
-  // next tick. Recorded only when something changed.
+  // The auto-merge safety meter and shutoff (src/merge-safety.ts): after merge-units. Its revert pass runs at most half-hourly; the counts and shutoff read D1 only, every tick. A namespace it pauses only narrows. Recorded only when something changed.
   await runTask(
     env,
     "merge-safety",
@@ -154,12 +145,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "OFFACCOUNT_DISPATCH_THREW:", rethrow: false },
   );
 
-  // The daily maintenance pass (src/maintenance.ts): once a UTC day after 11:00, it lists
-  // what has gone stale for the seat's morning read. Its writes are pruning merged
-  // branches, off until the seat turns it on, and tagging a shared package's merged version
-  // bump (src/maintenance-releases.ts), on until the seat turns it off. Each delete and each
-  // tag is audit-logged before the next, so a broken pass costs a missing list, not an
-  // unrecorded write. Not due is not a run.
+  // The daily maintenance pass (src/maintenance.ts): once a UTC day after 11:00, it lists what has gone stale for the seat's morning read. Its writes are pruning merged branches (off until the seat turns it on) and tagging a shared package's merged version bump (src/maintenance-releases.ts, on until turned off). Each delete and tag is audit-logged before the next, so a broken pass costs a missing list, not an unrecorded write. Not due is not a run.
   await runTask(
     env,
     "maintenance",
@@ -172,11 +158,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "MAINTENANCE_THREW:", rethrow: false },
   );
 
-  // The public system model (src/public-data.ts): once a UTC day, repo visibility read
-  // from GitHub, the model filtered by toPublic and stored for /public/model/v1.json,
-  // and the public repos' code maps for /public/code/v1.json, rebuilt hourly. A
-  // failed read throws before anything is written, so the last good document stays
-  // served and the ledger shows the failure. Not due is not a run.
+  // The public system model (src/public-data.ts): once a UTC day, repo visibility read from GitHub, the model filtered by toPublic and stored for /public/model/v1.json, and the public repos' code maps for /public/code/v1.json, rebuilt hourly. A failed read throws before anything is written, so the last good document stays served. Not due is not a run.
   await runTask(
     env,
     "public-build",
@@ -195,10 +177,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "PUBLIC_BUILD_THREW:", rethrow: false },
   );
 
-  // The versions and secrets models (src/system-facts.ts): once a UTC day after 06:00, every
-  // model repo's package pins from its lockfiles and every Worker's secret names and stores
-  // from Cloudflare, so the 11:00 maintenance pass lists their drift. A half that cannot be
-  // read keeps its last good document and is recorded as refused.
+  // The versions and secrets models (src/system-facts.ts): once a UTC day after 06:00, every model repo's package pins and every Worker's secret names and stores, so the 11:00 maintenance pass lists their drift. A half that cannot be read keeps its last good document and is recorded as refused.
   await runTask(
     env,
     "system-facts",
@@ -234,11 +213,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "DOC_INDEX_THREW:", rethrow: false },
   );
 
-  // The daily merge-state sweep. Outcome rows record a pull request as unmerged when
-  // written, because the driver blocks and the seat merges afterwards. The merge path
-  // corrects the rows it can see; this catches the rest (a merge done with gh rather
-  // than capsid_close_pr action merge, and rows written before the join table existed). Bounded per
-  // sweep, so the cost is fixed however far behind it is.
+  // The daily merge-state sweep. Outcome rows record a pull request as unmerged when written, because the driver blocks and the seat merges afterwards. The merge path corrects the rows it can see; this catches the rest (a merge done with gh, and rows from before the join table existed). Bounded per sweep.
   await runTask(
     env,
     "outcome-sweep",
@@ -279,10 +254,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     );
   }
 
-  // Phone alerts (src/push.ts): after the auto-merge step and the watcher, so a typed
-  // pull request or a rollback they just recorded is seen this tick. It spends no model
-  // tokens. Recorded only when an alert was due, so the ledger is not one empty pass
-  // every five minutes; no key or no device is not a run.
+  // Phone alerts (src/push.ts): after the auto-merge step and the watcher, so a pull request or rollback they just recorded is seen this tick. Spends no model tokens. Recorded only when an alert was due; no key or no device is not a run.
   await runTask(
     env,
     "push",

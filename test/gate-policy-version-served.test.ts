@@ -1,15 +1,9 @@
 import assert from "node:assert/strict";
+import { policyDocument } from "./policy-doc.ts";
 import { test } from "node:test";
 import { capsidStatus } from "../src/status.ts";
 import { GATE_POLICY_PATH } from "../src/gate-policy.ts";
-import {
-  AUTO_MERGE_ALLOWED_PATHS,
-  AUTO_MERGE_POLICY_PATH,
-  AUTO_MERGE_REFUSED_PATHS,
-  AUTO_MERGE_REQUIRED_CI,
-  POLICY_CHECKS,
-  requiredCiLabel,
-} from "../src/auto-merge-policy.ts";
+import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy.ts";
 import { signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, type DocRow } from "./fakes.ts";
 
@@ -38,38 +32,7 @@ const GATES = [
 // Built from the code's own lists rather than retyped: loadMergePolicy refuses a
 // document that describes less than the code enforces, so a short hand-written
 // fixture would only exercise the refusal.
-const AUTO_MERGE = [
-  "# Auto-merge policy",
-  "",
-  "- version: 3",
-  "- enabled: true",
-  "- namespaces: capsid",
-  "",
-  "## Checks",
-  "",
-  ...POLICY_CHECKS.map((c) => `- \`${c}\` enforced.`),
-  "",
-  "## Allowed PR authors",
-  "",
-  "- author `DrDustinEdwards`",
-  "",
-  "## Refused paths",
-  "",
-  ...AUTO_MERGE_REFUSED_PATHS.map(({ pattern, why }) => `- path \`${pattern.source}\` ${why}.`),
-  "",
-  ...Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) => [
-    `## Allowed paths, ${ns}`,
-    "",
-    ...rows.map(({ pattern, why }) => `- allow \`${pattern.source}\` ${why}.`),
-  ]),
-  "",
-  ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [
-    `## Required CI, ${ns}`,
-    "",
-    ...rows.map((r) => `- step \`${requiredCiLabel(r)}\``),
-    "",
-  ]),
-].join("\n");
+const AUTO_MERGE = policyDocument(3);
 
 async function envWith(documents: DocRow[], secret: string | undefined = SECRET) {
   const d1 = fakeD1({ documents });
