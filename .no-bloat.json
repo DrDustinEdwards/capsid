@@ -12,7 +12,7 @@
     }
   ],
   "baseline": {
-    "measured_at": "e0f6c8a",
+    "measured_at": "18b1c8c",
     "knip (Worker)": {},
     "knip (dashboard)": {
       "exports": 5
@@ -28,13 +28,64 @@
       "lines": 0
     },
     "legacy": {},
+    "size": {
+      "dashboard/dev/mock-api.ts": 3237,
+      "dashboard/src/app/App.tsx": 728,
+      "dashboard/src/app/ConfirmDialog.tsx": 552,
+      "dashboard/src/lib/derive.ts": 689,
+      "dashboard/src/views/PullRequests.tsx": 503,
+      "dashboard/src/views/SiteTraffic.tsx": 618,
+      "dashboard/src/views/TrendCharts.tsx": 946,
+      "dashboard/src/views/shared.tsx": 554,
+      "explorer/src/explorer.css": 1736,
+      "explorer/src/explorer.js": 592,
+      "explorer/src/pages.mjs": 934,
+      "scripts/verify-live.mjs": 766,
+      "src/auto-merge-policy.ts": 814,
+      "src/auto-merge-tick.ts": 838,
+      "src/backup.ts": 552,
+      "src/bench.ts": 745,
+      "src/controls-perform.ts": 685,
+      "src/controls-plan.ts": 775,
+      "src/github/refs.ts": 543,
+      "src/job-claims-read.ts": 524,
+      "src/jobs-claim.ts": 561,
+      "src/jobs-holder.ts": 633,
+      "src/jobs-seat.ts": 1051,
+      "src/live-checks.ts": 528,
+      "src/merge-safety.ts": 735,
+      "src/model-routing.ts": 583,
+      "src/namespace-delete.ts": 636,
+      "src/ops-cloudflare.ts": 611,
+      "src/ops-feed.ts": 606,
+      "src/ops-packages.ts": 598,
+      "src/ops-types/views.ts": 647,
+      "src/outcome-prs.ts": 541,
+      "src/overnight-plan.ts": 596,
+      "src/policy-sign.ts": 583,
+      "src/portal-site.ts": 526,
+      "src/push.ts": 552,
+      "src/review.ts": 533,
+      "src/scope.ts": 961,
+      "src/shared-code.ts": 774,
+      "src/system-resources.ts": 571,
+      "src/tools/jobs.ts": 502,
+      "src/tools/outputs.ts": 564,
+      "src/tools/repo.ts": 701,
+      "src/tools/surface.ts": 644,
+      "src/trends.ts": 536,
+      "src/watcher-detect.ts": 697,
+      "src/watcher-gather.ts": 549,
+      "src/watcher.ts": 509,
+      "test/fakes.ts": 1492
+    },
     "tests": {
       "files": 273,
       "cases": 2347
     },
     "comments": {
       "lines": 14913,
-      "code": 130982,
+      "code": 130992,
       "percentage": 10.22
     }
   }
