@@ -106,6 +106,11 @@ export type GateMatch =
 const EXPANDS = /[$`]/;
 // Outside quotes only: a subexpression, a script block, or a redirect.
 const UNQUOTED_ACTIVE = /[(){}<>]/;
+// Anywhere: a line break or control character other than \n and \t (PowerShell ends a line at
+// a bare CR), a curly quote (a quote to PowerShell, a letter to bash), and PowerShell's
+// stop-parsing token, after which a quote is a literal character.
+// oxlint-disable-next-line no-control-regex -- refusing control characters is the point
+const UNREADABLE = /[\0-\x08\x0b-\x1f\x7f\u0085\u2018-\u201f\u2028\u2029]|[-\u2013-\u2015]{2}%/;
 const OPEN_PR_PIECE = /^gh\s+pr\s+create\b/i;
 const SEPARATORS = ["&&", "||", ";", "|", "&", "\n"];
 
@@ -125,6 +130,13 @@ function commandPieces(
     return {
       refused:
         "it contains a $ or a backtick, which bash and PowerShell expand even inside double quotes, so part of the command would be decided when it runs. It waits for the human.",
+    };
+  }
+
+  if (UNREADABLE.test(command)) {
+    return {
+      refused:
+        "it contains a control character, a curly quote or --%, which bash and PowerShell read differently. It waits for the human.",
     };
   }
 
@@ -165,6 +177,13 @@ function commandPieces(
         span = "";
       }
       continue;
+    }
+    // A comment runs to the end of the line in both shells, and quotes inside it open nothing.
+    if (ch === "#" && (i === 0 || /[\s;&|]/.test(command[i - 1]))) {
+      return {
+        refused:
+          "it contains a # comment, whose quotes open nothing in bash or PowerShell. It waits for the human.",
+      };
     }
     if (ch === "'" || ch === '"') {
       quote = ch;
