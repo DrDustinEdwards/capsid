@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
+import { gzipSync } from "node:zlib";
 import type { R2Like } from "@dustinedwards/d1-dump";
 import { SITES, drillSite, firstFailure, selectSites } from "../scripts/drill-all.ts";
 
@@ -31,12 +32,14 @@ const SCHEMA = [
 const SCHEMA_NO_FTS = [SCHEMA[0]];
 
 class FakeBucket {
-  objects = new Map<string, string>();
+  objects = new Map<string, string | Buffer>();
   pageSize = 2;
   put = async (key: string, value: string) => void this.objects.set(key, value);
   get = async (key: string) => {
     const v = this.objects.get(key);
-    return v === undefined ? null : { text: async () => v };
+    return v === undefined
+      ? null
+      : { text: async () => v.toString(), arrayBuffer: async () => Buffer.from(v) };
   };
   // Pages of pageSize keys, so the script has to follow the cursor.
   list = async ({ prefix = "", cursor }: { prefix?: string; cursor?: string }) => {
@@ -67,11 +70,13 @@ function plant(
   rows: Array<Record<string, unknown>>,
   complete = true,
   withFts = true,
+  gz = false,
 ): string {
   const id = runIdOf(exportedAt);
   const prefix = `backups/json/${id}/`;
-  const docKey = `${prefix}documents.json`;
-  bucket.objects.set(docKey, JSON.stringify({ exported_at: exportedAt, table: "documents", rows }));
+  const docKey = `${prefix}documents.json${gz ? ".gz" : ""}`;
+  const doc = JSON.stringify({ exported_at: exportedAt, table: "documents", rows });
+  bucket.objects.set(docKey, gz ? gzipSync(doc) : doc);
   bucket.objects.set(
     `${prefix}_schema.json`,
     JSON.stringify({ exported_at: exportedAt, schema: withFts ? SCHEMA : SCHEMA_NO_FTS }),
@@ -103,6 +108,14 @@ test("a good run: PASS with the marker's tables and rows and the age in hours", 
   const id = plant(bucket, hoursAgo(5.25), DOCS);
   const { line, ok } = await drillSite("sample", bucket.asR2(), { now: NOW });
   assert.equal(line, `sample run=${id} age_hours=5.3 tables=1 rows=3 PASS`);
+  assert.equal(ok, true);
+});
+
+test("a compressed run (<table>.json.gz) reaches the drill byte for byte", async () => {
+  const bucket = new FakeBucket();
+  const id = plant(bucket, hoursAgo(4), DOCS, true, true, true);
+  const { line, ok } = await drillSite("sample", bucket.asR2(), { now: NOW });
+  assert.equal(line, `sample run=${id} age_hours=4.0 tables=1 rows=3 PASS`);
   assert.equal(ok, true);
 });
 
