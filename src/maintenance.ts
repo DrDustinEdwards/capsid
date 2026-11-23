@@ -14,10 +14,7 @@ import { readFactsDrift } from "./system-facts-store";
 import { bundledModel } from "./public-data";
 import { gatherRuleDocItems } from "./rule-docs";
 import { DAY_MS } from "./time";
-
-// The actor the merge-resume step records its touches under. Spelled here, not imported, so this pass does not depend on
-// that step's pull request having landed: until it does, the query finds no rows.
-const MERGE_RESUME_ACTOR = "system:merge-resume";
+import { MERGE_RESUME_ACTOR } from "./jobs-seat-auto";
 
 // THE DAILY MAINTENANCE PASS (routine maintenance, so no stale thing waits to be asked about).
 // One pass a day on the five-minute tick, reusing its stamp pattern. Every finding either was

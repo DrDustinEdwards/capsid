@@ -48,8 +48,6 @@ export class ToolCallLog extends SharedToolCallLog {
 // from the other and fails in both directions.
 export const BACKUP_CRON = "0 9 * * *";
 export const TICK_CRON = "*/5 * * * *";
-// Fires daily; readSchedule decides from KV whether today is the configured day, so
-// the weekly schedule changes without a redeploy.
 
 // What the OAuth provider hands its API handler: the grant's props, and what it verified
 // about the token, its scopes among them.

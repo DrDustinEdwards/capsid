@@ -23,13 +23,11 @@ import { openQuietFindings } from "./watcher-digest";
 import { WATCHER_ACTOR } from "./watcher";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { DAY_MS } from "./time";
+import { toSqlTime } from "@dustinedwards/site-runtime/time";
 
 // The feed's live reads, each shaped for OpsLive (src/ops-feed.ts gathers them).
 
 const WEEK_MS = 7 * DAY_MS;
-
-// D1's datetime('now') text form, for comparing against columns written by default.
-const sqliteTime = (at: Date): string => at.toISOString().slice(0, 19).replace("T", " ");
 
 /** An instant as ISO. Columns written by datetime('now') read "YYYY-MM-DD HH:MM:SS",
  *  which is UTC but which a browser's Date.parse reads as local time, so the feed
@@ -216,7 +214,7 @@ async function livePrs(db: D1Database, now: Date): Promise<OpsPr[]> {
       `SELECT job_id, pr_url, merged, merge_verified_at, recorded_at FROM job_outcome_prs
        WHERE recorded_at >= ?1 ORDER BY recorded_at DESC`,
     )
-    .bind(sqliteTime(new Date(now.getTime() - WEEK_MS)))
+    .bind(toSqlTime(now.getTime() - WEEK_MS))
     .all<{
       job_id: string;
       pr_url: string;

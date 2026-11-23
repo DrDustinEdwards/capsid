@@ -43,17 +43,6 @@ export const BENCH_REPRO_PATH = "/bench/repro";
 export const BENCH_ENABLED_KEY = "bench:enabled";
 // At most this many runs at once, so a pilot never starves Dustin's own subscription use.
 export const BENCH_MAX_RUNNING = 4;
-// A running row older than BENCH_STALE_MS (src/bench-run-key.ts) no longer holds a
-// slot: its job hit GitHub's own timeout without reporting. The row stays 'running' as
-// the record of that.
-// THE ERROR STOP AND THE OUTAGE HOUR (the methods paper's protocol, section 3).
-// A model run that ends with Claude Code's "error during execution" (a usage
-// limit and a transport error look the same, and neither is classified) is scored from
-// its diff and claim file the first time, as a clock kill is, and fills its slot. Except
-// in an outage hour: a UTC hour in which at least BENCH_OUTAGE_MIN_ENDED model runs ended
-// and at least half of them stopped this way. Such a stop counts as no attempt at all, so
-// its slot is started once more, and no model run starts while the current hour already
-// meets the rule.
 const TASK_FIELDS = [
   "source",
   "split",

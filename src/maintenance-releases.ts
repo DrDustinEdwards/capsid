@@ -1,6 +1,6 @@
 import { githubJson } from "@dustinedwards/site-runtime/github";
 import type { Env } from "./env";
-import { ghFetch, getDefaultBranch } from "./github/client";
+import { ghFetch, getDefaultBranch, parseMappedRepos } from "./github/client";
 import { createTag, publishRelease, releaseNotes } from "./github/releases";
 import type { MaintenanceItem } from "./maintenance";
 import { readSharedConfig, releaseDecision } from "./shared-code";
@@ -8,7 +8,7 @@ import { readRootManifest } from "./shared-code-read";
 import { auditStatement } from "./store-guards";
 import { fromBase64Text } from "@dustinedwards/site-runtime/encoding";
 
-import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
 // The daily maintenance pass's release-tag rule (Capsid improvement list, item 13). A cloud
 // session cannot push a tag, so a shared package's version bump merged from one sat untagged,
@@ -273,17 +273,17 @@ export function githubReleaseReaders(env: Env): ReleaseReaders {
       ).all<{ namespace: string; repos: string | null }>();
       const owner = new Map<string, string>();
       for (const row of results ?? []) {
-        let list: unknown;
-        try {
-          list = JSON.parse(row.repos ?? "[]");
-        } catch {
+        const parsed = parseMappedRepos(row.repos);
+        if ("error" in parsed) {
+          logEvent(
+            "REPOS_MAPPING_SKIPPED",
+            { message: `REPOS_MAPPING_SKIPPED ${row.namespace}: ${parsed.error}` },
+            { level: "error" },
+          );
           continue;
         }
-        if (!Array.isArray(list)) continue;
-        for (const entry of list) {
-          const r = (entry as { repo?: unknown })?.repo;
-          if (typeof r === "string" && !owner.has(r.toLowerCase()))
-            owner.set(r.toLowerCase(), row.namespace);
+        for (const { repo } of parsed.list) {
+          if (!owner.has(repo.toLowerCase())) owner.set(repo.toLowerCase(), row.namespace);
         }
       }
       return config.map((c) => ({

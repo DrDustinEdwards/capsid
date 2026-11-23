@@ -67,25 +67,6 @@ export interface JobOutcomeRow {
   model_actual?: string | null;
 }
 
-export type JobUsage = Pick<
-  JobOutcomeRow,
-  | "cost_usd"
-  | "tokens_input"
-  | "tokens_output"
-  | "tokens_cache_read"
-  | "tokens_cache_creation"
-  | "active_seconds"
->;
-
-const NO_USAGE: JobUsage = {
-  cost_usd: null,
-  tokens_input: null,
-  tokens_output: null,
-  tokens_cache_read: null,
-  tokens_cache_creation: null,
-  active_seconds: null,
-};
-
 const NOTHING_VERIFIED: VerifiedFields = {
   prs_opened: false,
   prs_merged: false,
@@ -415,13 +396,12 @@ export async function verifyEvidence(
   return verdict;
 }
 
-// usage: omitted is no usage: NULL.
+// A new row carries no usage: those columns are NULL until a claim reports them.
 // actualModel: the model_id the session reported in its claim, or null when it reported none.
 export function outcomeFrom(
   job: JobRow,
   verdict: EvidenceVerdict,
   now: Date,
-  usage: JobUsage = NO_USAGE,
   actualModel: string | null = null,
 ): JobOutcomeRow {
   return {
@@ -442,12 +422,12 @@ export function outcomeFrom(
     result_kind: resultKindOf(job.result_ref),
     verified: JSON.stringify(verdict.verified),
     recorded_at: now.toISOString(),
-    cost_usd: usage.cost_usd,
-    tokens_input: usage.tokens_input,
-    tokens_output: usage.tokens_output,
-    tokens_cache_read: usage.tokens_cache_read,
-    tokens_cache_creation: usage.tokens_cache_creation,
-    active_seconds: usage.active_seconds,
+    cost_usd: null,
+    tokens_input: null,
+    tokens_output: null,
+    tokens_cache_read: null,
+    tokens_cache_creation: null,
+    active_seconds: null,
     job_kind: job.kind ?? null,
     model_chosen: job.model_recommended ?? null,
     model_actual: actualModel,

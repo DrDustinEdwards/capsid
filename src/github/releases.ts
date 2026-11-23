@@ -1,4 +1,4 @@
-import type { Env } from "../env";
+import type { RepoEnv as Env } from "../env";
 import { assertRepoArg, getDefaultBranch, getRefSha, ghFetch, resolveRepo } from "./client";
 import { readRepoFile } from "./contents";
 

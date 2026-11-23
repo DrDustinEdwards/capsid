@@ -167,14 +167,13 @@ export function riskOf(files: readonly ChangedFile[]): Risk {
 // backup document is reason enough for the stronger model. It is too broad to decide where a
 // second reader earns its cost (it flagged about 7 in 10 of the last 100 merged capsid PRs,
 // mostly lockfile bumps, backup docs and a deleted screenshot). This narrower test asks: does
-// the change edit code that enforces something, where a subtle mistake ships quietly? Nothing
-// calls it yet; the advisory reviewer is the seat's decision, after this measurement.
+// the change edit code that enforces something, where a subtle mistake ships quietly?
 //
 // Only code is judged: a document, image, test, lockfile or JSON manifest is never the
 // reason on its own.
 const CODE_FILE = /\.(ts|tsx|mts|cts|js|mjs|cjs|sql|sh)$/i;
 const WORKFLOW_FILE = /^\.github\/workflows\/[^/]+\.ya?ml$/i;
-const TEST_FILE =
+export const TEST_FILE =
   /(^|\/)(test|tests|test-integration|e2e|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/i;
 
 // The sources that hold this repo's invariants and credentials but are not on auto-merge's

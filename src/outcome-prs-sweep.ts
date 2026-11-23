@@ -16,7 +16,8 @@ const REVERIFY_PER_SWEEP = 50;
 const REVERIFY_WINDOW_DAYS = 30;
 
 /**
- * ago, belonging to outcomes recorded inside the window and not already known merged.
+ * The pull requests whose merge status is due a re-read: those belonging to outcomes
+ * recorded inside the window and not already known merged.
  */
 export async function dueForReverify(
   env: Env,
