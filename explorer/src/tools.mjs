@@ -3,17 +3,10 @@
 // registrations (src/surface.mjs), so the catalog cannot drift from what is served. Pure.
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { layout, pageHead, scroller } from "./pages.mjs";
+import { NEED } from "./rules.mjs";
 
 /** @param {string} name */
 export const toolPath = (name) => `/tools/${name}/`;
-
-const GRANT = {
-  read: "read access",
-  write: "write access",
-  action: "read or write access, by action",
-  admin: "admin and write access",
-  admin_read: "admin and read access",
-};
 
 /** Text from a tool's description, its `code` spans kept as code. @param {string} text */
 const prose = (text) => escapeHtml(text).replace(/`([^`]+)`/g, "<code>$1</code>");
@@ -82,7 +75,7 @@ export function toolsPage(tools, asOf) {
     ["admin", "Admin only"],
     ["outside", "Reaches outside"],
   ];
-  const body = `${pageHead([], "Tools", "Every tool Capsid serves", `${tools.length} tools.`)}
+  const body = `${pageHead([], "Tools", "Every tool Capsid serves")}
 <div class="filter-bar" data-filter="tools" hidden>
 <label class="cap-sr-only" for="tool-q">Filter the tools</label>
 <input class="cap-input" id="tool-q" type="search" placeholder="Filter by name, action or argument" autocomplete="off" data-filter-q>
@@ -181,7 +174,7 @@ export function toolPage(t, tools, asOf) {
     ],
     t.name,
     escapeHtml(t.title),
-    `Needs ${GRANT[/** @type {keyof typeof GRANT} */ (t.grant)] ?? escapeHtml(t.grant)}.`,
+    `Needs ${NEED[/** @type {keyof typeof NEED} */ (t.grant)] ?? escapeHtml(t.grant)}.`,
   )}
 <p class="tool-tags">${pills(t)}</p>
 <section aria-labelledby="does-title"><h2 id="does-title">What it does</h2>${rest.map(said).join("")}</section>
