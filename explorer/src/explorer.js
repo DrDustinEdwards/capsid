@@ -13,6 +13,7 @@ import { enhance as enhanceTheme, toggleTheme } from "capsomer/behavior/theme-sw
 import { enhance as enhanceMeters } from "capsomer/behavior/meter";
 import { trustedHtml } from "capsomer/behavior/trusted-html";
 import { startPage } from "@dustinedwards/site-runtime/page-client";
+import { reachSentence, reaches, valueWords, verdict } from "./rules.mjs";
 
 // First, before anything renders: the Trusted Types default policy and INP reporting (site-runtime ./page-client).
 startPage();
@@ -183,43 +184,11 @@ function flowPage(map, root, host) {
 enhanceTabs();
 
 // The front page's panel: each breaker switches a grant, and every circuit lights by the rule
-// the build drew it with (src/home.mjs, reaches), which is src/scope.ts's needFor.
+// the build drew it with (src/rules.mjs, reaches), which is src/scope.ts's needFor.
 for (const panel of document.querySelectorAll("[data-board]")) {
   const breakers = panel;
   const count = panel.querySelector("[data-board-count]");
   const circuits = [...panel.querySelectorAll(".circuit")];
-  const reaches = (need, h) =>
-    need === "read"
-      ? h.read
-        ? "full"
-        : ""
-      : need === "write"
-        ? h.write
-          ? "full"
-          : ""
-        : need === "admin"
-          ? h.admin && h.write
-            ? "full"
-            : ""
-          : need === "admin_read"
-            ? h.admin && h.read
-              ? "full"
-              : ""
-            : need === "action"
-              ? h.read && h.write
-                ? "full"
-                : h.read || h.write
-                  ? "part"
-                  : ""
-              : "";
-  const who = (h) =>
-    !h.read && !h.write && !h.admin
-      ? "An agent with no access"
-      : h.admin && h.read && h.write
-        ? "The admin"
-        : h.read && !h.write && !h.admin
-          ? "A read-only agent"
-          : `An agent with ${[h.read && "read", h.write && "write", h.admin && "admin"].filter(Boolean).join(" and ")} access`;
   const apply = () => {
     const h = Object.fromEntries(
       [...breakers.querySelectorAll("[data-grant]")].map((b) => [
@@ -227,16 +196,15 @@ for (const panel of document.querySelectorAll("[data-board]")) {
         b.getAttribute("aria-pressed") === "true",
       ]),
     );
-    let full = 0;
-    let part = 0;
     for (const c of circuits) {
       const on = reaches(c.dataset.need, h);
       if (on) c.dataset.on = on;
       else delete c.dataset.on;
-      if (on === "full") full++;
-      if (on === "part") part++;
     }
-    count.textContent = `${who(h)} can use ${full} of ${circuits.length} tools${part ? `, and ${part} more in part` : ""}.`;
+    count.textContent = reachSentence(
+      circuits.map((c) => c.dataset.need),
+      h,
+    );
   };
   for (const b of breakers.querySelectorAll("[data-grant]")) {
     b.addEventListener("click", () => {
@@ -248,10 +216,9 @@ for (const panel of document.querySelectorAll("[data-board]")) {
 
 // The front page's claim: the reader changes what the agent says, or lets it lie at random, and
 // the check plays out: the claim goes to GitHub, GitHub's reading comes back, and the record
-// is stamped. What it keeps is the rule the build wrote it with (src/home.mjs, verdict), which
+// is stamped. What it keeps is the rule the build wrote it with (src/rules.mjs, verdict), which
 // is src/job-claims.ts's evaluationRows.
 for (const desk of document.querySelectorAll("[data-desk]")) {
-  const words = (kind, n) => (kind === "ci_green" ? (n ? "Yes" : "No") : String(n));
   const said = desk.querySelector("[data-desk-said]");
   const read = desk.querySelector("[data-desk-read]");
   const kept = desk.querySelector("[data-desk-kept]");
@@ -270,7 +237,7 @@ for (const desk of document.querySelectorAll("[data-desk]")) {
   const check = async (counted) => {
     const mine = ++run;
     const agree = claim === truth;
-    said.textContent = words(kind, claim);
+    said.textContent = valueWords(kind, claim);
     desk.dataset.phase = "sent";
     out.textContent = "Checking with GitHub\u2026";
     await wait(350);
@@ -279,17 +246,15 @@ for (const desk of document.querySelectorAll("[data-desk]")) {
     read.textContent = kept.textContent = "\u2026";
     await wait(700);
     if (mine !== run) return;
-    read.textContent = words(kind, truth);
+    read.textContent = valueWords(kind, truth);
     await wait(250);
     if (mine !== run) return;
-    kept.textContent = words(kind, truth);
+    kept.textContent = valueWords(kind, truth);
     if (agree) cell.dataset.agree = "";
     else delete cell.dataset.agree;
     stamp.textContent = agree ? "Match" : "Caught";
     desk.dataset.phase = "done";
-    out.textContent = agree
-      ? `They match. Capsid saves ${words(kind, truth)}.`
-      : `Caught. The agent said ${words(kind, claim)} and GitHub says ${words(kind, truth)}. Capsid saves GitHub's answer and flags the mismatch.`;
+    out.textContent = verdict(kind, claim, truth);
     if (counted) {
       tries++;
       if (!agree) caught++;
@@ -490,7 +455,11 @@ let index = null;
 const entriesOf = () =>
   (index ??= fetch("/assets/search.json")
     .then((r) => r.json())
-    .then((doc) => doc.entries));
+    .then((doc) => doc.entries)
+    .catch((e) => {
+      index = null;
+      throw e;
+    }));
 
 /** Every entry holding every word of the query, best first. */
 function rank(entries, query) {

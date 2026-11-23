@@ -12,7 +12,7 @@
     }
   ],
   "baseline": {
-    "measured_at": "197ef94",
+    "measured_at": "e63cf5e",
     "knip (Worker)": {},
     "knip (dashboard)": {
       "exports": 5
@@ -30,26 +30,26 @@
     "legacy": {},
     "size": {
       "dashboard/dev/mock-api.ts": 3237,
-      "dashboard/src/app/App.tsx": 727,
+      "dashboard/src/app/App.tsx": 724,
       "dashboard/src/app/ConfirmDialog.tsx": 552,
-      "dashboard/src/lib/derive.ts": 652,
+      "dashboard/src/lib/derive.ts": 650,
       "dashboard/src/views/SiteTraffic.tsx": 618,
-      "dashboard/src/views/TrendCharts.tsx": 946,
+      "dashboard/src/views/TrendCharts.tsx": 943,
       "dashboard/src/views/shared.tsx": 554,
-      "explorer/src/explorer.css": 1736,
-      "explorer/src/explorer.js": 592,
-      "explorer/src/pages.mjs": 934,
+      "explorer/src/explorer.css": 1722,
+      "explorer/src/explorer.js": 561,
+      "explorer/src/pages.mjs": 933,
       "scripts/verify-live.mjs": 766,
       "src/ops-cloudflare.ts": 611,
       "test/fakes.ts": 1492
     },
     "tests": {
       "files": 273,
-      "cases": 2348
+      "cases": 2349
     },
     "comments": {
-      "lines": 14948,
-      "code": 131270,
+      "lines": 14933,
+      "code": 131194,
       "percentage": 10.22
     }
   }

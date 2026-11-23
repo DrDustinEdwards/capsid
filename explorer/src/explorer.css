@@ -47,8 +47,6 @@ body {
   font-weight: var(--weight-semibold);
 }
 
-/* One column (.cap-page) for every page but the front, whose sections set their own width. */
-/* The title block closes every page, so the footer follows it at the section gap's foot. */
 /* A long name in running text (a file path, an argument) breaks rather than pushing a phone's
    page sideways; tables keep their columns, since break-word leaves their widths alone. */
 main {
@@ -205,7 +203,6 @@ h3 {
 .desk-title {
   letter-spacing: 0;
 }
-.desk-title span,
 .kb-head span {
   color: var(--muted);
   font-size: var(--fs-body);
@@ -1176,12 +1173,6 @@ html:not(.js) .chapter h3::before {
 }
 
 /* A system's page. */
-.links-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-6);
-  align-items: start;
-}
 .links {
   display: grid;
   gap: var(--space-3);
@@ -1192,11 +1183,6 @@ html:not(.js) .chapter h3::before {
 }
 .links dd {
   margin: 0;
-}
-@media (max-width: 52rem) {
-  .links-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 .wires .verb {
   color: var(--muted);
