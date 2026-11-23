@@ -106,6 +106,11 @@ export type GateMatch =
 const EXPANDS = /[$`]/;
 // Outside quotes only: a subexpression, a script block, or a redirect.
 const UNQUOTED_ACTIVE = /[(){}<>]/;
+// Anywhere: a line break or control character other than \n and \t (PowerShell ends a line at
+// a bare CR), a curly quote (a quote to PowerShell, a letter to bash), and PowerShell's
+// stop-parsing token, after which a quote is a literal character.
+// oxlint-disable-next-line no-control-regex -- refusing control characters is the point
+const UNREADABLE = /[\0-\x08\x0b-\x1f\x7f\u0085\u2018-\u201f\u2028\u2029]|[-\u2013-\u2015]{2}%/;
 const OPEN_PR_PIECE = /^gh\s+pr\s+create\b/i;
 const SEPARATORS = ["&&", "||", ";", "|", "&", "\n"];
 
@@ -128,6 +133,13 @@ function commandPieces(
     };
   }
 
+  if (UNREADABLE.test(command)) {
+    return {
+      refused:
+        "it contains a control character, a curly quote or --%, which bash and PowerShell read differently. It waits for the human.",
+    };
+  }
+
   const pieces: Array<{ raw: string; bare: string }> = [];
   let raw = "";
   let bare = "";
@@ -135,17 +147,43 @@ function commandPieces(
   let span = "";
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
+    // Bash reads `\"` (and `\'` outside quotes) as a literal quote, PowerShell as a quote that
+    // opens or closes, so the two disagree on what is quoted. `\\` is a backslash to both.
+    if (ch === "\\" && quote !== "'") {
+      const next = command[i + 1];
+      if (next === '"' || (next === "'" && !quote)) {
+        return {
+          refused:
+            "it has a backslash before a quote, which bash and PowerShell read differently, so where its quotes end cannot be read. It waits for the human.",
+        };
+      }
+      if (next === "\\") {
+        if (quote) span += "\\\\";
+        else {
+          raw += "\\\\";
+          bare += "\\\\";
+        }
+        i++;
+        continue;
+      }
+    }
     if (quote) {
       span += ch;
       if (ch === quote) {
         raw += span;
-        // Ends at the first matching quote. Neither shell ends one earlier; a bash `\"`
-        // or PowerShell `""` only makes it run on, and that text is then read as unquoted.
+        // Ends at the first matching quote, as in both shells now that `\"` is refused.
         bare += quote + quote;
         quote = null;
         span = "";
       }
       continue;
+    }
+    // A # can start a comment, whose quotes open nothing, and @ a PowerShell here-string,
+    // which a lone quote does not end.
+    if (ch === "#" || ch === "@") {
+      return {
+        refused: `it contains '${ch}' outside quotes, which can start a comment or a PowerShell here-string, so where its quotes end cannot be read. It waits for the human.`,
+      };
     }
     if (ch === "'" || ch === '"') {
       quote = ch;
