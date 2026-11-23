@@ -4,15 +4,11 @@ import {
   type ActionParams,
   type Surface,
   AUTOMERGE_RESUME_REASON,
-  CLOSE_SHIPPED_NEEDS_REASON,
-  SUPERSEDE_NEEDS_REASON,
   UNIT_RESUME_REASON,
   SWITCHES,
   auditPrefix,
   clickAuditAction,
   deleteOptionsFrom,
-  revisionOf,
-  shippedEvidence,
   switchReasonRefusal,
 } from "./controls-base";
 import {
@@ -23,44 +19,24 @@ import {
   updateRepos,
 } from "./namespace-admin";
 import { deleteAsPlanned } from "./namespace-delete-perform";
-import { setSiteKey } from "./site-key";
+import { type ActionResult, type PerformContext, required } from "./controls-perform-base";
+import { performJobAction } from "./controls-perform-jobs";
+import { performSiteAction } from "./controls-perform-sites";
 import type { Env } from "./env";
 import { managePr } from "./github";
 import { resetBreaker } from "./job-breaker";
-import { parkJob, unparkJob } from "./jobs-park";
-import { resumeJob, releaseJob, adminFailJob, completeAsCaller, supersedeJob } from "./jobs-seat";
-import { readJob } from "./jobs-transition";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { resumeNamespace } from "./merge-safety";
 import { liftSuspension } from "./merge-units";
-import {
-  removePackage,
-  validatePackage,
-  addPackage,
-  editPackage,
-  describePackage,
-} from "./ops-package-config";
-import { removeSite, validateSite, addSite, editSite, describeSite } from "./ops-sites";
 import type { PortalAction } from "./ops-types/portal";
 import { overnightValueRefusal, setOvernight } from "./overnight";
-import { performPolicyChange, performPolicyFromRepo } from "./policy-sign";
+import { performPolicyChange } from "./policy-sign-change";
+import { performPolicyFromRepo } from "./policy-sign-repo";
 import { planApproval, performApproval } from "./pr-approvals";
-import { runSiteRepair } from "./site-repair";
-import { CAPSID_DUMP, runCapsidDump, runSiteBackups } from "./site-backup";
-import { runSiteJob } from "./site-jobs";
 import { auditStatement } from "./store-guards";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
 // A control's perform (src/controls.ts is the core): the one dispatch to the shared mutators.
-
-function required(params: ActionParams, field: string): string | null {
-  const value = params[field];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-export type ActionResult =
-  | { ok: true; summary: string; warning: string | null }
-  | { ok: false; refusal: string };
 
 /** One action, performed by the administrator `email`: the shared mutator, then the click's audit row. */
 export async function performAction(
@@ -75,8 +51,7 @@ export async function performAction(
   const agent = adminAgentForEmail(email);
   const actor = agent.actor;
   // Set once the mutator succeeds, so the catch knows whether the action happened.
-  let committed = false;
-  let summary = "";
+  const state = { committed: false, summary: "" };
   // The switches: a reason in both directions, checked again because a token signed before
   // this rule could lack one. The reason and whether this is an Undo go in the click row.
   const switchReason = SWITCHES.has(action) ? required(params, "reason") : null;
@@ -104,6 +79,20 @@ export async function performAction(
     reason: switchReason,
     ...(undo ? { undo: true } : {}),
   });
+  const c: PerformContext = {
+    env,
+    agent,
+    actor,
+    now,
+    params,
+    surface,
+    state,
+    auditClick,
+    switchDetail,
+    switchReason,
+    undo,
+    click,
+  };
   try {
     switch (action) {
       case "reset_breaker": {
@@ -111,8 +100,8 @@ export async function performAction(
         if (!namespace) return { ok: false, refusal: "reset_breaker needs a namespace." };
         const result = await resetBreaker(env, actor, now, { namespace });
         if (!result.ok) return { ok: false, refusal: result.error };
-        committed = true;
-        summary = `Reset the circuit breaker for ${namespace}.`;
+        state.committed = true;
+        state.summary = `Reset the circuit breaker for ${namespace}.`;
         await auditClick(namespace, result.state);
         break;
       }
@@ -124,8 +113,8 @@ export async function performAction(
           value: value ?? undefined,
           reason: switchReason ?? undefined,
         });
-        committed = true;
-        summary =
+        state.committed = true;
+        state.summary =
           result.mode === "off"
             ? "Turned the overnight run off."
             : `Set the overnight run to run on ${result.mode === "api" ? "the API key" : "the subscription"}.`;
@@ -141,120 +130,14 @@ export async function performAction(
       }
       case "resume_job":
       case "release_job":
-      case "fail_job": {
-        const id = required(params, "id");
-        const reason = required(params, "reason");
-        if (!id) return { ok: false, refusal: `${action} needs a job id.` };
-        if (!reason) {
-          return {
-            ok: false,
-            refusal:
-              action === "resume_job"
-                ? "resume needs a reason: what you approved. A job that came back off a gate with no record of who cleared it is a gate that did not happen."
-                : action === "release_job"
-                  ? "release needs a reason: why the holder is not coming back."
-                  : "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.",
-          };
-        }
-        // resume_job's note is the full approval when it is longer than a line (stale jobs
-        // D6): the driver reads it as resume_note.note on its next claim or list.
-        const note = action === "resume_job" ? (required(params, "note") ?? undefined) : undefined;
-        const result =
-          action === "resume_job"
-            ? await resumeJob(env, agent, now, id, reason, { note })
-            : action === "release_job"
-              ? await releaseJob(env, agent, now, id, reason)
-              : await adminFailJob(env, agent, now, id, reason);
-        if (!result.ok) return { ok: false, refusal: result.refusal ?? `${action} was refused.` };
-        committed = true;
-        summary =
-          action === "resume_job"
-            ? result.job?.status === "queued"
-              ? `Resumed ${id}; it went back to the queue. ${result.note ?? ""}`.trim()
-              : `Resumed ${id}; it is claimed again by ${result.job?.claimed_by ?? "its claimant"}.`
-            : action === "release_job"
-              ? `Released ${id} back to the queue.`
-              : `Marked ${id} failed.`;
-        await auditClick(result.job?.namespace ?? null, {
-          id,
-          reason,
-          ...(note ? { note } : {}),
-        });
-        break;
-      }
-      case "close_shipped": {
-        const id = required(params, "id");
-        const reason = required(params, "reason");
-        if (!id) return { ok: false, refusal: "close_shipped needs a job id." };
-        if (!reason)
-          return {
-            ok: false,
-            refusal: CLOSE_SHIPPED_NEEDS_REASON,
-          };
-        const job = await readJob(env.DB, id);
-        if (!job) return { ok: false, refusal: `no job ${id}.` };
-        const shipped = shippedEvidence(job);
-        const result = await completeAsCaller(env, agent, now, id, {
-          result_summary: `Closed as shipped by ${actor}: ${reason}`,
-          ...(shipped.result_ref ? { result_ref: shipped.result_ref } : {}),
-          ...(shipped.prs.length ? { evidence: { prs: shipped.prs } } : {}),
-        });
-        if (!result.ok)
-          return { ok: false, refusal: result.refusal ?? "close_shipped was refused." };
-        committed = true;
-        summary = `Closed ${id} as shipped; the outcome is credited to ${job.claimed_by ?? "its holder"}.`;
-        await auditClick(job.namespace, {
-          id,
-          reason,
-          held_by: job.claimed_by,
-          prs: shipped.prs.length,
-        });
-        break;
-      }
-      case "supersede_job": {
-        const id = required(params, "id");
-        const reason = required(params, "reason");
-        if (!id) return { ok: false, refusal: "supersede_job needs a job id." };
-        if (!reason)
-          return {
-            ok: false,
-            refusal: SUPERSEDE_NEEDS_REASON,
-          };
-        const replaced_by = required(params, "replaced_by") ?? undefined;
-        const result = await supersedeJob(env, agent, now, id, { reason, replaced_by });
-        if (!result.ok)
-          return { ok: false, refusal: result.refusal ?? "supersede_job was refused." };
-        committed = true;
-        summary = `Superseded ${id}${replaced_by ? ` with ${replaced_by}` : ""}.`;
-        await auditClick(result.job?.namespace ?? null, {
-          id,
-          reason,
-          ...(replaced_by ? { replaced_by } : {}),
-        });
-        break;
-      }
+      case "fail_job":
+      case "close_shipped":
+      case "supersede_job":
       case "park_job":
-      case "unpark_job": {
-        const id = required(params, "id");
-        if (!id) return { ok: false, refusal: `${action} needs a job id.` };
-        const reason = required(params, "reason");
-        if (action === "park_job" && !reason)
-          return {
-            ok: false,
-            refusal: "park_job needs a reason in one line saying when the job comes back.",
-          };
-        const result =
-          action === "park_job"
-            ? await parkJob(env, agent, now, id, reason ?? undefined)
-            : await unparkJob(env, agent, now, id);
-        if (!result.ok) return { ok: false, refusal: result.refusal ?? `${action} was refused.` };
-        committed = true;
-        summary = action === "park_job" ? `Parked ${id}.` : `Unparked ${id}; it is queued again.`;
-        await auditClick(
-          result.job?.namespace ?? null,
-          { id, reason, ...(undo ? { undo: true } : {}) },
-          click,
-        );
+      case "unpark_job":
+      case "run_job": {
+        const r = await performJobAction(c, action);
+        if (r) return r;
         break;
       }
       case "approve_pr": {
@@ -265,8 +148,8 @@ export async function performAction(
         );
         const plan = await planApproval(env, actor, clean, surface, click);
         if (!plan.ok) return { ok: false, refusal: plan.refusal };
-        summary = await performApproval(env, actor, plan, required(params, "reason"), now);
-        committed = true;
+        state.summary = await performApproval(env, actor, plan, required(params, "reason"), now);
+        state.committed = true;
         await auditClick(
           plan.namespace,
           {
@@ -289,8 +172,8 @@ export async function performAction(
           required(params, "confirm") ?? undefined,
         );
         if (!done.ok) return { ok: false, refusal: done.error };
-        summary = done.summary;
-        committed = true;
+        state.summary = done.summary;
+        state.committed = true;
         await auditClick(
           "capsid",
           {
@@ -313,8 +196,8 @@ export async function performAction(
           required(params, "source_sha") ?? undefined,
         );
         if (!done.ok) return { ok: false, refusal: done.error };
-        summary = done.summary;
-        committed = true;
+        state.summary = done.summary;
+        state.committed = true;
         await auditClick(
           "capsid",
           {
@@ -326,42 +209,23 @@ export async function performAction(
         );
         break;
       }
-      case "unit_resume": {
-        const reason = required(params, "reason");
-        if (!reason) return { ok: false, refusal: UNIT_RESUME_REASON };
-        const done = await liftSuspension(
-          env,
-          actor,
-          required(params, "unit") ?? undefined,
-          reason,
-          now,
-        );
-        if (!done.ok) return { ok: false, refusal: done.refusal };
-        summary = done.summary;
-        committed = true;
-        await auditClick(
-          (params.unit ?? "").split("/")[0]!.trim() || null,
-          { unit: params.unit, reason },
-          click,
-        );
-        break;
-      }
+      case "unit_resume":
       case "automerge_resume": {
+        const unit = action === "unit_resume";
+        const field = unit ? "unit" : "namespace";
         const reason = required(params, "reason");
-        if (!reason) return { ok: false, refusal: AUTOMERGE_RESUME_REASON };
-        const done = await resumeNamespace(
-          env,
-          actor,
-          required(params, "namespace") ?? undefined,
-          reason,
-          now,
-        );
+        if (!reason)
+          return { ok: false, refusal: unit ? UNIT_RESUME_REASON : AUTOMERGE_RESUME_REASON };
+        const target = required(params, field) ?? undefined;
+        const done = unit
+          ? await liftSuspension(env, actor, target, reason, now)
+          : await resumeNamespace(env, actor, target, reason, now);
         if (!done.ok) return { ok: false, refusal: done.refusal };
-        summary = done.summary;
-        committed = true;
+        state.summary = done.summary;
+        state.committed = true;
         await auditClick(
-          (params.namespace ?? "").trim() || null,
-          { namespace: params.namespace, reason },
+          (params[field] ?? "").split("/")[0]!.trim() || null,
+          { [field]: params[field], reason },
           click,
         );
         break;
@@ -381,8 +245,8 @@ export async function performAction(
           if (!mapped.ok) return { ok: false, refusal: mapped.refusal };
           const done = await registerNamespace(env.DB, actor, namespace, mapped.list);
           if (!done.ok) return { ok: false, refusal: done.refusal };
-          committed = true;
-          summary = `Registered ${namespace}, mapped to ${mapped.list.map((r) => r.repo).join(", ")}.`;
+          state.committed = true;
+          state.summary = `Registered ${namespace}, mapped to ${mapped.list.map((r) => r.repo).join(", ")}.`;
           await auditClick(namespace, {
             namespace,
             repos: mapped.list,
@@ -398,8 +262,8 @@ export async function performAction(
             };
           const done = await updateNamespace(env.DB, actor, namespace, mapped.list, from);
           if (!done.ok) return { ok: false, refusal: done.refusal };
-          committed = true;
-          summary = `Changed ${namespace}'s repo mapping to ${mapped.list.map((r) => `${r.repo} (${r.label})`).join(", ")}.`;
+          state.committed = true;
+          state.summary = `Changed ${namespace}'s repo mapping to ${mapped.list.map((r) => `${r.repo} (${r.label})`).join(", ")}.`;
           await auditClick(namespace, {
             namespace,
             repos: mapped.list,
@@ -430,8 +294,8 @@ export async function performAction(
           edges_removed: number;
           ops_site_removed: boolean;
         };
-        committed = true;
-        summary = `Deleted ${namespace}: ${plural(data.documents_deleted, "live document")} (each snapshotted first), ${plural(data.edges_removed, "link")}${data.ops_site_removed ? ", its site row" : ""} and its registration.`;
+        state.committed = true;
+        state.summary = `Deleted ${namespace}: ${plural(data.documents_deleted, "live document")} (each snapshotted first), ${plural(data.edges_removed, "link")}${data.ops_site_removed ? ", its site row" : ""} and its registration.`;
         await auditClick(namespace, {
           namespace,
           cascade: options.opts.cascade,
@@ -442,30 +306,17 @@ export async function performAction(
         });
         break;
       }
-      case "site_key_rotate": {
-        // setSiteKey checks the token and the site row again, mints, sets the site then
-        // Carrel, and writes set_site_key. The value never leaves it.
-        const namespace = required(params, "namespace") ?? undefined;
-        const bad = namespaceNameRefusal(namespace);
-        if (bad || !namespace)
-          return { ok: false, refusal: bad ?? "site_key_rotate needs a namespace." };
-        const result = await setSiteKey(env, actor, namespace);
-        // The site refused: nothing changed, so it is a refusal (its set_site_key row records the attempt).
-        if (!result.site.set)
-          return {
-            ok: false,
-            refusal: `${result.note} ${result.site.script}: ${result.site.error ?? "not set"}`,
-          };
-        committed = true;
-        summary = result.matched
-          ? `Rotated ${namespace}'s site key: set on ${result.site.script} and on ${result.carrel.script}. The value is not shown anywhere.`
-          : `${result.note} ${result.carrel.script}: ${result.carrel.error ?? "not set"}`;
-        await auditClick(namespace, {
-          namespace,
-          site_set: result.site.set,
-          carrel_set: result.carrel.set,
-          matched: result.matched,
-        });
+      case "site_key_rotate":
+      case "site_add":
+      case "site_edit":
+      case "site_remove":
+      case "package_add":
+      case "package_edit":
+      case "package_remove":
+      case "site_repair":
+      case "site_backup": {
+        const r = await performSiteAction(c, action);
+        if (r) return r;
         break;
       }
       case "pr_close": {
@@ -489,8 +340,8 @@ export async function performAction(
           head_branch: string | null;
           head_branch_deleted: boolean;
         };
-        committed = true;
-        summary = `Closed ${result.repo}#${number}${result.head_branch_deleted ? `; its branch ${result.head_branch} was deleted` : ""}.`;
+        state.committed = true;
+        state.summary = `Closed ${result.repo}#${number}${result.head_branch_deleted ? `; its branch ${result.head_branch} was deleted` : ""}.`;
         // managePr writes no audit row of its own (the guardedWrite behind capsid_close_pr action close does),
         // so the control writes the change's row beside the click row.
         await env.DB.batch([
@@ -515,8 +366,8 @@ export async function performAction(
         const result = await revokeAgent(env.DB, actor, name);
         if (!result.ok)
           return { ok: false, refusal: result.refusal ?? `revoking ${name} was refused.` };
-        committed = true;
-        summary = `Revoked the agent ${name}.`;
+        state.committed = true;
+        state.summary = `Revoked the agent ${name}.`;
         await auditClick(null, { name });
         break;
       }
@@ -526,160 +377,21 @@ export async function performAction(
         const result = await activateAgent(env.DB, actor, name);
         if (!result.ok)
           return { ok: false, refusal: result.refusal ?? `activating ${name} was refused.` };
-        committed = true;
-        summary = `Activated the agent ${name}.`;
+        state.committed = true;
+        state.summary = `Activated the agent ${name}.`;
         await auditClick(null, { name });
-        break;
-      }
-      case "site_add":
-      case "site_edit":
-      case "site_remove": {
-        // Checked again here: the rules could have changed under a token signed before a deploy.
-        let result;
-        if (action === "site_remove") {
-          const revision = revisionOf(params.revision);
-          if (!params.namespace || revision === null)
-            return {
-              ok: false,
-              refusal: "site_remove needs a namespace and the revision it previewed.",
-            };
-          result = await removeSite(env.DB, actor, params.namespace, revision);
-        } else {
-          const checked = validateSite(params);
-          if (!checked.ok) return { ok: false, refusal: checked.refusal };
-          if (action === "site_add") {
-            result = await addSite(env.DB, actor, checked.site);
-          } else {
-            const revision = revisionOf(params.revision);
-            if (revision === null)
-              return { ok: false, refusal: "site_edit needs the revision it previewed." };
-            result = await editSite(env.DB, actor, checked.site, revision);
-          }
-        }
-        if (!result.ok) return { ok: false, refusal: result.refusal };
-        committed = true;
-        summary =
-          action === "site_add"
-            ? `Added ${result.site.namespace}: ${describeSite(result.site)}.`
-            : action === "site_edit"
-              ? `Changed ${result.site.namespace}: ${describeSite(result.site)}.`
-              : `Removed ${result.site.namespace} from the site configuration.`;
-        await auditClick(result.site.namespace, params);
-        break;
-      }
-      case "package_add":
-      case "package_edit":
-      case "package_remove": {
-        // Checked again here, as the site controls are.
-        let result;
-        if (action === "package_remove") {
-          const revision = revisionOf(params.revision);
-          if (!params.name || revision === null)
-            return {
-              ok: false,
-              refusal: "package_remove needs a name and the revision it previewed.",
-            };
-          result = await removePackage(env.DB, actor, params.name, revision);
-        } else {
-          const checked = validatePackage(params);
-          if (!checked.ok) return { ok: false, refusal: checked.refusal };
-          if (action === "package_add") {
-            result = await addPackage(env.DB, actor, checked.pkg);
-          } else {
-            const revision = revisionOf(params.revision);
-            if (revision === null)
-              return { ok: false, refusal: "package_edit needs the revision it previewed." };
-            result = await editPackage(env.DB, actor, checked.pkg, revision);
-          }
-        }
-        if (!result.ok) return { ok: false, refusal: result.refusal };
-        committed = true;
-        summary =
-          action === "package_add"
-            ? `Added ${describePackage(result.pkg)}.`
-            : action === "package_edit"
-              ? `Changed ${result.pkg.name}: ${describePackage(result.pkg)}.`
-              : `Removed ${result.pkg.name} from the packages.`;
-        await auditClick(null, params);
-        break;
-      }
-      case "site_repair": {
-        // Every check runs again inside runSiteRepair: the allowlist, token and rate limit can change before the click.
-        const namespace = required(params, "namespace");
-        const tool = required(params, "tool");
-        if (!namespace || !tool)
-          return { ok: false, refusal: "site_repair needs a namespace and a tool." };
-        const outcome = await runSiteRepair(
-          env,
-          { namespace, tool, actor, auto: false, via: surface },
-          now,
-        );
-        if (!outcome.ran) return { ok: false, refusal: outcome.refusal };
-        committed = true;
-        summary = `${namespace}: ${outcome.line}.${outcome.recorded ? "" : " The call's audit row was not written (SITE_REPAIR_NOT_RECORDED in the log)."}`;
-        await auditClick(namespace, {
-          tool,
-          ok: outcome.call.ok,
-          converged: outcome.call.converged,
-        });
-        break;
-      }
-      case "run_job": {
-        // Every check runs again inside runSiteJob: the configuration, token and rate limit can change before the click.
-        const namespace = required(params, "namespace");
-        const name = required(params, "name");
-        if (!namespace || !name)
-          return { ok: false, refusal: "run_job needs a namespace and a job name." };
-        const outcome = await runSiteJob(env, { namespace, name, actor, via: surface }, now);
-        if (!outcome.ran) return { ok: false, refusal: outcome.refusal };
-        committed = true;
-        summary = `${namespace}: ${outcome.line}.${outcome.recorded ? "" : " The call's audit row was not written (SITE_JOB_NOT_RECORDED in the log)."}`;
-        await auditClick(namespace, {
-          job: name,
-          ok: outcome.ok,
-        });
-        break;
-      }
-      case "site_backup": {
-        // Every check runs again inside runSiteBackups: the configuration, tokens and rate limit can change before the click.
-        const namespace = params.namespace?.trim() || undefined;
-        if (namespace === CAPSID_DUMP) {
-          const dump = await runCapsidDump(env);
-          if (!dump.ok) return { ok: false, refusal: dump.line };
-          committed = true;
-          summary = `${dump.line}.`;
-          await auditClick(namespace, { dump: true });
-          break;
-        }
-        const outcome = await runSiteBackups(env, { namespace, actor, via: surface }, now);
-        if (!outcome.ok) return { ok: false, refusal: outcome.refusal };
-        committed = outcome.runs.some((r) => r.ran);
-        if (!committed)
-          return {
-            ok: false,
-            refusal: outcome.runs.map((r) => (r.ran ? "" : r.refusal)).join(" "),
-          };
-        const unrecorded = outcome.runs.some((r) => r.ran && !r.recorded);
-        summary = `${outcome.runs.map((r) => `${r.namespace}: ${r.ran ? r.line : `skipped, ${r.refusal}`}`).join(". ")}.${unrecorded ? " A call's audit row was not written (SITE_BACKUP_NOT_RECORDED in the log)." : ""}`;
-        await auditClick(namespace ?? null, {
-          sites: outcome.runs.map((r) => ({
-            namespace: r.namespace,
-            ran: r.ran,
-            ok: r.ran ? r.call.ok : false,
-          })),
-        });
         break;
       }
     }
   } catch (err) {
     const message = errorMessage(err);
-    if (committed) {
+    if (state.committed) {
       // The action happened; only the Portal's own audit row failed, so no refusal.
       const warning = `${action} completed, but the Portal audit row naming ${actor} was not written: ${message}`;
       logEvent("PORTAL_ACTION_AUDIT_FAILED", { message: warning }, { level: "error" });
-      return { ok: true, summary, warning };
+      return { ok: true, summary: state.summary, warning };
     }
     return { ok: false, refusal: message };
   }
-  return { ok: true, summary, warning: null };
+  return { ok: true, summary: state.summary, warning: null };
 }

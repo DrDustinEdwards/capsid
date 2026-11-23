@@ -10,7 +10,8 @@ import {
 } from "../src/namespace-delete.ts";
 import { confirmKeys } from "../src/auth.ts";
 import { D1_BATCH_STATEMENTS } from "../src/limits.ts";
-import { actionArgFor, defaultActionFor, requiredGrant } from "../src/scope.ts";
+import { requiredGrant } from "../src/scope.ts";
+import { actionArgFor, defaultActionFor } from "../src/scope-guard.ts";
 import { hintsFor } from "../src/tool-annotations.ts";
 import { MANAGE_NAMESPACES } from "../src/tools/surface.ts";
 

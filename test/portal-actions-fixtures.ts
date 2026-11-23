@@ -1,3 +1,4 @@
+import { SHIPPED_VERSION } from "./policy-version.ts";
 import assert from "node:assert/strict";
 import {} from "node:test";
 import { mintConfirm } from "@dustinedwards/site-runtime/confirm-token";
@@ -392,8 +393,11 @@ export const EVERY_ACTION = [
   ["site_repair", { namespace: "sample", tool: "sync_posts" }],
   ["site_backup", {}],
   ["run_job", { namespace: "capsid", name: "supersede" }],
-  ["sign_policy_change", { change: "promote", unit: "capsid/tests", confirm: "11" }],
-  ["sign_policy_from_repo", { confirm: "11" }],
+  [
+    "sign_policy_change",
+    { change: "promote", unit: "capsid/tests", confirm: `${SHIPPED_VERSION + 1}` },
+  ],
+  ["sign_policy_from_repo", { confirm: `${SHIPPED_VERSION + 1}` }],
   ["unit_resume", { unit: "capsid/docs", reason: "the rollback's cause is fixed" }],
   ["automerge_resume", { namespace: "capsid", reason: "both rollbacks are answered" }],
   ["namespace_add", { namespace: "sample-added", repo: "example-org/sample-added" }],

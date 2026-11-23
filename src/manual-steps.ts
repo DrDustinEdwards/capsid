@@ -4,7 +4,7 @@ import { readStoredSecrets, type StoredSecrets } from "./secret-presence";
 
 // DUSTIN'S MANUAL STEPS, DONE ONLY WHEN CAPSID CAN SEE THEM (improvement list item 14). A
 // session that needs a person to click something (approve an npm publish, add an Access app,
-// set a secret, fill a repo's About box) blocks its job as for any gate (src/jobs-holder.ts):
+// set a secret, fill a repo's About box) blocks its job as for any gate (src/jobs-holder-block.ts):
 // the reason carries the steps, and a line "check: <form>" in the reason or command names the
 // result Capsid looks for (docs/work-queue.md):
 //   check: secret NAME on <namespace>     the site's Worker has the secret NAME, from the

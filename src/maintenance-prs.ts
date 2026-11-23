@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
 import { readAllPages, readCheckRuns } from "./github/pr-files";
-import { ciVerdict, jobIdFromBody } from "./auto-merge-policy";
+import { ciVerdict, jobIdFromBody } from "./auto-merge-policy-evaluate";
 import type { MaintenanceItem } from "./maintenance";
 import { HOUR_MS, days } from "./time";
 

@@ -4,7 +4,8 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildAdminServer, buildServer } from "../src/server.ts";
 import { MAX_ROWS } from "../src/limits.ts";
 import { driverMintInstruction, defaultScopes } from "../src/agents-schema.ts";
-import { actionArgFor, defaultActionFor, requiredForAction } from "../src/scope.ts";
+import { requiredForAction } from "../src/scope.ts";
+import { actionArgFor, defaultActionFor } from "../src/scope-guard.ts";
 import { surfaceOf } from "../src/tools/surface.ts";
 import { CORRECTION_CAP } from "../src/jobs-schema.ts";
 import {

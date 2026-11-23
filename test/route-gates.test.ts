@@ -52,7 +52,8 @@ import {
   PUBLIC_VERSIONS_PATH,
 } from "../src/public-data.ts";
 import { SIGNED_IN_REPORT_PATH } from "@dustinedwards/site-runtime/signed-in-crawl";
-import { ROUTE_GRANTS, UNGATED_ROUTES, requiredForAction } from "../src/scope.ts";
+import { requiredForAction } from "../src/scope.ts";
+import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope-routes.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 import { buildAdminServer, buildServer } from "../src/server.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
@@ -164,7 +165,7 @@ test("every route in defaultHandler is either gated through checkScope or listed
     const ungated = Object.hasOwn(UNGATED_ROUTES, path);
     assert.ok(
       gated || ungated,
-      `route ${path} is in neither ROUTE_GRANTS nor UNGATED_ROUTES in src/scope.ts. Decide which.`,
+      `route ${path} is in neither ROUTE_GRANTS nor UNGATED_ROUTES in src/scope-routes.ts. Decide which.`,
     );
     assert.ok(!(gated && ungated), `route ${path} is in both ROUTE_GRANTS and UNGATED_ROUTES`);
     if (ungated)

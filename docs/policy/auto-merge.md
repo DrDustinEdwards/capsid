@@ -6,9 +6,11 @@ source. The copy the Worker actually reads is the signed document at
 same key and envelope as a signed job body. An unsigned copy, or one
 edited after signing, merges nothing.
 
-- version: 10
+- version: 11
 - enabled: true
 - namespaces: dustinedwards, carrel, capsomer, capsid
+
+Version 11 names the signed sources by prefix (`src/scope-*.ts`, `src/jobs-*.ts`, `src/auto-merge-*.ts`, `src/policy-sign-*.ts`, `src/outcome-prs-*.ts`), so splitting one of them by responsibility keeps every part refused. Every check is unchanged.
 
 Version 10 lets a promoted unit stand in for the job trace (Dustin, 2026-10-31, thread
 "Measure how much Claude uses Capsid"). Since mid-October work comes from project
@@ -195,10 +197,10 @@ repo-relative path. The Worker holds the same list and refuses to load a documen
 list differs from it in either direction.
 
 - path `^src\/gate-policy\.ts$` the gate policy source.
-- path `^src\/auto-merge(-(policy|tick))?\.ts$` the auto-merge source, which holds this list.
-- path `^src\/policy-sign\.ts$` the policy signer.
+- path `^src\/auto-merge(-[a-z]+)*\.ts$` the auto-merge source, which holds this list.
+- path `^src\/policy-sign(-[a-z]+)*\.ts$` the policy signer.
 - path `^src\/protected-paths\.ts$` the protected path list.
-- path `^src\/scope\.ts$` isMoneyPath, which is the whole of the paths_not_money check.
+- path `^src\/scope(-[a-z]+)*\.ts$` isMoneyPath, which is the whole of the paths_not_money check.
 - path `^src\/signed-docs\.ts$` verifySignedBody, which is how loadMergePolicy decides the stored policy is signed.
 - path `^src\/auth\.ts$` the HMAC and the constant-time comparison that verifier delegates to.
 - path `^src\/encoding\.ts$` the hex encoding of the signature that verifier compares.
@@ -227,8 +229,8 @@ list differs from it in either direction.
 - path `(^|\/)Makefile$` build glue CI executes.
 - path `(^|\/)\.husky\/` a git hook CI may run.
 - path `(^|\/)\.gitmodules$` submodules the checkout would fetch and run.
-- path `^src\/jobs(-(claim|holder|seat|mirror|transition))?\.ts$` the job transitions that write result_ref, which pr_recorded_for_job reads.
-- path `^src\/outcome-prs\.ts$` the writer of job_outcome_prs, which pr_recorded_for_job reads.
+- path `^src\/jobs(-[a-z]+)*\.ts$` the job transitions that write result_ref, which pr_recorded_for_job reads.
+- path `^src\/outcome-prs(-[a-z]+)*\.ts$` the writer of job_outcome_prs, which pr_recorded_for_job reads.
 
 ## Allowed paths
 

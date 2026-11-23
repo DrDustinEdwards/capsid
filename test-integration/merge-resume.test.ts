@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob } from "../src/jobs";
-import { autoResumeJob, MERGE_RESUME_ACTOR } from "../src/jobs-seat";
+import { autoResumeJob, MERGE_RESUME_ACTOR } from "../src/jobs-seat-auto";
 import { mergeResumeTick } from "../src/merge-resume";
 import { readJob } from "../src/jobs-transition";
 import { grantAgent } from "../src/agents";

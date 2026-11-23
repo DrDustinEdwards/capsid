@@ -3,7 +3,7 @@ import { resetCapsidDb } from "./reset-db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeJob, postJob, resumeJob } from "../src/jobs";
 import { grantAgent } from "../src/agents";
-import { reverifySweep } from "../src/outcome-prs";
+import { reverifySweep } from "../src/outcome-prs-sweep";
 import { dropSampleToken, jobsEnv, seedSampleRepo } from "./jobs-fixture";
 
 // A pull request named only in result_ref is verified against GitHub, whoever completes

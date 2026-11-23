@@ -4,7 +4,7 @@ import { missingForRecord, type JobRow, type StartedNotice } from "./jobs-schema
 import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
 import { loadRecordRows, recordFor } from "./agent-record";
 import type { JobOutcomeRow } from "./job-outcomes";
-import type { JobListRow } from "./jobs-claim";
+import type { JobListRow } from "./jobs-claim-list";
 import type { OverlapReport } from "./job-overlaps";
 import type { JobVersion } from "./jobs-edit";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";

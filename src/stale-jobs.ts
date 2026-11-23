@@ -1,6 +1,6 @@
 import { plural } from "@drdustinedwards/site-helpers/text";
 import type { Env } from "./env";
-import { MERGE_RESUME_ACTOR } from "./jobs-seat";
+import { MERGE_RESUME_ACTOR } from "./jobs-seat-auto";
 import type { OpsStaleJob, StaleRule } from "./ops-types/views";
 import { readStepCache, stepsSeen, type StaleStepEntry } from "./manual-steps";
 import { HOUR_MS, DAY_MS } from "./time";

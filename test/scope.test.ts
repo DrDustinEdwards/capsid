@@ -9,14 +9,13 @@ import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS } from "../src/tools/surface.ts";
 import {
   TOOL_GRANTS,
   TOOL_ACTION_GRANTS,
-  actionArgFor,
   checkScope,
   isMoneyPath,
   repoWriteFlags,
   requiredForAction,
   requiredGrant,
-  toolListed,
 } from "../src/scope.ts";
+import { actionArgFor, toolListed } from "../src/scope-guard.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // One enforcement point, and the refusal names what is missing.

@@ -2,7 +2,7 @@ import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
-import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope";
+import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope-routes";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // Every route goes through the one enforcement point, driven through the whole

@@ -380,7 +380,7 @@ const UNGUARDED_EXCEPTIONS: Array<{ site: string; why: string }> = [
     why: "the tick merging on a human's recorded approval (pr_approvals), pinned to the approved sha; no caller, audited by close()",
   },
   {
-    site: "auto-merge-tick.ts: managePr",
+    site: "auto-merge-tick-judge.ts: managePr",
     why: "the signed auto-merge policy's own merge on the cron tick, pinned to the judged sha; no caller, audited by systemAudit",
   },
   {

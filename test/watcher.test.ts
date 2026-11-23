@@ -21,7 +21,7 @@ import {
   watcherAgent,
 } from "../src/watcher.ts";
 import { MAX_FINDINGS_PER_PASS, runPass } from "../src/watcher-pass.ts";
-import { newestMigration } from "../src/watcher-gather.ts";
+import { newestMigration } from "../src/watcher-gather-platform.ts";
 import { WATCHER_CHECKS, owningCheck, type WatcherCheck } from "../src/watcher-checks.ts";
 import {
   DEPLOY_SETTLE_MINUTES,

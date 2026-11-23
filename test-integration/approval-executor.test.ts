@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import { executeApproval, expireStaleApprovals, readOpenApprovals } from "../src/approval-executor";
-import type { PrFacts } from "../src/auto-merge-policy";
+import type { PrFacts } from "../src/auto-merge-policy-evaluate";
 
 // The executor's SQL against a real D1 with migrations/0037 applied: the read of the open
 // approvals, a state move with its audit row, and the 7-day sweep. The decisions are tested

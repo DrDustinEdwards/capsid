@@ -71,7 +71,7 @@ function CopyBlock({ id, text, label }: { id: string; text: string; label: strin
 }
 
 // Whether supersede may end the job: a queued one, or a claimed one with no work
-// recorded yet (src/jobs-seat.ts, supersedeJob). The Worker checks again.
+// recorded yet (src/jobs-seat-supersede.ts, supersedeJob). The Worker checks again.
 function supersedable(j: OpsJob): boolean {
   if (j.status === "queued") return true;
   return (

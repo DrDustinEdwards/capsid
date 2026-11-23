@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AUTO_MERGE_REQUIRED_CI, evaluatePolicy, type PrFacts } from "../src/auto-merge-policy.ts";
+import { AUTO_MERGE_REQUIRED_CI } from "../src/auto-merge-policy.ts";
+import { evaluatePolicy, type PrFacts } from "../src/auto-merge-policy-evaluate.ts";
 import { existingTestEdits, type PrFileRow } from "../src/github/pr-files.ts";
 import { mergeClass, pathClassOf, pathClassOfAll } from "../src/merge-class.ts";
 

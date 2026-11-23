@@ -4,13 +4,9 @@ import { agentActor, parseScopes, SCOPE_FLAGS } from "./agents-schema";
 import {
   type Surface,
   AUTOMERGE_RESUME_REASON,
-  CLOSE_SHIPPED_NEEDS_REASON,
-  SUPERSEDE_NEEDS_REASON,
   UNIT_RESUME_REASON,
   clickAuditAction,
   deleteOptionsFrom,
-  revisionOf,
-  shippedEvidence,
   switchReasonRefusal,
 } from "./controls-base";
 import {
@@ -23,24 +19,14 @@ import {
   updateRepos,
 } from "./namespace-admin";
 import { deleteRefusals, planFingerprint, readDeletePlan, summarize } from "./namespace-delete";
-import { CARREL_SCRIPT, SITE_SECRET, siteKeyTarget } from "./site-key";
+import { type Plan, refused } from "./controls-plan-base";
+import { planJobAction } from "./controls-plan-jobs";
+import { planSiteAction } from "./controls-plan-sites";
 import type { Env } from "./env";
 import { resolveRepo } from "./github";
 import { breakerState } from "./job-breaker";
-import { openTitleHolder } from "./jobs-edit";
-import { resumeDestination, workRecorded } from "./jobs-seat";
-import { readJob } from "./jobs-transition";
-import { MAX_RESUME_NOTE } from "./limits";
 import { planResume } from "./merge-safety";
 import { planLift } from "./merge-units";
-import { validatePackage, readPackageRow, describePackage } from "./ops-package-config";
-import {
-  validateSite,
-  readSiteRow,
-  describeSite,
-  originMoveRefusal,
-  type SiteInput,
-} from "./ops-sites";
 import type { PortalAction } from "./ops-types/portal";
 import {
   overnightValueRefusal,
@@ -49,38 +35,15 @@ import {
   decisionFor,
   OVERNIGHT_MODE_KEY,
 } from "./overnight";
-import { planPolicyChange, planPolicyFromRepo } from "./policy-sign";
+import { planPolicyChange } from "./policy-sign-change";
+import { planPolicyFromRepo } from "./policy-sign-repo";
 import { planApproval } from "./pr-approvals";
 import { APP_ROSTER } from "./roster";
-import { toolRefusal, tokenSet } from "./site-operator";
-import { limitRefusalFor } from "./site-repair";
-import {
-  BACKUP_LIMIT,
-  backupRefusal,
-  backupSites,
-  CAPSID_DUMP,
-  NO_BACKUP_SITES,
-} from "./site-backup";
-import { CAPSID_NAMESPACE, jobRefusal } from "./site-jobs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { plural } from "@drdustinedwards/site-helpers/text";
 // A control's preview (src/controls.ts is the core): reads the current state, writes
 // nothing, and returns what will change and the audit rows it will write.
-
-// bind: params the plan itself adds to the token, beside the caller's, so the perform
-// carries out what this preview read (sign_policy_from_repo binds its source sha this way).
-export type Plan =
-  | { ok: true; changes: string[]; audit: string[]; bind?: Record<string, string> }
-  | { ok: false; refusal: string };
-
-const SITE_FIELDS = ["name", "origin", "health_path", "platform", "script"] as const;
-
-function shown(value: string | null): string {
-  return value === null ? "(none)" : `"${value}"`;
-}
-
-const refused = (refusal: string): Plan => ({ ok: false, refusal });
 
 function rosterRefusal(action: "reset_breaker", namespace: string | undefined): string | null {
   if (!namespace) return `${action} needs a namespace.`;
@@ -150,176 +113,13 @@ export async function planAction(
     }
     case "resume_job":
     case "release_job":
-    case "fail_job": {
-      if (!p.id) return refused(`${action} needs a job id.`);
-      if (!p.reason)
-        return refused(
-          `${action} needs a reason. It is recorded in the audit row, and a transition with no reason is one nobody can review.`,
-        );
-      const job = await readJob(env.DB, p.id);
-      if (!job) return refused(`no job ${p.id}.`);
-      const label = `${job.id} ('${job.title}' in ${job.namespace})`;
-      if (action === "resume_job") {
-        if (p.note && p.note.length > MAX_RESUME_NOTE) {
-          return refused(
-            `resume_job's note is at most ${MAX_RESUME_NOTE} characters, as for the capsid_work_jobs tool; this one is ${p.note.length}.`,
-          );
-        }
-        if (job.status !== "blocked") {
-          return refused(
-            `${job.id} is ${job.status}, not blocked. Resume is how a job comes back off a gate; a queued job is claimed and a done or failed one is finished.`,
-          );
-        }
-        const holder = job.claimed_by || actor;
-        const { toQueue } = await resumeDestination(env, holder, job, false);
-        return {
-          ok: true,
-          changes: [
-            toQueue
-              ? `${label}: blocked -> queued, claimed by nobody. The resume records why: ${toQueue}`
-              : `${label}: blocked -> claimed by ${holder}. ${holder} continues it; it does not move to you.`,
-            `resumed_count: ${job.resumed_count} -> ${job.resumed_count + 1}.`,
-            `Your approval "${p.reason}" is recorded in the resume note the next holder reads${p.note ? `, with your note of ${plural(p.note.length, "character")} in full` : ""}.`,
-          ],
-          audit: [`job-resumed by ${actor}`, click],
-        };
-      }
-      if (action === "release_job") {
-        if (job.status !== "claimed") {
-          return refused(
-            `${job.id} is ${job.status}, not claimed. Release returns a claimed job to the queue; a blocked job is resumed, a queued one is already free, and a finished one is not reopened.`,
-          );
-        }
-        return {
-          ok: true,
-          changes: [
-            `${label}: claimed by ${job.claimed_by} -> queued, claimed by nobody.`,
-            `${job.claimed_by}'s claim ends, and no outcome is recorded against ${job.claimed_by}.`,
-          ],
-          audit: [`job-released by ${actor}`, click],
-        };
-      }
-      if (job.status !== "queued" && job.status !== "claimed" && job.status !== "blocked") {
-        return refused(`${job.id} is already ${job.status}; there is nothing to fail.`);
-      }
-      return {
-        ok: true,
-        changes: [
-          `${label}: ${job.status}${job.claimed_by ? ` (held by ${job.claimed_by})` : ""} -> failed, with the reason "${p.reason}".`,
-          job.claimed_by
-            ? `An outcome row records the failure against ${job.claimed_by}.`
-            : `Nobody held it, so no outcome row is written.`,
-        ],
-        audit: [`job-admin-fail by ${actor}`, click],
-      };
-    }
-    case "close_shipped": {
-      if (!p.id) return refused("close_shipped needs a job id.");
-      if (!p.reason) return refused(CLOSE_SHIPPED_NEEDS_REASON);
-      const job = await readJob(env.DB, p.id);
-      if (!job) return refused(`no job ${p.id}.`);
-      if (job.status !== "blocked") {
-        return refused(
-          `${job.id} is ${job.status}, not blocked. Close as shipped ends a blocked job whose work landed; a claimed job is completed by its holder, and a queued or finished one has nothing to close.`,
-        );
-      }
-      if (job.claimed_by === actor) {
-        return refused(
-          `${job.id} is blocked and held by ${actor} itself. A holder resumes its own gate and completes the job; close as shipped is for a job another credential blocked.`,
-        );
-      }
-      const shipped = shippedEvidence(job);
-      return {
-        ok: true,
-        changes: [
-          `${job.id} ('${job.title}' in ${job.namespace}): blocked -> done, with the result "Closed as shipped by ${actor}: ${p.reason}".`,
-          `The outcome row credits ${job.claimed_by ?? "nobody"}, who did the work. No claim is recorded for you; one admin_complete touch records that you closed it.`,
-          shipped.prs.length
-            ? `The outcome verifies ${plural(shipped.prs.length, "pull request")} against GitHub: ${shipped.prs.join(", ")}${shipped.more ? ` (${shipped.more} more named, left out)` : ""}.`
-            : "The job names no pull request, so the outcome verifies nothing.",
-        ],
-        audit: [`job-admin-complete by ${actor}`, click],
-      };
-    }
-    case "supersede_job": {
-      if (!p.id) return refused("supersede_job needs a job id.");
-      if (!p.reason) return refused(SUPERSEDE_NEEDS_REASON);
-      const job = await readJob(env.DB, p.id);
-      if (!job) return refused(`no job ${p.id}.`);
-      const label = `${job.id} ('${job.title}' in ${job.namespace})`;
-      if (job.status !== "queued" && job.status !== "claimed") {
-        return refused(
-          `${job.id} is ${job.status}. Supersede closes a queued job, or a claimed one with no work recorded; ${job.status === "blocked" ? "a blocked job has hit a gate, so it is failed instead" : "a finished job is not rewritten"}.`,
-        );
-      }
-      const work = job.status === "claimed" ? workRecorded(job) : null;
-      if (work)
-        return refused(
-          `${job.id} has work recorded on it: ${work}. Fail it instead; supersede is for a job replaced before any work was done.`,
-        );
-      if (p.replaced_by) {
-        if (p.replaced_by === job.id) return refused(`${job.id} cannot be replaced by itself.`);
-        const replacement = await readJob(env.DB, p.replaced_by);
-        if (!replacement)
-          return refused(
-            `no job ${p.replaced_by}. replaced_by names the job that replaces this one, and it must exist.`,
-          );
-        if (replacement.namespace !== job.namespace)
-          return refused(
-            `${p.replaced_by} is in ${replacement.namespace} and ${job.id} is in ${job.namespace}. A job is replaced by work in its own namespace.`,
-          );
-      }
-      return {
-        ok: true,
-        changes: [
-          `${label}: ${job.status}${job.claimed_by ? ` (held by ${job.claimed_by})` : ""} -> superseded, with the summary "${p.replaced_by ? `Superseded by ${p.replaced_by}` : "Superseded"}: ${p.reason}".`,
-          `No outcome row is written against anybody, and one supersede touch records that you did it.`,
-        ],
-        audit: [`job-superseded by ${actor}`, click],
-      };
-    }
-    case "park_job": {
-      if (!p.id) return refused("park_job needs a job id.");
-      if (!p.reason || p.reason.length > 300 || /[\r\n]/.test(p.reason)) {
-        return refused(
-          'park_job needs a reason in one line, at most 300 characters, saying when the job comes back ("comes back when ...").',
-        );
-      }
-      const job = await readJob(env.DB, p.id);
-      if (!job) return refused(`no job ${p.id}.`);
-      if (job.status !== "queued") {
-        return refused(
-          `${job.id} is ${job.status}. Park changes a queued job; a claimed or blocked one has somebody on it, so resume or supersede that instead.`,
-        );
-      }
-      return {
-        ok: true,
-        changes: [
-          `${job.id} ('${job.title}' in ${job.namespace}): queued -> parked, with "${p.reason}". It is never claimed and never planned while parked.`,
-          "It keeps its row, its priority and its mirror document, and Unpark puts it back in the queue.",
-        ],
-        audit: [`job-parked by ${actor}`, click],
-      };
-    }
-    case "unpark_job": {
-      if (!p.id) return refused("unpark_job needs a job id.");
-      const job = await readJob(env.DB, p.id);
-      if (!job) return refused(`no job ${p.id}.`);
-      if (job.status !== "parked") return refused(`${job.id} is ${job.status}, not parked.`);
-      const holder = await openTitleHolder(env.DB, job.namespace, job.title, job.id);
-      if (holder) {
-        return refused(
-          `${job.namespace} already has another open job titled '${job.title}': ${holder.id} is ${holder.status}. One open job per (namespace, title), so ${job.id} stays parked.`,
-        );
-      }
-      return {
-        ok: true,
-        changes: [
-          `${job.id} ('${job.title}' in ${job.namespace}): parked ("${job.result_summary ?? ""}") -> queued, at priority ${job.priority}. The next free session may claim it.`,
-        ],
-        audit: [`job-unparked by ${actor}`, click],
-      };
-    }
+    case "fail_job":
+    case "close_shipped":
+    case "supersede_job":
+    case "park_job":
+    case "unpark_job":
+    case "run_job":
+      return planJobAction(env, action, p, actor, click);
     case "approve_pr": {
       const plan = await planApproval(env, actor, p, surface, click);
       return plan.ok
@@ -428,21 +228,16 @@ export async function planAction(
         bind: { plan: planFingerprint(plan) },
       };
     }
-    case "site_key_rotate": {
-      const bad = namespaceNameRefusal(p.namespace);
-      if (bad) return refused(bad);
-      const target = await siteKeyTarget(env, p.namespace);
-      if (!target.ok) return refused(target.refusal);
-      return {
-        ok: true,
-        changes: [
-          `Mint a new key and set it as ${SITE_SECRET} on the Worker ${target.siteScript}, then as ${target.carrelSecret} on ${CARREL_SCRIPT}, through the Cloudflare API.`,
-          "The value is never shown, logged or written to an audit row: the row names each side's script and secret and whether it was set.",
-          `If ${target.siteScript} refuses it, nothing changes and Carrel is not touched. If Carrel alone refuses it, the two sides differ and Carrel's calls to the site are refused until you rotate again.`,
-        ],
-        audit: [`set_site_key by ${actor}`, click],
-      };
-    }
+    case "site_key_rotate":
+    case "site_add":
+    case "site_edit":
+    case "site_remove":
+    case "package_add":
+    case "package_edit":
+    case "package_remove":
+    case "site_repair":
+    case "site_backup":
+      return planSiteAction(env, action, p, actor, click);
     case "pr_close": {
       if (!p.namespace)
         return refused("pr_close needs the namespace whose repo holds the pull request.");
@@ -465,246 +260,6 @@ export async function planAction(
           "Its head branch is deleted as capsid_close_pr action close deletes it: never the default branch, a loop branch or a fork's.",
         ],
         audit: [`pr-closed by ${actor}`, click],
-      };
-    }
-    case "site_add": {
-      const checked = validateSite(p);
-      if (!checked.ok) return refused(checked.refusal);
-      const site = checked.site;
-      // A registered namespace, or a further host of one (`<namespace>-<host>`, such as
-      // carrel-mcp): the rule the watcher's site-map check reads (ops-sites owningNamespace).
-      // Namespace names hold no LIKE wildcards (lowercase letters, digits and hyphens).
-      const registered = await env.DB.prepare(
-        "SELECT namespace FROM namespaces WHERE namespace = ?1 OR ?1 LIKE namespace || '-%' LIMIT 1",
-      )
-        .bind(site.namespace)
-        .first<{ namespace: string }>();
-      if (!registered)
-        return refused(
-          `'${site.namespace}' is neither a registered namespace nor a further host of one (<namespace>-<host>). Register it first; a site row for an unregistered namespace is drift the watcher reports.`,
-        );
-      const existing = await readSiteRow(env.DB, site.namespace);
-      if (existing)
-        return refused(
-          `${site.namespace} already has a row (${describeSite(existing)}). Edit it instead.`,
-        );
-      return {
-        ok: true,
-        changes: [
-          `ops_sites: add ${site.namespace}, ${describeSite(site)}.`,
-          site.origin
-            ? `The watcher probes it from its next pass, and the Sites view lists it.`
-            : `Nothing is probed for ${site.namespace}; the site-map check counts it as decided.`,
-        ],
-        audit: [`ops-site-added by ${actor}`, click],
-      };
-    }
-    case "site_edit": {
-      const revision = revisionOf(p.revision);
-      if (revision === null) return refused("site_edit needs the revision of the row it edits.");
-      const checked = validateSite(p);
-      if (!checked.ok) return refused(checked.refusal);
-      const site: SiteInput = checked.site;
-      const before = await readSiteRow(env.DB, site.namespace);
-      if (!before) return refused(`${site.namespace} has no row to edit. Add it instead.`);
-      if (before.revision !== revision)
-        return refused(
-          `${site.namespace} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and edit again.`,
-        );
-      const diffs = SITE_FIELDS.filter((f) => before[f] !== site[f]).map(
-        (f) => `${f}: ${shown(before[f])} -> ${shown(site[f])}`,
-      );
-      // The operator API, only when the edit names it: a form that does not show it leaves it.
-      const beforeOperator = before.operator ? JSON.stringify(before.operator) : null;
-      if (site.operator !== undefined && site.operator !== beforeOperator)
-        diffs.push(`operator: ${shown(beforeOperator)} -> ${shown(site.operator)}`);
-      if (diffs.length === 0) return refused(`the edit changes nothing in ${site.namespace}.`);
-      const moved = originMoveRefusal(before, site);
-      if (moved) return refused(moved);
-      const changes = [
-        `ops_sites ${site.namespace}, revision ${revision} -> ${revision + 1}:`,
-        ...diffs.map((d) => `  ${d}`),
-      ];
-      if (before.self_probe && before.origin !== site.origin)
-        changes.push(
-          "The origin changes, so the in-process self-probe is cleared and the site is probed over HTTP.",
-        );
-      return { ok: true, changes, audit: [`ops-site-edited by ${actor}`, click] };
-    }
-    case "site_remove": {
-      const revision = revisionOf(p.revision);
-      if (!p.namespace || revision === null)
-        return refused("site_remove needs a namespace and the revision of the row it removes.");
-      const before = await readSiteRow(env.DB, p.namespace);
-      if (!before) return refused(`${p.namespace} has no row to remove.`);
-      if (before.revision !== revision)
-        return refused(
-          `${p.namespace} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and try again.`,
-        );
-      const registered = await env.DB.prepare(
-        "SELECT namespace FROM namespaces WHERE namespace = ?1",
-      )
-        .bind(p.namespace)
-        .first<{ namespace: string }>();
-      return {
-        ok: true,
-        changes: [
-          `ops_sites: remove ${p.namespace} (${describeSite(before)}). The row is kept in the audit row.`,
-          before.origin
-            ? `The watcher stops probing ${before.origin}, and its uptime ring leaves the next pass.`
-            : `Nothing was probed for it.`,
-          ...(registered
-            ? [
-                `${p.namespace} is still registered, so the site-map check reports it as unmapped until it has a row again.`,
-              ]
-            : []),
-        ],
-        audit: [`ops-site-removed by ${actor}`, click],
-      };
-    }
-    case "package_add": {
-      const checked = validatePackage(p);
-      if (!checked.ok) return refused(checked.refusal);
-      const existing = await readPackageRow(env.DB, checked.pkg.name);
-      if (existing)
-        return refused(
-          `${checked.pkg.name} is already configured (${describePackage(existing)}). Edit it instead.`,
-        );
-      return {
-        ok: true,
-        changes: [
-          `ops_packages: add ${describePackage(checked.pkg)}.`,
-          "The watcher reads it from its next pass: about nine requests to npm, deps.dev and GitHub per pass. The Packages view appears once a package is configured.",
-        ],
-        audit: [`ops-package-added by ${actor}`, click],
-      };
-    }
-    case "package_edit": {
-      const revision = revisionOf(p.revision);
-      if (revision === null) return refused("package_edit needs the revision of the row it edits.");
-      const checked = validatePackage(p);
-      if (!checked.ok) return refused(checked.refusal);
-      const before = await readPackageRow(env.DB, checked.pkg.name);
-      if (!before) return refused(`${checked.pkg.name} is not configured. Add it instead.`);
-      if (before.revision !== revision)
-        return refused(
-          `${checked.pkg.name} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and edit again.`,
-        );
-      const diffs = (["repo", "formerly"] as const)
-        .filter((k) => before[k] !== checked.pkg[k])
-        .map((k) => `  ${k}: ${shown(before[k])} -> ${shown(checked.pkg[k])}`);
-      if (diffs.length === 0) return refused(`the edit changes nothing in ${checked.pkg.name}.`);
-      return {
-        ok: true,
-        changes: [
-          `ops_packages ${checked.pkg.name}, revision ${revision} -> ${revision + 1}:`,
-          ...diffs,
-        ],
-        audit: [`ops-package-edited by ${actor}`, click],
-      };
-    }
-    case "package_remove": {
-      const revision = revisionOf(p.revision);
-      if (!p.name || revision === null)
-        return refused("package_remove needs a name and the revision of the row it removes.");
-      const before = await readPackageRow(env.DB, p.name);
-      if (!before) return refused(`${p.name} is not configured.`);
-      if (before.revision !== revision)
-        return refused(
-          `${p.name} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and try again.`,
-        );
-      return {
-        ok: true,
-        changes: [
-          `ops_packages: remove ${describePackage(before)}. The row is kept in the audit row, and its weekly GitHub rows stay.`,
-        ],
-        audit: [`ops-package-removed by ${actor}`, click],
-      };
-    }
-    case "site_repair": {
-      if (!p.namespace || !p.tool) return refused("site_repair needs a namespace and a tool.");
-      const row = await readSiteRow(env.DB, p.namespace);
-      if (!row?.origin) return refused(`${p.namespace} is not a configured site.`);
-      if (!row.operator)
-        return refused(
-          row.operator_problem ??
-            `${p.namespace} has no operator API configured, so Capsid may call nothing on it.`,
-        );
-      const bad = toolRefusal(row.operator, p.tool);
-      if (bad) return refused(bad);
-      if (!tokenSet(env, row.operator))
-        return refused(
-          `the Capsid Worker secret ${row.operator.auth_var} is not set, so nothing can be called on ${p.namespace}.`,
-        );
-      const wait = await limitRefusalFor(env, p.namespace, p.tool, new Date());
-      if (wait) return refused(`${p.tool} on ${p.namespace} waits: ${wait}`);
-      return {
-        ok: true,
-        changes: [
-          `POST ${row.origin}${row.operator.path} with tool ${p.tool}, authorized by the Capsid Worker secret ${row.operator.auth_var} (the token is never shown or recorded).`,
-          `The site re-derives that store from its source and reports a read-back verdict; the result is shown when it returns, up to five minutes. One task_runs row (site-repair) records it.`,
-        ],
-        audit: [`site-repair by ${actor}`, click],
-      };
-    }
-    case "site_backup": {
-      const now = new Date();
-      if (p.namespace === CAPSID_DUMP)
-        return {
-          ok: true,
-          changes: [
-            "capsid: run Capsid's own D1 dump now, the same run as the nightly 09:00 UTC cron (d1-dump runCheckedBackup into the backups bucket, then its checks and prunes). It takes the cron's lease, so a run that overlaps the cron skips. One task_runs row (backup) records it.",
-          ],
-          audit: [`site-backup by ${actor}`, click],
-        };
-      if (p.namespace) {
-        const bad = await backupRefusal(env, p.namespace);
-        if (bad) return refused(bad);
-      }
-      const sites = (await backupSites(env)).filter(
-        (s) => !p.namespace || s.namespace === p.namespace,
-      );
-      if (sites.length === 0) return refused(NO_BACKUP_SITES);
-      const lines = await Promise.all(
-        sites.map(async (s) => {
-          const wait = await limitRefusalFor(env, s.namespace, BACKUP_LIMIT, now);
-          const unset = tokenSet(env, s.operator)
-            ? null
-            : `the Capsid Worker secret ${s.operator.auth_var} is not set`;
-          return `${s.namespace}: POST ${s.origin}${s.operator.path} with tool run_job { backup: true }, authorized by ${s.operator.auth_var}${unset || wait ? `; skipped, ${unset ?? `it waits: ${wait}`}` : ""}.`;
-        }),
-      );
-      return {
-        ok: true,
-        changes: [
-          ...lines,
-          "Each site runs its own backup jobs now (its D1 dump and its files passes), through the path its nightly cron runs, recorded in its cron_runs. A dump adds a run under the site's own checks; a files pass copies under files/ in its backups bucket and goes on where it stopped. The result is shown when every site answers, up to five minutes. Each call is an audit_log and a task_runs row (site-backup). The tokens are never shown or recorded.",
-        ],
-        audit: [`site-backup by ${actor}`, click],
-      };
-    }
-    case "run_job": {
-      if (!p.namespace || !p.name) return refused("run_job needs a namespace and a job name.");
-      const bad = await jobRefusal(env, p.namespace, p.name);
-      if (bad) return refused(bad);
-      if (p.namespace === CAPSID_NAMESPACE)
-        return {
-          ok: true,
-          changes: [
-            `capsid: run Capsid's own ${p.name} job now, the same run as the nightly 09:00 UTC cron, with its task_runs row (${p.name}). The dump takes the cron's lease, so a run that overlaps the cron skips.`,
-          ],
-          audit: [`site-job by ${actor}`, click],
-        };
-      const row = await readSiteRow(env.DB, p.namespace);
-      const wait = await limitRefusalFor(env, p.namespace, `run_job:${p.name}`, new Date());
-      if (wait) return refused(`${p.name} on ${p.namespace} waits: ${wait}`);
-      return {
-        ok: true,
-        changes: [
-          `POST ${row?.origin ?? ""}${row?.operator?.path ?? ""} with tool run_job { job: "${p.name}" }, authorized by the Capsid Worker secret ${row?.operator?.auth_var ?? ""} (the token is never shown or recorded).`,
-          "The site runs that job now through the code its cron runs (site-runtime runJobTool), recorded in its cron_runs so /health's cron check sees the run, and answers each run's outcome; the result is shown when it returns, up to five minutes. A name the site does not run is refused by the site, naming its jobs. One audit_log and one task_runs row (site-job) record it.",
-        ],
-        audit: [`site-job by ${actor}`, click],
       };
     }
     case "revoke_agent": {
