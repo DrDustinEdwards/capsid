@@ -2,7 +2,7 @@ import { useApp } from "../app/ctx";
 import { Row } from "capsomer/react/row-list";
 import { Status } from "capsomer/react/status";
 import { KIND_STATUS } from "../lib/derive";
-import type { AutoMergeAsks } from "./NeedsYou";
+import type { AutoMergeAsks } from "../lib/waiting";
 import type { ConfirmRequest } from "../app/ctx";
 import type { OpsFeed } from "../types";
 import type { UnitRow } from "../lib/merge-units";
@@ -98,7 +98,9 @@ export function UnitButtons({
 /** Needs you's Auto-merge rows. */
 export function AutoMergeRows({ asks }: { asks: AutoMergeAsks }) {
   const { confirm } = useApp();
-  const { policy, paused, unitAsks, suspended } = asks;
+  const { policy, paused, unitAsks, units } = asks;
+  const suspended = new Set(units?.suspended.map((s) => s.unit));
+  if (!policy) return null;
   return (
     <>
       {!policy.loads && (

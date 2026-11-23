@@ -2,7 +2,7 @@ import { Alert } from "capsomer/react/banner";
 import { AwayLink } from "capsomer/react/link";
 import type { ReactNode } from "react";
 import { CopyButton } from "capsomer/react/copy";
-import { KIND_STATUS, jobBadge, resumeCall } from "../lib/derive";
+import { KIND_STATUS, jobBadge } from "../lib/derive";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import type { OpsJob, OpsAgent } from "../types";
@@ -14,6 +14,10 @@ import { jobMeta } from "../views/shared";
 import { useApp, type ConfirmRequest } from "./ctx";
 import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
+
+function resumeCall(j: OpsJob): string {
+  return `jobs action "resume" id "${j.id}" namespace "${j.namespace}" reason "<what you did>"`;
+}
 
 export function Head({
   label,
