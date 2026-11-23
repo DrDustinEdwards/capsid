@@ -14,10 +14,10 @@ if (!directory)
   throw new Error("usage: node explorer/wrangler-config.mjs <assets directory> [--local]");
 const config = {
   name: "capsid",
-  // The Worker is a few lines a compatibility date barely touches. This is a date the workerd
-  // in capsid's pinned wrangler runs (it stops at 2026-07-08), so `wrangler dev` (the browser
+  // The Worker is a few lines a compatibility date barely touches. This is the date the root
+  // wrangler.jsonc.example runs under the same pinned wrangler, so `wrangler dev` (the browser
   // spec) serves the same config that deploys.
-  compatibility_date: "2026-07-01",
+  compatibility_date: "2026-09-06",
   // request.signal fires on a client disconnect (site-runtime reads it); on by default only from 2026-11-17.
   compatibility_flags: ["enable_request_signal"],
   main: join(dirname(fileURLToPath(import.meta.url)), "worker.mjs"),

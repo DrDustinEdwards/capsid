@@ -341,26 +341,24 @@ const DERIVE_SCRIPT = join(
   "derive-backup-key.mjs",
 );
 
-test("the derive script's key is exactly the key the Worker verifies, with or without the old flag", async () => {
+test("the derive script's key is exactly the key the Worker verifies", async () => {
   // The script is a plain .mjs that restates the derivation, so the two are compared
   // by running it.
   const root = "a-test-root-secret";
-  for (const args of [[], ["--backup-credential"]]) {
-    const result = spawnSync(process.execPath, [DERIVE_SCRIPT, ...args], {
-      encoding: "utf8",
-      env: { ...process.env, IMPROVE_SCORE_SECRET: root },
-    });
-    assert.equal(result.status, 0, `the script refused ${JSON.stringify(args)}: ${result.stderr}`);
-    assert.equal(
-      result.stdout,
-      `${await deriveBackupCredentialKey(root)}\n`,
-      "the script and src/signed-requests.ts derive different backup keys",
-    );
-    assert.ok(
-      !result.stdout.includes(root) && !result.stderr.includes(root),
-      "the script printed the root secret",
-    );
-  }
+  const result = spawnSync(process.execPath, [DERIVE_SCRIPT], {
+    encoding: "utf8",
+    env: { ...process.env, IMPROVE_SCORE_SECRET: root },
+  });
+  assert.equal(result.status, 0, `the script refused: ${result.stderr}`);
+  assert.equal(
+    result.stdout,
+    `${await deriveBackupCredentialKey(root)}\n`,
+    "the script and src/signed-requests.ts derive different backup keys",
+  );
+  assert.ok(
+    !result.stdout.includes(root) && !result.stderr.includes(root),
+    "the script printed the root secret",
+  );
 });
 
 test("the derive script refuses a missing or blank root secret and an unknown argument", () => {
