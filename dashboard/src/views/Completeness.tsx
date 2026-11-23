@@ -1,4 +1,4 @@
-import { Alert } from "capsomer/react/banner";
+import { Alert, Banner } from "capsomer/react/banner";
 import { AwayLink } from "capsomer/react/link";
 import { Empty } from "capsomer/react/empty";
 import { Spinner } from "capsomer/react/skeleton";
@@ -67,7 +67,7 @@ export function Completeness() {
       </div>
     );
   }
-  if (load.error) {
+  if (load.error && !data) {
     return (
       <p role="alert">
         <Status tone="crit">Could not read the scoreboard: {load.error}</Status>
@@ -92,6 +92,7 @@ export function Completeness() {
   const count = (s: CompletenessStatus) => cells.filter((c) => c.status === s).length;
   return (
     <div className="cap-stack">
+      {load.error && <Banner tone="warn">Could not re-read the scoreboard: {load.error}</Banner>}
       <Alert tone={data.finished ? "neutral" : "warn"}>
         <b>{data.finished ? "Finished." : "Not finished."}</b> {shortCount(count("complete"))} of{" "}
         {shortCount(cells.length)} cells complete, {shortCount(count("partial"))} partial,{" "}

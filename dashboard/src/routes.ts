@@ -4,7 +4,7 @@ import { type RouteConfig, index, layout, prefix, route } from "@react-router/de
 // (/<view>/<type>/<id>: a job, agent or audit row), and each site's own page under Sites
 // (/sites/<namespace>, with a drawer over it the same way). The whole tree is served twice by the
 // capsid Worker: at the root of portal.dustinedwards.info behind the sign-in, and under /demos/
-// with sample data and no sign-in (src/portal-render.ts there). Ids carry the tree's name, since
+// with sample data and no sign-in (src/portal-demo.ts there). Ids carry the tree's name, since
 // React Router needs one id per route.
 const VIEWS = [
   "health",

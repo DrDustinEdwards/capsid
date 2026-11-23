@@ -1,7 +1,4 @@
 /* The Completeness tab (Completeness.tsx), loaded with it rather than with the shell. */
-.done-verdict {
-  margin: 0 0 var(--space-5);
-}
 .done-open {
   list-style: none;
   margin: 0;

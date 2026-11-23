@@ -30,8 +30,6 @@ const SinceLastLooked = lazy(() =>
 const MinutesTile = trendChart("MinutesTile");
 const WaitingChart = trendChart("WaitingChart");
 
-// The filters live in the address (?namespace=&actor=), so a filtered view can be
-// reloaded or shared. The inputs apply on submit, not on each keystroke.
 // A job transition writes two rows with the same action, actor and path; this says which
 // is the job's and which its mirror document's.
 const TARGET_LABEL: Record<"job" | "document", string> = {

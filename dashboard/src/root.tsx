@@ -78,7 +78,7 @@ export function loader({ context }: LoaderFunctionArgs) {
 const NO_FLASH = themeScript(THEME_PREF);
 
 export function Layout({ children }: { children: ReactNode }) {
-  // The CSP nonce (the Worker's per-request policy, src/portal-render.ts) on every script the
+  // The CSP nonce (the Worker's per-request policy, src/portal-app.ts) on every script the
   // document renders: the theme line, React Router's hydration data and its module scripts.
   const nonce = useRouteLoaderData<typeof loader>("root")?.nonce ?? "";
   const demo = pageBase(useLocation().pathname) !== "";

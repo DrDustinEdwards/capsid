@@ -68,8 +68,9 @@ function Waiting() {
   return (
     <Panel flush title="Waiting for you" id="waiting" count={total}>
       {error && <Banner tone="warn">Stopped queues could not be read: {error}</Banner>}
+      {asks.error && <Banner tone="warn">Merge units could not be read: {asks.error}</Banner>}
       {total === 0 ? (
-        <Empty kind="all-clear" title="Nothing needs you." />
+        !error && !asks.error && <Empty kind="all-clear" title="Nothing needs you." />
       ) : (
         <>
           {prs.length > 0 && <PrGroup entries={prs} />}

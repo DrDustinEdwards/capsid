@@ -57,7 +57,7 @@ export function MinutesTile() {
   if (loading && !data) return null;
   if (!data)
     return (
-      <p className="cap-text minutes-none" data-tone="dim">
+      <p className="cap-text" data-tone="dim">
         Your time per week could not be read: {error}
       </p>
     );
@@ -195,14 +195,14 @@ export function WaitingChart() {
   if (!load.data && load.loading) return null;
   if (!load.data)
     return (
-      <p className="cap-text wait-none" data-tone="dim">
+      <p className="cap-text" data-tone="dim">
         Where waiting goes could not be read: {load.error}
       </p>
     );
   const { rows, classes, shown, allHours } = waitRows(load.data.waits);
   if (!rows.length)
     return (
-      <p className="cap-text wait-none" data-tone="dim">
+      <p className="cap-text" data-tone="dim">
         No wait ended in the last 14 days.
       </p>
     );
@@ -613,7 +613,6 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
   } as const;
   return (
     <ChartFrame
-      className="error-rate"
       draw={(width, fit) => lineChart({ ...opts, width, ...fit })}
     />
   );
@@ -685,7 +684,6 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
   };
   return (
     <ChartFrame
-      className="deploy-timeline"
       draw={(width, fit) => timeline({ ...opts, width, ...fit })}
     />
   );
@@ -738,7 +736,6 @@ export function TonightTimeline({ plan }: { plan: PortalPlan }) {
   };
   return (
     <ChartFrame
-      className="tonight-chart"
       draw={(width, fit) => timeline({ ...opts, width, ...fit })}
     />
   );
@@ -832,7 +829,7 @@ export function CiHistory() {
               // A branch with no verdict in the window has nothing to draw; its line says so.
               if (!r.days.some((d) => d.state !== "none")) {
                 return (
-                  <div className="slot-row slot-head" key={r.namespace} data-ci={r.namespace}>
+                  <div className="slot-head" key={r.namespace} data-ci={r.namespace}>
                     <b>{r.namespace}</b> <Status tone="nodata">no run in 14 days</Status>
                   </div>
                 );
@@ -853,13 +850,13 @@ export function CiHistory() {
                 formatValue: (v: number) => (v >= 1 ? "red" : "green"),
               };
               return (
-                <div className="slot-row" key={r.namespace} data-ci={r.namespace}>
+                <div key={r.namespace} data-ci={r.namespace}>
                   <ChartFrame inline draw={(width, fit) => heatStrip({ ...opts, width, ...fit })} />
                 </div>
               );
             })}
             {ci.not_read.map((n) => (
-              <div className="slot-row slot-head" key={n.namespace}>
+              <div className="slot-head" key={n.namespace}>
                 <b>{n.namespace}</b> <Status tone="nodata">{`not read: ${n.error}`}</Status>
               </div>
             ))}

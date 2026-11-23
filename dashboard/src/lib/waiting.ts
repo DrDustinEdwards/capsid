@@ -31,5 +31,5 @@ function useAutoMergeAsks(feed: OpsFeed | null) {
   const unitAsks =
     units && policy?.loads ? unitRows(policy.units, units).filter((r) => r.state !== "auto") : [];
   const count = (policy && !policy.loads ? 1 : 0) + paused.length + unitAsks.length;
-  return { policy, paused, units, unitAsks, count };
+  return { policy, paused, units, unitAsks, count, error: load.error };
 }
