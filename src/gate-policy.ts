@@ -178,11 +178,11 @@ function commandPieces(
       }
       continue;
     }
-    // A comment runs to the end of the line in both shells, and quotes inside it open nothing.
-    if (ch === "#" && (i === 0 || /[\s;&|]/.test(command[i - 1]))) {
+    // A # can start a comment, whose quotes open nothing, and @ a PowerShell here-string,
+    // which a lone quote does not end.
+    if (ch === "#" || ch === "@") {
       return {
-        refused:
-          "it contains a # comment, whose quotes open nothing in bash or PowerShell. It waits for the human.",
+        refused: `it contains '${ch}' outside quotes, which can start a comment or a PowerShell here-string, so where its quotes end cannot be read. It waits for the human.`,
       };
     }
     if (ch === "'" || ch === '"') {
