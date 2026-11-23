@@ -9,8 +9,7 @@
 // /portal/api/namespaces, GET /portal/api/activity, GET /portal/api/claims, GET
 // /portal/api/stale, GET /portal/api/merge-units, a site page's GET /portal/api/site-search,
 // /portal/api/site-traffic, /portal/api/workers-builds and /portal/api/build-log, GET /portal/api/maintenance, GET and POST /portal/api/push and POST
-// /portal/api/sign-out, with
-// the Worker's refusals:
+// /portal/api/sign-out, with the Worker's refusals:
 // text/plain 400 for a bad request, 403 for a missing or wrong X-Capsid-CSRF, 410 for
 // an expired token, 413 for a body over 8 KB. Changes live in memory until the dev
 // server restarts.
@@ -2789,8 +2788,7 @@ function isoOrNull(value: string | null): string | null {
     : "bad";
 }
 
-// A browser test's "nothing waits" (cookie wf-mock=quiet): the feed's inbox empty and no
-// namespace paused. A cookie, not a route the test intercepts, since the page's first reads are
+// A browser test's "nothing waits" (cookie wf-mock=quiet): nothing in the inbox or paused. A cookie, not a route the test intercepts, since the page's first reads are
 // the server's (dev/serve.ts forwards the page's cookies to them).
 function quiet(req: IncomingMessage): boolean {
   return /(?:^|;\s*)wf-mock=quiet(?:;|$)/.test(req.headers.cookie ?? "");
@@ -2803,6 +2801,7 @@ function quietFeed(f: OpsFeed): OpsFeed {
     severity: "none",
     apps: f.live.inbox.apps.map((a) => ({ ...a, count: 0, severity: "none", items: [] })),
   };
+  for (const n of f.live.merge_safety?.namespaces ?? []) n.paused = null;
   return f;
 }
 
@@ -2989,7 +2988,8 @@ export function mockHandler(): (
     }
     if (path === "/portal/api/merge-units") {
       if (req.method !== "GET") return send(res, 405, { error: "method" });
-      return send(res, 200, mergeUnits(feed(nextRefresh, st), st));
+      const units = mergeUnits(feed(nextRefresh, st), st);
+      return send(res, 200, quiet(req) ? { ...units, suspended: [], proposals: [] } : units);
     }
     // A site page's reads, with the Worker's 400s for a bad namespace, days, limit or build.
     if (
