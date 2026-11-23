@@ -74,10 +74,10 @@ const list = <T>(items: T[], line: (t: T) => string): string[] => [
   ...(items.length > LIST_MAX ? [`- and ${items.length - LIST_MAX} more in the Portal`] : []),
 ];
 
-/** The mail, from the state now. Reads only. */
 // The reader behind capsid_work_jobs action list view digest, or a test's stand-in.
 type DigestReader = typeof readOvernightDigest;
 
+/** The mail, from the state now. Reads only. */
 async function composeDigest(
   env: Env,
   now: Date,
@@ -85,7 +85,17 @@ async function composeDigest(
   read: DigestReader = readOvernightDigest,
 ): Promise<{ subject: string; text: string; waiting: number }> {
   const raw = await env.APP_KV.get(AWAITING_SEAT_KEY).catch(() => null);
-  const parsed: unknown = raw ? JSON.parse(raw) : [];
+  // A corrupt list reads as none, so one bad value cannot stop every tick's mail.
+  let parsed: unknown = [];
+  try {
+    parsed = raw ? JSON.parse(raw) : [];
+  } catch (err) {
+    logEvent(
+      "DIGEST_AWAITING_UNREADABLE",
+      { message: `DIGEST_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${errorMessage(err)}` },
+      { level: "error" },
+    );
+  }
   const awaiting = (Array.isArray(parsed) ? (parsed as AwaitingSeat[]) : []).filter(
     (a) => a.class !== "auto" && a.class !== "wait",
   );

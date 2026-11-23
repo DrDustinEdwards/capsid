@@ -15,7 +15,7 @@ import { auditLogCheck } from "@dustinedwards/site-runtime/audit-log";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
 import { DEFAULT_CADENCE_MINUTES } from "./watcher";
 
-import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 export const BACKUP_LAST_OK_KEY = "backup:last-ok";
 // Daily cron is 24h; 26h is that plus a 2h grace so one slow run does not warn.
 export const BACKUP_STALE_HOURS = 26;
@@ -27,11 +27,13 @@ export async function backupFreshness(
   try {
     lastOk = await env.APP_KV.get(BACKUP_LAST_OK_KEY);
   } catch (err) {
-    return {
-      last_ok: null,
-      age_hours: null,
-      warning: `backup freshness unreadable: ${errorMessage(err).slice(0, 80)}`,
-    };
+    // The body is public (/health), so the driver's message goes to the log only.
+    logEvent(
+      "HEALTH_PROBE_FAILED",
+      { message: `HEALTH_PROBE_FAILED backup freshness: ${errorMessage(err).slice(0, 120)}` },
+      { level: "error" },
+    );
+    return { last_ok: null, age_hours: null, warning: "backup freshness unreadable" };
   }
   if (!lastOk) return { last_ok: null, age_hours: null, warning: "no successful backup recorded" };
   const stamped = Date.parse(lastOk);
@@ -90,33 +92,46 @@ export interface HealthReport extends HealthSnapshot {
   ai_search?: { month: string; hybrid: number; cap: number } | null;
 }
 
-// /health serializes this and the watcher's pass records it for Capsid Portal, so the
-// Portal shows the same values the live gate asserts.
-export async function healthReport(env: Env): Promise<HealthReport> {
-  const provenance = { sha: env.BUILD_SHA ?? "unknown" };
-
+// The D1 ping and the latest migration, read once for healthReport (the watcher, in
+// process) and handleHealth (public). d1 carries the driver's message on an error; the
+// public body replaces it (publicState).
+async function readStore(env: Env): Promise<{ d1: string; schema_version: string | null }> {
   let d1 = "unbound";
-  let fts = "skipped";
   try {
     const one = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
     d1 = one?.ok === 1 ? "ok" : `unexpected: ${JSON.stringify(one)}`;
   } catch (err) {
-    d1 = `error: ${errorMessage(err).slice(0, 120)}`;
+    d1 = probeError(err);
   }
-  if (d1 === "ok") fts = await probeFts(env.DB);
-
+  if (d1 !== "ok") return { d1, schema_version: null };
   // Informational. A store without d1_migrations is null, not a health failure.
-  let schema_version: string | null = null;
-  if (d1 === "ok") {
-    try {
-      const row = await env.DB.prepare(
-        "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1",
-      ).first<{ name: string }>();
-      schema_version = row?.name ?? null;
-    } catch {
-      schema_version = null;
-    }
-  }
+  const schema_version = await env.DB.prepare(
+    "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1",
+  )
+    .first<{ name: string }>()
+    .then((row) => row?.name ?? null)
+    .catch(() => null);
+  return { d1, schema_version };
+}
+
+// A store probe's state for the public /health body: a driver error can name a table or
+// a binding, so the body says "error" and the message goes to the log.
+function publicState(probe: string, state: string): string {
+  if (!state.startsWith("error")) return state;
+  logEvent(
+    "HEALTH_PROBE_FAILED",
+    { message: `HEALTH_PROBE_FAILED ${probe}: ${state}` },
+    { level: "error" },
+  );
+  return "error";
+}
+
+// The watcher, site-check and site-pulse read this in process, so it keeps the probes'
+// messages. Capsid Portal shows the same values the live gate asserts.
+export async function healthReport(env: Env): Promise<HealthReport> {
+  const provenance = { sha: env.BUILD_SHA ?? "unknown" };
+  const { d1, schema_version } = await readStore(env);
+  const fts = d1 === "ok" ? await probeFts(env.DB) : "skipped";
 
   const backup = await backupFreshness(env);
   const bindings = await probeBindings(env);
@@ -177,7 +192,7 @@ export async function handleHealth(env: Env): Promise<Response> {
     {
       name: "fts",
       run: async () => {
-        store.fts = await probeFts(env.DB);
+        store.fts = publicState("fts", await probeFts(env.DB));
         return store.fts === "ok" || { ok: false, detail: store.fts };
       },
     },
@@ -209,21 +224,10 @@ export async function handleHealth(env: Env): Promise<Response> {
   if (env.TOOL_CALL_LOG) checks.push(auditLogCheck(env));
   const response = await healthResponse({
     ping: async () => {
-      try {
-        const one = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
-        store.d1 = one?.ok === 1 ? "ok" : `unexpected: ${JSON.stringify(one)}`;
-      } catch (err) {
-        store.d1 = probeError(err);
-      }
-      if (store.d1 !== "ok") return { ok: false, detail: store.d1 };
-      // Informational. A store without d1_migrations is null, not a health failure.
-      schemaVersion = await env.DB.prepare(
-        "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1",
-      )
-        .first<{ name: string }>()
-        .then((row) => row?.name ?? null)
-        .catch(() => null);
-      return true;
+      const read = await readStore(env);
+      store.d1 = publicState("d1", read.d1);
+      schemaVersion = read.schema_version;
+      return store.d1 === "ok" || { ok: false, detail: store.d1 };
     },
     backup: () => backupFreshness(env),
     // A KV get, not an R2 listing, so there is nothing to save by holding it per isolate.

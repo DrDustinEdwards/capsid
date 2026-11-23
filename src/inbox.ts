@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { readSiteConfig } from "./ops-sites";
 import { readSnapshot } from "./ops-snapshot";
@@ -196,17 +197,21 @@ export async function gatherInbox(
   const allowed = namespaces === null ? null : new Set(namespaces);
   const keep = (namespace: string) => allowed === null || allowed.has(namespace);
   const byNamespace = new Map<string, InboxItem[]>();
+  // Past MAX_ITEMS_PER_APP an app's items are dropped, so the kinds that name a fault or a
+  // waiting pull request are added before the blocked and held jobs, which are the many.
+  const dropped = new Map<string, number>();
   const add = (namespace: string, item: InboxItem) => {
     if (!keep(namespace)) return;
     const list = byNamespace.get(namespace) ?? [];
     if (list.length < MAX_ITEMS_PER_APP) list.push(item);
+    else dropped.set(namespace, (dropped.get(namespace) ?? 0) + 1);
     byNamespace.set(namespace, list);
   };
 
   const blocked = await env.DB.prepare(
     "SELECT id, namespace, title, result_ref, result_summary, updated_at FROM jobs WHERE status = 'blocked' ORDER BY updated_at LIMIT ?1",
   )
-    .bind(MAX_BLOCKED)
+    .bind(MAX_BLOCKED + 1)
     .all<{
       id: string;
       namespace: string;
@@ -221,9 +226,6 @@ export async function gatherInbox(
   const stale = (await readStaleCache(env.APP_KV).catch(() => ({ cache: {} }))).cache;
   const steps = (await readStepCache(env.APP_KV).catch(() => ({ cache: {} }))).cache;
   const applied = await appliedMigrations(env.DB);
-  for (const job of blocked.results ?? []) {
-    if (!blockSettled(job, stale, applied, steps)) add(job.namespace, blockedJobItem(job));
-  }
 
   // Claimed jobs gone quiet and parked jobs past their due date (heldJobItem). Both are
   // few, so one read with each job's newest audit row (audit_log_doc serves it).
@@ -236,10 +238,6 @@ export async function gatherInbox(
   )
     .bind(JOB_DOC_PREFIX, now.toISOString(), MAX_HELD)
     .all<Parameters<typeof heldJobItem>[0] & { namespace: string }>();
-  for (const job of held.results ?? []) {
-    const item = heldJobItem(job, now);
-    if (item) add(job.namespace, item);
-  }
 
   // The pull requests auto-merge declined, rewritten whole by its tick. An unreadable
   // list reads as none, not as a failure of the inbox.
@@ -288,6 +286,22 @@ export async function gatherInbox(
 
   for (const [namespace, items] of await readReports(env.APP_KV, now)) {
     for (const item of items) add(namespace, item);
+  }
+
+  // Claimed and parked jobs, then the blocked ones: the most numerous kinds go last.
+  for (const job of held.results ?? []) {
+    const item = heldJobItem(job, now);
+    if (item) add(job.namespace, item);
+  }
+  const blockedRows = blocked.results ?? [];
+  for (const job of blockedRows.slice(0, MAX_BLOCKED)) {
+    if (!blockSettled(job, stale, applied, steps)) add(job.namespace, blockedJobItem(job));
+  }
+  // The inbox type is the shell's (capsomer), with no field for a cut, so a cut is logged.
+  if (dropped.size > 0 || blockedRows.length > MAX_BLOCKED) {
+    logEvent("INBOX_TRUNCATED", {
+      message: `INBOX_TRUNCATED apps over ${MAX_ITEMS_PER_APP} items: ${JSON.stringify(Object.fromEntries(dropped))}; blocked jobs past ${MAX_BLOCKED}: ${blockedRows.length > MAX_BLOCKED}`,
+    });
   }
 
   // Every configured app appears, with a count of zero when nothing waits, so the shell
