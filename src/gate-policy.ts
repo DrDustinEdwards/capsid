@@ -135,12 +135,31 @@ function commandPieces(
   let span = "";
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
+    // Bash reads `\"` (and `\'` outside quotes) as a literal quote, PowerShell as a quote that
+    // opens or closes, so the two disagree on what is quoted. `\\` is a backslash to both.
+    if (ch === "\\" && quote !== "'") {
+      const next = command[i + 1];
+      if (next === '"' || (next === "'" && !quote)) {
+        return {
+          refused:
+            "it has a backslash before a quote, which bash and PowerShell read differently, so where its quotes end cannot be read. It waits for the human.",
+        };
+      }
+      if (next === "\\") {
+        if (quote) span += "\\\\";
+        else {
+          raw += "\\\\";
+          bare += "\\\\";
+        }
+        i++;
+        continue;
+      }
+    }
     if (quote) {
       span += ch;
       if (ch === quote) {
         raw += span;
-        // Ends at the first matching quote. Neither shell ends one earlier; a bash `\"`
-        // or PowerShell `""` only makes it run on, and that text is then read as unquoted.
+        // Ends at the first matching quote, as in both shells now that `\"` is refused.
         bare += quote + quote;
         quote = null;
         span = "";
