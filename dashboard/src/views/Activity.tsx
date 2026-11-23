@@ -10,8 +10,25 @@ import type { PortalActivity } from "../types";
 import { Missing } from "capsomer/react/empty";
 import { Spinner } from "capsomer/react/skeleton";
 import { Panel } from "capsomer/react/panel";
+import { Group } from "capsomer/react/disclosure";
+import { Row, RowList } from "capsomer/react/row-list";
+import "capsomer/group.css";
+import "capsomer/row-list.css";
 import { ReadAgain } from "capsomer/react/read-state";
 import { PageHead, ProjectSelect } from "./shared";
+import { Suspense, lazy } from "react";
+import { trendChart } from "./charts";
+import { ChartSlot } from "../ui/ChartSlot";
+
+// What happened since you last looked, the weekly digest, then the audit log, then the two
+// trend charts. The
+// digest strip and the charts load after first paint (their reads and Enarratio code stay off
+// the first screen).
+const SinceLastLooked = lazy(() =>
+  import("./Overnight").then((m) => ({ default: m.SinceLastLooked })),
+);
+const MinutesTile = trendChart("MinutesTile");
+const WaitingChart = trendChart("WaitingChart");
 
 // The filters live in the address (?namespace=&actor=), so a filtered view can be
 // reloaded or shared. The inputs apply on submit, not on each keystroke.
@@ -48,6 +65,10 @@ export function Activity() {
   return (
     <div className="cap-admin-page">
       <PageHead title="Activity" />
+      <Suspense fallback={null}>
+        <SinceLastLooked />
+      </Suspense>
+      <WeeklyDigest />
       <form
         className="cap-cluster"
         data-gap="3"
@@ -177,6 +198,54 @@ export function Activity() {
           </div>
         ) : null}
       </Panel>
+      <div className="chart-row" id="trends">
+        <ChartSlot>
+          <MinutesTile />
+        </ChartSlot>
+        <ChartSlot>
+          <WaitingChart />
+        </ChartSlot>
+      </div>
     </div>
+  );
+}
+
+// The watcher's digest-class findings (src/watcher.ts, findingClass): CSP, security
+// headers, analytics and beacon settings, scorer drift. They post no job; one block per
+// site lists what is open, and the Monday email carries the same list. Hidden while none
+// is open, so a quiet week adds nothing to the page.
+function WeeklyDigest() {
+  const { feed, now } = useApp();
+  const open = feed.live.findings.filter((f) => f.class === "digest");
+  if (open.length === 0) return null;
+  const sites = [...new Set(open.map((f) => f.namespace))].sort();
+  return (
+    <Panel title="Weekly digest" id="weekly-digest" section="Weekly digest" count={open.length}>
+      {sites.map((site) => {
+        const mine = open.filter((f) => f.namespace === site);
+        return (
+          <div key={site} data-digest-site={site}>
+            <Group
+              label={`${site}, open`}
+              count={mine.length}
+              defaultExpanded
+              headingLevel={3}
+              body="list"
+            >
+              <RowList label={`Weekly digest, ${site}`}>
+                {mine.map((f) => (
+                  <Row
+                    key={f.fingerprint}
+                    title={f.headline}
+                    detail={f.evidence.join(" · ") || undefined}
+                    meta={`since ${ago(parse(f.first_seen), now)}`}
+                  />
+                ))}
+              </RowList>
+            </Group>
+          </div>
+        );
+      })}
+    </Panel>
   );
 }

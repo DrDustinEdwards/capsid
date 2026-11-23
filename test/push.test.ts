@@ -445,7 +445,7 @@ test("no alert carries an action, and every alert opens its own item on the Port
     );
   }
   assert.deepEqual(s.got.map((g) => g.url).sort(), [
-    "https://portal.dustinedwards.info/prs#pr-owner-foxhound-7",
+    "https://portal.dustinedwards.info/#pr-owner-foxhound-7",
     "https://portal.dustinedwards.info/sites/capsid?tab=deploys",
   ]);
 });

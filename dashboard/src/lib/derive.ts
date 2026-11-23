@@ -384,44 +384,20 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       at: parse(live.generated),
       open: "view:health#backups",
     });
-  const blocked = live.jobs.filter((j) => j.status === "blocked");
-  if (blocked.length) {
-    out.push({
-      sev: "warn",
-      kind: "Queue",
-      title: `${blocked.length} ${blocked.length === 1 ? "job is" : "jobs are"} waiting on you`,
-      sub: [...new Set(blocked.map((j) => j.namespace))].join(", "),
-      at: Math.max(...blocked.map((j) => parse(j.updated_at))),
-      open: blocked.length === 1 && blocked[0] ? `job:${blocked[0].id}` : "view:queue",
-    });
-  }
-  // The watcher's attention-class findings (src/watcher.ts, findingClass), which post no
-  // job: an agent acting out of its usual pattern (src/anomaly.ts, OWASP item 6; Dustin
-  // ruled a hit is a finding plus an attention item and nothing more, D4, 2026-10-03), and
-  // open queue breakers. Warnings, never critical.
+  // The watcher's attention-class findings about an agent acting out of its usual pattern
+  // (src/anomaly.ts, OWASP item 6; Dustin ruled a hit is a finding plus an attention item and
+  // nothing more, D4, 2026-10-03). Warnings, never critical. An open queue breaker, blocked
+  // jobs and pull requests waiting for you are listed on Needs you with their buttons, so they
+  // are no problem rows (UX audit m2: one count, in one place).
   for (const f of live.findings) {
-    if (f.class !== "attention") continue;
-    const agent = f.fingerprint.startsWith("anomaly-");
+    if (f.class !== "attention" || !f.fingerprint.startsWith("anomaly-")) continue;
     out.push({
       sev: "warn",
-      kind: agent ? "Agent" : "Breaker",
+      kind: "Agent",
       title: f.headline,
-      sub: agent
-        ? "Out of its usual pattern · a finding only, nothing suspended"
-        : (f.evidence[0] ?? "Paused after repeated failures"),
+      sub: "Out of its usual pattern · a finding only, nothing suspended",
       at: parse(f.last_seen),
-      open: agent ? "view:health#problems" : "view:needs#waiting",
-    });
-  }
-  for (const a of live.awaiting_seat) {
-    out.push({
-      sev: "warn",
-      kind: "PR",
-      title: `${a.repo} #${a.number} awaits the seat`,
-      sub: `${a.failed}: ${a.why}`,
-      at: parse(a.at),
-      open: "view:prs",
-      group: { key: "pr-seat", facet: a.repo },
+      open: "view:health#problems",
     });
   }
   for (const a of live.agents) {
@@ -453,14 +429,9 @@ function worstFirst(a: { sev: Sev; at: number }, b: { sev: Sev; at: number }): n
 // warning. The tier follows from the severity (Capsomer's arrange), so any new row lands
 // in the right one, and rows with one cause fold into one row there.
 
-type GroupKey = "pr-seat" | "silent";
+type GroupKey = "silent";
 
 const GROUPS: Record<GroupKey, { title: (n: number) => string; view: string; label: string }> = {
-  "pr-seat": {
-    title: (n) => `${n} pull requests await the seat`,
-    view: "prs",
-    label: "Pull requests",
-  },
   silent: {
     title: (n) => `${n} drivers have been silent for over 7 days`,
     view: "agents",
@@ -468,22 +439,14 @@ const GROUPS: Record<GroupKey, { title: (n: number) => string; view: string; lab
   },
 };
 
-// What waits on a person's decision: blocked jobs, pull
-// requests waiting for you and stopped queues. Needs you lists each of these with its
-// buttons, so its Problems list, and Health's, leave them out (UX audit m2: one count, in
-// one place).
-export const WAITING_KINDS: ReadonlySet<string> = new Set(["Queue", "PR", "Breaker"]);
-
-// The attention rows as Capsomer's attention list takes them, worst first, with what is
-// in `skip` left out. `href` turns a row's OpenRef into the address it opens. The row's
+// The attention rows as Capsomer's attention list takes them, worst first. `href` turns a row's OpenRef into the address it opens. The row's
 // kind ("Backup", "CI") leads its detail; the status says how bad it is.
 export function attentionList(
   feed: OpsFeed,
   now: number,
   href: (ref: OpenRef) => string,
-  skip?: ReadonlySet<string>,
 ): { items: AttentionItem[]; groups: Record<string, AttentionGroupInfo> } {
-  const rows = attentionItems(feed, now).filter((a) => !skip?.has(a.kind));
+  const rows = attentionItems(feed, now);
   const items = rows.map((a, i): AttentionItem => ({
     id: `${a.kind}|${a.title}|${i}`,
     tone: a.sev,

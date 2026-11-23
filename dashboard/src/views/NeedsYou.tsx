@@ -1,9 +1,7 @@
 import { Banner } from "capsomer/react/banner";
-import { trendChart } from "./charts";
-import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy, useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
-import { LIVE, fetchNamespaces } from "../lib/api";
+import { LIVE, fetchMergeUnits, fetchNamespaces } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
 import { age, agentLabel, ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
@@ -13,6 +11,7 @@ import {
   canApprove,
   closeRequest,
   prAnchor,
+  prName,
   seatFor,
 } from "../lib/pr-actions";
 import type { InboxApp, InboxItem, OpsAwaitingSeat, OpsJob, PortalNamespace } from "../types";
@@ -29,14 +28,14 @@ import "capsomer/group.css";
 import "capsomer/check.css";
 import { PageHead } from "./shared";
 import { Problems } from "./Problems";
+import { pausedProjects, unitRows } from "../lib/merge-units";
 
 // NEEDS YOU, the home page (docs/design/design-portal-evaluation.md section 4, DECIDE 1,
-// ruled 2026-10-09; the UX audit of 2026-10-19, B1, B3 and M3). It answers "what do I have to
-// decide" and lets each decision be made here: first everything waiting for you, by kind,
-// each row with its own buttons, the existing controls (approve_pr, pr_close, resume_job,
-// reset_breaker) through the one confirm
-// dialog. Then the problems, worst first, what happened since you last looked, and the
-// charts last, folded away.
+// ruled 2026-10-09; the Portal reorganization of 2026-11-23). It answers "what do I have to
+// decide" and lets each decision be made here: everything waiting for you, by kind, each row
+// with its own buttons (approve_pr, pr_close, the auto-merge controls, resume_job,
+// reset_breaker) through the one confirm dialog. Then the problems, worst first. What
+// happened since you last looked, the weekly digest and the charts are on Activity.
 
 // The inbox's kinds that are not decided on this page by their own control: they open
 // where they are fixed. Keyed by string, so an unknown kind still shows under its own name and
@@ -52,27 +51,12 @@ const KIND: Record<string, { label: string; tone: Tone; glyph?: GlyphName } | un
   "site-down": { label: "Site down", tone: "crit", glyph: "site-down" },
 };
 
-// The digest strip loads after first paint, so the home's first screen is not held up by
-// its read.
-const SinceLastLooked = lazy(() =>
-  import("./Overnight").then((m) => ({ default: m.SinceLastLooked })),
-);
-// The two charts load only when Trends is opened: their Enarratio code and their reads stay
-// off the first screen.
-const MinutesTile = trendChart("MinutesTile");
-const WaitingChart = trendChart("WaitingChart");
-
 export function NeedsYou() {
   return (
     <div className="cap-admin-page">
       <PageHead title="Needs you" />
       <Waiting />
       <Problems />
-      <Suspense fallback={null}>
-        <SinceLastLooked />
-      </Suspense>
-      <WeeklyDigest />
-      <Trends />
     </div>
   );
 }
@@ -98,32 +82,25 @@ function Waiting() {
   const { feed } = useApp();
   const inbox = feed.live.inbox;
   const { stops, error, reread } = useStops();
+  const asks = useAutoMergeAsks();
   const all: Entry[] = inbox.apps.flatMap((app) => app.items.map((item) => ({ app, item })));
   const prs = all.filter((e) => e.item.kind === "pr");
   const jobs = all.filter((e) => e.item.kind === "question" || e.item.kind === "blocked-job");
-  const other = all.filter((e) => !prs.includes(e) && !jobs.includes(e));
-  const total = all.length + stops.length;
-  const quiet = inbox.apps.filter((a) => a.count === 0);
+  // A merge unit's proposal or suspension is a row of Auto-merge, with its button, once the
+  // units are read; until then, or if they cannot be read, it shows under Also waiting.
+  const other = all.filter(
+    (e) => !prs.includes(e) && !jobs.includes(e) && !(asks.units && e.item.kind === "proposal"),
+  );
+  const total = prs.length + jobs.length + other.length + stops.length + asks.count;
   return (
-    <Panel
-      flush
-      title="Waiting for you"
-      id="waiting"
-      count={total}
-      footer={
-        quiet.length > 0 ? (
-          <span className="cap-text" data-tone="dim">
-            Nothing waiting: {quiet.map((a) => a.name).join(", ")}
-          </span>
-        ) : undefined
-      }
-    >
+    <Panel flush title="Waiting for you" id="waiting" count={total}>
       {error && <Banner tone="warn">Stopped queues could not be read: {error}</Banner>}
       {total === 0 ? (
         <Empty kind="all-clear" title="Nothing needs you." />
       ) : (
         <>
           {prs.length > 0 && <PrGroup entries={prs} />}
+          {asks.count > 0 && <AutoMergeGroup asks={asks} />}
           {jobs.length > 0 && <JobGroup entries={jobs} />}
           {stops.length > 0 && <StopGroup list={stops} onReset={reread} />}
           {other.length > 0 && <OtherGroup entries={other} />}
@@ -211,8 +188,6 @@ function PrGroup({ entries }: { entries: Entry[] }) {
   );
 }
 
-const prName = (a: OpsAwaitingSeat) => `${a.repo} #${a.number}`;
-
 function PrRow({
   app,
   item,
@@ -229,6 +204,7 @@ function PrRow({
   const ok = seat && canApprove(seat) ? seat : null;
   return (
     <Row
+      id={seat ? prAnchor(seat) : undefined}
       title={item.title}
       href={item.link ?? undefined}
       renderLink={newTab}
@@ -248,7 +224,12 @@ function PrRow({
           )
         ) : undefined
       }
-      detail={`${app.name} · waiting ${age(parse(item.since), now)}${seat?.why ? ` · ${seat.why}` : ""}`}
+      detail={
+        <>
+          {`${app.name} · waiting ${age(parse(item.since), now)}${seat?.why ? ` · ${seat.why}` : ""}`}
+          {seat?.visual && <VisualLook visual={seat.visual} />}
+        </>
+      }
       actions={
         <>
           {ok && (
@@ -280,6 +261,62 @@ function PrRow({
         </>
       }
     />
+  );
+}
+
+// What a visual pull request shows before you approve it (src/visual-pr.ts): its live
+// preview and its screenshots, read from the pull request. They open in a new tab as links,
+// since the Portal's CSP loads no image from another origin.
+function VisualLook({ visual }: { visual: NonNullable<OpsAwaitingSeat["visual"]> }) {
+  return (
+    <span className="visual-look">
+      <span>{visual.title}</span>
+      {visual.preview && (
+        <AwayLink href={visual.preview} newTab>
+          Open the preview
+        </AwayLink>
+      )}
+      {visual.shots.map((src, i) => (
+        <AwayLink key={src} href={src} newTab>
+          Screenshot {i + 1}
+        </AwayLink>
+      ))}
+      {!visual.preview && !visual.shots.length && (
+        <span className="cap-text" data-tone="dim">
+          No preview.
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ---- auto-merge: a policy that does not load, a paused project, a merge unit to sign or lift
+
+export type AutoMergeAsks = ReturnType<typeof useAutoMergeAsks>;
+
+// The rows load after first paint, keeping their code off the first screen.
+const AutoMergeRows = lazy(() => import("./automerge").then((m) => ({ default: m.AutoMergeRows })));
+
+function useAutoMergeAsks() {
+  const { feed } = useApp();
+  const load = useAnswer([LIVE, "merge-units"], fetchMergeUnits);
+  const policy = feed.live.merge_policy;
+  const paused = pausedProjects(feed);
+  const units = load.data ?? null;
+  const unitAsks =
+    units && policy.loads ? unitRows(policy.units, units).filter((r) => r.state !== "auto") : [];
+  const suspended = new Set(units?.suspended.map((s) => s.unit));
+  const count = (policy.loads ? 0 : 1) + paused.length + unitAsks.length;
+  return { policy, paused, units, unitAsks, suspended, count };
+}
+
+function AutoMergeGroup({ asks }: { asks: AutoMergeAsks }) {
+  return (
+    <WaitGroup id="w-automerge" title="Auto-merge" count={asks.count}>
+      <Suspense fallback={null}>
+        <AutoMergeRows asks={asks} />
+      </Suspense>
+    </WaitGroup>
   );
 }
 
@@ -432,67 +469,5 @@ function OtherGroup({ entries }: { entries: Entry[] }) {
         );
       })}
     </WaitGroup>
-  );
-}
-
-// The watcher's digest-class findings (src/watcher.ts, findingClass): CSP, security
-// headers, analytics and beacon settings, scorer drift. They post no job; one block per
-// site lists what is open, and the Monday email carries the same list. Hidden while none
-// is open, so a quiet week adds nothing to the page.
-function WeeklyDigest() {
-  const { feed, now } = useApp();
-  const open = feed.live.findings.filter((f) => f.class === "digest");
-  if (open.length === 0) return null;
-  const sites = [...new Set(open.map((f) => f.namespace))].sort();
-  return (
-    <Panel title="Weekly digest" id="weekly-digest" section="Weekly digest" count={open.length}>
-      {sites.map((site) => {
-        const mine = open.filter((f) => f.namespace === site);
-        return (
-          <div key={site} data-digest-site={site}>
-            <Group
-              label={`${site}, open`}
-              count={mine.length}
-              defaultExpanded
-              headingLevel={3}
-              body="list"
-            >
-              <RowList label={`Weekly digest, ${site}`}>
-                {mine.map((f) => (
-                  <Row
-                    key={f.fingerprint}
-                    title={f.headline}
-                    detail={f.evidence.join(" · ") || undefined}
-                    meta={`since ${ago(parse(f.first_seen), now)}`}
-                  />
-                ))}
-              </RowList>
-            </Group>
-          </div>
-        );
-      })}
-    </Panel>
-  );
-}
-
-// The two charts, folded away at the foot (UX audit B3): the list comes first and never
-// moves. They are drawn on the server inside the fold, so opening it shows them at once, with
-// scripts or without.
-function Trends() {
-  return (
-    <details className="trends" id="trends">
-      <summary>
-        <span className="chev" aria-hidden="true" />
-        Trends
-      </summary>
-      <div className="trends-body chart-row">
-        <ChartSlot>
-          <MinutesTile />
-        </ChartSlot>
-        <ChartSlot>
-          <WaitingChart />
-        </ChartSlot>
-      </div>
-    </details>
   );
 }

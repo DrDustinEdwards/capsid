@@ -106,11 +106,8 @@ test.describe("on a phone", () => {
 });
 
 test("a chart's toolbar shows its inline icons under the Portal's CSP", async ({ page }) => {
-  await page.goto("demos/");
+  await page.goto("demos/activity");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page.locator("main .loading")).toHaveCount(0);
-  // The charts sit in the Trends section, closed until it is opened.
-  await page.getByText("Trends", { exact: false }).first().click();
   const toolbar = page.getByRole("toolbar", { name: "Chart controls" }).first();
   await expect(toolbar).toBeVisible();
   // Enarratio 0.12.2: icons are inline SVG, not CSS masks that a page's img-src blocks.

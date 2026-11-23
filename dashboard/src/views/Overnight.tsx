@@ -147,7 +147,7 @@ export function Tonight() {
   );
 }
 
-// When this browser last opened Needs you. A per-viewer convenience: with no record, or
+// When this browser last opened Activity. A per-viewer convenience: with no record, or
 // storage blocked, the strip reports the last 24 hours, the digest's own default.
 const LAST_LOOKED_PREF = "wf-last-looked";
 
