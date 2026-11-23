@@ -154,9 +154,7 @@ export function Claims() {
         }
       >
         {!data && agg.loading ? (
-          <div className="loading" role="status">
-            <Spinner label="Reading the claims..." />
-          </div>
+          <Spinner layout="page" label="Reading the claims..." />
         ) : data && data.groups.length ? (
           <div className="cap-table-wrap" data-reflow="wide">
             <table className="cap-table">
@@ -295,11 +293,7 @@ export function Claims() {
           </button>
         )}
       </form>
-      {detail.loading && (
-        <div className="loading" role="status">
-          <Spinner label="Reading the job..." />
-        </div>
-      )}
+      {detail.loading && <Spinner layout="page" label="Reading the job..." />}
       {detail.error && (
         <Alert tone="crit">
           Could not read job {job}: {detail.error}

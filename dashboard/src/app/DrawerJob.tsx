@@ -16,7 +16,7 @@ import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
 
 function resumeCall(j: OpsJob): string {
-  return `jobs action "resume" id "${j.id}" namespace "${j.namespace}" reason "<what you did>"`;
+  return `capsid_work_jobs action "resume" id "${j.id}" namespace "${j.namespace}" reason "<what you did>"`;
 }
 
 export function Head({
@@ -409,9 +409,6 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
               <FragmentPr key={p.pr_url} url={p.pr_url} merged={p.merged} />
             ))}
           </dl>
-        </div>
-        <div className="src">
-          Source: live, D1 jobs row {j.id}. The mirrored document is {j.namespace}/jobs/{j.id}.md
         </div>
       </div>
     </>

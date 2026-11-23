@@ -255,7 +255,7 @@ export function useApp(): Ctx {
   return c;
 }
 
-// Routes, relative to the /portal base:
+// Routes, relative to the base (lib/base.ts):
 //   /                          needs you, the home (design-portal-evaluation.md, DECIDE 1)
 //   /<view>                    a view
 //   /<view>/<type>/<id>        a view with a drawer open over it (job, agent, audit row)

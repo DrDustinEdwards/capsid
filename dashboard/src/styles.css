@@ -1,4 +1,4 @@
-/* Colors, fonts, shadows: Capsomer's tokens, loaded before this file (main.tsx). Only the
+/* Colors, fonts, shadows: Capsomer's tokens, loaded before this file (root.tsx). Only the
    app's own dimensions live here. */
 :root {
   --top: 44px;
@@ -6,7 +6,7 @@
   --panes-break: 64rem;
 }
 
-/* After Capsomer's base.css (main.tsx) in the same layer, so the Portal's denser type wins. Margin,
+/* After Capsomer's base.css (root.tsx) in the same layer, so the Portal's denser type wins. Margin,
    ground, ink, links, the pointer on buttons and the focus ring are Capsomer's (base.css). */
 @layer cap.base {
   html,
@@ -171,7 +171,7 @@ table.workers-stores .cap-status {
   color: var(--muted);
   white-space: nowrap;
 }
-/* Charts are themed by capsomer/enarratio.css alone (main.tsx); a chart whose colors mean a
+/* Charts are themed by capsomer/enarratio.css alone (root.tsx); a chart whose colors mean a
    status passes them as Enarratio's colors option (views/TrendCharts.tsx). */
 /* Two charts side by side, each half the row, stacked when the row is narrow. */
 .chart-row {
@@ -333,10 +333,6 @@ main .sev-crit[data-row]:focus-visible {
   box-shadow:
     inset var(--line-w-bar) 0 var(--crit),
     inset 0 0 0 var(--line-w) var(--accent-line);
-}
-.loading {
-  padding: var(--space-7-5) 0;
-  text-align: center;
 }
 @media (max-width: 820px) {
   .search {

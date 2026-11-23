@@ -65,11 +65,12 @@ function Waiting() {
   const prs = listed.filter((e) => e.item.kind === "pr");
   const jobs = listed.filter((e) => e.item.kind === "question" || e.item.kind === "blocked-job");
   const other = listed.filter((e) => !prs.includes(e) && !jobs.includes(e));
+  const failed = error ?? asks.error;
   return (
     <Panel flush title="Waiting for you" id="waiting" count={total}>
-      {error && <Banner tone="warn">Stopped queues could not be read: {error}</Banner>}
+      {failed && <Banner tone="warn">Some of what waits on you could not be read: {failed}</Banner>}
       {total === 0 ? (
-        <Empty kind="all-clear" title="Nothing needs you." />
+        !failed && <Empty kind="all-clear" title="Nothing needs you." />
       ) : (
         <>
           {prs.length > 0 && <PrGroup entries={prs} />}

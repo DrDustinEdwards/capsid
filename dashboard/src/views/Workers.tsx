@@ -199,11 +199,7 @@ function useResources() {
 function NotRead({ load }: { load: ReturnType<typeof useResources> }) {
   const doc = load.data;
   if (load.loading && !doc) {
-    return (
-      <div className="loading">
-        <Spinner label="Reading the Workers" />
-      </div>
-    );
+    return <Spinner layout="page" label="Reading the Workers" />;
   }
   if (load.error && !doc) {
     return (

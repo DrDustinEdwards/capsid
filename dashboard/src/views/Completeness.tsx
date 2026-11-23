@@ -1,4 +1,4 @@
-import { Alert } from "capsomer/react/banner";
+import { Alert, Banner } from "capsomer/react/banner";
 import { AwayLink } from "capsomer/react/link";
 import { Empty } from "capsomer/react/empty";
 import { Spinner } from "capsomer/react/skeleton";
@@ -61,23 +61,13 @@ export function Completeness() {
   const load = useAnswer<CompletenessView>(["completeness"], fetchCompleteness);
   const data = load.data;
   if (load.loading && !data) {
-    return (
-      <div className="loading">
-        <Spinner label="Reading the scoreboard" />
-      </div>
-    );
-  }
-  if (load.error) {
-    return (
-      <p role="alert">
-        <Status tone="crit">Could not read the scoreboard: {load.error}</Status>
-      </p>
-    );
+    return <Spinner layout="page" label="Reading the scoreboard" />;
   }
   if (!data || data.error) {
-    return data?.error ? (
+    const err = data?.error ?? load.error;
+    return err ? (
       <Empty kind="failed" title="No scoreboard to show.">
-        {data.error}
+        {err}
       </Empty>
     ) : (
       <Empty kind="nothing-yet" title="No scoreboard to show." />
@@ -92,6 +82,7 @@ export function Completeness() {
   const count = (s: CompletenessStatus) => cells.filter((c) => c.status === s).length;
   return (
     <div className="cap-stack">
+      {load.error && <Banner tone="warn">Could not re-read the scoreboard: {load.error}</Banner>}
       <Alert tone={data.finished ? "neutral" : "warn"}>
         <b>{data.finished ? "Finished." : "Not finished."}</b> {shortCount(count("complete"))} of{" "}
         {shortCount(cells.length)} cells complete, {shortCount(count("partial"))} partial,{" "}

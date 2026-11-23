@@ -41,7 +41,7 @@ const STALE_RULE: Record<StaleRule, string> = {
 type StaleLoad = Load<PortalStale>;
 
 // The stale view (capsid/research/design-stale-jobs.md): GET /portal/api/stale, the same
-// rows `jobs` list with stale: true returns. Read when the Queue opens and again with
+// rows `capsid_work_jobs` list with stale: true returns. Read when the Queue opens and again with
 // each feed, so a resume or a close performed from the drawer drops its row.
 function useStale(): { load: StaleLoad; reread: () => void } {
   const load = useAnswer([LIVE, "stale"], fetchStale);
@@ -80,9 +80,7 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
       )}
       {data?.note && <Banner tone="warn">{data.note}</Banner>}
       {!data && load.loading ? (
-        <div className="loading" role="status">
-          <Spinner label="Reading the stale jobs..." />
-        </div>
+        <Spinner layout="page" label="Reading the stale jobs..." />
       ) : rows.length ? (
         <RowList label="Stuck jobs">
           {rows.map((j) => {

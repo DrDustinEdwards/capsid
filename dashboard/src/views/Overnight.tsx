@@ -20,7 +20,7 @@ import { Status } from "capsomer/react/status";
 // The Tonight plan on the Queue and the "since you last looked" strip on Needs you
 // (docs/design/design-portal-evaluation.md, DECIDE 3, ruled 2026-10-09). Each reads its
 // own route when its page opens and again with each feed: GET /portal/api/plan and
-// GET /portal/api/digest, the readers behind `jobs` list view plan and view digest, so
+// GET /portal/api/digest, the readers behind `capsid_work_jobs` list view plan and view digest, so
 // the Portal and chat cannot disagree. Neither changes anything.
 
 // Chart 4, Tonight as a timeline, loads with the Queue that shows it, not with the digest
@@ -69,9 +69,7 @@ export function Tonight() {
         </Banner>
       )}
       {!plan && load.loading ? (
-        <div className="loading" role="status">
-          <Spinner label="Reading tonight's plan..." />
-        </div>
+        <Spinner layout="page" label="Reading tonight's plan..." />
       ) : plan && (planned || plan.skipped.length) ? (
         <>
           {planned > 0 && (
@@ -163,12 +161,10 @@ export function SinceLastLooked() {
     <Panel title="Since you last looked" id="since" src={`since ${ago(parse(since), now)}`}>
       <Failed what="the digest" error={load.error} />
       {!d && load.loading ? (
-        <div className="loading" role="status">
-          <Spinner label="Reading what happened..." />
-        </div>
+        <Spinner layout="page" label="Reading what happened..." />
       ) : d ? (
-        <div className="digest">
-          <p className="digest-line" data-digest="">
+        <div>
+          <p data-digest="">
             <b className="cap-num">{d.finished.length}</b> finished ·{" "}
             <b className="cap-num">{merged}</b> merged ·{" "}
             <b className="cap-num">{d.pull_requests_ready.length}</b> ready for you ·{" "}
@@ -176,10 +172,10 @@ export function SinceLastLooked() {
           </p>
           {(d.pull_requests_ready.length > 0 || d.blocked.length > 0) && (
             // One line first (UX audit, the proposed Needs you); the lists behind it.
-            <details className="digest-more">
+            <details>
               <summary>Show them</summary>
               {d.pull_requests_ready.length > 0 && (
-                <ul className="digest-list">
+                <ul>
                   {d.pull_requests_ready.map((p) => (
                     <li key={p.url}>
                       <a href={p.url} target="_blank" rel="noreferrer noopener">
@@ -193,7 +189,7 @@ export function SinceLastLooked() {
                 </ul>
               )}
               {d.blocked.length > 0 && (
-                <ul className="digest-list">
+                <ul>
                   {d.blocked.map((b) => (
                     <li
                       key={b.id}

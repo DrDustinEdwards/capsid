@@ -29,8 +29,7 @@ export interface DrillRun {
   output: string;
 }
 
-// dustinedwards and foxing join this list as their backup jobs land
-// (job_e40ec706c10a, job_d087b66eef22). txasm's bucket is txasm-books (binding BOOKS).
+// foxing joins this list when its backup job lands (job_d087b66eef22). txasm's bucket is txasm-books (binding BOOKS).
 // A site with no FTS5 table (txasm) passes d1-dump's own `search` check since d1-dump 0.8
 // ("no FTS5 tables in this database"), so the drill needs no flag for it.
 export const SITES: Site[] = [
@@ -38,6 +37,7 @@ export const SITES: Site[] = [
   { name: "carrel", bucket: "carrel-backups" },
   { name: "germomics", bucket: "germomics-backups" },
   { name: "txasm", bucket: "txasm-books" },
+  { name: "dustinedwards", bucket: "dustinedwards-backups" },
 ];
 
 // The drill's own freshness threshold (d1-dump DEFAULT_STALE_HOURS). Checked here against
@@ -134,9 +134,10 @@ export async function drillSite(
       const path = resolve(dir, ...key.split("/"));
       if (!path.startsWith(root)) throw new Error(`${key} resolves outside the download directory`);
       const obj = await bucket.get(key);
-      if (!obj) throw new Error(`${key} listed but not readable`);
+      if (!obj?.arrayBuffer) throw new Error(`${key} listed but not readable as bytes`);
       mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, await obj.text());
+      // Raw bytes: a compressed run's <table>.json.gz must reach the drill untouched.
+      writeFileSync(path, Buffer.from(await obj.arrayBuffer()));
     }
     const marker = JSON.parse(
       readFileSync(join(dir, ...latest.prefix.split("/"), COMPLETE_MARKER), "utf8"),

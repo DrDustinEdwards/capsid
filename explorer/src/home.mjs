@@ -28,6 +28,7 @@ import {
   stepPath,
   stepWords,
 } from "./pages.mjs";
+import { NEED, reachSentence, reaches, valueWords, verdict } from "./rules.mjs";
 import { toolPath } from "./tools.mjs";
 
 const DESCRIPTION =
@@ -105,15 +106,6 @@ function readingsByStep(stats) {
   };
 }
 
-/** What each grant requirement asks of a caller, in words (src/scope.ts, needFor). */
-const NEED = {
-  read: "read access",
-  write: "write access",
-  action: "read access for some actions and write access for the rest",
-  admin: "admin and write access",
-  admin_read: "admin and read access",
-};
-
 /** The grants a caller can hold, as the panel's breakers. */
 const BREAKERS = [
   ["read", "Read", "Read notes, repos and the job queue"],
@@ -131,29 +123,6 @@ const FEEDS = {
 };
 
 /**
- * Whether a caller holding these grants reaches a tool: "full", "part" (an action tool, some of
- * whose actions need the grant it lacks) or "" (src/scope.ts: needFor, checkScope). The script
- * runs the same rule as the breakers move (src/explorer.js, board).
- * @param {string} need @param {{ read: boolean, write: boolean, admin: boolean }} held
- */
-export function reaches(need, held) {
-  if (need === "read") return held.read ? "full" : "";
-  if (need === "write") return held.write ? "full" : "";
-  if (need === "admin") return held.admin && held.write ? "full" : "";
-  if (need === "admin_read") return held.admin && held.read ? "full" : "";
-  if (need === "action")
-    return held.read && held.write ? "full" : held.read || held.write ? "part" : "";
-  return "";
-}
-
-/** How many tools a caller with these grants reaches, in words. @param {any[]} tools @param {{ read: boolean, write: boolean, admin: boolean }} held */
-export function reachSentence(tools, held) {
-  const full = tools.filter((t) => reaches(t.grant, held) === "full").length;
-  const part = tools.filter((t) => reaches(t.grant, held) === "part").length;
-  return `can use ${full} of ${tools.length} tools${part ? `, and ${part} more in part` : ""}.`;
-}
-
-/**
  * The checks the Worker runs on a claim (src/job-claims.ts, WORKER_EVALUATIONS), as the hero's
  * example job: what GitHub reads for it, and the claim's words. ci_green is a yes or a no.
  */
@@ -165,20 +134,6 @@ const CHECKS = [
   ["ci_green", "CI passed", 1],
 ];
 
-/** A check's value in words: a count as itself, CI green as yes or no. @param {string} kind @param {number} n */
-export const valueWords = (kind, n) => (kind === "ci_green" ? (n ? "Yes" : "No") : String(n));
-
-/**
- * What Capsid records for a claim (src/job-claims.ts, evaluationRows): GitHub's value, with the
- * agent's beside it and the two marked as agreeing or not. @param {string} kind @param {number} said @param {number} read
- */
-export function verdict(kind, said, read) {
-  const r = valueWords(kind, read);
-  return said === read
-    ? `They match. Capsid saves ${r}.`
-    : `Caught. The agent said ${valueWords(kind, said)} and GitHub says ${r}. Capsid saves GitHub's answer and flags the mismatch.`;
-}
-
 /**
  * The first screen: what Capsid is, the two ways on, and one claim checked, which the reader
  * can change to see Capsid catch it. The example's numbers are an example; the figure under
@@ -188,7 +143,7 @@ export function verdict(kind, said, read) {
 function hero(stats) {
   const v = stats.verification;
   const [kind, , read] = CHECKS[0];
-  const desk = `<h2 class="desk-title" data-plain>Catch an agent <span>An example job. Change what the agent reports.</span></h2>
+  const desk = `<h2 class="desk-title" data-plain>Catch an agent</h2>
 <div class="desk-kinds" role="group" aria-label="What the agent reports">${CHECKS.map(([k, name, n], i) => `<button type="button" class="desk-kind" data-kind="${k}" data-read="${n}" aria-pressed="${i === 0}">${name}</button>`).join("")}</div>
 <div class="desk-row">
 <div class="desk-cell"><span class="desk-label">The agent says</span><span class="desk-value" data-desk-said>${valueWords(kind, read)}</span><span class="desk-step"><button type="button" data-desk-step="-1" aria-label="One less">\u2212</button><button type="button" data-desk-step="1" aria-label="One more">+</button></span></div>
@@ -318,7 +273,7 @@ function knowledge(model, stats) {
 ${more("doc-search", "How search works")}
 </div>
 <div class="kb-box" data-ui data-session>
-<h3 class="kb-head">Start a session <span>The same notes</span></h3>
+<h3 class="kb-head">Start a session</h3>
 <p class="kb-actions"><button type="button" class="cap-btn" data-variant="primary" data-start>Start a session</button><button type="button" class="cap-btn" data-write disabled>Write a note</button></p>
 <ol class="kb-brief">${BRIEF.map(([name, path, kb]) => `<li data-brief><span class="kb-doc"><span class="kb-title">${name}</span><code>${path}</code></span><span class="kb-size">${kb} KB</span></li>`).join("")}<li data-brief data-mine hidden><span class="kb-doc"><span class="kb-title">Your note from last session</span><code>sample/sessions/2026-10-25.md</code></span><span class="kb-size">1 KB</span></li></ol>
 <div class="kb-budget"><div class="cap-meter" data-cap="meter" data-size="sm"><span class="cap-meter-label" id="kb-budget-label">The session's brief</span><span class="cap-meter-value" data-budget-words>${total} KB of the 40 KB limit. Nothing cut.</span><span class="cap-meter-bar" role="meter" aria-labelledby="kb-budget-label" aria-valuemin="0" aria-valuemax="40" aria-valuenow="${total}" aria-valuetext="${total} KB of the 40 KB limit" data-budget><span class="cap-meter-fill"></span></span></div></div>
@@ -348,7 +303,10 @@ function board(tools) {
   return `<section class="board cap-page" aria-labelledby="board-title">
 <h2 id="board-title">Agents use only what you allow</h2>
 <div class="board-panel" data-ui data-board data-read>
-<p class="board-count" role="status" data-board-count>A read-only agent ${reachSentence(tools, held)}</p>
+<p class="board-count" role="status" data-board-count>${reachSentence(
+    tools.map((t) => t.grant),
+    held,
+  )}</p>
 <div class="board-cols">${cols}</div>
 </div>
 </section>`;

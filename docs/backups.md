@@ -170,7 +170,7 @@ node scripts/drill-all.ts            # every site
 node scripts/drill-all.ts --site carrel --site foxhound
 ```
 
-Run it after 04:00 UTC on a night both the foxhound and carrel crons have run, so each bucket holds a fresh run and the 26 hour check can pass (the script checks the age itself and runs the drill with `--max-age-hours off`, so the printed age and the verdict read one clock). `wrangler r2 object` cannot list, so the script opens each site's bucket (`SITES` in `scripts/drill-all.ts`: foxhound, carrel, germomics) through wrangler's `getPlatformProxy` with a remote R2 binding, finds the newest run that carries `_complete.json`, downloads it to a temp directory, runs `d1-dump drill --backend sqlite` on it, and deletes the directory. A run with no marker is skipped, as `latestDump` skips it. It prints one line per site:
+Run it after 04:00 UTC on a night both the foxhound and carrel crons have run, so each bucket holds a fresh run and the 26 hour check can pass (the script checks the age itself and runs the drill with `--max-age-hours off`, so the printed age and the verdict read one clock). `wrangler r2 object` cannot list, so the script opens each site's bucket (`SITES` in `scripts/drill-all.ts`: foxhound, carrel, germomics, txasm, dustinedwards) through wrangler's `getPlatformProxy` with a remote R2 binding, finds the newest run that carries `_complete.json`, downloads it to a temp directory, runs `d1-dump drill --backend sqlite` on it, and deletes the directory. A run with no marker is skipped, as `latestDump` skips it. It prints one line per site:
 
 ```
 <site> run=<run id> age_hours=<n> tables=<n> rows=<n> PASS
@@ -178,7 +178,7 @@ Run it after 04:00 UTC on a night both the foxhound and carrel crons have run, s
 <site> FAIL (<reason>)
 ```
 
-`run` is the run drilled, `age_hours` is the marker's `exported_at` to now, `tables` and `rows` come from the marker. `PASS` means the drill exited 0. `FAIL (counts: ...)` and the other check names are the drill's own, listed above. A line with no run id means no complete run was found or the bucket could not be opened or read (the reason follows). The exit code is 1 when any site failed, and 2 for an unknown argument or site (nothing is drilled). txasm, dustinedwards and foxing join `SITES` as their backup jobs land.
+`run` is the run drilled, `age_hours` is the marker's `exported_at` to now, `tables` and `rows` come from the marker. `PASS` means the drill exited 0. `FAIL (counts: ...)` and the other check names are the drill's own, listed above. A line with no run id means no complete run was found or the bucket could not be opened or read (the reason follows). The exit code is 1 when any site failed, and 2 for an unknown argument or site (nothing is drilled). foxing joins `SITES` when its backup job lands.
 
 Checks the old rehearsal made and where each lives now:
 

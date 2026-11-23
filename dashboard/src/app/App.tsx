@@ -89,9 +89,6 @@ const GROUPS: Array<{ label?: string; views: ViewId[] }> = [
   { views: ["settings"] },
 ];
 
-// 0 until the page has hydrated: the first render, on the server and in the browser alike,
-// measures every time from the feed's own read time (serverNow), so both say the same words
-// and React keeps the server's HTML. The clock starts once the page is live.
 // The header's freshness line: the feed's age and the watcher pass, on Capsomer's Freshness.
 function FeedFreshness({
   feed,
@@ -548,9 +545,7 @@ function PortalApp() {
         {error ? (
           <Banner tone="crit">Could not read the feed: {error}. It retries every minute.</Banner>
         ) : (
-          <div className="loading" role="status">
-            <Spinner label="Reading the feed..." />
-          </div>
+          <Spinner layout="page" label="Reading the feed..." />
         )}
       </div>
     );
@@ -566,9 +561,7 @@ function PortalApp() {
         <Suspense
           fallback={
             <div className="cap-admin-page">
-              <div className="loading" role="status">
-                <Spinner label="Loading..." />
-              </div>
+              <Spinner layout="page" label="Loading..." />
             </div>
           }
         >

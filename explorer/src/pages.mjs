@@ -529,8 +529,7 @@ export function systemsPage(model, bySystem, asOf) {
     ["used", "What people use"],
     ["private", "Private"],
   ];
-  const privates = model.systems.filter((/** @type {any} */ s) => s.private).length;
-  const body = `${pageHead([], "Systems", "The network of systems", privates ? `${privates} are private.` : "")}
+  const body = `${pageHead([], "Systems", "The network of systems")}
 <section aria-labelledby="family-title">${map}</section>
 <section aria-labelledby="table-title"><h2 id="table-title">Every system</h2>
 <div class="filter-bar" data-filter="systems" hidden>

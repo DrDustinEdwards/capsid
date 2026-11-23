@@ -222,11 +222,7 @@ function SiteBackups() {
       <div className="body cap-stack" data-gap="4">
         {load.error && <Banner tone="crit">Could not read the sites' backups: {load.error}</Banner>}
         {!data ? (
-          !load.error && (
-            <div className="loading" role="status">
-              <Spinner label="Reading each site's backups..." />
-            </div>
-          )
+          !load.error && <Spinner layout="page" label="Reading each site's backups..." />
         ) : (
           <>
             {data.not_configured.length > 0 && (

@@ -17,8 +17,7 @@
 //     | gh secret set BACKUP_CREDENTIAL_KEY --repo DrDustinEdwards/capsid-backups
 //
 // It prints the derived key and nothing else, so it can be piped. It never prints the
-// root secret. Everything explanatory goes to stderr. The old --backup-credential flag is
-// accepted and changes nothing.
+// root secret. Everything explanatory goes to stderr.
 
 import { createHmac } from "node:crypto";
 
@@ -29,7 +28,7 @@ const rawRoot = process.env.IMPROVE_SCORE_SECRET;
 const root = rawRoot && rawRoot.trim() !== "" ? rawRoot : undefined;
 
 const arg = process.argv[2];
-if (arg !== undefined && arg !== "--backup-credential") {
+if (arg !== undefined) {
   console.error(
     `derive-backup-key: unknown argument '${arg}'. Usage: IMPROVE_SCORE_SECRET=... node scripts/derive-backup-key.mjs`,
   );

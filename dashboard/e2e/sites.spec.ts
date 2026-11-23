@@ -13,7 +13,7 @@ const settings = (page: Page) => page.locator("main section#settings");
 async function openSetup(page: Page) {
   await page.goto(`sites/${NS}?tab=setup`);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page.locator("main .loading")).toHaveCount(0);
+  await expect(page.locator("main .cap-spinner[data-layout='page']")).toHaveCount(0);
 }
 
 async function openAdd(page: Page) {
