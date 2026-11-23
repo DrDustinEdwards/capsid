@@ -1,5 +1,4 @@
 import type { Env } from "./env";
-import { logEvent } from "@dustinedwards/site-runtime/log";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { readSiteConfig } from "./ops-sites";
 import { readSnapshot } from "./ops-snapshot";
@@ -197,21 +196,18 @@ export async function gatherInbox(
   const allowed = namespaces === null ? null : new Set(namespaces);
   const keep = (namespace: string) => allowed === null || allowed.has(namespace);
   const byNamespace = new Map<string, InboxItem[]>();
-  // Past MAX_ITEMS_PER_APP an app's items are dropped, so the kinds that name a fault or a
-  // waiting pull request are added before the blocked and held jobs, which are the many.
-  const dropped = new Map<string, number>();
+  // Past MAX_ITEMS_PER_APP items drop, so faults and waiting PRs go in before the many jobs.
   const add = (namespace: string, item: InboxItem) => {
     if (!keep(namespace)) return;
     const list = byNamespace.get(namespace) ?? [];
     if (list.length < MAX_ITEMS_PER_APP) list.push(item);
-    else dropped.set(namespace, (dropped.get(namespace) ?? 0) + 1);
     byNamespace.set(namespace, list);
   };
 
   const blocked = await env.DB.prepare(
     "SELECT id, namespace, title, result_ref, result_summary, updated_at FROM jobs WHERE status = 'blocked' ORDER BY updated_at LIMIT ?1",
   )
-    .bind(MAX_BLOCKED + 1)
+    .bind(MAX_BLOCKED)
     .all<{
       id: string;
       namespace: string;
@@ -293,15 +289,8 @@ export async function gatherInbox(
     const item = heldJobItem(job, now);
     if (item) add(job.namespace, item);
   }
-  const blockedRows = blocked.results ?? [];
-  for (const job of blockedRows.slice(0, MAX_BLOCKED)) {
+  for (const job of blocked.results ?? []) {
     if (!blockSettled(job, stale, applied, steps)) add(job.namespace, blockedJobItem(job));
-  }
-  // The inbox type is the shell's (capsomer), with no field for a cut, so a cut is logged.
-  if (dropped.size > 0 || blockedRows.length > MAX_BLOCKED) {
-    logEvent("INBOX_TRUNCATED", {
-      message: `INBOX_TRUNCATED apps over ${MAX_ITEMS_PER_APP} items: ${JSON.stringify(Object.fromEntries(dropped))}; blocked jobs past ${MAX_BLOCKED}: ${blockedRows.length > MAX_BLOCKED}`,
-    });
   }
 
   // Every configured app appears, with a count of zero when nothing waits, so the shell

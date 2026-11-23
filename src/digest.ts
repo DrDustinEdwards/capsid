@@ -89,12 +89,8 @@ async function composeDigest(
   let parsed: unknown = [];
   try {
     parsed = raw ? JSON.parse(raw) : [];
-  } catch (err) {
-    logEvent(
-      "DIGEST_AWAITING_UNREADABLE",
-      { message: `DIGEST_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${errorMessage(err)}` },
-      { level: "error" },
-    );
+  } catch {
+    // parsed stays []
   }
   const awaiting = (Array.isArray(parsed) ? (parsed as AwaitingSeat[]) : []).filter(
     (a) => a.class !== "auto" && a.class !== "wait",

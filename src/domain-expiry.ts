@@ -13,7 +13,7 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 // RDAP (RFC 9224 bootstrap, RFC 9083 responses): the IANA bootstrap maps a TLD to its registry's
 // RDAP base; `{base}domain/{name}` answers with an `expiration` event. Both are public, no key.
 // The bootstrap is kept a week and each domain's answer a day in KV, so a half-hourly watcher
-// pass makes about one RDAP call per domain per day. A failed read is kept an hour.
+// pass makes about one RDAP call per domain per day.
 //
 // A finding at EARLY_DAYS before expiry, and a second, new fingerprint at LATE_DAYS, so the last
 // week posts again even if the first was dismissed. A domain whose expiry could not be read is
@@ -24,9 +24,6 @@ const BOOTSTRAP_KEY = "rdap:bootstrap:v1";
 const BOOTSTRAP_TTL_SECONDS = 7 * 86_400;
 export const expiryKey = (domain: string) => `rdap:expiry:v1:${domain}`;
 const EXPIRY_TTL_SECONDS = 86_400;
-// A failed read is kept this long under the same key, so a registry outage costs one
-// attempt per domain an hour rather than eight seconds of fetching per domain every pass.
-const FAILURE_TTL_SECONDS = 3600;
 const EARLY_DAYS = 30;
 const LATE_DAYS = 7;
 const FETCH_TIMEOUT_MS = 8000;
@@ -140,7 +137,7 @@ export function domainAlerts(
   return out;
 }
 
-type Cached = { expires?: string; failed?: string; read_at: string };
+type Cached = { expires: string; read_at: string };
 
 async function fetchJson(fetchImpl: typeof fetch, url: string): Promise<unknown> {
   const resp = await fetchImpl(url, {
@@ -173,10 +170,6 @@ export async function readExpiries(
       expiries.push({ domain, expires: cached.expires });
       continue;
     }
-    if (cached?.failed) {
-      failed.push({ domain, error: cached.failed });
-      continue;
-    }
     try {
       if (bootstrap === null) {
         bootstrap = await kv.get(BOOTSTRAP_KEY, "json");
@@ -201,15 +194,7 @@ export async function readExpiries(
       );
       expiries.push({ domain, expires });
     } catch (err) {
-      const error = errorMessage(err);
-      failed.push({ domain, error });
-      await kv
-        .put(
-          expiryKey(domain),
-          JSON.stringify({ failed: error, read_at: now.toISOString() } satisfies Cached),
-          { expirationTtl: FAILURE_TTL_SECONDS },
-        )
-        .catch(() => undefined);
+      failed.push({ domain, error: errorMessage(err) });
     }
   }
   return { expiries, failed };

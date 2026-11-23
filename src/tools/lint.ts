@@ -329,10 +329,8 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
       }
       if (problems.length > 0)
         return fail(`finalize aborted, nothing archived:\n${problems.join("\n")}`);
-      // Archiving is a move, so it asks what move asks (src/tools/docs-lifecycle.ts): canon is
-      // the seat's, and a signed policy document or a job mirror is never archived. finalize is
-      // type-gated to episodic and source documents, but the writer sets the type, so a canon,
-      // policy or jobs/ document can carry one. No opt-in flag here.
+      // Archiving is a move: it asks what move asks (docs-lifecycle.ts), since the writer sets
+      // the type and a canon, policy or jobs/ document can carry an archivable one.
       for (const consumedPath of paths) {
         for (const end of [consumedPath, `archive/${consumedPath}`]) {
           if (canonGuarded(ctx.agent, namespace, end))

@@ -237,14 +237,16 @@ export function auditStatement(
  *  caller to show, because the write stands and a thrown error would report it as refused. */
 export async function auditCommitted(
   db: D1Database,
-  statement: D1PreparedStatement,
-  what: string,
+  actor: string,
+  action: string,
+  namespace: string | null,
+  params: unknown,
 ): Promise<string | undefined> {
   try {
-    await db.batch([statement]);
+    await auditStatement(db, actor, action, namespace, null, params).run();
     return undefined;
   } catch (err) {
-    const warning = `${what} was saved, but its audit row was not written: ${errorMessage(err)}`;
+    const warning = `${action} was saved, but its audit row was not written: ${errorMessage(err)}`;
     logEvent("AUDIT_AFTER_WRITE_FAILED", { message: warning }, { level: "error" });
     return warning;
   }

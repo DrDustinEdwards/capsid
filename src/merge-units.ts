@@ -246,17 +246,8 @@ export async function readUnitEvidence(
       run_at: string;
     }>();
   const rollbacks: RollbackEvidence[] = [];
-  // Newest first, one past the cap: a burst keeps the latest rollbacks, the ones that
-  // matter to a suspension, and says it dropped older ones.
+  // Newest first: a burst keeps the latest rollbacks, the ones that matter to a suspension.
   const rolledRows = rolled.results ?? [];
-  if (rolledRows.length > 50)
-    logEvent(
-      "MERGE_UNITS",
-      {
-        message: "MERGE_UNITS read the newest 50 rollbacks in the window; older ones were left out",
-      },
-      { level: "warn" },
-    );
   for (const r of rolledRows.slice(0, 50)) {
     let merged_by: RollbackEvidence["merged_by"] = "unknown";
     let path_class: string | null = null;

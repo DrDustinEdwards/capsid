@@ -197,15 +197,8 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
   ).all<{ namespace: string; repos: string | null }>();
   for (const row of mappings ?? []) {
     const parsed = parseMappedRepos(row.repos);
-    if ("error" in parsed) {
-      // One corrupt row must not stop the pass for every other namespace.
-      logEvent(
-        "REPOS_MAPPING_SKIPPED",
-        { message: `REPOS_MAPPING_SKIPPED ${row.namespace}: ${parsed.error}` },
-        { level: "error" },
-      );
-      continue;
-    }
+    // One corrupt row must not stop the pass for every other namespace.
+    if ("error" in parsed) continue;
     for (const { repo } of parsed.list) mapped.add(repo.toLowerCase());
   }
   const recorded: string[] = [];

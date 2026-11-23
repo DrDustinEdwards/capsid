@@ -183,7 +183,7 @@ export async function planApproval(
       return void problems.push(
         `#${n} has no class: the tick has not classed it into the awaiting-seat set yet, so nothing says what kind of approval it needs.`,
       );
-    // The row is the tick's judgement of an earlier head: its class and path class describe
+    // The row is the tick's judgment of an earlier head: its class and path class describe
     // that head, not this one.
     if (row.head_sha && row.head_sha !== head.sha)
       return void problems.push(

@@ -7,8 +7,7 @@ import { readSharedConfig, releaseDecision } from "./shared-code";
 import { readRootManifest } from "./shared-code-read";
 import { auditStatement } from "./store-guards";
 import { fromBase64Text } from "@dustinedwards/site-runtime/encoding";
-
-import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 
 // The daily maintenance pass's release-tag rule (Capsid improvement list, item 13). A cloud
 // session cannot push a tag, so a shared package's version bump merged from one sat untagged,
@@ -274,14 +273,7 @@ export function githubReleaseReaders(env: Env): ReleaseReaders {
       const owner = new Map<string, string>();
       for (const row of results ?? []) {
         const parsed = parseMappedRepos(row.repos);
-        if ("error" in parsed) {
-          logEvent(
-            "REPOS_MAPPING_SKIPPED",
-            { message: `REPOS_MAPPING_SKIPPED ${row.namespace}: ${parsed.error}` },
-            { level: "error" },
-          );
-          continue;
-        }
+        if ("error" in parsed) continue;
         for (const { repo } of parsed.list) {
           if (!owner.has(repo.toLowerCase())) owner.set(repo.toLowerCase(), row.namespace);
         }

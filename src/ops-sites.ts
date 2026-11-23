@@ -1,5 +1,5 @@
 import type { OpsSiteConfig, SiteMapDrift } from "./ops-types/sites";
-import { auditCommitted, auditStatement } from "./store-guards";
+import { auditCommitted } from "./store-guards";
 import { parseOperator } from "./site-operator";
 
 // The sites the watcher probes for Capsid Portal (capsid/research/design-ops-console.md),
@@ -359,11 +359,7 @@ export async function addSite(db: D1Database, actor: string, site: SiteInput): P
       ok: false,
       refusal: `${site.namespace} was added and then removed before it could be read back.`,
     };
-  const warning = await auditCommitted(
-    db,
-    auditStatement(db, actor, "ops-site-added", site.namespace, null, { after }),
-    "ops-site-added",
-  );
+  const warning = await auditCommitted(db, actor, "ops-site-added", site.namespace, { after });
   return { ok: true, site: after, warning };
 }
 
@@ -427,11 +423,10 @@ export async function editSite(
       ok: false,
       refusal: `${site.namespace} was edited and then removed before it could be read back.`,
     };
-  const warning = await auditCommitted(
-    db,
-    auditStatement(db, actor, "ops-site-edited", site.namespace, null, { before, after }),
-    "ops-site-edited",
-  );
+  const warning = await auditCommitted(db, actor, "ops-site-edited", site.namespace, {
+    before,
+    after,
+  });
   return { ok: true, site: after, warning };
 }
 
@@ -455,10 +450,6 @@ export async function removeSite(
       refusal: `${namespace} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.`,
     };
   }
-  const warning = await auditCommitted(
-    db,
-    auditStatement(db, actor, "ops-site-removed", namespace, null, { before }),
-    "ops-site-removed",
-  );
+  const warning = await auditCommitted(db, actor, "ops-site-removed", namespace, { before });
   return { ok: true, site: before, warning };
 }

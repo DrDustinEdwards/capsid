@@ -67,9 +67,8 @@ export async function siteCheck(
     headers_failed: failures(headers).map((r) => r.name),
   };
 
-  // The 401 probe: the path named, else the site's operator API, else none. site_check is a
-  // read-grant call, so only the site's own operator path is POSTed to; a path the caller
-  // names is read with a GET, never a write to a route this call knows nothing about.
+  // The 401 probe: the path named, else the operator API. Only the operator path is POSTed;
+  // a caller-named path is read with a GET.
   const probePath = args.probe ?? row.operator?.path ?? null;
   let probe: { path: string | null; status: number | null; refused: boolean | null; note: string };
   if (probePath === null) {

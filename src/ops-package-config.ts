@@ -1,5 +1,5 @@
 import type { OpsPackageConfig } from "./ops-types/sites";
-import { auditCommitted, auditStatement } from "./store-guards";
+import { auditCommitted } from "./store-guards";
 
 // The packages configuration: the ops_packages rows and their validated edits.
 
@@ -113,11 +113,7 @@ export async function addPackage(
       ok: false,
       refusal: `${p.name} was added and then removed before it could be read back.`,
     };
-  const warning = await auditCommitted(
-    db,
-    auditStatement(db, actor, "ops-package-added", null, null, { after }),
-    "ops-package-added",
-  );
+  const warning = await auditCommitted(db, actor, "ops-package-added", null, { after });
   return { ok: true, pkg: after, warning };
 }
 
@@ -148,11 +144,7 @@ export async function editPackage(
       ok: false,
       refusal: `${p.name} was edited and then removed before it could be read back.`,
     };
-  const warning = await auditCommitted(
-    db,
-    auditStatement(db, actor, "ops-package-edited", null, null, { before, after }),
-    "ops-package-edited",
-  );
+  const warning = await auditCommitted(db, actor, "ops-package-edited", null, { before, after });
   // A changed name source makes the cached history wrong; the next view refetches.
   return { ok: true, pkg: after, warning };
 }
@@ -175,10 +167,6 @@ export async function removePackage(
       ok: false,
       refusal: `${name} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.`,
     };
-  const warning = await auditCommitted(
-    db,
-    auditStatement(db, actor, "ops-package-removed", null, null, { before }),
-    "ops-package-removed",
-  );
+  const warning = await auditCommitted(db, actor, "ops-package-removed", null, { before });
   return { ok: true, pkg: before, warning };
 }

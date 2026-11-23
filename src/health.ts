@@ -26,13 +26,8 @@ export async function backupFreshness(
   let lastOk: string | null = null;
   try {
     lastOk = await env.APP_KV.get(BACKUP_LAST_OK_KEY);
-  } catch (err) {
-    // The body is public (/health), so the driver's message goes to the log only.
-    logEvent(
-      "HEALTH_PROBE_FAILED",
-      { message: `HEALTH_PROBE_FAILED backup freshness: ${errorMessage(err).slice(0, 120)}` },
-      { level: "error" },
-    );
+  } catch {
+    // The body is public (/health), so the driver's message stays out of it.
     return { last_ok: null, age_hours: null, warning: "backup freshness unreadable" };
   }
   if (!lastOk) return { last_ok: null, age_hours: null, warning: "no successful backup recorded" };
@@ -92,9 +87,7 @@ export interface HealthReport extends HealthSnapshot {
   ai_search?: { month: string; hybrid: number; cap: number } | null;
 }
 
-// The D1 ping and the latest migration, read once for healthReport (the watcher, in
-// process) and handleHealth (public). d1 carries the driver's message on an error; the
-// public body replaces it (publicState).
+// The D1 ping and latest migration; d1 carries the driver's message, which publicState hides.
 async function readStore(env: Env): Promise<{ d1: string; schema_version: string | null }> {
   let d1 = "unbound";
   try {
@@ -114,8 +107,7 @@ async function readStore(env: Env): Promise<{ d1: string; schema_version: string
   return { d1, schema_version };
 }
 
-// A store probe's state for the public /health body: a driver error can name a table or
-// a binding, so the body says "error" and the message goes to the log.
+// A driver error can name a table or binding: the public body says "error", the log has it.
 function publicState(probe: string, state: string): string {
   if (!state.startsWith("error")) return state;
   logEvent(
@@ -126,8 +118,7 @@ function publicState(probe: string, state: string): string {
   return "error";
 }
 
-// The watcher, site-check and site-pulse read this in process, so it keeps the probes'
-// messages. Capsid Portal shows the same values the live gate asserts.
+// In-process readers keep the probes' messages.
 export async function healthReport(env: Env): Promise<HealthReport> {
   const provenance = { sha: env.BUILD_SHA ?? "unknown" };
   const { d1, schema_version } = await readStore(env);

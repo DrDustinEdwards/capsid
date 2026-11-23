@@ -84,8 +84,8 @@ function agentAudit(
 }
 
 /** The state change and its audit row in one batch, so neither lands without the other.
- *  The audit INSERT goes first and fires only while the agent still matches `guard`; the
- *  UPDATE then matches the same state inside the same transaction. False: the agent
+ *  Both fire only while the agent still matches `guard`, the audit INSERT first and the
+ *  UPDATE (`set`, with `extra` as ?2) inside the same transaction. False: the agent
  *  changed after the caller read it, and neither statement wrote. */
 async function changeWithAudit(
   db: D1Database,
@@ -93,8 +93,9 @@ async function changeWithAudit(
   action: string,
   row: { id: string; name: string },
   params: Record<string, unknown>,
+  set: string,
   guard: string,
-  update: D1PreparedStatement,
+  extra?: string,
 ): Promise<boolean> {
   const audit = db
     .prepare(
@@ -109,6 +110,9 @@ async function changeWithAudit(
       clientOf(actor, params, undefined),
       row.id,
     );
+  const update = db
+    .prepare(`UPDATE agents SET ${set} WHERE id = ?1 AND ${guard} RETURNING id`)
+    .bind(...(extra === undefined ? [row.id] : [row.id, extra]));
   const [, changed] = await db.batch([audit, update]);
   return (changed?.results?.length ?? 0) > 0;
 }
@@ -324,12 +328,8 @@ export async function revokeAgent(
     "agent-revoked",
     row,
     { id: row.id, scopes: parseScopes(row.scopes) },
+    "revoked_at = datetime('now')",
     "revoked_at IS NULL",
-    db
-      .prepare(
-        "UPDATE agents SET revoked_at = datetime('now') WHERE id = ?1 AND revoked_at IS NULL RETURNING id",
-      )
-      .bind(row.id),
   );
   if (!won)
     return refuse(
@@ -361,12 +361,8 @@ export async function activateAgent(
       "agent-activated",
       won,
       { id: won.id },
+      "pending = 0",
       "revoked_at IS NULL AND pending = 1",
-      db
-        .prepare(
-          "UPDATE agents SET pending = 0 WHERE id = ?1 AND revoked_at IS NULL AND pending = 1 RETURNING id",
-        )
-        .bind(won.id),
     ));
   if (!won || !activated)
     return refuse(
@@ -398,10 +394,9 @@ export async function updateAgentScopes(
     "agent-rescoped",
     row,
     { id: row.id, before, after: scopes },
+    "scopes = ?2",
     "revoked_at IS NULL",
-    db
-      .prepare("UPDATE agents SET scopes = ?2 WHERE id = ?1 AND revoked_at IS NULL RETURNING id")
-      .bind(row.id, serializeScopes(scopes)),
+    serializeScopes(scopes),
   );
   if (!won)
     return refuse("update_scopes", `'${name}' was revoked between reading it and re-scoping it.`);
