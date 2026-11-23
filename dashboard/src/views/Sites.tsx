@@ -1,5 +1,5 @@
 import { Banner } from "capsomer/react/banner";
-import type { OpsSiteConfig } from "../types";
+import type { OpsSiteConfig, SiteSnapshot } from "../types";
 import { SITES_TABS, sitePath, tabOf, useApp } from "../app/ctx";
 import { Link } from "../lib/router";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
@@ -11,9 +11,13 @@ import { Suspense, lazy } from "react";
 import { Missing } from "capsomer/react/empty";
 import { Spinner } from "capsomer/react/skeleton";
 import { parse, utc } from "capsomer/behavior/time";
-import { ago } from "../lib/format";
-import { Status } from "capsomer/react/status";
-import { FilterEmpty, FleetTable, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
+import { ago, hostOf, pct, shortId } from "../lib/format";
+import { shortCount } from "capsomer/behavior/format";
+import { Meter } from "capsomer/react/meter";
+import { KIND_STATUS, PROBE, cfOk, cfShort, siteKey } from "../lib/derive";
+import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
+import { Pill, Status } from "capsomer/react/status";
+import { FilterEmpty, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
 
 // The add and edit form loads only when it opens, with its fields' stylesheets (as on SitePage).
 const SiteForm = lazy(() => import("./SiteConfig").then((m) => ({ default: m.SiteForm })));
@@ -175,5 +179,157 @@ function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
         </button>
       </td>
     </tr>
+  );
+}
+
+function LiveDeployCell({ s }: { s: SiteSnapshot }) {
+  const { now } = useApp();
+  const cf = cfOk(s);
+  if (!cf)
+    return (
+      <Status tone="nodata" reason={cfShort(s.cloudflare) ?? ""} brief>
+        No data
+      </Status>
+    );
+  const d = cf.deploys[0];
+  if (!d)
+    return (
+      <span className="cap-text" data-tone="dim">
+        No deploys recorded
+      </span>
+    );
+  return (
+    <>
+      <span className="cap-mono">{shortId(d.version_id ?? d.id)}</span>
+      <div className="src">
+        {ago(parse(d.created_on), now)}
+        {d.triggered_by ? ` · ${d.triggered_by}` : ""}
+      </div>
+    </>
+  );
+}
+
+function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
+  const cf = cfOk(s);
+  if (!cf)
+    return (
+      <Status tone="nodata" reason={cfShort(s.cloudflare) ?? ""} brief>
+        No data
+      </Status>
+    );
+  if (!cf.errors24)
+    return (
+      <Status tone="nodata" reason="the analytics read failed" brief>
+        No data
+      </Status>
+    );
+  const t = errorTotals(cf.errors24);
+  const hot = t.rate != null && t.rate > 0.01;
+  return (
+    <>
+      <ErrorSpark
+        values={cf.errors24.map((x) => x.errors)}
+        label={`Errors per hour for ${s.name}, last 24 hours: ${shortCount(t.err)} of ${shortCount(t.req)} requests`}
+      />
+      <div className={`src${hot ? " hot" : ""}`}>
+        {shortCount(t.err)} / {shortCount(t.req)} · {pct(t.rate)}
+      </div>
+    </>
+  );
+}
+
+// Capsid's own backup is the only one the feed carries (snapshot.health.backup, against
+// the 26-hour window /health uses). Every other site's backup is not reported until its
+// health contract says so, and that is shown as no data, never as "none" or a zero. The
+// column header says so once; each cell says "No data" (design D18).
+const BACKUP_LIMIT_HOURS = 26;
+
+function BackupCell({ s }: { s: SiteSnapshot }) {
+  const { feed } = useApp();
+  const backup = s.namespace === "capsid" ? feed.snapshot?.health?.backup : undefined;
+  if (!backup)
+    return (
+      <Status tone="nodata" reason="not reported by the site" brief>
+        No data
+      </Status>
+    );
+  if (backup.age_hours == null) return <Status tone="crit">Never</Status>;
+  const age = backup.age_hours.toFixed(1);
+  return (
+    <Meter
+      size="sm"
+      label={<span className="cap-sr-only">Backup age</span>}
+      value={Math.min(backup.age_hours, BACKUP_LIMIT_HOURS)}
+      max={BACKUP_LIMIT_HOURS}
+      warnAt={0.75}
+      critAt={1}
+      valueText={`${age} of ${BACKUP_LIMIT_HOURS} hours`}
+      display={`${age}h / ${BACKUP_LIMIT_HOURS}h`}
+    />
+  );
+}
+
+function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
+  const { now } = useApp();
+  return (
+    <div className="cap-table-wrap" data-reflow="wide">
+      <table className="cap-table fleet">
+        <thead>
+          <tr>
+            <th>Site</th>
+            <th>Status</th>
+            <th>Uptime, 2-hour ticks</th>
+            <th>Live deploy</th>
+            <th>Errors 24h</th>
+            <th>
+              Backup age <span className="cap-table-note">only Capsid reports one</span>
+            </th>
+            <th>Probe</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sites.map((s) => {
+            const p = PROBE[s.state];
+            return (
+              <tr key={siteKey(s)} data-row="" data-open={`site:${siteKey(s)}`} tabIndex={0}>
+                <td className="site">
+                  <b>{s.name}</b>
+                  <span>{hostOf(s.origin)}</span>
+                </td>
+                <td data-label="Status">
+                  <div className="cap-stack" data-gap="2" data-align="start">
+                    <Pill {...KIND_STATUS[p.kind]}>{p.label}</Pill>
+                    <div className="src">
+                      {s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}
+                    </div>
+                  </div>
+                </td>
+                <td data-label="Uptime, 2-hour ticks" className="uptime-cell">
+                  <UptimeTicks site={s} />
+                  <UptimeFoot site={s} />
+                </td>
+                <td data-label="Live deploy">
+                  <LiveDeployCell s={s} />
+                </td>
+                <td data-label="Errors 24h">
+                  <ErrorTotalsCell s={s} />
+                </td>
+                <td data-label="Backup age">
+                  <BackupCell s={s} />
+                </td>
+                <td data-label="Probe">
+                  <span className="cap-num">
+                    {s.http_status == null ? "no answer" : `HTTP ${s.http_status}`}
+                  </span>
+                  <div className="src">
+                    {s.health_path ?? "/"} · {ago(parse(s.checked_at), now)}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }

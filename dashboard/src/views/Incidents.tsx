@@ -1,6 +1,7 @@
 import { Alert } from "capsomer/react/banner";
 import { useApp } from "../app/ctx";
-import { KIND_STATUS, incidents, passStale, TASK_OUTCOME } from "../lib/derive";
+import { KIND_STATUS, passStale, TASK_OUTCOME } from "../lib/derive";
+import { incidents } from "../lib/incidents";
 import { ago, age } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import type { OpsTask } from "../types";

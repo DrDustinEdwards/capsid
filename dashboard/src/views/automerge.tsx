@@ -98,7 +98,8 @@ export function UnitButtons({
 /** Needs you's Auto-merge rows. */
 export function AutoMergeRows({ asks }: { asks: AutoMergeAsks }) {
   const { confirm } = useApp();
-  const { policy, paused, unitAsks, suspended } = asks;
+  const { policy, paused, unitAsks, units } = asks;
+  const suspended = new Set(units?.suspended.map((s) => s.unit));
   if (!policy) return null;
   return (
     <>

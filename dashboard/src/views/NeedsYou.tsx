@@ -61,7 +61,10 @@ export function NeedsYou() {
 
 function Waiting() {
   const { feed } = useApp();
-  const { prs, jobs, other, stops, asks, total, error, reread } = useWaiting(feed);
+  const { listed, stops, asks, total, error, reread } = useWaiting(feed);
+  const prs = listed.filter((e) => e.item.kind === "pr");
+  const jobs = listed.filter((e) => e.item.kind === "question" || e.item.kind === "blocked-job");
+  const other = listed.filter((e) => !prs.includes(e) && !jobs.includes(e));
   return (
     <Panel flush title="Waiting for you" id="waiting" count={total}>
       {error && <Banner tone="warn">Stopped queues could not be read: {error}</Banner>}

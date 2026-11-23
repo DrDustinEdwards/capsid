@@ -32,7 +32,7 @@ import {
   signOutRequest,
   useOpsFeed,
 } from "../lib/api";
-import { attentionItems, counts, hasSites, passStale } from "../lib/derive";
+import { attentionItems, hasSites, passStale } from "../lib/derive";
 import { ago } from "../lib/format";
 import { useWaiting } from "../lib/waiting";
 import { parse, serverNow, utc } from "capsomer/behavior/time";
@@ -88,18 +88,6 @@ const GROUPS: Array<{ label?: string; views: ViewId[] }> = [
   { label: "Records", views: ["activity", "queue", "agents", "packages", "library"] },
   { views: ["settings"] },
 ];
-
-// What a count means (rulings: a plain number counts, a violet pill needs you, red and amber are
-// status). Down, critical or a red CI run is red (a failure is never violet); paused is amber; what
-// waits on the owner is violet.
-const COUNT_TONE: Partial<Record<ViewId, "need" | "crit" | "warn">> = {
-  health: "crit",
-};
-
-// What each rail count means, for its accessible name and its tooltip.
-const BADGE_NOTE: Partial<Record<ViewId, string>> = {
-  health: "critical",
-};
 
 // 0 until the page has hydrated: the first render, on the server and in the browser alike,
 // measures every time from the feed's own read time (serverNow), so both say the same words
@@ -485,16 +473,9 @@ function PortalApp() {
   };
 
   const waiting = useWaiting(feed);
-  const c = feed ? counts(feed) : null;
   // What waits on you is the header inbox's number (useWaiting, the list Needs you shows) and
   // nowhere else, so no menu entry counts it. Health counts the critical problems only (derive.ts).
   const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit").length : 0;
-  const badge: Partial<Record<ViewId, { n: number; cls: string }>> =
-    c && feed
-      ? {
-          health: { n: critCount, cls: "hot" },
-        }
-      : {};
 
   // The page title names the view, and the open panel's subject before it (WCAG 2.4.2):
   // "Fix the probe · Queue · Capsid Portal".
@@ -523,16 +504,16 @@ function PortalApp() {
   // One menu entry per view, grouped, Settings last.
   const entryFor = (id: ViewId, group?: string): AdminEntry => {
     const v = VIEWS.find((x) => x.id === id)!;
-    const b = badge[id];
+    const health = id === "health";
     return {
       id,
       label: v.label,
       href: routePath(id),
       icon: <NavIcon id={id} />,
       current: route.view === id,
-      count: b?.n || undefined,
-      countNote: BADGE_NOTE[id],
-      tone: COUNT_TONE[id],
+      count: (health && critCount) || undefined,
+      countNote: health ? "critical" : undefined,
+      tone: health ? ("crit" as const) : undefined,
       group,
     };
   };
