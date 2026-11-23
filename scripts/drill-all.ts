@@ -134,7 +134,7 @@ export async function drillSite(
       const path = resolve(dir, ...key.split("/"));
       if (!path.startsWith(root)) throw new Error(`${key} resolves outside the download directory`);
       const obj = await bucket.get(key);
-      if (!obj) throw new Error(`${key} listed but not readable`);
+      if (!obj?.arrayBuffer) throw new Error(`${key} listed but not readable as bytes`);
       mkdirSync(dirname(path), { recursive: true });
       // Raw bytes: a compressed run's <table>.json.gz must reach the drill untouched.
       writeFileSync(path, Buffer.from(await obj.arrayBuffer()));
