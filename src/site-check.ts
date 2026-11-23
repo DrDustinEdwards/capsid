@@ -67,7 +67,9 @@ export async function siteCheck(
     headers_failed: failures(headers).map((r) => r.name),
   };
 
-  // The 401 probe: the path named, else the site's operator API, else none.
+  // The 401 probe: the path named, else the site's operator API, else none. site_check is a
+  // read-grant call, so only the site's own operator path is POSTed to; a path the caller
+  // names is read with a GET, never a write to a route this call knows nothing about.
   const probePath = args.probe ?? row.operator?.path ?? null;
   let probe: { path: string | null; status: number | null; refused: boolean | null; note: string };
   if (probePath === null) {
@@ -81,11 +83,15 @@ export async function siteCheck(
     let status: number | null = null;
     let error: string | null = null;
     try {
+      const post = probePath === row.operator?.path;
       const resp = await fetchImpl(`${site.origin}${probePath}`, {
-        method: "POST",
+        method: post ? "POST" : "GET",
         redirect: "manual",
-        headers: { "Content-Type": "application/json", "User-Agent": "capsid-inspect (401 probe)" },
-        body: "{}",
+        headers: {
+          ...(post ? { "Content-Type": "application/json" } : {}),
+          "User-Agent": "capsid-inspect (401 probe)",
+        },
+        ...(post ? { body: "{}" } : {}),
         signal: callSignal(PROBE_TIMEOUT_MS),
       });
       status = resp.status;

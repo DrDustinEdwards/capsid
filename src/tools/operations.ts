@@ -5,8 +5,8 @@ export type Shape = Record<string, ZodType>;
 
 // The operations behind the served tools (the MCP 4 regroup).
 //
-// Capsid serves 11 tools and Capsid Admin 8, each one whole job with an `action`
-// argument. The work each action does is an operation: a handler with its own input
+// Capsid serves CAPSID_TOOLS and Capsid Admin CAPSID_ADMIN_TOOLS (src/tools/surface.ts), each one
+// whole job with an `action` argument. The work each action does is an operation: a handler with its own input
 // shape, defined once by the module that owns it (src/tools/docs-read.ts and the rest)
 // and dispatched by the composite tool in src/tools/surface.ts. An operation is not a
 // tool: nothing serves its name, scope never sees it, and an agent's tools axis names
