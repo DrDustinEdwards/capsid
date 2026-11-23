@@ -34,6 +34,7 @@ import {
 } from "../lib/api";
 import { attentionItems, counts, hasSites, passStale } from "../lib/derive";
 import { ago } from "../lib/format";
+import { useWaiting } from "../lib/waiting";
 import { parse, serverNow, utc } from "capsomer/behavior/time";
 import { toggleTheme } from "capsomer/behavior/theme-switch";
 import { RAIL_PREF, THEME_PREF, useSingleKeys } from "../lib/prefs";
@@ -483,12 +484,10 @@ function PortalApp() {
     }
   };
 
+  const waiting = useWaiting(feed);
   const c = feed ? counts(feed) : null;
-  // One number, one place (design-portal-evaluation.md section 2, "Badges"; the UX audit's
-  // m2): what waits on you is the header inbox's number and Needs you's list, and nowhere
-  // else, so no menu entry counts it (Pull requests' waiting pull requests among them).
-  // Health counts the critical problems, session incidents included (derive.ts), leaving
-  // out what waits on you.
+  // What waits on you is the header inbox's number (useWaiting, the list Needs you shows) and
+  // nowhere else, so no menu entry counts it. Health counts the critical problems only (derive.ts).
   const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit").length : 0;
   const badge: Partial<Record<ViewId, { n: number; cls: string }>> =
     c && feed
@@ -618,7 +617,7 @@ function PortalApp() {
       inbox={
         feed
           ? {
-              count: feed.live.inbox.count,
+              count: waiting.total,
               countNote: "waiting on you",
               href: routePath("needs"),
             }
