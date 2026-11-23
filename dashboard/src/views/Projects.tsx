@@ -194,9 +194,7 @@ function Roster() {
         }
       >
         {!data && load.loading ? (
-          <div className="loading" role="status">
-            <Spinner label="Reading the projects..." />
-          </div>
+          <Spinner layout="page" label="Reading the projects..." />
         ) : data && data.namespaces.length ? (
           <div className="cap-table-wrap" data-reflow="wide">
             <table className="cap-table roster">

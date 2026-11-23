@@ -33,7 +33,7 @@ test("at 1024 px and at 390 px, no tab of a site's page scrolls sideways", async
     for (const tab of SITE_TABS) {
       await page.goto(`sites/sample${tab.id === "overview" ? "" : `?tab=${tab.id}`}`);
       await expect(page.getByRole("heading", { level: 1, name: "Sample A" })).toBeVisible();
-      await expect(page.locator("main .loading")).toHaveCount(0);
+      await expect(page.locator("main .cap-spinner[data-layout='page']")).toHaveCount(0);
       const o = await measure(page);
       // On a phone a wide table may scroll inside its wrapper; the document may not.
       problems.push(

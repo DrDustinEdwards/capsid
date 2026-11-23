@@ -105,9 +105,7 @@ export function Library() {
         />
       </FilterBar>
       {load.loading ? (
-        <div className="loading">
-          <Spinner label="Reading the library" />
-        </div>
+        <Spinner layout="page" label="Reading the library" />
       ) : load.error ? (
         <p role="alert">
           <Status tone="crit">Could not read the library: {load.error}</Status>

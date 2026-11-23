@@ -55,12 +55,7 @@ function Stale({ error }: { error: string | null }) {
 export function MinutesTile() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
-  if (!data)
-    return (
-      <p className="cap-text" data-tone="dim">
-        Your time per week could not be read: {error}
-      </p>
-    );
+  if (!data) return <Unread what="Your time per week" error={error} />;
   return (
     <>
       <Minutes minutes={data.minutes} />
@@ -108,6 +103,14 @@ function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
       className="minutes-chart"
       draw={(width, fit) => lineChart({ ...opts, width, ...fit })}
     />
+  );
+}
+
+function Unread({ what, error }: { what: string; error: string | null }) {
+  return (
+    <p className="cap-text" data-tone="dim">
+      {what} could not be read: {error}
+    </p>
   );
 }
 
@@ -193,12 +196,7 @@ export function WaitingChart() {
     { staleTime: 10 * 60_000 },
   );
   if (!load.data && load.loading) return null;
-  if (!load.data)
-    return (
-      <p className="cap-text" data-tone="dim">
-        Where waiting goes could not be read: {load.error}
-      </p>
-    );
+  if (!load.data) return <Unread what="Where waiting goes" error={load.error} />;
   const { rows, classes, shown, allHours } = waitRows(load.data.waits);
   if (!rows.length)
     return (
@@ -237,12 +235,7 @@ export function WaitingChart() {
 export function QueueChart() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
-  if (!data)
-    return (
-      <p className="cap-text" data-tone="dim">
-        The queue's last 14 days could not be read: {error}
-      </p>
-    );
+  if (!data) return <Unread what="The queue's last 14 days" error={error} />;
   const days = data.queue;
   if (!days.length) return null;
   const first = days[0]!;
@@ -394,12 +387,7 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
 export function CostChart() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
-  if (!data)
-    return (
-      <p className="cap-text" data-tone="dim">
-        Weekly cost could not be read: {error}
-      </p>
-    );
+  if (!data) return <Unread what="Weekly cost" error={error} />;
   const weeks = data.cost.weeks;
   if (!weeks.some((w) => w.usd !== null))
     return (
@@ -443,12 +431,7 @@ const MERGE_NAME: Record<(typeof MERGE_KINDS)[number], string> = {
 export function MergesChart() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
-  if (!data)
-    return (
-      <p className="cap-text" data-tone="dim">
-        Merges per week could not be read: {error}
-      </p>
-    );
+  if (!data) return <Unread what="Merges per week" error={error} />;
   const weeks = data.merges.weeks;
   const rollbacks = data.merges.rollbacks;
   const rows = weeks.flatMap((w) =>
@@ -499,12 +482,7 @@ const restoreWords = (s: number | null) =>
 export function DeploysTable() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
-  if (!data)
-    return (
-      <p className="cap-text" data-tone="dim">
-        Deploys could not be read: {error}
-      </p>
-    );
+  if (!data) return <Unread what="Deploys" error={error} />;
   const repos = data.deploys.repos;
   return (
     <Panel
@@ -611,11 +589,7 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
       : "No deploy in the window.",
     source: { name: "Cloudflare Workers analytics, hourly" },
   } as const;
-  return (
-    <ChartFrame
-      draw={(width, fit) => lineChart({ ...opts, width, ...fit })}
-    />
-  );
+  return <ChartFrame draw={(width, fit) => lineChart({ ...opts, width, ...fit })} />;
 }
 
 /** Health's Deploys tab: each deploy a point, each run of failed probes or of missing watcher
@@ -682,11 +656,7 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
     notes,
     source: { name: "Cloudflare deployments and the watcher's probes" },
   };
-  return (
-    <ChartFrame
-      draw={(width, fit) => timeline({ ...opts, width, ...fit })}
-    />
-  );
+  return <ChartFrame draw={(width, fit) => timeline({ ...opts, width, ...fit })} />;
 }
 
 /** Tonight's plan as a timeline, one lane per repo, as if it started when the plan was read:
@@ -734,11 +704,7 @@ export function TonightTimeline({ plan }: { plan: PortalPlan }) {
     label: `Tonight's plan, ${events.length} ${events.length === 1 ? "job" : "jobs"} by repo, as if it started when the plan was read (UTC)`,
     source: { name: "The overnight planner's estimates" },
   };
-  return (
-    <ChartFrame
-      draw={(width, fit) => timeline({ ...opts, width, ...fit })}
-    />
-  );
+  return <ChartFrame draw={(width, fit) => timeline({ ...opts, width, ...fit })} />;
 }
 
 // Drawn as a heat strip on the family ramp (capsomer/enarratio.css), a missing slot at its

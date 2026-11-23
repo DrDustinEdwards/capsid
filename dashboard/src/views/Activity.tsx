@@ -138,9 +138,7 @@ export function Activity() {
         }
       >
         {!data && load.loading ? (
-          <div className="loading" role="status">
-            <Spinner label="Reading the activity..." />
-          </div>
+          <Spinner layout="page" label="Reading the activity..." />
         ) : data && data.rows.length ? (
           <div className="cap-table-wrap">
             <table className="cap-table">

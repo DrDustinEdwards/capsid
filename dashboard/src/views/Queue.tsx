@@ -80,9 +80,7 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
       )}
       {data?.note && <Banner tone="warn">{data.note}</Banner>}
       {!data && load.loading ? (
-        <div className="loading" role="status">
-          <Spinner label="Reading the stale jobs..." />
-        </div>
+        <Spinner layout="page" label="Reading the stale jobs..." />
       ) : rows.length ? (
         <RowList label="Stuck jobs">
           {rows.map((j) => {

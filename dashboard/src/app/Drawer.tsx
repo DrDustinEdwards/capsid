@@ -54,9 +54,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
       <>
         <Head label="Audit row" title={`#${id}`} onClose={onClose} />
         <div className="cap-dialog-body cap-detail-body">
-          <div className="loading" role="status">
-            <Spinner label="Reading the row..." />
-          </div>
+          <Spinner layout="page" label="Reading the row..." />
         </div>
       </>
     );

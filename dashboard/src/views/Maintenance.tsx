@@ -84,9 +84,7 @@ export function Maintenance() {
     >
       {load.error && <Banner tone="crit">Could not read the Maintenance list: {load.error}</Banner>}
       {!data && load.loading ? (
-        <div className="loading" role="status">
-          <Spinner label="Reading the Maintenance list..." />
-        </div>
+        <Spinner layout="page" label="Reading the Maintenance list..." />
       ) : data && !data.generated ? (
         <div className="cap-text body" data-tone="dim">
           Not run yet.

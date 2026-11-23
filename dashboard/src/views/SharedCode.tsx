@@ -25,9 +25,7 @@ export function SharedCode() {
   return (
     <div className="cap-stack">
       {load.loading ? (
-        <div className="loading">
-          <Spinner label="Reading the shared packages" />
-        </div>
+        <Spinner layout="page" label="Reading the shared packages" />
       ) : load.error ? (
         <p role="alert">
           <Status tone="crit">Could not read the shared packages: {load.error}</Status>

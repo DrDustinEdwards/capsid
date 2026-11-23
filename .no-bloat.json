@@ -30,11 +30,11 @@
     "legacy": {},
     "size": {
       "dashboard/dev/mock-api.ts": 3237,
-      "dashboard/src/app/App.tsx": 704,
+      "dashboard/src/app/App.tsx": 700,
       "dashboard/src/app/ConfirmDialog.tsx": 552,
       "dashboard/src/lib/derive.ts": 543,
       "dashboard/src/views/SiteTraffic.tsx": 618,
-      "dashboard/src/views/TrendCharts.tsx": 943,
+      "dashboard/src/views/TrendCharts.tsx": 909,
       "explorer/src/explorer.css": 1722,
       "explorer/src/explorer.js": 561,
       "explorer/src/pages.mjs": 933,

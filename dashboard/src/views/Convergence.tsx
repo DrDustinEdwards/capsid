@@ -35,9 +35,7 @@ export function Convergence({ ns }: { ns: string }) {
         {load.error ? (
           <Banner tone="crit">Could not read site sync: {load.error}</Banner>
         ) : (
-          <div className="loading" role="status">
-            <Spinner label="Reading each site's operator API..." />
-          </div>
+          <Spinner layout="page" label="Reading each site's operator API..." />
         )}
       </Panel>
     );

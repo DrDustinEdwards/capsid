@@ -334,10 +334,6 @@ main .sev-crit[data-row]:focus-visible {
     inset var(--line-w-bar) 0 var(--crit),
     inset 0 0 0 var(--line-w) var(--accent-line);
 }
-.loading {
-  padding: var(--space-7-5) 0;
-  text-align: center;
-}
 @media (max-width: 820px) {
   .search {
     min-width: 0;

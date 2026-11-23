@@ -545,9 +545,7 @@ function PortalApp() {
         {error ? (
           <Banner tone="crit">Could not read the feed: {error}. It retries every minute.</Banner>
         ) : (
-          <div className="loading" role="status">
-            <Spinner label="Reading the feed..." />
-          </div>
+          <Spinner layout="page" label="Reading the feed..." />
         )}
       </div>
     );
@@ -563,9 +561,7 @@ function PortalApp() {
         <Suspense
           fallback={
             <div className="cap-admin-page">
-              <div className="loading" role="status">
-                <Spinner label="Loading..." />
-              </div>
+              <Spinner layout="page" label="Loading..." />
             </div>
           }
         >

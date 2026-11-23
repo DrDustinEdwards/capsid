@@ -69,9 +69,7 @@ export function Tonight() {
         </Banner>
       )}
       {!plan && load.loading ? (
-        <div className="loading" role="status">
-          <Spinner label="Reading tonight's plan..." />
-        </div>
+        <Spinner layout="page" label="Reading tonight's plan..." />
       ) : plan && (planned || plan.skipped.length) ? (
         <>
           {planned > 0 && (
@@ -163,9 +161,7 @@ export function SinceLastLooked() {
     <Panel title="Since you last looked" id="since" src={`since ${ago(parse(since), now)}`}>
       <Failed what="the digest" error={load.error} />
       {!d && load.loading ? (
-        <div className="loading" role="status">
-          <Spinner label="Reading what happened..." />
-        </div>
+        <Spinner layout="page" label="Reading what happened..." />
       ) : d ? (
         <div>
           <p data-digest="">

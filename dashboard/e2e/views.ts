@@ -25,7 +25,7 @@ export async function visit(page: Page, id: Place): Promise<void> {
   const label = ALL_VIEWS.find((v) => v.id === view)!.label;
   await page.goto(urlOf(id));
   await expect(page.getByRole("heading", { level: 1, name: label })).toBeVisible();
-  await expect(page.locator("main .loading")).toHaveCount(0);
+  await expect(page.locator("main .cap-spinner[data-layout='page']")).toHaveCount(0);
 }
 
 export interface Overflow {

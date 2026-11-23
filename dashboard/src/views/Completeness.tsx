@@ -61,23 +61,13 @@ export function Completeness() {
   const load = useAnswer<CompletenessView>(["completeness"], fetchCompleteness);
   const data = load.data;
   if (load.loading && !data) {
-    return (
-      <div className="loading">
-        <Spinner label="Reading the scoreboard" />
-      </div>
-    );
-  }
-  if (load.error && !data) {
-    return (
-      <p role="alert">
-        <Status tone="crit">Could not read the scoreboard: {load.error}</Status>
-      </p>
-    );
+    return <Spinner layout="page" label="Reading the scoreboard" />;
   }
   if (!data || data.error) {
-    return data?.error ? (
+    const err = data?.error ?? load.error;
+    return err ? (
       <Empty kind="failed" title="No scoreboard to show.">
-        {data.error}
+        {err}
       </Empty>
     ) : (
       <Empty kind="nothing-yet" title="No scoreboard to show." />

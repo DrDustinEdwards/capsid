@@ -303,7 +303,10 @@ function board(tools) {
   return `<section class="board cap-page" aria-labelledby="board-title">
 <h2 id="board-title">Agents use only what you allow</h2>
 <div class="board-panel" data-ui data-board data-read>
-<p class="board-count" role="status" data-board-count>${reachSentence(tools.map((t) => t.grant), held)}</p>
+<p class="board-count" role="status" data-board-count>${reachSentence(
+    tools.map((t) => t.grant),
+    held,
+  )}</p>
 <div class="board-cols">${cols}</div>
 </div>
 </section>`;
