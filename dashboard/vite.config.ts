@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { defineConfig, type Plugin } from "vite";
 import { mockOpsApi } from "./dev/mock-api.ts";
 
-// The Portal, server-rendered by React Router inside the capsid Worker (src/portal-render.ts
+// The Portal, server-rendered by React Router inside the capsid Worker (src/portal-app.ts
 // there; react-router.config.ts). The build writes build/client (the hashed files under
 // assets/, served from the Worker's assets) and build/server, which src/worker.ts wraps into the
 // one module the Worker bundles (npm run build:worker). The page's CSP carries a per-request
