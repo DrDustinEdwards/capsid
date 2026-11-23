@@ -1,10 +1,9 @@
 import { createContext, useContext } from "react";
 import type { OpsFeed, PortalAction, PortalPerformed } from "../types";
 
-// Eleven pages, grouped by what a person is doing (the Portal audit and new map, ruled
-// 2026-11-06): Needs you and Health; Sites, one page for every site and one for each; Pull
-// requests, Jobs and Projects; Activity, Agents, Packages and Library; Settings last, which
-// holds preferences only. The ids are internal; the labels are the menu's words (the Queue is
+// Eleven pages; the menu groups them (app/App.tsx GROUPS): Needs you and Health; Sites, one
+// page for every site and one for each; Pull requests and Projects; Activity, Jobs, Agents,
+// Packages and Library; Settings last, which holds preferences only. The ids are internal; the labels are the menu's words (the Queue is
 // "Jobs"). There is no redirect for an old address (pre-launch: no legacy shims).
 export const VIEWS = [
   { id: "needs", label: "Needs you", key: "y" },

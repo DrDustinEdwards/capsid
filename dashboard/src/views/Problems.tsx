@@ -3,7 +3,7 @@ import "capsomer/row-list.css";
 import "capsomer/attention-list.css";
 import { rowLink } from "../lib/router";
 import { useApp } from "../app/ctx";
-import { attentionList, WAITING_KINDS } from "../lib/derive";
+import { attentionList } from "../lib/derive";
 
 // What is broken or needs looking at, worst first, as Capsomer's attention list: like rows
 // fold into one that opens in place, warnings past the first eight wait behind "N more",
@@ -11,7 +11,7 @@ import { attentionList, WAITING_KINDS } from "../lib/derive";
 // list above, so it is left out here.
 export function Problems() {
   const { feed, now, href } = useApp();
-  const { items, groups } = attentionList(feed, now, href, WAITING_KINDS);
+  const { items, groups } = attentionList(feed, now, href);
   return (
     <div id="attention">
       <AttentionList

@@ -95,31 +95,11 @@ main {
 .batch-list {
   list-style: decimal;
 }
-/* Trends, folded at the foot. Open, it keeps room for its charts while they load. */
-.trends {
-  border: var(--line-w) solid var(--line);
-  border-radius: var(--radius-l);
-  background: var(--surface);
-}
-.trends > summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
-  padding: var(--space-3-5) var(--space-5);
-  min-height: 44px;
-  font-weight: var(--weight-semibold);
-  list-style: none;
-}
 summary {
   cursor: pointer;
 }
-.trends > summary::-webkit-details-marker,
 summary.cap-btn::-webkit-details-marker {
   display: none;
-}
-.trends > summary .cap-text {
-  font-weight: var(--weight-regular);
 }
 details[open] > summary .chev {
   transform: rotate(45deg);
@@ -127,10 +107,6 @@ details[open] > summary .chev {
 /* The buttons a disclosure opens sit a row's gap under its summary. */
 details > summary + .cap-cluster {
   margin-block-start: var(--space-3);
-}
-.trends-body {
-  padding: var(--space-2) var(--space-5) 0;
-  min-height: 320px;
 }
 
 /* Shared code: the read line, each package's users, and its local copies. */

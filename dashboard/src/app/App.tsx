@@ -32,7 +32,7 @@ import {
   signOutRequest,
   useOpsFeed,
 } from "../lib/api";
-import { WAITING_KINDS, attentionItems, counts, hasSites, passStale } from "../lib/derive";
+import { attentionItems, counts, hasSites, passStale } from "../lib/derive";
 import { ago } from "../lib/format";
 import { parse, serverNow, utc } from "capsomer/behavior/time";
 import { toggleTheme } from "capsomer/behavior/theme-switch";
@@ -76,14 +76,15 @@ const ShortcutSheet = lazy(() =>
 // (Capsomer has no Menu tab yet), Settings among them.
 const TABS: ViewId[] = ["needs", "health", "prs"];
 
-// The menu's groups (the Portal audit's new map, 2026-11-06): Now, Sites, Work, Records, then
+// The menu's groups (the Portal audit's new map, 2026-11-06; Jobs under Records since the
+// reorganization of 2026-11-23, the job runner retired): Now, Sites, Work, Records, then
 // Settings at the foot, with no heading of its own. It is also in the avatar's menu, with its
 // g then e shortcut and its command-menu entry.
 const GROUPS: Array<{ label?: string; views: ViewId[] }> = [
   { label: "Now", views: ["needs", "health"] },
   { label: "Sites", views: ["sites"] },
-  { label: "Work", views: ["prs", "queue", "projects"] },
-  { label: "Records", views: ["activity", "agents", "packages", "library"] },
+  { label: "Work", views: ["prs", "projects"] },
+  { label: "Records", views: ["activity", "queue", "agents", "packages", "library"] },
   { views: ["settings"] },
 ];
 
@@ -488,9 +489,7 @@ function PortalApp() {
   // else, so no menu entry counts it (Pull requests' waiting pull requests among them).
   // Health counts the critical problems, session incidents included (derive.ts), leaving
   // out what waits on you.
-  const critCount = feed
-    ? attentionItems(feed, now).filter((x) => x.sev === "crit" && !WAITING_KINDS.has(x.kind)).length
-    : 0;
+  const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit").length : 0;
   const badge: Partial<Record<ViewId, { n: number; cls: string }>> =
     c && feed
       ? {

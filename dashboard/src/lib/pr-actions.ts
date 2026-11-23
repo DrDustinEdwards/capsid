@@ -1,16 +1,11 @@
 import type { BatchItem, ConfirmRequest } from "../app/ctx";
 import type { OpsAwaitingSeat, OpsFeed } from "../types";
 
-// A pull request waiting for you (live.awaiting_seat), and the two existing controls that
-// decide it: approve_pr and pr_close. Pull requests and Needs you build the same requests
-// here, so a row approves the same way wherever it is.
+// A pull request waiting for you (live.awaiting_seat), and the two controls that decide it:
+// approve_pr and pr_close.
 
 export function prName(a: Pick<OpsAwaitingSeat, "repo" | "number">): string {
   return `${a.repo} #${a.number}`;
-}
-
-export function prUrl(a: Pick<OpsAwaitingSeat, "repo" | "number">): string {
-  return `https://github.com/${a.repo}/pull/${a.number}`;
 }
 
 // The id a pull request's row or card carries, so an alert or a link can name it.

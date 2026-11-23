@@ -61,11 +61,11 @@ export const MAX_DEVICES = 10;
 export const PORTAL_URL = `https://${PORTAL_HOST}/`;
 
 // Where a tap lands: the item itself on the Portal, not its home page (the UX audit's M2).
-// A pull request's card on Pull requests carries the anchor the dashboard builds
+// A pull request's row on Needs you carries the anchor the dashboard builds
 // (dashboard/src/lib/pr-actions.ts, prAnchor); a job opens in its drawer on Jobs.
 const portalPath = (path: string) => `https://${PORTAL_HOST}${path}`;
 const prUrl = (repo: string, number: number) =>
-  portalPath(`/prs#pr-${repo.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${number}`);
+  portalPath(`/#pr-${repo.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${number}`);
 const jobUrl = (id: string) => portalPath(`/queue/job/${encodeURIComponent(id)}`);
 // A site's own page (/sites/<namespace>), at a tab when one is named.
 const siteUrl = (namespace: string, tab?: "deploys") =>

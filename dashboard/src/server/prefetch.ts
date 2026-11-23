@@ -79,14 +79,7 @@ function specsFor(
   const out: Spec[] = [];
   switch (view) {
     case "needs":
-      out.push(namespaces, trends, {
-        key: ["claims", "waits"],
-        path: `/claims${qs({ since: new Date(generated - 14 * DAY).toISOString() })}`,
-      });
-      out.push({
-        key: [LIVE, "digest", digestSince(generated)],
-        path: `/digest${qs({ since: digestSince(generated) })}`,
-      });
+      out.push(namespaces, { key: [LIVE, "merge-units"], path: "/merge-units" });
       break;
     case "health":
       out.push(trends, { key: ["maintenance"], path: "/maintenance" });
@@ -148,10 +141,21 @@ function specsFor(
     case "activity": {
       const namespace = p.get("namespace") ?? "";
       const actor = p.get("actor") ?? "";
-      out.push({
-        key: ["activity", namespace, actor],
-        path: `/activity${qs({ namespace, actor })}`,
-      });
+      out.push(
+        {
+          key: ["activity", namespace, actor],
+          path: `/activity${qs({ namespace, actor })}`,
+        },
+        trends,
+        {
+          key: ["claims", "waits"],
+          path: `/claims${qs({ since: new Date(generated - 14 * DAY).toISOString() })}`,
+        },
+        {
+          key: [LIVE, "digest", digestSince(generated)],
+          path: `/digest${qs({ since: digestSince(generated) })}`,
+        },
+      );
       break;
     }
     case "agents":

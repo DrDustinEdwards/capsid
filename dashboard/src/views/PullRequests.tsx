@@ -1,28 +1,18 @@
 import { AwayLink } from "capsomer/react/link";
-import { Row, RowList } from "capsomer/react/row-list";
-import "capsomer/row-list.css";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { useApp } from "../app/ctx";
-import { KIND_STATUS, type Kind } from "../lib/derive";
-import { checkWords } from "../../../src/check-words";
-import { age, ago } from "../lib/format";
+import { KIND_STATUS } from "../lib/derive";
+import { ago } from "../lib/format";
 import { parse, utc } from "capsomer/behavior/time";
 import { Status } from "capsomer/react/status";
 import { Panel } from "capsomer/react/panel";
 import { Empty } from "capsomer/react/empty";
-import {
-  approveRequest,
-  canApprove,
-  closeRequest,
-  prAnchor,
-  prName,
-  prUrl,
-} from "../lib/pr-actions";
 import { PageHead } from "./shared";
-import type { OpsAwaitingSeat, PortalMergeUnits } from "../types";
 import { LIVE, fetchMergeUnits } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
+import { UNIT_STATE, UnitButtons, resumeRequest, signPolicyRequest } from "./automerge";
+import { unitRows } from "../lib/merge-units";
 
 function prLabel(url: string): string {
   const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);
@@ -32,28 +22,16 @@ function prLabel(url: string): string {
 // Chart 7, merges per week by who acted, loads the same way for Pull requests.
 const MergesChart = trendChart("MergesChart");
 
-// Pull requests (design section 2; the UX audit of 2026-10-19, B2 and m6): what waits for
-// you first, each pull request a row on a wide screen and a card with full-width Approve and
-// Close on a phone; then Auto-merge (the signed policy and its Load from repo and sign, and
-// the safety meter), the pull requests recorded in the last 7 days, and the chart
-// last. The default-branch table is on Health.
+// Pull requests: Auto-merge (the signed policy and its Load from repo and sign, the safety
+// meter and the merge units), the pull requests recorded in the last 7 days, and the chart
+// last. What waits for you, pull requests and auto-merge's asks, is on Needs you; the
+// default-branch table is on Health.
 export function PullRequests() {
   const { feed, now, confirm } = useApp();
   const live = feed.live;
   return (
     <div className="cap-admin-page">
       <PageHead title="Pull requests" />
-      <Panel flush title="Waiting for you" id="waiting-prs" count={live.awaiting_seat.length}>
-        {live.awaiting_seat.length ? (
-          <RowList label="Pull requests waiting for you">
-            {live.awaiting_seat.map((a) => (
-              <WaitingPr key={`${a.repo}-${a.number}`} a={a} />
-            ))}
-          </RowList>
-        ) : (
-          <Empty kind="all-clear" title="No pull request is waiting for you." />
-        )}
-      </Panel>
       {/* Auto-merge, one section: whether the signed policy loads, then the safety meter.
           A pause alert opens it (src/push.ts, /prs#auto-merge). */}
       <div className="cap-stack" id="auto-merge">
@@ -76,17 +54,7 @@ export function PullRequests() {
               </>
             )}
             <div className="cap-cluster" data-gap="3">
-              <button
-                type="button"
-                className="cap-btn"
-                onClick={() =>
-                  confirm({
-                    action: "sign_policy_from_repo",
-                    params: {},
-                    title: "Load the auto-merge policy from the repo and sign it",
-                  })
-                }
-              >
+              <button type="button" className="cap-btn" onClick={() => confirm(signPolicyRequest)}>
                 Load from repo and sign
               </button>
             </div>
@@ -162,13 +130,7 @@ export function PullRequests() {
                             type="button"
                             className="cap-btn"
                             aria-label={`Resume auto-merge for ${n.namespace}`}
-                            onClick={() =>
-                              confirm({
-                                action: "automerge_resume",
-                                params: { namespace: n.namespace },
-                                title: `Resume auto-merge for ${n.namespace}`,
-                              })
-                            }
+                            onClick={() => confirm(resumeRequest(n.namespace))}
                           >
                             Resume
                           </button>
@@ -266,43 +228,9 @@ export function PullRequests() {
 
 // The merge units (a project and a kind of change, such as sample/docs; src/merge-units.ts):
 // those the signed policy promotes to auto, those suspended after a rollback of an unattended
-// merge, and the tick's promote and demote proposals. Each row offers its control: Demote and
-// Promote sign the policy's next version (sign_policy_change, the version typed), and Lift
-// suspension is unit_resume, with a reason. docs/autonomy.md, "Earned promotion and demotion".
-type UnitRow = {
-  unit: string;
-  state: "auto" | "suspended" | "promote" | "demote";
-  why: string;
-};
-
-function unitRows(promoted: readonly string[], units: PortalMergeUnits): UnitRow[] {
-  const rows = new Map<string, UnitRow>();
-  for (const u of promoted) rows.set(u, { unit: u, state: "auto", why: "" });
-  for (const p of units.proposals) {
-    // A demote proposal is for a unit in the list; a promote one for a unit not yet in it.
-    if (p.kind === "demote" && !rows.has(p.unit)) continue;
-    rows.set(p.unit, { unit: p.unit, state: p.kind, why: p.title });
-  }
-  for (const s of units.suspended) {
-    const row = rows.get(s.unit);
-    rows.set(s.unit, {
-      unit: s.unit,
-      state: "suspended",
-      why: row?.state === "demote" ? row.why : s.reason,
-    });
-  }
-  return [...rows.values()].sort((a, b) => a.unit.localeCompare(b.unit));
-}
-
-const UNIT_STATE: Record<UnitRow["state"], { kind: Kind; label: string }> = {
-  auto: { kind: "ok", label: "Auto" },
-  suspended: { kind: "warn", label: "Suspended" },
-  promote: { kind: "queued", label: "Ready to promote" },
-  demote: { kind: "warn", label: "Proposed for removal" },
-};
-
+// merge, and the tick's promote and demote proposals, each with its buttons (./automerge).
 function MergeUnits() {
-  const { feed, confirm } = useApp();
+  const { feed } = useApp();
   // Its own read (GET /portal/api/merge-units), again with each feed, so a lift drops its row.
   const load = useAnswer([LIVE, "merge-units"], fetchMergeUnits);
   const policy = feed.live.merge_policy;
@@ -319,15 +247,6 @@ function MergeUnits() {
       </Panel>
     );
   const rows = unitRows(policy.units, units);
-  const next = String(Number(policy.version) + 1);
-  const sign = (change: "promote" | "demote", unit: string) =>
-    confirm({
-      action: "sign_policy_change",
-      params: { change, unit },
-      title:
-        change === "promote" ? `Promote ${unit} to auto-merge` : `Remove ${unit} from auto-merge`,
-      confirmHelp: `The policy's next version, ${next}. It decides what merges with no human, so it is typed, not clicked.`,
-    });
   const suspended = new Set(units.suspended.map((s) => s.unit));
   return (
     <Panel
@@ -353,7 +272,6 @@ function MergeUnits() {
             <tbody>
               {rows.map((r) => {
                 const st = UNIT_STATE[r.state];
-                const listed = policy.units.includes(r.unit);
                 return (
                   <tr key={r.unit}>
                     <td className="cap-mono nowrap">{r.unit}</td>
@@ -364,45 +282,7 @@ function MergeUnits() {
                       {r.why}
                     </td>
                     <td>
-                      <span className="cap-cluster" data-gap="3">
-                        {suspended.has(r.unit) && (
-                          <button
-                            type="button"
-                            className="cap-btn"
-                            aria-label={`Lift the suspension of ${r.unit}`}
-                            onClick={() =>
-                              confirm({
-                                action: "unit_resume",
-                                params: { unit: r.unit },
-                                title: `Lift the suspension of ${r.unit}`,
-                              })
-                            }
-                          >
-                            Lift suspension
-                          </button>
-                        )}
-                        {r.state === "promote" && (
-                          <button
-                            type="button"
-                            className="cap-btn"
-                            data-variant="primary"
-                            aria-label={`Promote ${r.unit}`}
-                            onClick={() => sign("promote", r.unit)}
-                          >
-                            Promote
-                          </button>
-                        )}
-                        {listed && (
-                          <button
-                            type="button"
-                            className="cap-btn"
-                            aria-label={`Demote ${r.unit}`}
-                            onClick={() => sign("demote", r.unit)}
-                          >
-                            Demote
-                          </button>
-                        )}
-                      </span>
+                      <UnitButtons row={r} policy={policy} suspended={suspended.has(r.unit)} />
                     </td>
                   </tr>
                 );
@@ -414,90 +294,5 @@ function MergeUnits() {
         <Empty kind="all-clear" title="No units." />
       )}
     </Panel>
-  );
-}
-
-// One pull request waiting for you, a Capsomer row. Its buttons are the same controls Needs
-// you uses (lib/pr-actions.ts); on a phone they sit under it, full width.
-function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
-  const { now, confirm } = useApp();
-  const name = prName(a);
-  return (
-    <Row
-      status={
-        <Status tone="warn" wrap>
-          {checkWords(a.failed)}
-        </Status>
-      }
-      id={prAnchor(a)}
-      title={<span className="cap-mono">{name}</span>}
-      href={prUrl(a)}
-      renderLink={({ children, ...props }) => (
-        <AwayLink {...props} newTab>
-          {children}
-        </AwayLink>
-      )}
-      detail={
-        <>
-          {a.why}
-          {a.visual && <VisualLook visual={a.visual} />}
-        </>
-      }
-      meta={`${a.namespace} · waiting ${age(parse(a.at), now)}`}
-      actions={
-        <>
-          {canApprove(a) && (
-            <button
-              type="button"
-              className="cap-btn"
-              data-variant="primary"
-              aria-label={`Approve ${name}`}
-              onClick={() => confirm(approveRequest(a))}
-            >
-              Approve
-            </button>
-          )}
-          <button
-            type="button"
-            className="cap-btn"
-            aria-label={`Close ${name}`}
-            onClick={() => confirm(closeRequest(a))}
-          >
-            Close
-          </button>
-          {!canApprove(a) && a.class === "typed" && (
-            <span className="cap-text" data-tone="dim" data-size="small">
-              Approve in chat
-            </span>
-          )}
-        </>
-      }
-    />
-  );
-}
-
-// What a visual pull request shows before Dustin approves it (src/visual-pr.ts,
-// job_0368576da167): its live preview and its screenshots, read from the pull request. They
-// open in a new tab as links, since the Portal's CSP loads no image from another origin.
-function VisualLook({ visual }: { visual: NonNullable<OpsAwaitingSeat["visual"]> }) {
-  return (
-    <span className="visual-look">
-      <span>{visual.title}</span>
-      {visual.preview && (
-        <AwayLink href={visual.preview} newTab>
-          Open the preview
-        </AwayLink>
-      )}
-      {visual.shots.map((src, i) => (
-        <AwayLink key={src} href={src} newTab>
-          Screenshot {i + 1}
-        </AwayLink>
-      ))}
-      {!visual.preview && !visual.shots.length && (
-        <span className="cap-text" data-tone="dim">
-          No preview.
-        </span>
-      )}
-    </span>
   );
 }

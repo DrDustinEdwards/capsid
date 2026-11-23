@@ -3,7 +3,7 @@ import { visit } from "./views.ts";
 
 // Needs you, the home (docs/design/design-portal-evaluation.md DECIDE 1; the UX audit of
 // 2026-10-19, B1, B3 and M3): everything waiting for you first, by kind, each row deciding
-// in place through the existing controls; then Problems; the charts folded at the foot.
+// in place through the existing controls; then Problems.
 
 const PREVIEW_URL = "**/api/actions/preview";
 const PERFORM_URL = "**/api/actions/perform";
@@ -36,29 +36,21 @@ const waiting = (page: Page) => page.locator("#waiting");
 const group = (page: Page, id: string) => page.locator(`[data-group="${id}"]`);
 const dialog = (page: Page) => page.locator("dialog.confirm");
 
-test("PLANT: the home is Needs you, the list comes first by kind, and the charts are folded at the foot", async ({
-  page,
-}) => {
+test("PLANT: the home is Needs you, and the list comes first by kind", async ({ page }) => {
   await page.goto("./");
   await expect(page.getByRole("heading", { level: 1, name: "Needs you" })).toBeVisible();
   await expect(waiting(page).locator(".cap-group-heading")).toHaveText([
     /^Pull requests, ?2/,
+    /^Auto-merge, ?3/,
     /^Questions and blocked jobs, ?3/,
     /^Paused after repeated failures, ?1/,
     /^Also waiting, ?2/,
   ]);
-  // The list is above Problems and Trends, and nothing above it waits on a chart.
+  // The list is above Problems.
   const order = await page.evaluate(() =>
-    ["#waiting", "#attention", "#trends"].map(
-      (s) => document.querySelector(s)!.getBoundingClientRect().top,
-    ),
+    ["#waiting", "#attention"].map((s) => document.querySelector(s)!.getBoundingClientRect().top),
   );
   expect(order[0]).toBeLessThan(order[1]!);
-  expect(order[1]).toBeLessThan(order[2]!);
-  await expect(page.locator("#trends")).not.toHaveAttribute("open", "");
-  // Drawn on the server inside the fold, so they are there with scripts off once it is opened.
-  await expect(page.locator("#trends .cap-chart")).toHaveCount(2);
-  await expect(waiting(page).getByText(/^Nothing waiting: /)).toContainText("Sample D");
   // The inbox's count is the header's Inbox, once; the menu entry carries no second copy.
   await expect(
     page.locator("header.cap-site-header").getByRole("link", { name: "Inbox, 7 waiting on you" }),
@@ -77,24 +69,13 @@ test("PLANT: the home is Needs you, the list comes first by kind, and the charts
   ).toHaveCount(0);
 });
 
-test("PLANT: the list does not move once the page has loaded, and Trends draws its charts in reserved room", async ({
-  page,
-}) => {
+test("PLANT: the list does not move once the page has loaded", async ({ page }) => {
   await page.goto("./");
   const h = page.locator('[data-group="w-prs"] .cap-group-heading');
   await expect(h).toBeVisible();
   const before = await h.evaluate((el) => el.getBoundingClientRect().top);
   await page.waitForTimeout(1500);
   expect(await h.evaluate((el) => el.getBoundingClientRect().top)).toBe(before);
-  const body = page.locator("#trends .trends-body");
-  await page.locator("#trends > summary").click();
-  await expect(page.locator("#trends")).toHaveAttribute("open", "");
-  expect(await body.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(
-    300,
-  );
-  await expect(
-    page.locator("#trends .minutes-chart, #trends .wait-chart, #trends .minutes-none").first(),
-  ).toBeVisible();
 });
 
 test("PLANT: Approve on a pull request row previews approve_pr at the head the tick judged, then performs", async ({
@@ -253,6 +234,22 @@ test("Resume on a blocked job row previews resume_job; its title opens its panel
   await expect(page.locator("dialog.drawer[open]")).toBeVisible();
 });
 
+test("PLANT: auto-merge's asks are here, each opening its control: Resume, Promote, Lift suspension", async ({
+  page,
+}) => {
+  await visit(page, "needs");
+  const g = group(page, "w-automerge");
+  for (const [button, title] of [
+    ["Resume auto-merge for sample-c", "Resume auto-merge for sample-c"],
+    ["Promote sample-b/tests", "Promote sample-b/tests to auto-merge"],
+    ["Lift the suspension of sample-c/docs", "Lift the suspension of sample-c/docs"],
+  ] as const) {
+    await g.getByRole("button", { name: button }).click();
+    await expect(dialog(page)).toContainText(title);
+    await dialog(page).getByRole("button", { name: "Cancel" }).click();
+  }
+});
+
 test("PLANT: a stopped queue is here with Reset, which previews reset_breaker for its namespace", async ({
   page,
 }) => {
@@ -291,7 +288,7 @@ test.describe("on a touch phone", () => {
   });
 });
 
-test("with nothing waiting it says so, and every app is named as quiet", async ({ page }) => {
+test("with nothing waiting it says so", async ({ page }) => {
   // The page's first reads are the server's: the mock answers "nothing waits" to this cookie.
   await page
     .context()
@@ -299,7 +296,6 @@ test("with nothing waiting it says so, and every app is named as quiet", async (
   await visit(page, "needs");
   await expect(waiting(page).getByText("Nothing needs you.")).toBeVisible();
   await expect(waiting(page).locator(".cap-group")).toHaveCount(0);
-  await expect(waiting(page).getByText(/^Nothing waiting: /)).toContainText("Sample A");
 });
 
 test("a preview refused for one ticked row still lists the others, and names the refusal", async ({

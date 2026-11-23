@@ -2,7 +2,7 @@ import { Suspense, lazy, type ReactNode } from "react";
 import { Link } from "../lib/router";
 import { arrange } from "capsomer/behavior/attention-list";
 import { HEALTH_TABS, tabOf, useApp, type HealthTab } from "../app/ctx";
-import { WAITING_KINDS, attentionList, siteScripts } from "../lib/derive";
+import { attentionList, siteScripts } from "../lib/derive";
 import { Verdict } from "capsomer/react/verdict";
 import "capsomer/verdict.css";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
@@ -69,7 +69,7 @@ function TabPanel({ tab }: { tab: HealthTab }): ReactNode {
 // you is not one of them: it is in Waiting for you), so the two pages never disagree.
 function HealthVerdict() {
   const { feed, now, open, href } = useApp();
-  const { items, groups } = attentionList(feed, now, href, WAITING_KINDS);
+  const { items, groups } = attentionList(feed, now, href);
   // Every problem, none held back behind "more": the verdict names the first few itself.
   const { problems } = arrange(items, { groups, rows: Infinity });
   return (

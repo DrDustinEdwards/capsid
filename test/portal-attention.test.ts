@@ -7,7 +7,7 @@ import type { OpsFeed } from "../src/ops-types/feed.ts";
 // The Problems list's rows, tiered (dashboard/src/lib/derive.ts, attentionList and
 // blockedOrder; the folding is Capsomer's arrange, tested there; capsid/research/audit-ui-patterns.md, rulings 3 and
 // 10). Built on the dashboard's own sample feed (fake data), reshaped per test.
-const { attentionList, blockedOrder, STALE_BLOCKED_MS, WAITING_KINDS } =
+const { attentionList, blockedOrder, STALE_BLOCKED_MS } =
   await import("../dashboard/src/lib/derive.ts");
 
 const SAMPLE = readFileSync(
@@ -21,17 +21,18 @@ function feed(): { f: OpsFeed; now: number } {
   return { f, now: Date.parse(f.live.generated) };
 }
 
-const list = (f: OpsFeed, now: number, skip?: ReadonlySet<string>) =>
-  attentionList(f, now, (ref) => `/open/${ref}`, skip);
+const list = (f: OpsFeed, now: number) => attentionList(f, now, (ref) => `/open/${ref}`);
 
-test("PLANT: with WAITING_KINDS skipped, Problems hold nothing Needs you lists with its buttons", () => {
+test("PLANT: Problems hold nothing Needs you lists with its buttons", () => {
   const { f, now } = feed();
-  const kind = (d?: string) => d?.split(" · ")[0] ?? "";
-  const all = list(f, now).items.map((r) => kind(r.detail));
-  for (const k of ["Queue", "PR"]) assert.ok(all.includes(k), `the sample has a ${k} row to skip`);
-  const left = list(f, now, WAITING_KINDS).items.map((r) => kind(r.detail));
+  assert.ok(
+    f.live.jobs.some((j) => j.status === "blocked"),
+    "the sample has a blocked job",
+  );
+  assert.ok(f.live.awaiting_seat.length > 0, "the sample has a pull request waiting");
+  const left = list(f, now).items.map((r) => r.detail?.split(" · ")[0] ?? "");
   assert.deepEqual(
-    left.filter((k) => WAITING_KINDS.has(k)),
+    left.filter((k) => ["Queue", "PR", "Breaker"].includes(k)),
     [],
   );
   assert.ok(left.length > 0, "the other problems stay");
