@@ -5,10 +5,10 @@ import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
 import { useApp } from "../app/ctx";
 import { fetchConvergence } from "../lib/api";
-import { useAnswer, type Load } from "capsomer/react/data";
+import { useAnswer } from "capsomer/react/data";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
-import type { ConvergenceCheck, ConvergenceSite, PortalConvergence } from "../types";
+import type { ConvergenceCheck, ConvergenceSite } from "../types";
 import { Status } from "capsomer/react/status";
 import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
@@ -20,17 +20,10 @@ import "capsomer/detail-panel.css";
 // every control, the allowlist enforced in the Worker. Nothing on this panel is a value
 // of a secret; the Worker never sends one.
 
-function useConvergence(): {
-  load: Load<PortalConvergence>;
-  reread: () => void;
-} {
-  const load = useAnswer(["convergence"], fetchConvergence);
-  return { load, reread: load.reread };
-}
-
 // One site's Sync and repairs tab. A site that has not opted in says so.
 export function Convergence({ ns }: { ns: string }) {
-  const { load, reread } = useConvergence();
+  const load = useAnswer(["convergence"], fetchConvergence);
+  const { reread } = load;
   const data = load.data;
   const sites = data ? data.sites.filter((s) => s.namespace === ns) : [];
   if (data && sites.length === 0) {
@@ -143,7 +136,7 @@ function SitePanel({
       )}
       {site.status && (
         <div className="body cap-stack" data-gap="4">
-          <h3 className="conv-h">Operator sync_status</h3>
+          <h3>Operator sync_status</h3>
           {site.status.error ? (
             <Alert tone="neutral">
               <Status tone="nodata">Not read</Status> {site.status.error}
@@ -159,7 +152,7 @@ function SitePanel({
       )}
       {site.recent.length > 0 && (
         <div className="body cap-stack" data-gap="4">
-          <h3 className="conv-h">Recent repairs</h3>
+          <h3>Recent repairs</h3>
           <ul className="plain">
             {site.recent.map((r, i) => (
               <li key={`${r.at}|${i}`}>
@@ -264,7 +257,7 @@ function Checks({
 // The site's Worker secrets by name, set or not, against what its configuration names: on
 // the site's Setup tab, from the same read.
 export function SiteSecrets({ ns }: { ns: string }) {
-  const { load } = useConvergence();
+  const load = useAnswer(["convergence"], fetchConvergence);
   const site = load.data?.sites.find((s) => s.namespace === ns);
   if (!site?.secrets) return null;
   return (

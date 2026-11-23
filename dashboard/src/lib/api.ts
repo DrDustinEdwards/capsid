@@ -407,14 +407,14 @@ export function fetchPlan(): Promise<Answer<PortalPlan>> {
   return getAnswer<PortalPlan>(PLAN_URL);
 }
 
-// GET /portal/api/digest?since=: what finished, blocked and is ready since then, the
-// reader behind jobs list view digest.
 /** The digest's default window: the 24 hours before `now`. Here, not in views/Overnight, so the
  * server prefetch every page runs does not pull the Overnight views into the first load. */
 export function digestSince(now: number): string {
   return new Date(now - DAY).toISOString();
 }
 
+// GET /portal/api/digest?since=: what finished, blocked and is ready since then, the
+// reader behind capsid_work_jobs list view digest.
 export function fetchDigest(since: string): Promise<Answer<PortalDigest>> {
   return getAnswer<PortalDigest>(`${DIGEST_URL}?since=${encodeURIComponent(since)}`);
 }

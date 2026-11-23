@@ -23,7 +23,7 @@ export type PortalRead = (path: string) => Promise<Response>;
 
 export interface PortalServer {
   /** The Portal's reads for this request: the Worker's own /portal/api routes with the
-   *  visitor's session, or the demo's sample answers (src/portal-render.ts in the Worker). */
+   *  visitor's session, or the demo's sample answers (src/portal-app.ts in the Worker). */
   read: PortalRead;
   /** This response's Content-Security-Policy nonce, for every script the page renders. */
   nonce: string;

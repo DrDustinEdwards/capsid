@@ -137,7 +137,7 @@ function isOpen(j: OpsJob): boolean {
 }
 
 export function resumeCall(j: OpsJob): string {
-  return `jobs action "resume" id "${j.id}" namespace "${j.namespace}" reason "<what you did>"`;
+  return `capsid_work_jobs action "resume" id "${j.id}" namespace "${j.namespace}" reason "<what you did>"`;
 }
 
 export function ciState(c: CiObservation): { kind: Kind; label: string; red: boolean } {
@@ -421,7 +421,6 @@ function worstFirst(a: { sev: Sev; at: number }, b: { sev: Sev; at: number }): n
   return RANK[a.sev] - RANK[b.sev] || b.at - a.at;
 }
 
-//
 // Two tiers. A problem (critical or warning) needs a person; a notice (missing data, a
 // check that could not run, CI that could not be read, site map drift, a silent
 // driver) is a fact with nothing to do now. Session incidents join as problems when
@@ -473,7 +472,6 @@ export function attentionList(
   return { items, groups };
 }
 
-//
 // Priority first (high first), then the newest update first. A job blocked for more than
 // 7 days goes after the rest. all is the two in that order.
 

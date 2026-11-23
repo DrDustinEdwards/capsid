@@ -406,9 +406,6 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             ))}
           </dl>
         </div>
-        <div className="src">
-          Source: live, D1 jobs row {j.id}. The mirrored document is {j.namespace}/jobs/{j.id}.md
-        </div>
       </div>
     </>
   );

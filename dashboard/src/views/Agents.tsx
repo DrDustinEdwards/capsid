@@ -2,7 +2,7 @@ import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { AGENT_TABS, tabOf, useApp } from "../app/ctx";
 import { KIND_STATUS, agentState, archiveAgents, nsList, rosterAgents } from "../lib/derive";
-import { ago, pct } from "../lib/format";
+import { DAY, ago, pct } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import { Status } from "capsomer/react/status";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
@@ -27,12 +27,6 @@ export function Agents() {
   );
 }
 
-// Revoked agents leave the roster at once and the live table after 7 days (docs/auth.md);
-// a one-job runner key leaves it sooner, once its job ends.
-const ARCHIVE_AFTER_MS = 7 * 24 * 3_600_000;
-
-// The revoked agents: still in the live table and waiting their 7 days, then the archived,
-// newest move first. Both are history, so each row opens the agent's drawer as the roster's do.
 // An agent's first cell in both tables: its name, kind and namespaces.
 function AgentName({ a }: { a: OpsAgent }) {
   return (
@@ -59,6 +53,9 @@ function AgentWork({ a }: { a: OpsAgent }) {
   );
 }
 
+// The revoked agents: still in the live table and waiting their 7 days (docs/auth.md; a
+// one-job runner key leaves it sooner, once its job ends), then the archived, newest move
+// first. Both are history, so each row opens the agent's drawer as the roster's do.
 function Archive() {
   const { feed, now } = useApp();
   const rows = archiveAgents(feed.live.agents);
@@ -99,9 +96,9 @@ function Archive() {
                       ) : (
                         <Status tone="muted" glyph="queued">
                           Moves by{" "}
-                          {new Date(
-                            parse(a.revoked_at as string) + ARCHIVE_AFTER_MS,
-                          ).toLocaleDateString()}
+                          {new Date(parse(a.revoked_at as string) + 7 * DAY)
+                            .toISOString()
+                            .slice(0, 10)}
                         </Status>
                       )}
                     </td>

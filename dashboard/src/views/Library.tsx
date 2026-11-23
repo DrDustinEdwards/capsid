@@ -37,9 +37,6 @@ function docParam(ns: string, path: string): string {
   return `${ns}/${path}`;
 }
 
-/** A ?doc= value back to its namespace and path; null when it names neither. A namespace
- *  holds no slash, so the first one divides them. */
-
 function docHref(ns: string, path: string): string {
   return `${routePath("library")}?${new URLSearchParams({ doc: docParam(ns, path) }).toString()}`;
 }

@@ -95,8 +95,9 @@ function Waiting() {
   return (
     <Panel flush title="Waiting for you" id="waiting" count={total}>
       {error && <Banner tone="warn">Stopped queues could not be read: {error}</Banner>}
+      {asks.error && <Banner tone="warn">Merge units could not be read: {asks.error}</Banner>}
       {total === 0 ? (
-        <Empty kind="all-clear" title="Nothing needs you." />
+        !error && !asks.error && <Empty kind="all-clear" title="Nothing needs you." />
       ) : (
         <>
           {prs.length > 0 && <PrGroup entries={prs} />}
@@ -307,7 +308,7 @@ function useAutoMergeAsks() {
     units && policy.loads ? unitRows(policy.units, units).filter((r) => r.state !== "auto") : [];
   const suspended = new Set(units?.suspended.map((s) => s.unit));
   const count = (policy.loads ? 0 : 1) + paused.length + unitAsks.length;
-  return { policy, paused, units, unitAsks, suspended, count };
+  return { policy, paused, units, unitAsks, suspended, count, error: load.error };
 }
 
 function AutoMergeGroup({ asks }: { asks: AutoMergeAsks }) {

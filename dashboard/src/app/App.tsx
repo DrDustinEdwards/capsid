@@ -100,9 +100,6 @@ const BADGE_NOTE: Partial<Record<ViewId, string>> = {
   health: "critical",
 };
 
-// 0 until the page has hydrated: the first render, on the server and in the browser alike,
-// measures every time from the feed's own read time (serverNow), so both say the same words
-// and React keeps the server's HTML. The clock starts once the page is live.
 // The header's freshness line: the feed's age and the watcher pass, on Capsomer's Freshness.
 function FeedFreshness({
   feed,
