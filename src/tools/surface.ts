@@ -9,9 +9,9 @@ import {
   singleHandler,
 } from "./surface-composite";
 
-// The served surface (capsid/research/design-mcp-servers.md section 3). Capsid serves 14 whole-job tools
-// on /mcp and /ops/mcp, and Capsid Admin 8 on its own route for the administrator
-// alone (src/mcp-handler.ts). Each tool is named {service}_{action}_{resource}
+// The served surface (capsid/research/design-mcp-servers.md section 3). Capsid serves the whole-job tools
+// of CAPSID_TOOLS on /mcp and /ops/mcp, and Capsid Admin those of CAPSID_ADMIN_TOOLS on its
+// own route for the administrator alone (src/mcp-handler.ts). Each tool is named {service}_{action}_{resource}
 // (ruling rule 5) and carries one honest set of hints (rule 6, src/tool-annotations.ts).
 //
 // A tool with more than one action takes `action`, which picks the operation that does

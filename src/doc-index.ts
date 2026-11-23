@@ -72,8 +72,8 @@ async function ensureInstance(env: Env, ns: AiSearchNamespace): Promise<AiSearch
 
 // The reranker and the embedding model run inside AI Search, so a search call has no
 // gateway of its own to name: the instance names it (`ai_gateway_id`), and every model
-// call it makes then goes through that gateway's logs, rate limits and spend limits
-//. AI_GATEWAY_ID is a dashboard var (kept by keep_vars); unset, the
+// call it makes then goes through that gateway's logs, rate limits and spend limits.
+// AI_GATEWAY_ID is a dashboard var (kept by keep_vars); unset, the
 // instance is left as it is. A refusal is logged and retried on the next tick.
 async function routeThroughGateway(env: Env, instance: AiSearchInstance): Promise<void> {
   const id = env.AI_GATEWAY_ID?.trim();
@@ -194,7 +194,7 @@ export async function hybridSearch(
   if (!filter.includeRetired) filters.status = { $nin: RETIRED };
   let chunks: AiSearchSearchResponse["chunks"];
   // AI Search's binding takes no signal, so the search and its reranker are raced against
-  // a deadline (C2, C13).
+  // a deadline.
   let timer: number | null = null;
   const late = new Promise<never>((_, reject) => {
     timer = setTimeout(

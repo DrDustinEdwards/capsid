@@ -183,6 +183,12 @@ export async function planApproval(
       return void problems.push(
         `#${n} has no class: the tick has not classed it into the awaiting-seat set yet, so nothing says what kind of approval it needs.`,
       );
+    // The row is the tick's judgment of an earlier head: its class and path class describe
+    // that head, not this one.
+    if (row.head_sha && row.head_sha !== head.sha)
+      return void problems.push(
+        `#${n}: the tick judged ${row.head_sha.slice(0, 7)}, not this head (${head.sha.slice(0, 7)}); wait for the next tick.`,
+      );
     if (cls === "seat")
       return void problems.push(
         `#${n} is class seat (${(row.class_reasons ?? []).join("; ") || "a step outside a merge"}): it stays with the seat.`,

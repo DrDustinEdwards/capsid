@@ -105,7 +105,7 @@ function healthyAnswers(probeStatus: number): Record<string, Answer> {
       body: `{"error":"${MARKER}"}`,
       headers: { "Content-Type": "application/json" },
     },
-    [`POST ${ORIGIN}/admin`]: { status: probeStatus, body: MARKER },
+    [`GET ${ORIGIN}/admin`]: { status: probeStatus, body: MARKER },
   };
 }
 
@@ -208,19 +208,24 @@ test("PLANT: the operator API answering 200 to a caller with no credential is re
   assert.match(r.probe.note, /^OPEN: answered 200 to a caller with no credential/);
 });
 
-test("the probe sends no credential, and a named probe path overrides the operator API", async () => {
+test("the probe sends no credential, and a named probe path overrides the operator API with a GET, never a POST", async () => {
   const { env } = siteEnv([ROW]);
   const answers = healthyAnswers(401);
   const seen: Array<Record<string, string>> = [];
   const s = site(answers);
   const impl = async (url: string, init?: RequestInit) => {
-    if (init?.method === "POST") seen.push((init.headers ?? {}) as Record<string, string>);
+    if (url.endsWith("/admin")) seen.push((init?.headers ?? {}) as Record<string, string>);
     return s.impl(url, init);
   };
   const r = await siteCheck(env, "sample", { probe: "/admin" }, impl, NOW);
   assert.equal(r.probe.path, "/admin");
   assert.equal(r.probe.refused, true);
   assert.equal(seen.length, 1);
+  assert.equal(
+    s.calls.some((c) => c.method === "POST"),
+    false,
+    "a caller-named probe path was POSTed to",
+  );
   assert.equal(
     Object.keys(seen[0]).some((h) => /authorization|cookie/i.test(h)),
     false,

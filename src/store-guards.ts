@@ -1,7 +1,7 @@
 import { readDocument } from "./doc-reads";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 // INSERT that violates NOT NULL, guarded by NOT EXISTS, so a missing row aborts
 // the batch. A pre-read is a different transaction. meta.changes is inflated by
 // FTS5 triggers and cannot count what a batch did.
@@ -199,7 +199,11 @@ export function documentUpsert(
 // Who made a write when no MCP client did: the Worker's own passes ("system:maintenance", "capsid:push", the improve loop)
 // are "system", and an agent key running a job names the job ("job:<id>"). A person's write with no client (the Portal, a
 // grant from before the name was kept) stays null rather than guessed.
-function clientOf(actor: string, params: unknown, client: string | undefined): string | null {
+export function clientOf(
+  actor: string,
+  params: unknown,
+  client: string | undefined,
+): string | null {
   if (client) return client;
   if (/^(system|capsid):/.test(actor) || actor === "improve-loop") return "system";
   const job = (params as { job_id?: unknown } | null)?.job_id;
@@ -226,4 +230,24 @@ export function auditStatement(
       "INSERT INTO audit_log (actor, action, namespace, path, params, client) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
     )
     .bind(actor, action, namespace, path, JSON.stringify(params), clientOf(actor, params, client));
+}
+
+/** The audit row of a write that has already committed (a revision-guarded RETURNING write
+ *  cannot share a batch with it). A failure is logged and returned as a warning for the
+ *  caller to show, because the write stands and a thrown error would report it as refused. */
+export async function auditCommitted(
+  db: D1Database,
+  actor: string,
+  action: string,
+  namespace: string | null,
+  params: unknown,
+): Promise<string | undefined> {
+  try {
+    await auditStatement(db, actor, action, namespace, null, params).run();
+    return undefined;
+  } catch (err) {
+    const warning = `${action} was saved, but its audit row was not written: ${errorMessage(err)}`;
+    logEvent("AUDIT_AFTER_WRITE_FAILED", { message: warning }, { level: "error" });
+    return warning;
+  }
 }

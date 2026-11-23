@@ -19,7 +19,8 @@ import {
   type ReportEdge,
 } from "../truth-report";
 import { docPath, GATHER_BUDGET, LINT_CONSUMED_MAX, nsName } from "../limits";
-import { policyWriteRefusal } from "../signed-docs";
+import { canonGuarded, canonRefusal } from "../canon";
+import { policyPathsRefusal } from "./docs-write";
 import { fail, ok, pathMutation, requireConfirmation, type ToolCtx } from "./docs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
@@ -328,16 +329,18 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
       }
       if (problems.length > 0)
         return fail(`finalize aborted, nothing archived:\n${problems.join("\n")}`);
-      // The policy-document guard. finalize is type-gated to episodic and source
-      // documents, but a document written under policy/ with the opt-in flag can carry
-      // type 'source', and finalize would then archive a signed policy. No opt-in here:
-      // archiving a policy is never right.
-      const consumedPolicyRefusals = paths
-        .map((consumedPath) => policyWriteRefusal(namespace, consumedPath, false))
-        .filter((r): r is string => r !== null);
-      if (consumedPolicyRefusals.length > 0) {
-        return fail(`finalize aborted, nothing archived:\n${consumedPolicyRefusals.join("\n")}`);
+      // Archiving is a move: it asks what move asks (docs-lifecycle.ts), since the writer sets
+      // the type and a canon, policy or jobs/ document can carry an archivable one.
+      for (const consumedPath of paths) {
+        for (const end of [consumedPath, `archive/${consumedPath}`]) {
+          if (canonGuarded(ctx.agent, namespace, end))
+            return fail(
+              `finalize aborted, nothing archived:\n${canonRefusal("move", namespace, end)}`,
+            );
+        }
       }
+      const policyRefusal = policyPathsRefusal(ctx, "move", namespace, false, paths);
+      if (policyRefusal) return fail(`finalize aborted, nothing archived:\n${policyRefusal}`);
       // finalize needs confirmation: one call renames every consumed document.
       const finalizeRefusal = await requireConfirmation(server, confirm, {
         prompt: `Archive ${paths.length} document(s) in ${namespace} by moving them under archive/?`,

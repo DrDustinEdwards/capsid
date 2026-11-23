@@ -352,6 +352,12 @@ export async function portalGate(
   return { ok: true, user };
 }
 
+/** A query value, trimmed; an empty or absent one is null (no filter), not the empty string. */
+export function queryParam(url: URL, name: string): string | null {
+  const raw = url.searchParams.get(name)?.trim();
+  return raw ? raw : null;
+}
+
 /** A Portal API route behind the gate: `run` is called only once the administrator is signed in
  *  (with the user, ahead of any extra arguments the caller passes), and a request that is not
  *  gets the gate's own response. */

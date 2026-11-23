@@ -15,7 +15,9 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 // - No severity field: a reported item always counts as needs-you, so an app cannot quiet its badge.
 // - The items are the app's words. A link must stay on the app's own origin (its ops_sites row),
 //   and capsid_read_status action status fences the title as external before an agent reads it.
-// - One report per minute per key, fail closed: this is a write path.
+// - About one report per minute per key, fail closed: this is a write path. The count is a KV
+//   get then put, so two reports at once, or from two colos inside KV's propagation delay, can both
+//   pass; the limit is approximate, and the write itself is bounded (20 items, 16 KiB).
 
 const INBOX_REPORT_PATH = "/ops/inbox/report";
 const REPORT_PREFIX = "inbox:report:";

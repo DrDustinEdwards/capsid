@@ -1,5 +1,5 @@
-import type { Env } from "../env";
-import { TEST_FILE } from "../merge-class";
+import type { RepoEnv as Env } from "../env";
+import { TEST_FILE } from "../model-routing";
 import { readAllPages as readPages } from "@dustinedwards/site-runtime/github";
 import { ghFetch } from "./client";
 

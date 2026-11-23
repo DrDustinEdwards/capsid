@@ -1,4 +1,5 @@
 import { auditDetail } from "./audit-detail";
+import { queryParam } from "./portal-auth";
 import type { AuditDetail } from "./ops-types/portal";
 
 // Recent activity: a bounded, filtered read of audit_log across every namespace, for
@@ -32,14 +33,6 @@ export interface ActivityRow {
   detail: AuditDetail;
 }
 
-function param(url: URL, name: string): string | null {
-  const raw = url.searchParams.get(name);
-  if (raw === null) return null;
-  const trimmed = raw.trim();
-  // An empty value is no filter, not a filter on the empty string.
-  return trimmed.length ? trimmed : null;
-}
-
 // An audit row id: a positive whole number, as the autoincrement writes it.
 const ROW_ID = /^[1-9][0-9]{0,15}$/;
 
@@ -48,7 +41,7 @@ const ROW_ID = /^[1-9][0-9]{0,15}$/;
 export function activityFilterFrom(
   url: URL,
 ): { ok: true; filter: ActivityFilter } | { ok: false; refusal: string } {
-  const id = param(url, "id");
+  const id = queryParam(url, "id");
   if (id !== null && !ROW_ID.test(id))
     return {
       ok: false,
@@ -57,8 +50,8 @@ export function activityFilterFrom(
   return {
     ok: true,
     filter: {
-      namespace: param(url, "namespace"),
-      actor: param(url, "actor"),
+      namespace: queryParam(url, "namespace"),
+      actor: queryParam(url, "actor"),
       id: id === null ? null : Number(id),
     },
   };

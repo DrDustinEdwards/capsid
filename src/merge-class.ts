@@ -1,6 +1,6 @@
 import { AUTO_MERGE_REFUSED_PATHS, overSizeCap, sizeCapReason } from "./auto-merge-policy";
 import type { PrFacts, PolicyVerdict } from "./auto-merge-policy-evaluate";
-import { worthReviewer } from "./model-routing";
+import { TEST_FILE, worthReviewer } from "./model-routing";
 import { isMoneyPath } from "./scope";
 
 // THE MERGE CLASSES (docs/design/design-merge-pipeline.md section 2). Every open pull request on a
@@ -42,8 +42,6 @@ export interface Classification {
   reasons: string[];
 }
 
-export const TEST_FILE =
-  /(^|\/)(test|tests|test-integration|e2e|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/i;
 const DEPS_FILE =
   /(^|\/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$/i;
 const DOC_FILE = /\.(md|mdx|txt|png|jpe?g|gif|svg|webp)$/i;

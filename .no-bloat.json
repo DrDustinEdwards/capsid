@@ -40,11 +40,11 @@
       "explorer/src/pages.mjs": 934,
       "scripts/verify-live.mjs": 766,
       "src/ops-cloudflare.ts": 611,
-      "test/fakes.ts": 1492
+      "test/fakes.ts": 1458
     },
     "tests": {
       "files": 273,
-      "cases": 2348
+      "cases": 2349
     },
     "comments": {
       "lines": 14941,

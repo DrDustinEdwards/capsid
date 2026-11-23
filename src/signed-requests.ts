@@ -14,6 +14,7 @@ import {
 } from "./offaccount";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { MINUTE_MS } from "./time";
+import { callSignal } from "./call-signal";
 import { textResponse } from "@dustinedwards/site-runtime/http";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
@@ -175,6 +176,8 @@ export interface ScopedCredential {
   expires_in: number;
 }
 
+const MINT_TIMEOUT_MS = 10_000;
+
 // The call to the temp-access-credentials API: object-read-only, one hour, one bucket,
 // the dump and files prefixes, derived from the named parent token. The parent's secret never leaves the
 // dashboard; the Worker holds only its access key id and the mint token.
@@ -199,6 +202,7 @@ async function mintScopedCredential(
         ttlSeconds: CREDENTIAL_TTL_SECONDS,
         prefixes: [...new Set([scope.prefix, scope.filesPrefix])],
       }),
+      signal: callSignal(MINT_TIMEOUT_MS),
     },
   );
   if (!resp.ok) {

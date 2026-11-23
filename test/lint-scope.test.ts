@@ -61,9 +61,14 @@ function scopedTo(namespaces: string[], repos: string[] | "*"): Agent {
   };
 }
 
-async function connect(agent: Agent) {
+async function connect(
+  agent: Agent,
+  documents: Array<Record<string, unknown>> = [
+    { namespace: "sample", path: "core.md", type: "core", body: "lorem" },
+  ],
+) {
   const base = fakeD1({
-    documents: [{ namespace: "sample", path: "core.md", type: "core", body: "lorem" }],
+    documents: documents as never,
     namespaces: [
       { namespace: "sample", repos: JSON.stringify([{ repo: OWN_REPO, label: "primary" }]) },
     ],
@@ -188,6 +193,28 @@ test("THE INNOCENT DIRECTION: an unrestricted caller still gets the rules, every
       written.includes("other/private-plan.md"),
       "an unrestricted caller lost a cross-namespace edge",
     );
+  } finally {
+    await close();
+  }
+});
+
+test("PLANT: finalize archives no canon or job mirror a writer typed as episodic, and no write lands", async () => {
+  const guarded = ["core.md", "decisions.md", "jobs/20260101-abc.md"];
+  const { client, recorded, close } = await connect(
+    scopedTo(["sample"], "*"),
+    guarded.map((path) => ({ namespace: "sample", path, type: "episodic", body: "lorem" })),
+  );
+  try {
+    for (const path of guarded) {
+      const result = await call(client, {
+        namespace: "sample",
+        mode: "finalize",
+        consumed: [path],
+        confirm: true,
+      });
+      assert.equal(result.isError, true, `${path} was archived by a non-seat caller`);
+    }
+    assert.equal(recorded.length, 0, "a statement was issued for a refused finalize");
   } finally {
     await close();
   }

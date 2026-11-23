@@ -234,7 +234,7 @@ export async function readUnitEvidence(
     .bind(since)
     .all<ApprovalEvidence>();
   const rolled = await env.DB.prepare(
-    `SELECT namespace, repo, pr, head_sha, run_id, run_at FROM deploy_outcomes WHERE outcome IN ('rolled_back', 'rollback_failed') AND run_at >= ?1 ORDER BY run_at LIMIT 50`,
+    `SELECT namespace, repo, pr, head_sha, run_id, run_at FROM deploy_outcomes WHERE outcome IN ('rolled_back', 'rollback_failed') AND run_at >= ?1 ORDER BY run_at DESC LIMIT 51`,
   )
     .bind(since)
     .all<{
@@ -246,7 +246,9 @@ export async function readUnitEvidence(
       run_at: string;
     }>();
   const rollbacks: RollbackEvidence[] = [];
-  for (const r of rolled.results ?? []) {
+  // Newest first: a burst keeps the latest rollbacks, the ones that matter to a suspension.
+  const rolledRows = rolled.results ?? [];
+  for (const r of rolledRows.slice(0, 50)) {
     let merged_by: RollbackEvidence["merged_by"] = "unknown";
     let path_class: string | null = null;
     if (r.pr !== null) {

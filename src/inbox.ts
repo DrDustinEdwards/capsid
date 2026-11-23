@@ -196,6 +196,7 @@ export async function gatherInbox(
   const allowed = namespaces === null ? null : new Set(namespaces);
   const keep = (namespace: string) => allowed === null || allowed.has(namespace);
   const byNamespace = new Map<string, InboxItem[]>();
+  // Past MAX_ITEMS_PER_APP items drop, so faults and waiting PRs go in before the many jobs.
   const add = (namespace: string, item: InboxItem) => {
     if (!keep(namespace)) return;
     const list = byNamespace.get(namespace) ?? [];
@@ -221,9 +222,6 @@ export async function gatherInbox(
   const stale = (await readStaleCache(env.APP_KV).catch(() => ({ cache: {} }))).cache;
   const steps = (await readStepCache(env.APP_KV).catch(() => ({ cache: {} }))).cache;
   const applied = await appliedMigrations(env.DB);
-  for (const job of blocked.results ?? []) {
-    if (!blockSettled(job, stale, applied, steps)) add(job.namespace, blockedJobItem(job));
-  }
 
   // Claimed jobs gone quiet and parked jobs past their due date (heldJobItem). Both are
   // few, so one read with each job's newest audit row (audit_log_doc serves it).
@@ -236,10 +234,6 @@ export async function gatherInbox(
   )
     .bind(JOB_DOC_PREFIX, now.toISOString(), MAX_HELD)
     .all<Parameters<typeof heldJobItem>[0] & { namespace: string }>();
-  for (const job of held.results ?? []) {
-    const item = heldJobItem(job, now);
-    if (item) add(job.namespace, item);
-  }
 
   // The pull requests auto-merge declined, rewritten whole by its tick. An unreadable
   // list reads as none, not as a failure of the inbox.
@@ -288,6 +282,15 @@ export async function gatherInbox(
 
   for (const [namespace, items] of await readReports(env.APP_KV, now)) {
     for (const item of items) add(namespace, item);
+  }
+
+  // Claimed and parked jobs, then the blocked ones: the most numerous kinds go last.
+  for (const job of held.results ?? []) {
+    const item = heldJobItem(job, now);
+    if (item) add(job.namespace, item);
+  }
+  for (const job of blocked.results ?? []) {
+    if (!blockSettled(job, stale, applied, steps)) add(job.namespace, blockedJobItem(job));
   }
 
   // Every configured app appears, with a count of zero when nothing waits, so the shell

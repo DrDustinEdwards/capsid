@@ -1,7 +1,7 @@
 import { loadMergePolicy } from "./auto-merge-policy";
 import type { Env } from "./env";
 import { parsePrUrl } from "@dustinedwards/site-runtime/github";
-import { ghFetch, resolveRepo } from "./github/client";
+import { ghFetch, parseMappedRepos, resolveRepo } from "./github/client";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
@@ -192,12 +192,15 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
   // retired (capsid-mcp, dustinedwards-mcp, renovate-config) has no installation to read it
   // with, so each pass paid a slow "GitHub refused an installation token" for it.
   const mapped = new Set<string>();
-  const { results: mappings } = await env.DB.prepare("SELECT repos FROM namespaces").all<{
-    repos: string | null;
-  }>();
-  for (const row of mappings ?? [])
-    for (const entry of JSON.parse(row.repos || "[]") as Array<{ repo?: unknown }>)
-      if (typeof entry?.repo === "string") mapped.add(entry.repo.toLowerCase());
+  const { results: mappings } = await env.DB.prepare(
+    "SELECT namespace, repos FROM namespaces",
+  ).all<{ namespace: string; repos: string | null }>();
+  for (const row of mappings ?? []) {
+    const parsed = parseMappedRepos(row.repos);
+    // One corrupt row must not stop the pass for every other namespace.
+    if ("error" in parsed) continue;
+    for (const { repo } of parsed.list) mapped.add(repo.toLowerCase());
+  }
   const recorded: string[] = [];
   for (const { owner, repo, prs } of [...repos.values()]
     .filter((r) => mapped.has(`${r.owner}/${r.repo}`.toLowerCase()))

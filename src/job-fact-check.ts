@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { encodePath, ghFetch } from "./github/client";
+import { encodePath, ghFetch, parseMappedRepos } from "./github/client";
 import { npmVersions, type FetchLike } from "./ops-packages";
 import { readPackageConfig } from "./ops-package-config";
 import { heading, proseOnly } from "./job-body-check";
@@ -419,15 +419,13 @@ function liveFactReaders(
           .bind(namespace)
           .first<{ repos: string | null }>();
         if (!row) return { ok: false, reason: `${namespace} is not a registered namespace` };
-        const list: unknown = JSON.parse(row.repos || "[]");
-        if (!Array.isArray(list))
-          return { ok: false, reason: `${namespace}'s repos mapping is not a list` };
-        return {
-          ok: true,
-          value: list
-            .map((r: { repo?: unknown }) => r.repo)
-            .filter((r): r is string => typeof r === "string" && r.includes("/")),
-        };
+        const parsed = parseMappedRepos(row.repos);
+        if ("error" in parsed)
+          return {
+            ok: false,
+            reason: `${namespace}'s repos mapping is not readable: ${parsed.error}`,
+          };
+        return { ok: true, value: parsed.list.map((r) => r.repo) };
       } catch (err) {
         return {
           ok: false,

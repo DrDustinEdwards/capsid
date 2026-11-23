@@ -312,6 +312,14 @@ export function parseReposList(reposJson: string): { list: RepoEntry[] } | { err
   return { list };
 }
 
+/** A namespace's `repos` column as a list: no mapping (null, blank or `[]`) is an empty list,
+ *  anything else goes through parseReposList. The readers of the column share this. */
+export function parseMappedRepos(
+  reposJson: string | null,
+): { list: RepoEntry[] } | { error: string } {
+  return reposJson && reposJson.trim() !== "[]" ? parseReposList(reposJson) : { list: [] };
+}
+
 // update_namespace requires exactly one primary (register_namespace does not, so
 // this is not folded into parseReposList). Returns an error string or null.
 export function requireSinglePrimary(list: RepoEntry[]): string | null {

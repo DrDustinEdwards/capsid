@@ -8,11 +8,14 @@ import type { Arm } from "./bench-requests";
 export const BENCH_REPEATS = 3;
 export const MODEL_ARMS: readonly Arm[] = ["baseline", "treatment"];
 
-//
-// THE ORDER (section 5, "Order"). A drawn task's six slots run in the
-// fixed order baseline, treatment, baseline, treatment, baseline, treatment, each ended
-// before the next starts, and a drawn task's first slot starts only when every task
-// before it on the draw has ended all six.
+// THE ERROR STOP AND THE OUTAGE HOUR (the methods paper's protocol, section 3).
+// A model run that ends with Claude Code's "error during execution" (a usage
+// limit and a transport error look the same, and neither is classified) is scored from
+// its diff and claim file the first time, as a clock kill is, and fills its slot. Except
+// in an outage hour: a UTC hour in which at least BENCH_OUTAGE_MIN_ENDED model runs ended
+// and at least half of them stopped this way. Such a stop counts as no attempt at all, so
+// its slot is started once more, and no model run starts while the current hour already
+// meets the rule.
 const BENCH_OUTAGE_MIN_ENDED = 4;
 export interface PriorRun {
   status: string;
@@ -149,6 +152,11 @@ export function orderRefusal(
   return null;
 }
 
+// THE ORDER (section 5, "Order"). A drawn task's six slots run in the
+// fixed order baseline, treatment, baseline, treatment, baseline, treatment, each ended
+// before the next starts, and a drawn task's first slot starts only when every task
+// before it on the draw has ended all six.
+//
 // The order rule's facts for a start, read from the database. Tasks off the draw (the
 // pilot) have no order.
 export async function orderOf(

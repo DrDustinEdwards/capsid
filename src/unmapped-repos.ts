@@ -1,6 +1,6 @@
 import { readDocument } from "./doc-reads";
 import type { Env } from "./env";
-import { listInstalledRepos, type InstalledRepo } from "./github/client";
+import { listInstalledRepos, parseMappedRepos, type InstalledRepo } from "./github/client";
 
 // Repos the GitHub App can see that no namespace maps. A repo is reachable through
 // Capsid's tools only if a namespace maps it, and the mapping is the authorization
@@ -80,19 +80,12 @@ export async function readRepoMap(env: Env): Promise<RepoMapRead> {
   const namespaces: string[] = [];
   for (const row of results ?? []) {
     namespaces.push(row.namespace);
-    let list: unknown;
-    try {
-      list = JSON.parse(row.repos || "[]");
-    } catch {
+    const parsed = parseMappedRepos(row.repos);
+    if ("error" in parsed)
       throw new Error(
-        `namespace ${row.namespace} has a corrupt repos mapping, so what is unmapped cannot be judged`,
+        `namespace ${row.namespace} has a corrupt repos mapping, so what is unmapped cannot be judged: ${parsed.error}`,
       );
-    }
-    if (!Array.isArray(list))
-      throw new Error(`namespace ${row.namespace} has a corrupt repos mapping (not an array)`);
-    for (const entry of list as Array<{ repo?: unknown }>) {
-      if (typeof entry?.repo === "string") mapped.add(entry.repo.toLowerCase());
-    }
+    for (const { repo } of parsed.list) mapped.add(repo.toLowerCase());
   }
   const doc = await readDocument(env.DB, UNMAPPED_ON_PURPOSE_NS, UNMAPPED_ON_PURPOSE_PATH);
   return {

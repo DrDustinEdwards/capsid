@@ -1,7 +1,7 @@
 import { documentEdges, readDocument, searchDocuments } from "./doc-reads";
 import { MAX_NAMESPACE, MAX_QUERY, MAX_ROWS, pathProblem, SEARCH_ROWS } from "./limits";
 import type { LibraryEntry, LibraryShelf, PortalLibrary } from "./ops-types/views";
-import { behindGate } from "./portal-auth";
+import { behindGate, queryParam } from "./portal-auth";
 import { jsonResponse as json } from "@dustinedwards/site-runtime/http";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
@@ -27,18 +27,13 @@ function shelfOf(row: Pick<LibraryEntry, "type" | "path">): LibraryShelf {
   return row.path.startsWith("rulings/") ? "rulings" : "research";
 }
 
-function param(url: URL, name: string): string | null {
-  const raw = url.searchParams.get(name)?.trim();
-  return raw ? raw : null;
-}
-
 /** GET /portal/api/library: the shelves, ?q= a search, or ?ns=&path= one document. */
 export const handlePortalLibrary = behindGate(async (request, env, now) => {
   const url = new URL(request.url);
   const generated = now.toISOString();
-  const q = param(url, "q");
-  const ns = param(url, "ns");
-  const path = param(url, "path");
+  const q = queryParam(url, "q");
+  const ns = queryParam(url, "ns");
+  const path = queryParam(url, "path");
 
   if (ns !== null || path !== null) {
     if (ns === null || path === null)

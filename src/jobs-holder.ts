@@ -236,7 +236,7 @@ export async function holderTransition(
         ),
       );
     }
-    const row = outcomeFrom(job, verdict, now, undefined, claimed?.model_id ?? null);
+    const row = outcomeFrom(job, verdict, now, claimed?.model_id ?? null);
     outcome = { row, notes: verdict.notes };
     statements.push(outcomeStatement(env.DB, row));
     // One row per pull request the evidence named, so the outcome's counts can be traced and

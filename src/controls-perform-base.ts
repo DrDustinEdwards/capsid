@@ -14,7 +14,8 @@ export type ActionResult =
   | { ok: false; refusal: string };
 
 /** One action in flight: the caller, the click's audit writer, and `state`, which a mutator
- *  sets once it has run so the catch knows whether the action happened. */
+ *  sets once it has run so the catch knows whether the action happened. `warning` is a done
+ *  action's caveat the Portal shows beside the success. */
 export type PerformContext = {
   env: Env;
   agent: Agent;
@@ -25,7 +26,7 @@ export type PerformContext = {
   switchReason: string | null;
   undo: boolean;
   click: string;
-  state: { committed: boolean; summary: string };
+  state: { committed: boolean; summary: string; warning: string | null };
   auditClick: (namespace: string | null, detail: object, name?: string) => Promise<void>;
   switchDetail: (result: object) => object;
 };

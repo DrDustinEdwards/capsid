@@ -1,5 +1,5 @@
 import type { OpsSiteConfig, SiteMapDrift } from "./ops-types/sites";
-import { auditStatement } from "./store-guards";
+import { auditCommitted } from "./store-guards";
 import { parseOperator } from "./site-operator";
 
 // The sites the watcher probes for Capsid Portal (capsid/research/design-ops-console.md),
@@ -319,7 +319,9 @@ export function describeSite(
   return `"${site.name}", probed at ${probe}, on ${site.platform}${site.script ? `, Worker script ${site.script}` : ""}`;
 }
 
-export type SiteResult = { ok: true; site: OpsSiteConfig } | { ok: false; refusal: string };
+export type SiteResult =
+  | { ok: true; site: OpsSiteConfig; warning?: string }
+  | { ok: false; refusal: string };
 
 /** One row, or null. */
 export async function readSiteRow(
@@ -357,8 +359,8 @@ export async function addSite(db: D1Database, actor: string, site: SiteInput): P
       ok: false,
       refusal: `${site.namespace} was added and then removed before it could be read back.`,
     };
-  await db.batch([auditStatement(db, actor, "ops-site-added", site.namespace, null, { after })]);
-  return { ok: true, site: after };
+  const warning = await auditCommitted(db, actor, "ops-site-added", site.namespace, { after });
+  return { ok: true, site: after, warning };
 }
 
 /** Replace a row's fields, only if it is still at `revision`. An origin change clears
@@ -421,10 +423,11 @@ export async function editSite(
       ok: false,
       refusal: `${site.namespace} was edited and then removed before it could be read back.`,
     };
-  await db.batch([
-    auditStatement(db, actor, "ops-site-edited", site.namespace, null, { before, after }),
-  ]);
-  return { ok: true, site: after };
+  const warning = await auditCommitted(db, actor, "ops-site-edited", site.namespace, {
+    before,
+    after,
+  });
+  return { ok: true, site: after, warning };
 }
 
 /** Remove a row, only if it is still at `revision`. The prior row goes in the audit
@@ -447,6 +450,6 @@ export async function removeSite(
       refusal: `${namespace} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.`,
     };
   }
-  await db.batch([auditStatement(db, actor, "ops-site-removed", namespace, null, { before })]);
-  return { ok: true, site: before };
+  const warning = await auditCommitted(db, actor, "ops-site-removed", namespace, { before });
+  return { ok: true, site: before, warning };
 }

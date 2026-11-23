@@ -48,6 +48,8 @@ export async function performSiteAction(
       state.summary = result.matched
         ? `Rotated ${namespace}'s site key: set on ${result.site.script} and on ${result.carrel.script}. The value is not shown anywhere.`
         : `${result.note} ${result.carrel.script}: ${result.carrel.error ?? "not set"}`;
+      // The two sides now differ, so this is a success with a caveat, never a plain one.
+      if (!result.matched) state.warning = result.note;
       await auditClick(namespace, {
         namespace,
         site_set: result.site.set,
@@ -83,6 +85,7 @@ export async function performSiteAction(
       }
       if (!result.ok) return { ok: false, refusal: result.refusal };
       state.committed = true;
+      state.warning = result.warning ?? null;
       state.summary =
         action === "site_add"
           ? `Added ${result.site.namespace}: ${describeSite(result.site)}.`
@@ -119,6 +122,7 @@ export async function performSiteAction(
       }
       if (!result.ok) return { ok: false, refusal: result.refusal };
       state.committed = true;
+      state.warning = result.warning ?? null;
       state.summary =
         action === "package_add"
           ? `Added ${describePackage(result.pkg)}.`
