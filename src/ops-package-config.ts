@@ -1,5 +1,5 @@
 import type { OpsPackageConfig } from "./ops-types/sites";
-import { auditStatement } from "./store-guards";
+import { auditCommitted, auditStatement } from "./store-guards";
 
 // The packages configuration: the ops_packages rows and their validated edits.
 
@@ -90,7 +90,9 @@ export function describePackage(p: PackageInput): string {
   return `npm "${p.name}"${p.repo ? `, repository ${p.repo}` : ", no repository"}${p.formerly ? `, formerly "${p.formerly}"` : ""}`;
 }
 
-export type PackageResult = { ok: true; pkg: OpsPackageConfig } | { ok: false; refusal: string };
+export type PackageResult =
+  | { ok: true; pkg: OpsPackageConfig; warning?: string }
+  | { ok: false; refusal: string };
 
 /** Add a row. A package already configured is refused, not replaced. */
 export async function addPackage(
@@ -111,8 +113,12 @@ export async function addPackage(
       ok: false,
       refusal: `${p.name} was added and then removed before it could be read back.`,
     };
-  await db.batch([auditStatement(db, actor, "ops-package-added", null, null, { after })]);
-  return { ok: true, pkg: after };
+  const warning = await auditCommitted(
+    db,
+    auditStatement(db, actor, "ops-package-added", null, null, { after }),
+    "ops-package-added",
+  );
+  return { ok: true, pkg: after, warning };
 }
 
 /** Replace a row's fields, only if it is still at `revision`. */
@@ -142,9 +148,13 @@ export async function editPackage(
       ok: false,
       refusal: `${p.name} was edited and then removed before it could be read back.`,
     };
-  await db.batch([auditStatement(db, actor, "ops-package-edited", null, null, { before, after })]);
+  const warning = await auditCommitted(
+    db,
+    auditStatement(db, actor, "ops-package-edited", null, null, { before, after }),
+    "ops-package-edited",
+  );
   // A changed name source makes the cached history wrong; the next view refetches.
-  return { ok: true, pkg: after };
+  return { ok: true, pkg: after, warning };
 }
 
 /** Remove a row, only if it is still at `revision`. Its weekly rows stay, as history. */
@@ -165,6 +175,10 @@ export async function removePackage(
       ok: false,
       refusal: `${name} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.`,
     };
-  await db.batch([auditStatement(db, actor, "ops-package-removed", null, null, { before })]);
-  return { ok: true, pkg: before };
+  const warning = await auditCommitted(
+    db,
+    auditStatement(db, actor, "ops-package-removed", null, null, { before }),
+    "ops-package-removed",
+  );
+  return { ok: true, pkg: before, warning };
 }

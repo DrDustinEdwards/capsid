@@ -51,7 +51,7 @@ export async function performAction(
   const agent = adminAgentForEmail(email);
   const actor = agent.actor;
   // Set once the mutator succeeds, so the catch knows whether the action happened.
-  const state = { committed: false, summary: "" };
+  const state: PerformContext["state"] = { committed: false, summary: "", warning: null };
   // The switches: a reason in both directions, checked again because a token signed before
   // this rule could lack one. The reason and whether this is an Undo go in the click row.
   const switchReason = SWITCHES.has(action) ? required(params, "reason") : null;
@@ -389,9 +389,13 @@ export async function performAction(
       // The action happened; only the Portal's own audit row failed, so no refusal.
       const warning = `${action} completed, but the Portal audit row naming ${actor} was not written: ${message}`;
       logEvent("PORTAL_ACTION_AUDIT_FAILED", { message: warning }, { level: "error" });
-      return { ok: true, summary: state.summary, warning };
+      return {
+        ok: true,
+        summary: state.summary,
+        warning: [state.warning, warning].filter(Boolean).join(" "),
+      };
     }
     return { ok: false, refusal: message };
   }
-  return { ok: true, summary: state.summary, warning: null };
+  return { ok: true, summary: state.summary, warning: state.warning };
 }

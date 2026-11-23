@@ -13,7 +13,8 @@ import {
   type AgentRow,
   type AgentScopes,
 } from "./agents-schema";
-import { auditStatement } from "./store-guards";
+import { parseMappedRepos } from "./github/client";
+import { auditStatement, clientOf } from "./store-guards";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The control plane for credentials: mint, list, revoke, re-scope. Admin only (see
@@ -82,6 +83,36 @@ function agentAudit(
   return auditStatement(db, actor, action, "agents", name, params);
 }
 
+/** The state change and its audit row in one batch, so neither lands without the other.
+ *  The audit INSERT goes first and fires only while the agent still matches `guard`; the
+ *  UPDATE then matches the same state inside the same transaction. False: the agent
+ *  changed after the caller read it, and neither statement wrote. */
+async function changeWithAudit(
+  db: D1Database,
+  actor: string,
+  action: string,
+  row: { id: string; name: string },
+  params: Record<string, unknown>,
+  guard: string,
+  update: D1PreparedStatement,
+): Promise<boolean> {
+  const audit = db
+    .prepare(
+      `INSERT INTO audit_log (actor, action, namespace, path, params, client)
+       SELECT ?1, ?2, 'agents', ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM agents WHERE id = ?6 AND ${guard})`,
+    )
+    .bind(
+      actor,
+      action,
+      row.name,
+      JSON.stringify(params),
+      clientOf(actor, params, undefined),
+      row.id,
+    );
+  const [, changed] = await db.batch([audit, update]);
+  return (changed?.results?.length ?? 0) > 0;
+}
+
 async function liveAgentByName(db: D1Database, name: string): Promise<AgentRow | null> {
   return db
     .prepare("SELECT * FROM agents WHERE name = ?1 AND revoked_at IS NULL")
@@ -148,25 +179,20 @@ async function reposForNamespaces(
           `Register it first, or pass repos explicitly.`,
       };
     }
-    let list: unknown;
-    try {
-      list = JSON.parse(row.repos || "[]");
-    } catch {
+    const parsed = parseMappedRepos(row.repos);
+    if ("error" in parsed) {
       return {
-        error: `namespace '${namespace}' has a corrupt repos mapping. Repair it with capsid_admin_manage_namespaces action update, or pass repos explicitly.`,
+        error: `namespace '${namespace}' has a corrupt repos mapping (${parsed.error}). Repair it with capsid_admin_manage_namespaces action update, or pass repos explicitly.`,
       };
     }
-    if (!Array.isArray(list) || list.length === 0) {
+    if (parsed.list.length === 0) {
       return {
         error:
           `namespace '${namespace}' maps no repos, so an agent scoped to it would get the wildcard by default. ` +
           `Map its repos with capsid_admin_manage_namespaces action update, or pass repos explicitly (pass the single entry * to mean every repo deliberately).`,
       };
     }
-    for (const entry of list as Array<{ repo?: unknown }>) {
-      if (typeof entry?.repo === "string" && entry.repo && !repos.includes(entry.repo))
-        repos.push(entry.repo);
-    }
+    for (const { repo } of parsed.list) if (!repos.includes(repo)) repos.push(repo);
   }
   return { repos };
 }
@@ -291,22 +317,25 @@ export async function revokeAgent(
       "revoke",
       `no live agent named '${name}'. Call action list to see the inventory, revoked ones included.`,
     );
-  // Keyed UPDATE with RETURNING: no row back means somebody else got there first,
-  // and reporting success over that would be false.
-  const won = await db
-    .prepare(
-      "UPDATE agents SET revoked_at = datetime('now') WHERE id = ?1 AND revoked_at IS NULL RETURNING id",
-    )
-    .bind(row.id)
-    .first<{ id: string }>();
+  // The UPDATE returns the row, so a lost race is reported, never success.
+  const won = await changeWithAudit(
+    db,
+    actor,
+    "agent-revoked",
+    row,
+    { id: row.id, scopes: parseScopes(row.scopes) },
+    "revoked_at IS NULL",
+    db
+      .prepare(
+        "UPDATE agents SET revoked_at = datetime('now') WHERE id = ?1 AND revoked_at IS NULL RETURNING id",
+      )
+      .bind(row.id),
+  );
   if (!won)
     return refuse(
       "revoke",
       `'${name}' was revoked by somebody else between reading it and revoking it.`,
     );
-  await db.batch([
-    agentAudit(db, actor, "agent-revoked", name, { id: row.id, scopes: parseScopes(row.scopes) }),
-  ]);
   return {
     ok: true,
     action: "revoke",
@@ -321,17 +350,29 @@ export async function activateAgent(
   name: string,
 ): Promise<AgentResult> {
   const won = await db
-    .prepare(
-      "UPDATE agents SET pending = 0 WHERE name = ?1 AND revoked_at IS NULL AND pending = 1 RETURNING *",
-    )
+    .prepare("SELECT * FROM agents WHERE name = ?1 AND revoked_at IS NULL AND pending = 1")
     .bind(name)
     .first<AgentRow>();
-  if (!won)
+  const activated =
+    won &&
+    (await changeWithAudit(
+      db,
+      actor,
+      "agent-activated",
+      won,
+      { id: won.id },
+      "revoked_at IS NULL AND pending = 1",
+      db
+        .prepare(
+          "UPDATE agents SET pending = 0 WHERE id = ?1 AND revoked_at IS NULL AND pending = 1 RETURNING id",
+        )
+        .bind(won.id),
+    ));
+  if (!won || !activated)
     return refuse(
       "activate",
       `no live agent named '${name}' is waiting for activation. Call action list to see the inventory.`,
     );
-  await db.batch([agentAudit(db, actor, "agent-activated", name, { id: won.id })]);
   return { ok: true, action: "activate", agent: publicAgent(won) };
 }
 
@@ -349,16 +390,20 @@ export async function updateAgentScopes(
     );
   const before = parseScopes(row.scopes);
   const scopes = applyScopes(before, args);
-  const won = await db
-    .prepare("UPDATE agents SET scopes = ?2 WHERE id = ?1 AND revoked_at IS NULL RETURNING id")
-    .bind(row.id, serializeScopes(scopes))
-    .first<{ id: string }>();
-  if (!won)
-    return refuse("update_scopes", `'${name}' was revoked between reading it and re-scoping it.`);
   // Both sides go in the audit row. The current scopes are answerable from the table;
   // what they were before, and who widened them, only from the row that changed them.
-  await db.batch([
-    agentAudit(db, actor, "agent-rescoped", name, { id: row.id, before, after: scopes }),
-  ]);
+  const won = await changeWithAudit(
+    db,
+    actor,
+    "agent-rescoped",
+    row,
+    { id: row.id, before, after: scopes },
+    "revoked_at IS NULL",
+    db
+      .prepare("UPDATE agents SET scopes = ?2 WHERE id = ?1 AND revoked_at IS NULL RETURNING id")
+      .bind(row.id, serializeScopes(scopes)),
+  );
+  if (!won)
+    return refuse("update_scopes", `'${name}' was revoked between reading it and re-scoping it.`);
   return { ok: true, action: "update_scopes", agent: { ...publicAgent(row), scopes }, scopes };
 }

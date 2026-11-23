@@ -27,6 +27,7 @@ import {
   type TableSpec,
   type WriteResult,
 } from "./fake-sql.ts";
+import { landAuditRow } from "./fake-audit.ts";
 
 // improve_jti, the replay cache the signed endpoints claim nonces in (migrations/0004,
 // kept when the improve loop's other tables were dropped in 0048). The backup dumps it
@@ -413,42 +414,6 @@ function landSnapshot(params: unknown[], rows: FakeD1Rows): WriteResult {
   return { changes: 1, returning: [{ id }] };
 }
 
-// delete's audit row, whose params are the edges it removes, built inside the batch
-// by json_group_array. An aggregate over no edges still answers one row, so the audit
-// row lands with an empty list, as it does in SQLite.
-const DELETE_AUDIT_EDGES =
-  /^INSERT INTO audit_log \(actor, action, namespace, path, params, client\) SELECT \?1, 'delete', \?2, \?3, json_object\('edges_removed', json_group_array\( json_object\('from_ns', from_ns, 'from_path', from_path, 'type', type, 'to_ns', to_ns, 'to_path', to_path\)\)\), \?4 FROM document_links WHERE \(from_ns = \?2 AND from_path = \?3\) OR \(to_ns = \?2 AND to_path = \?3\) RETURNING params$/i;
-
-function landDeleteAudit(params: unknown[], rows: FakeD1Rows): WriteResult {
-  const [actor, namespace, path, client] = params as [string, string, string, string | null];
-  const edges = rows.links
-    .filter(
-      (l) =>
-        (l.from_ns === namespace && l.from_path === path) ||
-        (l.to_ns === namespace && l.to_path === path),
-    )
-    .map((l) => ({
-      from_ns: l.from_ns,
-      from_path: l.from_path,
-      type: l.type,
-      to_ns: l.to_ns,
-      to_path: l.to_path,
-    }));
-  const auditParams = JSON.stringify({ edges_removed: edges });
-  const id = rows.audit_log.reduce((max, a) => Math.max(max, a.id ?? 0), 0) + 1;
-  (rows.audit_log as Row[]).push({
-    id,
-    actor,
-    action: "delete",
-    namespace,
-    path,
-    params: auditParams,
-    client: client ?? null,
-    at: sqliteNow(),
-  });
-  return { changes: 1, returning: [{ params: auditParams }] };
-}
-
 // touchStatement (src/job-touches.ts): waited_ms is a subquery over the latest gate row
 // for the job, resolved here against rows.job_touches in the same order SQLite reads
 // it (by id), so a gate earlier in the same batch counts.
@@ -617,7 +582,8 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     }
     if (SNAPSHOT_LIVE.test(flat)) return landSnapshot(params, rows);
     if (TOUCH_INSERT.test(flat)) return landTouch(params, rows);
-    if (DELETE_AUDIT_EDGES.test(flat)) return landDeleteAudit(params, rows);
+    const audit = landAuditRow(flat, params, rows);
+    if (audit) return audit;
     // jobs_open_title (migrations/0019): one open job per (namespace, title). The
     // queue's duplicate refusal is this index firing, so a fake without it would
     // post every duplicate.

@@ -296,7 +296,9 @@ export async function deleteBranch(
   }
 
   if (!opts.force) {
-    const prResp = await cachedGet(
+    // Live, not cachedGet: a PR opened in the last minute must still stop the delete
+    // (prune.ts reads live for the same reason).
+    const prResp = await ghFetch(
       env,
       owner,
       repo,
