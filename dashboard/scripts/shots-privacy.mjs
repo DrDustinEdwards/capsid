@@ -7,14 +7,14 @@
 //     github.com under an example owner, and mcp.dustinedwards.info;
 //   - a portfolio name (a real site, project or person);
 //   - a job id that is not the sample shape, or one the mock names that the feed lacks;
-//   - a token-shaped string (the shapes src/redact.ts redacts, restated here because a
-//     plain .mjs cannot import the Worker's TypeScript).
+//   - a secret-shaped string, by the rules the Worker redacts with (site-runtime/redact).
 //
 // Run: node scripts/shots-privacy.mjs [file ...]. With no files it checks the two
 // fixtures. playwright.shots.config.ts runs it as globalSetup, so no shot is taken from
 // fixtures that fail it.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { redact } from "@dustinedwards/site-runtime/redact";
 
 const DEFAULT_FILES = ["../dev/sample-feed.json", "../dev/mock-api.ts"].map((p) =>
   fileURLToPath(new URL(p, import.meta.url)),
@@ -42,36 +42,6 @@ const REAL_NAMES =
 const JOB_ANY = /\bjob_[A-Za-z0-9_-]+/g;
 const JOB_SAMPLE = /^job_[0-9a-f]{12}(?:-s\d+)?$/;
 const NOT_A_JOB = new Set(["job_id"]);
-
-// src/redact.ts, its shapes. VALUE and SECRET_NAME match redact.ts.
-const VALUE = String.raw`(?!\[REDACTED)[^\s"',;&]{6,}`;
-const SECRET_NAME = String.raw`[A-Za-z0-9_.-]*(?:secret|token|passw(?:or)?d|api[_-]?key|access[_-]?key|private[_-]?key|signing[_-]?key|credential)[A-Za-z0-9_.-]*`;
-const TOKEN_RULES = [
-  ["private-key", /-----BEGIN ([A-Z0-9 ]*?)PRIVATE KEY( BLOCK)?-----/g],
-  ["jwt", /\beyJ[A-Za-z0-9_-]{5,}\.eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/g],
-  ["github-token", /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g],
-  ["slack-token", /\bxox[abposr]-[A-Za-z0-9-]{10,}/g],
-  ["slack-token", /https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/_-]+/g],
-  ["aws-access-key-id", /\b(?:AKIA|ASIA|ABIA|ACCA|AGPA|AIDA|AIPA|ANPA|ANVA|AROA)[A-Z0-9]{16}\b/g],
-  [
-    "auth",
-    new RegExp(
-      String.raw`\bauthorization["']?\s*[:=]\s*["']?(?:(?:bearer|basic|token|digest)\s+)?${VALUE}`,
-      "gi",
-    ),
-  ],
-  ["auth", /\b(?:Bearer|Basic)\s+(?=[A-Za-z0-9._~+/-]*[0-9+/=])[A-Za-z0-9._~+/-]{8,}=*/gi],
-  ["api-key", /\b(?:sk|pk|rk)[-_](?:live|test|ant|proj)?[-_]?[A-Za-z0-9_-]{20,}/g],
-];
-// Applied to the prose parts (segments) and JSON only.
-const ASSIGNMENT = new RegExp(
-  String.raw`(?<![A-Za-z0-9_.-])(["']?)(${SECRET_NAME})\1\s*[:=]\s*["']?(${VALUE})`,
-  "gi",
-);
-const HIGH_ENTROPY =
-  /\b(?:secret|token|key|password|passwd|credential)s?\b[^\n]{0,24}?([A-Za-z0-9+/_-]{32,}={0,2})/gi;
-const looksRandom = (run) =>
-  (/^[0-9a-f]+$/i.test(run) && /\d/.test(run)) || (/\d/.test(run) && /[A-Za-z]/.test(run));
 
 // The prose in a TypeScript source, each part with its offset: string literals ("...",
 // '...', `...`) and comments. Hostnames and secret-named values are looked for only
@@ -124,17 +94,10 @@ export function scan(name, text, feedJobIds) {
       at(m.index, `job id the sample feed does not define: ${id}`);
   }
 
-  for (const [kind, re] of TOKEN_RULES) {
-    for (const m of text.matchAll(re))
-      at(m.index, `token-shaped string (${kind}): ${m[0].slice(0, 12)}...`);
-  }
-  for (const p of parts) {
-    for (const m of p.text.matchAll(ASSIGNMENT))
-      at(p.index + m.index, `secret-named value (assignment): ${m[2]}=...`);
-    for (const m of p.text.matchAll(HIGH_ENTROPY))
-      if (looksRandom(m[1]))
-        at(p.index + m.index, `random-looking value after a secret word: ${m[1].slice(0, 8)}...`);
-  }
+  // Token shapes and secret-named values, by the Worker's own rules.
+  for (const p of parts)
+    for (const kind of Object.keys(redact(p.text).redactions))
+      at(p.index, `secret-shaped value (${kind})`);
   return problems;
 }
 
