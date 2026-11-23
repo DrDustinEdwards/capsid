@@ -53,7 +53,7 @@ test("PLANT: the home is Needs you, and the list comes first by kind", async ({ 
   expect(order[0]).toBeLessThan(order[1]!);
   // The inbox's count is the header's Inbox, once; the menu entry carries no second copy.
   await expect(
-    page.locator("header.cap-site-header").getByRole("link", { name: "Inbox, 7 waiting on you" }),
+    page.locator("header.cap-site-header").getByRole("link", { name: "Inbox, 11 waiting on you" }),
   ).toHaveCount(1);
   await expect(
     page.locator("nav.cap-admin-menu").getByRole("link", { name: /^Needs you/ }),

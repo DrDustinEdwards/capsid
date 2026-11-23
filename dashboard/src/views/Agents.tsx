@@ -1,7 +1,8 @@
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { AGENT_TABS, tabOf, useApp } from "../app/ctx";
-import { KIND_STATUS, agentState, archiveAgents, nsList, rosterAgents } from "../lib/derive";
+import { KIND_STATUS } from "../lib/derive";
+import { agentState, archiveAgents, nsList, rosterAgents } from "../lib/agents";
 import { ago, pct } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import { Status } from "capsomer/react/status";

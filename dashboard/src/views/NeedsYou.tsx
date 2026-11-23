@@ -1,8 +1,6 @@
 import { Banner } from "capsomer/react/banner";
 import { Suspense, lazy, useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
-import { LIVE, fetchMergeUnits, fetchNamespaces } from "../lib/api";
-import { useAnswer } from "capsomer/react/data";
 import { age, agentLabel, ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import {
@@ -28,7 +26,7 @@ import "capsomer/group.css";
 import "capsomer/check.css";
 import { PageHead } from "./shared";
 import { Problems } from "./Problems";
-import { pausedProjects, unitRows } from "../lib/merge-units";
+import { useWaiting, type AutoMergeAsks, type Entry } from "../lib/waiting";
 
 // NEEDS YOU, the home page (docs/design/design-portal-evaluation.md section 4, DECIDE 1,
 // ruled 2026-10-09; the Portal reorganization of 2026-11-23). It answers "what do I have to
@@ -61,37 +59,12 @@ export function NeedsYou() {
   );
 }
 
-type Entry = { app: InboxApp; item: InboxItem };
-
-// Queues stopped by the circuit breaker (src/job-breaker.ts), from the roster read
-// (GET /portal/api/namespaces), read again with each feed so a reset drops its row.
-function useStops(): {
-  stops: PortalNamespace[];
-  error: string | null;
-  reread: () => void;
-} {
-  const load = useAnswer([LIVE, "namespaces"], fetchNamespaces);
-  return {
-    stops: load.data?.namespaces.filter((n) => n.breaker.open) ?? [],
-    error: load.error,
-    reread: load.reread,
-  };
-}
-
 function Waiting() {
   const { feed } = useApp();
-  const inbox = feed.live.inbox;
-  const { stops, error, reread } = useStops();
-  const asks = useAutoMergeAsks();
-  const all: Entry[] = inbox.apps.flatMap((app) => app.items.map((item) => ({ app, item })));
-  const prs = all.filter((e) => e.item.kind === "pr");
-  const jobs = all.filter((e) => e.item.kind === "question" || e.item.kind === "blocked-job");
-  // A merge unit's proposal or suspension is a row of Auto-merge, with its button, once the
-  // units are read; until then, or if they cannot be read, it shows under Also waiting.
-  const other = all.filter(
-    (e) => !prs.includes(e) && !jobs.includes(e) && !(asks.units && e.item.kind === "proposal"),
-  );
-  const total = prs.length + jobs.length + other.length + stops.length + asks.count;
+  const { listed, stops, asks, total, error, reread } = useWaiting(feed);
+  const prs = listed.filter((e) => e.item.kind === "pr");
+  const jobs = listed.filter((e) => e.item.kind === "question" || e.item.kind === "blocked-job");
+  const other = listed.filter((e) => !prs.includes(e) && !jobs.includes(e));
   return (
     <Panel flush title="Waiting for you" id="waiting" count={total}>
       {error && <Banner tone="warn">Stopped queues could not be read: {error}</Banner>}
@@ -292,23 +265,8 @@ function VisualLook({ visual }: { visual: NonNullable<OpsAwaitingSeat["visual"]>
 
 // ---- auto-merge: a policy that does not load, a paused project, a merge unit to sign or lift
 
-export type AutoMergeAsks = ReturnType<typeof useAutoMergeAsks>;
-
 // The rows load after first paint, keeping their code off the first screen.
 const AutoMergeRows = lazy(() => import("./automerge").then((m) => ({ default: m.AutoMergeRows })));
-
-function useAutoMergeAsks() {
-  const { feed } = useApp();
-  const load = useAnswer([LIVE, "merge-units"], fetchMergeUnits);
-  const policy = feed.live.merge_policy;
-  const paused = pausedProjects(feed);
-  const units = load.data ?? null;
-  const unitAsks =
-    units && policy.loads ? unitRows(policy.units, units).filter((r) => r.state !== "auto") : [];
-  const suspended = new Set(units?.suspended.map((s) => s.unit));
-  const count = (policy.loads ? 0 : 1) + paused.length + unitAsks.length;
-  return { policy, paused, units, unitAsks, suspended, count };
-}
 
 function AutoMergeGroup({ asks }: { asks: AutoMergeAsks }) {
   return (

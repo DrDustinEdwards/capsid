@@ -23,7 +23,7 @@ import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import { Pill, Status } from "capsomer/react/status";
 import { Time } from "capsomer/react/time";
-import { agentState, nsList } from "../lib/derive";
+import { agentState, nsList } from "../lib/agents";
 import { AgentControls, Head, JobBody } from "./DrawerJob";
 import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";

@@ -2,7 +2,6 @@ import type { AttentionGroupInfo, AttentionItem } from "capsomer/behavior/attent
 import { outcomeStatus, type GlyphName, type Tone } from "capsomer/behavior/status";
 import type {
   CiObservation,
-  OpsAgent,
   OpsFeed,
   OpsJob,
   OpsSnapshot,
@@ -132,12 +131,8 @@ export function jobBadge(j: OpsJob, now: number): { kind: Kind; label: string } 
 
 const OPEN_STATUSES: ReadonlyArray<OpsJob["status"]> = ["queued", "claimed", "blocked"];
 
-function isOpen(j: OpsJob): boolean {
+export function isOpen(j: OpsJob): boolean {
   return OPEN_STATUSES.includes(j.status);
-}
-
-export function resumeCall(j: OpsJob): string {
-  return `jobs action "resume" id "${j.id}" namespace "${j.namespace}" reason "<what you did>"`;
 }
 
 export function ciState(c: CiObservation): { kind: Kind; label: string; red: boolean } {
@@ -489,108 +484,6 @@ export function blockedOrder(
   const blocked = list.filter((j) => now - parse(j.updated_at) <= STALE_BLOCKED_MS);
   const stale = list.filter((j) => now - parse(j.updated_at) > STALE_BLOCKED_MS);
   return { blocked, stale, all: [...blocked, ...stale] };
-}
-
-export interface Incident {
-  sev: "crit" | "warn";
-  open: boolean;
-  title: string;
-  fp: string;
-  ns: string;
-  at: number;
-  ref: OpenRef | null;
-  status: string;
-}
-
-const HOT = /^(probe|down|offaccount|backup)/;
-
-export function incidents(feed: OpsFeed): Incident[] {
-  const items: Incident[] = [];
-  const seen = new Set<string>();
-  for (const j of feed.live.jobs) {
-    if (!j.finding) continue;
-    seen.add(j.finding.fingerprint);
-    items.push({
-      sev: HOT.test(j.finding.fingerprint) ? "crit" : "warn",
-      open: isOpen(j),
-      title: j.title.replace(/^Watcher: /, "").replace(/ \[[^\]]*\]$/, ""),
-      fp: j.finding.fingerprint,
-      ns: j.namespace,
-      at: parse(j.created_at),
-      ref: `job:${j.id}`,
-      status: JOB[j.status].label.toLowerCase(),
-    });
-  }
-  // A check's finding with no job in the live window: shown, not openable.
-  for (const c of feed.snapshot?.checks ?? []) {
-    if (c.state !== "finding") continue;
-    for (const fp of c.findings) {
-      if (seen.has(fp)) continue;
-      items.push({
-        sev: HOT.test(fp) ? "crit" : "warn",
-        open: true,
-        title: `Check '${c.id}' reports a finding`,
-        fp,
-        ns: "watcher",
-        at: parse(feed.snapshot?.pass_at ?? feed.live.generated),
-        ref: null,
-        status: "no job in the live window",
-      });
-    }
-  }
-  return items.sort((a, b) => Number(b.open) - Number(a.open) || b.at - a.at);
-}
-
-export function counts(feed: OpsFeed) {
-  const sites = hasSites(feed) ? (feed.snapshot?.sites ?? []) : [];
-  const jobs = feed.live.jobs;
-  return {
-    down: sites.filter((s) => s.state === "down").length,
-    degraded: sites.filter((s) => s.state === "degraded").length,
-    blocked: jobs.filter((j) => j.status === "blocked").length,
-    running: jobs.filter((j) => j.status === "claimed").length,
-    queued: jobs.filter((j) => j.status === "queued").length,
-    findings: jobs.filter((j) => j.finding && isOpen(j)).length,
-    ciRed: (feed.snapshot?.ci ?? []).filter((c) => ciState(c).red).length,
-  };
-}
-
-// The roster is the live credentials only. A revoked agent leaves it at once, and its row
-// leaves the live table 7 days later (docs/auth.md); both are the Archive tab's.
-export function rosterAgents(agents: readonly OpsAgent[]): OpsAgent[] {
-  return agents.filter((a) => !a.revoked_at && !a.archived_at);
-}
-
-/** The Archive tab's rows: revoked and still in the live table, oldest revocation first
- *  (the next to move), then archived, newest move first. */
-export function archiveAgents(agents: readonly OpsAgent[]): OpsAgent[] {
-  const waiting = agents
-    .filter((a) => a.revoked_at && !a.archived_at)
-    .sort((x, y) => parse(x.revoked_at as string) - parse(y.revoked_at as string));
-  const archived = agents
-    .filter((a) => a.archived_at)
-    .sort((x, y) => parse(y.archived_at as string) - parse(x.archived_at as string));
-  return [...waiting, ...archived];
-}
-
-export function agentState(a: OpsAgent, now: number): { kind: Kind; label: string } {
-  if (a.archived_at) return { kind: "nodata", label: "Archived" };
-  if (a.revoked_at) return { kind: "crit", label: "Revoked" };
-  if (a.pending) return { kind: "warn", label: "Waiting for activation" };
-  if (!a.last_seen) return { kind: "nodata", label: "Never seen" };
-  const d = now - parse(a.last_seen);
-  if (d < HOUR) return { kind: "ok", label: "Active" };
-  if (d < 2 * DAY) return { kind: "queued", label: "Idle" };
-  return { kind: "nodata", label: "Silent" };
-}
-
-export function nsList(a: OpsAgent): string {
-  return a.namespaces === "*" ? "*" : a.namespaces.join(", ");
-}
-
-// A namespace's driver is the agent named <ns>-driver.
-export function driverOf(feed: OpsFeed, ns: string): OpsAgent | null {
-  return feed.live.agents.find((a) => a.name === `${ns}-driver`) ?? null;
 }
 
 // The Amazon backup copy at a glance (src/watcher-detect.ts holds the same windows: a
