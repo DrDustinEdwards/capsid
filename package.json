@@ -51,7 +51,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.9.0",
     "@cloudflare/workers-types": "5.20261120.1",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.59.4",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.59.5",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/conformance": "0.2.0-alpha.12",
     "@types/node": "24.19.2",
