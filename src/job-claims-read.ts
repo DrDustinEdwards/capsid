@@ -170,28 +170,15 @@ interface UsageSqlRow {
 
 const groupKey = (agent: string | null, namespace: string) => JSON.stringify([agent, namespace]);
 
-const NO_USAGE_TOTALS: ClaimsUsageTotals = {
-  rows: 0,
-  cost_usd: null,
-  active_seconds: null,
-  tokens_input: null,
-  tokens_output: null,
-  tokens_cache_read: null,
-  tokens_cache_creation: null,
-};
-
-const usageTotals = (row: UsageSqlRow | undefined): ClaimsUsageTotals =>
-  row
-    ? {
-        rows: row.n,
-        cost_usd: row.cost_usd,
-        active_seconds: row.active_seconds,
-        tokens_input: row.tokens_input,
-        tokens_output: row.tokens_output,
-        tokens_cache_read: row.tokens_cache_read,
-        tokens_cache_creation: row.tokens_cache_creation,
-      }
-    : NO_USAGE_TOTALS;
+const usageTotals = (row: UsageSqlRow): ClaimsUsageTotals => ({
+  rows: row.n,
+  cost_usd: row.cost_usd,
+  active_seconds: row.active_seconds,
+  tokens_input: row.tokens_input,
+  tokens_output: row.tokens_output,
+  tokens_cache_read: row.tokens_cache_read,
+  tokens_cache_creation: row.tokens_cache_creation,
+});
 
 const WAIT_CLASS_NEEDS_HUMAN = "needs_human";
 const WAIT_CLASS_UNREADABLE = "unreadable_gate";
@@ -242,7 +229,7 @@ export async function readClaimsAggregate(
   filter: ClaimsFilter,
 ): Promise<ClaimsAggregate> {
   const { namespace, agent, since, until } = filter;
-  const [claimRows, evaluationRows, touchRows, waitRows, telemetryRows, reportedRows] =
+  const [claimRows, evaluationRows, touchRows, waitRows, usageRows] =
     await Promise.all([
       db
         .prepare(
@@ -290,24 +277,8 @@ export async function readClaimsAggregate(
         )
         .bind(namespace, agent, since, until, TOUCH_ROWS + 1)
         .all<WaitFoldRow>(),
-      // Telemetry: the job_outcomes columns the OTLP receiver fills. A job with none of
-      // the six is not a row here, so "rows" counts jobs that reported something.
-      db
-        .prepare(
-          `SELECT namespace, COUNT(*) AS n, SUM(cost_usd) AS cost_usd, SUM(active_seconds) AS active_seconds,
-           SUM(tokens_input) AS tokens_input, SUM(tokens_output) AS tokens_output,
-           SUM(tokens_cache_read) AS tokens_cache_read, SUM(tokens_cache_creation) AS tokens_cache_creation
-         FROM job_outcomes
-         WHERE (cost_usd IS NOT NULL OR active_seconds IS NOT NULL OR tokens_input IS NOT NULL OR tokens_output IS NOT NULL
-                OR tokens_cache_read IS NOT NULL OR tokens_cache_creation IS NOT NULL)
-           AND (?1 IS NULL OR namespace = ?1) AND (?2 IS NULL OR agent = ?2)
-           AND (?3 IS NULL OR recorded_at >= ?3) AND (?4 IS NULL OR recorded_at < ?4)
-         GROUP BY namespace ORDER BY namespace LIMIT ?5`,
-        )
-        .bind(namespace, agent, since, until, CLAIMS_GROUP_LIMIT + 1)
-        .all<UsageSqlRow>(),
-      // Reported: claim.usage as the agent sent it, kept whole in job_claims.raw. Each
-      // claim is one session's own total, so claims on a job are summed.
+      // claim.usage as the agent sent it, kept whole in job_claims.raw. Each claim is one
+      // session's own total, so claims on a job are summed.
       db
         .prepare(
           `SELECT namespace, COUNT(*) AS n,
@@ -429,22 +400,9 @@ export async function readClaimsAggregate(
         a.gate_class.localeCompare(b.gate_class),
     );
 
-  const telemetry = new Map(
-    within("usage_telemetry", telemetryRows.results, CLAIMS_GROUP_LIMIT).map((r) => [
-      r.namespace,
-      r,
-    ]),
+  const usage: ClaimsUsageRow[] = within("usage", usageRows.results, CLAIMS_GROUP_LIMIT).map(
+    (r) => ({ namespace: r.namespace, ...usageTotals(r) }),
   );
-  const reported = new Map(
-    within("usage_reported", reportedRows.results, CLAIMS_GROUP_LIMIT).map((r) => [r.namespace, r]),
-  );
-  const usage: ClaimsUsageRow[] = [...new Set([...telemetry.keys(), ...reported.keys()])]
-    .sort()
-    .map((ns) => ({
-      namespace: ns,
-      telemetry: usageTotals(telemetry.get(ns)),
-      reported: usageTotals(reported.get(ns)),
-    }));
 
   return { filter, groups: ordered, waits: waitsRanked, usage, truncated };
 }

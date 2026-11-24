@@ -249,12 +249,6 @@ describe("job outcomes", () => {
       result_kind: "none" as const,
       verified: UNVERIFIED,
       recorded_at: NOW.toISOString(),
-      cost_usd: null,
-      tokens_input: null,
-      tokens_output: null,
-      tokens_cache_read: null,
-      tokens_cache_creation: null,
-      active_seconds: null,
     });
     await env.DB.batch([outcomeStatement(env.DB, row(DRIVER_ACTOR, null))]);
     await env.DB.batch([

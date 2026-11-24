@@ -102,8 +102,8 @@ test("every aggregate filter value is BOUND, never interpolated, and every read 
   });
   assert.equal(
     calls.length,
-    6,
-    `expected the claims, evaluations, touches, waits, telemetry and reported reads, got ${calls.length}`,
+    5,
+    `expected the claims, evaluations, touches, waits and usage reads, got ${calls.length}`,
   );
   for (const call of calls) {
     assert.doesNotMatch(call.sql, /DROP TABLE/, "a filter value reached the SQL text");
@@ -265,8 +265,7 @@ test("PLANT: a read that hits its bound says so by name instead of passing as wh
     "evaluations",
     "groups",
     "touches",
-    "usage_reported",
-    "usage_telemetry",
+    "usage",
     "waits",
   ]);
 });
@@ -555,17 +554,7 @@ test("the aggregate ranks ended waits by total, per namespace, gate class and wh
   );
 });
 
-test("usage: telemetry and reported stay apart per namespace, and a figure nobody sent is null, not 0", async () => {
-  const telemetry = {
-    namespace: "sample",
-    n: 2,
-    cost_usd: 1.5,
-    active_seconds: 600,
-    tokens_input: 10,
-    tokens_output: 20,
-    tokens_cache_read: 30,
-    tokens_cache_creation: 40,
-  };
+test("usage is per namespace from claim.usage, and a figure nobody sent is null, not 0", async () => {
   const reported = {
     namespace: "sample-b",
     n: 1,
@@ -576,37 +565,22 @@ test("usage: telemetry and reported stay apart per namespace, and a figure nobod
     tokens_cache_read: null,
     tokens_cache_creation: null,
   };
-  const { db } = stubDb((sql) =>
-    sql.includes("FROM job_outcomes")
-      ? [telemetry]
-      : sql.includes("json_extract")
-        ? [reported]
-        : [],
-  );
+  const { db } = stubDb((sql) => (sql.includes("json_extract") ? [reported] : []));
   const out = await readClaimsAggregate(db, {
     namespace: null,
     agent: null,
     since: null,
     until: null,
   });
-  assert.equal(out.usage.length, 2);
-  const a = out.usage.find((u) => u.namespace === "sample")!;
-  assert.equal(a.telemetry.rows, 2);
-  assert.equal(a.telemetry.cost_usd, 1.5);
-  assert.equal(a.reported.rows, 0);
-  assert.equal(a.reported.cost_usd, null, "no reported usage is null");
-  const b = out.usage.find((u) => u.namespace === "sample-b")!;
-  assert.equal(b.reported.cost_usd, 0.25);
-  assert.equal(b.reported.active_seconds, null, "a field the agent did not report is null, not 0");
-  assert.equal(b.telemetry.rows, 0);
-  assert.equal(b.telemetry.cost_usd, null);
+  assert.equal(out.usage.length, 1);
+  const b = out.usage[0]!;
+  assert.equal(b.cost_usd, 0.25);
+  assert.equal(b.active_seconds, null, "a field the agent did not report is null, not 0");
 });
 
 test("the usage reads only count rows that carried something, and read job_claims.raw's claim.usage", async () => {
   const { db, calls } = stubDb();
   await readClaimsAggregate(db, { namespace: null, agent: null, since: null, until: null });
-  const telemetry = calls.find((c) => c.sql.includes("FROM job_outcomes"))!;
-  assert.match(telemetry.sql, /cost_usd IS NOT NULL OR active_seconds IS NOT NULL/);
   const reported = calls.find((c) =>
     c.sql.includes("json_extract(raw, '$.claim.usage') IS NOT NULL"),
   )!;

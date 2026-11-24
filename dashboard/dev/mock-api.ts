@@ -664,15 +664,6 @@ function mockTrends(weeks: number): PortalTrends {
         },
       ],
     },
-    // Weekly model spend: one week with no costed outcome (a gap, not a zero).
-    cost: {
-      weeks: weekRows.map((w, i) => ({
-        week: w.week,
-        start: w.start,
-        usd: i === 1 && weeks > 3 ? null : 6 + ((i * 7) % 9) * 1.5,
-        jobs: i === 1 && weeks > 3 ? 0 : 3 + (i % 4),
-      })),
-    },
     backups: {
       runs: 27,
       error: null,

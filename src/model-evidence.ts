@@ -1,5 +1,4 @@
 import { JOB_KINDS, MODELS, ROUTING_RULES, TRIAL_ARMS, type RoutedModel } from "./model-routing";
-import { formatMoney } from "@dustinedwards/site-runtime/money";
 
 // What the outcomes say about the routing rules (src/model-routing.ts). Reads only.
 
@@ -20,8 +19,6 @@ export interface OutcomeFact {
   prs_merged: number | null;
   ci_green: number | null;
   corrections: number | null;
-  cost_usd: number | null;
-  tokens: number | null;
   // Its pull request was later reverted, or its deploy rolled back (src/model-learning.ts).
   undone?: boolean;
 }
@@ -34,8 +31,6 @@ export interface Cell {
   merged_green: number;
   rate: number;
   corrections_mean: number | null;
-  cost_mean_usd: number | null;
-  cost_n: number;
   // Below MIN_SAMPLE: shown, never acted on.
   enough: boolean;
 }
@@ -65,7 +60,6 @@ export function cellsOf(facts: readonly OutcomeFact[]): Cell[] {
       (r) => (r.prs_merged ?? 0) >= 1 && r.ci_green === 1 && !r.undone,
     ).length;
     const corr = rows.filter((r) => r.corrections !== null);
-    const costed = rows.filter((r) => r.cost_usd !== null);
     cells.push({
       kind,
       model,
@@ -75,10 +69,6 @@ export function cellsOf(facts: readonly OutcomeFact[]): Cell[] {
       corrections_mean: corr.length
         ? corr.reduce((s, r) => s + (r.corrections ?? 0), 0) / corr.length
         : null,
-      cost_mean_usd: costed.length
-        ? costed.reduce((s, r) => s + (r.cost_usd ?? 0), 0) / costed.length
-        : null,
-      cost_n: costed.length,
       enough: rows.length >= MIN_SAMPLE,
     });
   }
@@ -152,9 +142,6 @@ export interface TrialStatus {
   why: string;
 }
 
-const money = (usd: number | null): string =>
-  usd === null ? "no cost recorded" : `${formatMoney(usd, "usd", { scale: 0 })} a job`;
-
 /** Each trial arm read against its kind's rule: what it has collected and whether the
  *  evidence supports the rule change. "supports" holds exactly when proposeRuleChanges
  *  proposes that change; the seat makes the edit. */
@@ -179,7 +166,7 @@ export function trialStatus(cells: readonly Cell[]): TrialStatus[] {
         why: `${base.n} of ${MIN_SAMPLE} outcomes on ${arm.model} and ${base.against_n} of ${MIN_SAMPLE} on ${rule.model}; nothing is read from fewer`,
       };
     }
-    const scores = `${arm.model} merged green ${mine.merged_green}/${mine.n} at ${money(mine.cost_mean_usd)}, ${rule.model} ${theirs.merged_green}/${theirs.n} at ${money(theirs.cost_mean_usd)}`;
+    const scores = `${arm.model} merged green ${mine.merged_green}/${mine.n}, ${rule.model} ${theirs.merged_green}/${theirs.n}`;
     const proposed = proposals.some((p) => p.kind === arm.kind && p.to === arm.model);
     return proposed
       ? {

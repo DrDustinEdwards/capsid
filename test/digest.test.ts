@@ -27,8 +27,7 @@ const EMPTY: OvernightDigest = {
   pull_requests_ready: [],
   pull_requests_merged: 0,
   totals: {
-    telemetry: { jobs: 0 } as never,
-    reported: { jobs: 0 } as never,
+    usage: { jobs: 0 } as never,
     jobs_without_usage: 0,
   },
   truncated: [],
@@ -45,7 +44,6 @@ const FULL: OvernightDigest = {
       duration_minutes: 30,
       blocked_count: 0,
       usage,
-      usage_source: "none",
     },
   ],
   blocked: [
@@ -57,7 +55,6 @@ const FULL: OvernightDigest = {
       summary: "QUESTION: which domain?",
       pull_requests: [],
       usage,
-      usage_source: "none",
     },
     {
       id: "job_b",
@@ -67,7 +64,6 @@ const FULL: OvernightDigest = {
       summary: "run this",
       pull_requests: [],
       usage,
-      usage_source: "none",
     },
   ],
   pull_requests_ready: [

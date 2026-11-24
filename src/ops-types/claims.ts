@@ -59,10 +59,10 @@ export interface ClaimsWaitRow {
   waited_ms_median: number;
 }
 
-// Cost, tokens and active time for one source, summed over the rows that carried it.
-// Every figure is null when no row carried it, never 0.
+// Cost, tokens and active time the agents reported in claim.usage, summed over the claims
+// that carried any. Every figure is null when none did, never 0.
 export interface ClaimsUsageTotals {
-  // Jobs (telemetry) or claims (reported) that carried any usage at all.
+  // Claims that carried any usage at all.
   rows: number;
   cost_usd: number | null;
   active_seconds: number | null;
@@ -72,13 +72,8 @@ export interface ClaimsUsageTotals {
   tokens_cache_creation: number | null;
 }
 
-// Per namespace, the two sources side by side and never added together: telemetry from
-// job_outcomes (src/job-outcomes.ts readJobUsage) and what the agent reported in
-// claim.usage. A job can appear in both, so a sum across them would count it twice.
-export interface ClaimsUsageRow {
+export interface ClaimsUsageRow extends ClaimsUsageTotals {
   namespace: string;
-  telemetry: ClaimsUsageTotals;
-  reported: ClaimsUsageTotals;
 }
 
 export interface ClaimsAggregate {

@@ -52,14 +52,6 @@ export interface JobOutcomeRow {
   result_kind: OutcomeResultKind;
   verified: string;
   recorded_at: string;
-  // Usage columns (migrations/0025). Nothing fills them since the telemetry receiver was
-  // removed, so they stay NULL, never 0.
-  cost_usd: number | null;
-  tokens_input: number | null;
-  tokens_output: number | null;
-  tokens_cache_read: number | null;
-  tokens_cache_creation: number | null;
-  active_seconds: number | null;
   // The job's kind, the model Capsid recommended and the model the session reported it ran
   // (migrations/0032, src/model-routing.ts). NULL where not routed or not reported.
   job_kind?: string | null;
@@ -422,12 +414,6 @@ export function outcomeFrom(
     result_kind: resultKindOf(job.result_ref),
     verified: JSON.stringify(verdict.verified),
     recorded_at: now.toISOString(),
-    cost_usd: null,
-    tokens_input: null,
-    tokens_output: null,
-    tokens_cache_read: null,
-    tokens_cache_creation: null,
-    active_seconds: null,
     job_kind: job.kind ?? null,
     model_chosen: job.model_recommended ?? null,
     model_actual: actualModel,
@@ -441,9 +427,8 @@ export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
     .prepare(
       `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, commits, files_changed,
          tests_added, ci_green, blocked_count, resumed_count, duration_minutes, result_kind, verified,
-         recorded_at, cost_usd, tokens_input, tokens_output,
-         tokens_cache_read, tokens_cache_creation, active_seconds, job_kind, model_chosen, model_actual)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
+         recorded_at, job_kind, model_chosen, model_actual)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
        ON CONFLICT(job_id) DO NOTHING`,
     )
     .bind(
@@ -462,12 +447,6 @@ export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
       row.result_kind,
       row.verified,
       row.recorded_at,
-      row.cost_usd,
-      row.tokens_input,
-      row.tokens_output,
-      row.tokens_cache_read,
-      row.tokens_cache_creation,
-      row.active_seconds,
       row.job_kind ?? null,
       row.model_chosen ?? null,
       row.model_actual ?? null,

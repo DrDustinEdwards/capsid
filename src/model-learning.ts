@@ -16,8 +16,8 @@ import { DAY_MS } from "./time";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
 // WHAT THE ROUTING LEARNS (capsid/research/design-model-routing.md): per kind and model, the share
-// of jobs merged with green CI and not undone since, the corrections spent, and the cost where
-// telemetry recorded one, read from job_outcomes. Merge and CI are GitHub's, read at complete
+// of jobs merged with green CI and not undone since, and the corrections spent, read from
+// job_outcomes. Merge and CI are GitHub's, read at complete
 // (docs/work-queue.md). A merge is a weak label alone (Peralta et al., MSR 2026: reviewers fix and
 // merge, or merge and revert), so a job whose PR was later reverted (`job-pr-reverted`,
 // src/merge-safety.ts) or whose deploy was rolled back does not count as work that held. The
@@ -52,8 +52,6 @@ interface Row {
   prs_merged: number | null;
   ci_green: number | null;
   corrections: number | null;
-  cost_usd: number | null;
-  tokens: number | null;
   undone: number;
 }
 
@@ -74,8 +72,7 @@ export async function readModelLearning(db: D1Database, now: Date): Promise<Mode
   const { results } = await db
     .prepare(
       `SELECT o.job_kind AS kind, o.model_chosen AS model, o.model_actual AS model_actual, o.prs_merged AS prs_merged, o.ci_green AS ci_green,
-              j.corrections_count AS corrections, o.cost_usd AS cost_usd,
-              CASE WHEN o.tokens_input IS NULL AND o.tokens_output IS NULL THEN NULL ELSE COALESCE(o.tokens_input, 0) + COALESCE(o.tokens_output, 0) END AS tokens,
+              j.corrections_count AS corrections,
               (EXISTS (SELECT 1 FROM audit_log a WHERE a.action = 'job-pr-reverted' AND json_extract(a.params, '$.job_id') = o.job_id)
                OR EXISTS (SELECT 1 FROM job_outcome_prs p JOIN deploy_outcomes d
                             ON lower(p.pr_url) = lower('https://github.com/' || d.repo || '/pull/' || d.pr)
@@ -95,8 +92,6 @@ export async function readModelLearning(db: D1Database, now: Date): Promise<Mode
     prs_merged: r.prs_merged,
     ci_green: r.ci_green,
     corrections: r.corrections,
-    cost_usd: r.cost_usd,
-    tokens: r.tokens,
     undone: r.undone === 1,
   }));
   const mismatched = read.length - facts.length;

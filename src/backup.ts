@@ -87,8 +87,8 @@ export const TABLES = [
   "document_versions",
   "audit_log",
   "document_links",
-  // Nothing prunes the tables below except improve_jti, so a dump is the only copy
-  // outside D1. job_outcomes and job_outcome_prs hold counts verified against pull
+  // The tables from here to improve_jti are never pruned, except task_runs, so a dump is
+  // the only copy outside D1. job_outcomes and job_outcome_prs hold counts verified against pull
   // requests GitHub can delete. agents carries the sha256 verifier, never a key, and
   // a revoked agent keeps its row so the audit trail it wrote still resolves.
   "jobs",
