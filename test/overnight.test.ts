@@ -24,11 +24,7 @@ import {
   type PlanJobRow,
   type RepoOf,
 } from "../src/overnight-plan.ts";
-import {
-  digestSinceFrom,
-  pullRequestsIn,
-  readOvernightDigest,
-} from "../src/overnight-digest.ts";
+import { digestSinceFrom, pullRequestsIn, readOvernightDigest } from "../src/overnight-digest.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // The overnight run's switch, plan and digest (src/overnight.ts, src/overnight-plan.ts, src/overnight-digest.ts).
