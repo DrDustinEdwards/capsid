@@ -67,6 +67,7 @@
     "0063_audit_log_client.sql": "cbbae6f30361ce9197d366a381fedd3920478585c3db03e4077efbb15283569c",
     "0064_jobs_parked_until.sql": "f7bbd56fae740d2e42f81503f7aa9739ee302b56ed6ae4897110b16d5b019d7d",
     "0065_agents_pending.sql": "c262e4d963ae575fc54095b669aa190ffcb1eb5be06467b4e7c86457a65c05d8",
-    "0066_agents_archive_columns.sql": "9fc2aed1492a42ad5417095f40ae9d88c00b7538087266aa3cf660d71a410c30"
+    "0066_agents_archive_columns.sql": "9fc2aed1492a42ad5417095f40ae9d88c00b7538087266aa3cf660d71a410c30",
+    "0067_drop_unused_columns.sql": "16eb09b18517ad9aa3b875fcacdc9880f183ad24cb4d798d61881db8da61c244"
   }
 }
