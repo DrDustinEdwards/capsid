@@ -55,9 +55,6 @@ export interface AgentRow {
   // 1 from the mint until a person clicks Activate in the Portal (migrations/0065); the key
   // resolves only at 0. Optional because a test fake may leave it out.
   pending?: number;
-  // The one job an old runner key existed to work (migrations/0021), or null; no key is minted with one now. Optional
-  // because a row read before that migration has no such column.
-  job_id?: string | null;
   // Set when the watcher pass archives a revoked agent (migrations/0066).
   archived_at?: string | null;
 }

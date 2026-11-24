@@ -9,7 +9,7 @@ import { auditStatement } from "./store-guards";
 // still be read in place for a week.
 export const ARCHIVE_AFTER_DAYS = 7;
 
-type ArchiveReason = "revoked-7-days" | "runner-job-ended";
+type ArchiveReason = "revoked-7-days";
 
 // How many agents one pass moves. A pass is not the place to drain a backlog of
 // hundreds; the next pass takes the rest.
@@ -18,7 +18,7 @@ const MAX_PER_PASS = 20;
 const ARCHIVE_ACTION = "agents.archive";
 
 const ARCHIVED_COLUMNS =
-  "id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, last_seen, job_id, archive_reason AS reason, audit_rows, jobs, archived_at";
+  "id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, last_seen, archive_reason AS reason, audit_rows, jobs, archived_at";
 
 export interface ArchivedAgent {
   id: string;
@@ -30,7 +30,6 @@ export interface ArchivedAgent {
   created_at: string;
   revoked_at: string;
   last_seen: string | null;
-  job_id: string | null;
   reason: ArchiveReason;
   audit_rows: number;
   jobs: number;
@@ -43,18 +42,13 @@ interface DueRow {
   reason: ArchiveReason;
 }
 
-/** The revoked agents due to move: 7 days after revocation, or a one-job key row
- *  (job_id set, an old runner key) whose job has ended (done, failed or superseded). Oldest revocation first. */
+/** The revoked agents due to move: 7 days after revocation, oldest revocation first. */
 async function archiveDue(db: D1Database, now: Date): Promise<DueRow[]> {
   const { results } = await db
     .prepare(
-      `SELECT a.id AS id, a.name AS name,
-              CASE WHEN a.job_id IS NOT NULL AND j.status IN ('done', 'failed', 'superseded') THEN 'runner-job-ended' ELSE 'revoked-7-days' END AS reason
-         FROM agents a LEFT JOIN jobs j ON j.id = a.job_id
-        WHERE a.revoked_at IS NOT NULL AND a.archived_at IS NULL
-          AND (datetime(a.revoked_at) <= datetime(?1, ?3)
-               OR (a.job_id IS NOT NULL AND j.status IN ('done', 'failed', 'superseded')))
-        ORDER BY a.revoked_at, a.name
+      `SELECT id, name, 'revoked-7-days' AS reason FROM agents
+        WHERE revoked_at IS NOT NULL AND archived_at IS NULL AND datetime(revoked_at) <= datetime(?1, ?3)
+        ORDER BY revoked_at, name
         LIMIT ?2`,
     )
     .bind(now.toISOString(), MAX_PER_PASS, `-${ARCHIVE_AFTER_DAYS} days`)

@@ -71,17 +71,16 @@ async function plantAgent(
   raw: DatabaseSync,
   name: string,
   revoked: string | null,
-  jobId: string | null = null,
 ): Promise<string> {
   const key = `key-${name}`;
   raw
     .prepare(
-      "INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, job_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
       `agent_${name}`,
       name,
-      jobId ? "session" : "driver",
+      "driver",
       await sha256Hex(key),
       JSON.stringify({
         namespaces: ["sample"],
@@ -93,7 +92,6 @@ async function plantAgent(
       "access:dustin@example.com",
       daysAgo(30),
       revoked,
-      jobId,
     );
   return key;
 }
@@ -145,17 +143,6 @@ test("a revoked agent moves 7 days after revocation with its counts and an audit
   );
   // A second pass has nothing left to move.
   assert.deepEqual(await archiveRevokedAgents(db, ACTOR, NOW), { archived: [], skipped: [] });
-});
-
-test("a runner key moves once its job has ended, and waits its 7 days while the job is only blocked", async () => {
-  const { raw, db } = fresh();
-  plantJob(raw, "job_cccccccccccc", "done", "agent:runner-done");
-  plantJob(raw, "job_dddddddddddd", "blocked", "agent:runner-blocked");
-  await plantAgent(raw, "runner-done", daysAgo(0.1), "job_cccccccccccc");
-  await plantAgent(raw, "runner-blocked", daysAgo(0.1), "job_dddddddddddd");
-  const pass = await archiveRevokedAgents(db, ACTOR, NOW);
-  assert.deepEqual(pass.archived, [{ name: "runner-done", reason: "runner-job-ended" }]);
-  assert.deepEqual(names(raw), ["runner-blocked"]);
 });
 
 test("PLANT: an archived key is refused", async () => {
