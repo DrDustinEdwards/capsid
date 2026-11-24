@@ -231,12 +231,10 @@ export async function mintAgent(
     );
   }
   // Names are never reused, revoked and archived ones included, so the check is over
-  // every row of both tables. An audit actor has to mean one credential forever, or
-  // the log cannot answer who did something.
+  // every row. An audit actor has to mean one credential forever, or the log cannot
+  // answer who did something.
   const existing = await db
-    .prepare(
-      "SELECT id FROM agents WHERE name = ?1 UNION ALL SELECT id FROM agents_archive WHERE name = ?1",
-    )
+    .prepare("SELECT id FROM agents WHERE name = ?1")
     .bind(name)
     .first<{ id: string }>();
   if (existing) {
@@ -305,7 +303,7 @@ export async function listAgents(db: D1Database): Promise<AgentResult> {
   // for, and hiding it would make "revoked" and "never existed" look the same. The
   // archive is the list action's archived: true.
   const { results } = await db
-    .prepare("SELECT * FROM agents ORDER BY created_at DESC, name")
+    .prepare("SELECT * FROM agents WHERE archived_at IS NULL ORDER BY created_at DESC, name")
     .all<AgentRow>();
   return { ok: true, action: "list", agents: (results ?? []).map(publicAgent) };
 }
