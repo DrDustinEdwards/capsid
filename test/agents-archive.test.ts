@@ -14,7 +14,7 @@ import { resolveAgent } from "../src/agents.ts";
 import { agentSummaries } from "../src/status.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// Revoked agents move to agents_archive and keep their history (job_24e460427d6c). The
+// Revoked agents are archived in place and keep their history (job_24e460427d6c). The
 // move is SQL across five tables, so these run every migration with Node's SQLite and
 // drive the real statements through a small D1 shape, rather than the D1 fake, which
 // models no subquery or UNION.
@@ -106,11 +106,12 @@ function plantJob(raw: DatabaseSync, id: string, status: string, by: string): vo
     .run(id, `t ${id}`, status, by);
 }
 
-const names = (raw: DatabaseSync, table: string) =>
+const names = (raw: DatabaseSync, where = "archived_at IS NULL") =>
   raw
-    .prepare(`SELECT name FROM ${table} ORDER BY name`)
+    .prepare(`SELECT name FROM agents WHERE ${where} ORDER BY name`)
     .all()
     .map((r) => r.name);
+const archivedNames = (raw: DatabaseSync) => names(raw, "archived_at IS NOT NULL");
 
 test("a revoked agent moves 7 days after revocation with its counts and an audit row; a live one and a recent one stay", async () => {
   const { raw, db } = fresh();
@@ -125,20 +126,16 @@ test("a revoked agent moves 7 days after revocation with its counts and an audit
       .run();
   plantJob(raw, "job_aaaaaaaaaaaa", "done", "agent:old");
   plantJob(raw, "job_bbbbbbbbbbbb", "queued", "agent:live");
-  assert.equal(names(raw, "agents").length, 3, "the plant did not land");
+  assert.equal(names(raw).length, 3, "the plant did not land");
 
   const pass = await archiveRevokedAgents(db, ACTOR, NOW);
   assert.deepEqual(pass, { archived: [{ name: "old", reason: "revoked-7-days" }], skipped: [] });
-  assert.deepEqual(names(raw, "agents"), ["live", "recent"]);
-  const row = raw.prepare("SELECT * FROM agents_archive WHERE name = 'old'").get()!;
+  assert.deepEqual(names(raw), ["live", "recent"]);
+  const row = raw.prepare("SELECT * FROM agents WHERE name = 'old'").get()!;
   assert.equal(row.audit_rows, 3);
   assert.equal(row.jobs, 1);
-  assert.equal(row.reason, "revoked-7-days");
-  assert.equal(
-    row.revoked_at,
-    daysAgo(ARCHIVE_AFTER_DAYS + 1),
-    "the row is copied, not re-stamped",
-  );
+  assert.equal(row.archive_reason, "revoked-7-days");
+  assert.equal(row.revoked_at, daysAgo(ARCHIVE_AFTER_DAYS + 1), "revoked_at is not re-stamped");
   const audit = raw
     .prepare("SELECT actor, path, params FROM audit_log WHERE action = 'agents.archive'")
     .all();
@@ -158,14 +155,14 @@ test("a runner key moves once its job has ended, and waits its 7 days while the 
   await plantAgent(raw, "runner-blocked", daysAgo(0.1), "job_dddddddddddd");
   const pass = await archiveRevokedAgents(db, ACTOR, NOW);
   assert.deepEqual(pass.archived, [{ name: "runner-done", reason: "runner-job-ended" }]);
-  assert.deepEqual(names(raw, "agents"), ["runner-blocked"]);
+  assert.deepEqual(names(raw), ["runner-blocked"]);
 });
 
 test("PLANT: an archived key is refused", async () => {
   const { raw, db } = fresh();
   const key = await plantAgent(raw, "gone", daysAgo(ARCHIVE_AFTER_DAYS + 1));
   await archiveRevokedAgents(db, ACTOR, NOW);
-  assert.deepEqual(names(raw, "agents_archive"), ["gone"], "the plant did not land in the archive");
+  assert.deepEqual(archivedNames(raw), ["gone"], "the plant was not archived");
   const request = new Request("https://capsid.example.com/ops/mcp", {
     headers: { Authorization: `Bearer ${key}` },
   });
@@ -176,7 +173,7 @@ test("PLANT: an archived name is never minted again", async () => {
   const { raw, db } = fresh();
   await plantAgent(raw, "gone", daysAgo(ARCHIVE_AFTER_DAYS + 1));
   await archiveRevokedAgents(db, ACTOR, NOW);
-  assert.deepEqual(names(raw, "agents"), [], "the plant is still in the live table");
+  assert.deepEqual(archivedNames(raw), ["gone"], "the plant was not archived");
   const minted = await mintAgent(db, "access:dustin@example.com", {
     name: "gone",
     kind: "driver",
@@ -185,7 +182,6 @@ test("PLANT: an archived name is never minted again", async () => {
   });
   assert.equal(minted.ok, false);
   assert.match(minted.refusal ?? "", /already exists/);
-  assert.deepEqual(names(raw, "agents"), []);
 });
 
 test("the inventory lists live, then revoked, then archived with archived_at; the archive read never returns the verifier", async () => {

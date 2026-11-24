@@ -58,6 +58,8 @@ export interface AgentRow {
   // The one job an old runner key existed to work (migrations/0021), or null; no key is minted with one now. Optional
   // because a row read before that migration has no such column.
   job_id?: string | null;
+  // Set when the watcher pass archives a revoked agent (migrations/0066).
+  archived_at?: string | null;
 }
 
 export function isAgentKind(value: unknown): value is AgentKind {

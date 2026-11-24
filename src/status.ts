@@ -88,8 +88,8 @@ export interface AgentSummary {
   revoked_at: string | null;
   // Minted and not yet activated in the Portal (migrations/0065): its key resolves nothing.
   pending: boolean;
-  // When the watcher pass moved it to agents_archive (src/agents-archive.ts), or null
-  // for a row still in agents. An archived agent is always revoked.
+  // When the watcher pass archived it (src/agents-archive.ts), or null for a live or
+  // revoked row. An archived agent is always revoked.
   archived_at: string | null;
   // What this credential has done, from job_outcomes. Counts and rates, never a
   // composite score (src/agent-record.ts says why).
@@ -106,9 +106,9 @@ const SUMMARY_ARCHIVE_LIMIT = 50;
 export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
   const { results } = await db
     .prepare(
-      `SELECT name, kind, scopes, last_seen, revoked_at, pending, NULL AS archived_at FROM agents
+      `SELECT name, kind, scopes, last_seen, revoked_at, pending, archived_at FROM agents WHERE archived_at IS NULL
        UNION ALL
-       SELECT * FROM (SELECT name, kind, scopes, last_seen, revoked_at, 0 AS pending, archived_at FROM agents_archive ORDER BY archived_at DESC, name LIMIT ?1)`,
+       SELECT * FROM (SELECT name, kind, scopes, last_seen, revoked_at, pending, archived_at FROM agents WHERE archived_at IS NOT NULL ORDER BY archived_at DESC, name LIMIT ?1)`,
     )
     .bind(SUMMARY_ARCHIVE_LIMIT)
     .all<{

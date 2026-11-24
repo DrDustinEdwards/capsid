@@ -1,12 +1,9 @@
 import { auditStatement } from "./store-guards";
 
 // Revoked agents leave the live inventory and keep their history: archive and hide, never
-// delete an agent with history (migrations/0038_agents_archive.sql says what moves and why).
-//
-// Every row that records what an agent did carries the actor string agent:<name> itself, so
-// moving the agents row breaks no join. Two things still read the old row from here: the name
-// stays reserved (mintAgent), and the key's digest is still refused (resolveAgent). Archived
-// means revoked to every other reader.
+// delete an agent with history (migrations/0038_agents_archive.sql says why). An archived
+// agent is a revoked agents row with archived_at set (migrations/0066), so its name stays
+// reserved (mintAgent) and its key stays refused (resolveAgent) with no second table to read.
 
 // A revoked agent moves this long after revocation, so a revocation made by mistake can
 // still be read in place for a week.
@@ -19,6 +16,9 @@ type ArchiveReason = "revoked-7-days" | "runner-job-ended";
 const MAX_PER_PASS = 20;
 
 const ARCHIVE_ACTION = "agents.archive";
+
+const ARCHIVED_COLUMNS =
+  "id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, last_seen, job_id, archive_reason AS reason, audit_rows, jobs, archived_at";
 
 export interface ArchivedAgent {
   id: string;
@@ -51,7 +51,7 @@ async function archiveDue(db: D1Database, now: Date): Promise<DueRow[]> {
       `SELECT a.id AS id, a.name AS name,
               CASE WHEN a.job_id IS NOT NULL AND j.status IN ('done', 'failed', 'superseded') THEN 'runner-job-ended' ELSE 'revoked-7-days' END AS reason
          FROM agents a LEFT JOIN jobs j ON j.id = a.job_id
-        WHERE a.revoked_at IS NOT NULL
+        WHERE a.revoked_at IS NOT NULL AND a.archived_at IS NULL
           AND (datetime(a.revoked_at) <= datetime(?1, ?3)
                OR (a.job_id IS NOT NULL AND j.status IN ('done', 'failed', 'superseded')))
         ORDER BY a.revoked_at, a.name
@@ -62,29 +62,23 @@ async function archiveDue(db: D1Database, now: Date): Promise<DueRow[]> {
   return results ?? [];
 }
 
-/** The move of one agent, as one batch: copy it with its counts, delete it from agents,
- *  and write the audit row. Both data statements are guarded on the row still being
- *  revoked, so a row that changed between the read and the batch moves nothing. */
+/** The move of one agent, as one batch: stamp it archived with its counts and write the
+ *  audit row. The update is guarded on the row still being revoked and not archived, so a
+ *  row that changed between the read and the batch moves nothing. */
 function archiveStatements(db: D1Database, actor: string, due: DueRow): D1PreparedStatement[] {
   const agentActor = `agent:${due.name}`;
   return [
     db
       .prepare(
-        `INSERT INTO agents_archive (id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, last_seen, job_id, reason, audit_rows, jobs)
-         SELECT id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, last_seen, job_id, ?2,
-                (SELECT COUNT(*) FROM audit_log WHERE actor = ?3),
-                (SELECT COUNT(*) FROM (
+        `UPDATE agents SET archived_at = datetime('now'), archive_reason = ?2,
+                audit_rows = (SELECT COUNT(*) FROM audit_log WHERE actor = ?3),
+                jobs = (SELECT COUNT(*) FROM (
                    SELECT id FROM jobs WHERE posted_by = ?3 OR claimed_by = ?3
                    UNION SELECT job_id FROM job_outcomes WHERE agent = ?3
                    UNION SELECT job_id FROM job_claims WHERE agent = ?3))
-           FROM agents WHERE id = ?1 AND revoked_at IS NOT NULL`,
+          WHERE id = ?1 AND revoked_at IS NOT NULL AND archived_at IS NULL`,
       )
       .bind(due.id, due.reason, agentActor),
-    db
-      .prepare(
-        "DELETE FROM agents WHERE id = ?1 AND revoked_at IS NOT NULL AND EXISTS (SELECT 1 FROM agents_archive WHERE id = ?1)",
-      )
-      .bind(due.id),
     auditStatement(db, actor, ARCHIVE_ACTION, "agents", due.name, {
       reason: due.reason,
       id: due.id,
@@ -108,9 +102,9 @@ export async function archiveRevokedAgents(
   const out: ArchivePass = { archived: [], skipped: [] };
   for (const due of await archiveDue(db, now)) {
     const results = await db.batch(archiveStatements(db, actor, due));
-    // The DELETE is what takes the row out of the live table, so its count is the move.
-    // agents has no trigger to inflate it.
-    if ((results[1]?.meta?.changes ?? 0) === 1)
+    // The UPDATE is the move, so its count says whether it happened. agents has no trigger
+    // to inflate it.
+    if ((results[0]?.meta?.changes ?? 0) === 1)
       out.archived.push({ name: due.name, reason: due.reason });
     else out.skipped.push(due.name);
   }
@@ -124,7 +118,9 @@ export async function listArchivedAgents(
   limit = 200,
 ): Promise<Array<Omit<ArchivedAgent, "key_hash"> & { fingerprint: string }>> {
   const { results } = await db
-    .prepare("SELECT * FROM agents_archive ORDER BY archived_at DESC, name LIMIT ?1")
+    .prepare(
+      `SELECT ${ARCHIVED_COLUMNS} FROM agents WHERE archived_at IS NOT NULL ORDER BY archived_at DESC, name LIMIT ?1`,
+    )
     .bind(limit)
     .all<ArchivedAgent>();
   return (results ?? []).map(({ key_hash, ...row }) => ({
@@ -139,7 +135,7 @@ export async function archivedAgentByName(
   name: string,
 ): Promise<ArchivedAgent | null> {
   return db
-    .prepare("SELECT * FROM agents_archive WHERE name = ?1")
+    .prepare(`SELECT ${ARCHIVED_COLUMNS} FROM agents WHERE name = ?1 AND archived_at IS NOT NULL`)
     .bind(name)
     .first<ArchivedAgent>();
 }

@@ -38,9 +38,7 @@ export async function resumeDestination(
 async function isRevokedActor(db: D1Database, actor: string): Promise<boolean> {
   if (!actor.startsWith("agent:")) return false;
   const row = await db
-    .prepare(
-      "SELECT revoked_at FROM agents WHERE name = ?1 UNION ALL SELECT revoked_at FROM agents_archive WHERE name = ?1",
-    )
+    .prepare("SELECT revoked_at FROM agents WHERE name = ?1")
     .bind(actor.slice("agent:".length))
     .first<{ revoked_at: string | null }>();
   return row?.revoked_at != null;
