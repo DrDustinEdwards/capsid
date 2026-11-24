@@ -34,8 +34,7 @@ export interface DocumentEdges {
   incoming: Array<{ type: string; from_ns: string; from_path: string }>;
 }
 
-/** One document by namespace and path, or null. Named columns: frontmatter and
- *  publish_at are left out, since nothing in this server reads or writes them. */
+/** One document by namespace and path, or null. */
 export async function readDocument(
   db: D1Database,
   namespace: string,
