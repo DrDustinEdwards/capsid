@@ -16,7 +16,7 @@
     "shots": "playwright test -c playwright.shots.config.ts"
   },
   "dependencies": {
-    "@tanstack/react-query": "5.107.1",
+    "@tanstack/react-query": "5.108.2",
     "capsomer": "github:DrDustinEdwards/capsomer#v0.164.10",
     "enarratio": "0.17.2",
     "react": "19.3.1",
