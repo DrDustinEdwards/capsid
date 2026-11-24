@@ -45,17 +45,7 @@ const NULLABLE = [
   "prs_merged",
   "commits",
   "files_changed",
-  "tests_added",
-  "tests_run",
-  "tests_passed",
-  "tests_failed",
-  "tests_result",
-  "deploy_state",
-  "files_touched",
   "model_id",
-  "client_name",
-  "client_version",
-  "permission_mode",
   "capsid_sha",
 ] as const;
 
@@ -147,18 +137,14 @@ test("PLANT: an absent field is NULL, never 0", () => {
       `${column} is ${JSON.stringify(empty[column])} with nothing said`,
     );
   // A partial claim leaves its siblings NULL too.
-  const partial = row({ claim: { tests: { run: 4 } } });
-  assert.equal(partial.tests_run, 4);
-  assert.equal(partial.tests_passed, null);
-  assert.equal(partial.tests_failed, null);
-  assert.equal(partial.tests_result, null);
+  const partial = row({ claim: { versions: { client_name: "x" } } });
+  assert.equal(partial.model_id, null);
 });
 
 test("a stated zero and a stated empty list are kept as said: 0 and []", () => {
-  const said = row({ claim: { prs_opened: [], tests: { failed: 0 } }, evidence: { commits: 0 } });
+  const said = row({ claim: { prs_opened: [] }, evidence: { commits: 0 } });
   assert.equal(said.prs_opened, 0);
   assert.equal(said.prs_opened_urls, "[]");
-  assert.equal(said.tests_failed, 0);
   assert.equal(said.commits, 0);
   assert.equal(said.prs_merged, null, "a list nobody named is still NULL");
 });
@@ -177,36 +163,17 @@ test("prs_opened comes from the claim, else from evidence.prs; prs_merged only f
   assert.equal(fromClaim.prs_merged, 1);
 });
 
-test("the claim row carries every claim field, the agent, the namespace and the Worker's sha", () => {
+test("the claim row carries the agent, the namespace, the facts the checks read and the Worker's sha", () => {
   const full = row({
-    claim: {
-      tests: { run: 10, passed: 9, failed: 1, result: "partial" },
-      deploy_state: "pending",
-      files_touched: ["src/a.ts", "test/a.test.ts"],
-      versions: {
-        model_id: "model-x",
-        client_name: "claude-code",
-        client_version: "9.9.9",
-        permission_mode: "auto",
-      },
-    },
-    evidence: { commits: 2, files_changed: 3, tests_added: 4 },
+    claim: { versions: { model_id: "model-x" } },
+    evidence: { commits: 2, files_changed: 3 },
     capsid_sha: "abc1234",
   });
   assert.equal(full.agent, "agent:sample-driver");
   assert.equal(full.namespace, "sample");
   assert.equal(full.action, "complete");
-  assert.deepEqual(
-    [full.tests_run, full.tests_passed, full.tests_failed, full.tests_result],
-    [10, 9, 1, "partial"],
-  );
-  assert.equal(full.deploy_state, "pending");
-  assert.deepEqual(JSON.parse(full.files_touched ?? "null"), ["src/a.ts", "test/a.test.ts"]);
-  assert.deepEqual(
-    [full.model_id, full.client_name, full.client_version, full.permission_mode],
-    ["model-x", "claude-code", "9.9.9", "auto"],
-  );
-  assert.deepEqual([full.commits, full.files_changed, full.tests_added], [2, 3, 4]);
+  assert.equal(full.model_id, "model-x");
+  assert.deepEqual([full.commits, full.files_changed], [2, 3]);
   assert.equal(full.capsid_sha, "abc1234");
   assert.equal(
     full.recorded_at,

@@ -141,6 +141,7 @@ interface BackupSummary {
   reports_pruned: number;
   versions_pruned: number;
   audit_pruned: number;
+  deploys_pruned: number;
   // Null on a healthy run. Otherwise the named reason NOTHING was deleted. Read it
   // before believing a zero in any of the *_pruned counters.
   prune_refused: string | null;
@@ -392,6 +393,7 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
       reports_pruned: 0,
       versions_pruned: 0,
       audit_pruned: 0,
+      deploys_pruned: 0,
       prune_refused: pruneRefused,
       preflight: { documents: docs.length, fts },
     };
@@ -419,6 +421,7 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
     reports_pruned: reports,
     versions_pruned: history.versions,
     audit_pruned: history.audit,
+    deploys_pruned: history.deploys,
     prune_refused: null,
     preflight: { documents: docs.length, fts },
   };
@@ -447,6 +450,6 @@ export function backupTaskResult(result: BackupResult): TaskResult {
   }
   return {
     outcome: "ok",
-    reason: `wrote ${result.json_keys.length} dump objects (${result.documents} documents); pruned ${result.json_backups_pruned} dumps (${result.json_backups_locked} locked), ${result.versions_pruned} versions, ${result.audit_pruned} audit rows`,
+    reason: `wrote ${result.json_keys.length} dump objects (${result.documents} documents); pruned ${result.json_backups_pruned} dumps (${result.json_backups_locked} locked), ${result.versions_pruned} versions, ${result.audit_pruned} audit rows, ${result.deploys_pruned} deploy outcomes`,
   };
 }

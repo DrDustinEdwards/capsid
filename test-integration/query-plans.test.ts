@@ -11,7 +11,14 @@ import { describe, expect, it } from "vitest";
 // rule is a bare `SCAN <table>` with no ` USING INDEX` and no ` VIRTUAL TABLE`, on
 // one of the tables that grows without bound.
 
-const HOT_TABLES = ["documents", "document_links", "document_versions", "audit_log", "improve_jti"];
+const HOT_TABLES = [
+  "documents",
+  "document_links",
+  "document_versions",
+  "audit_log",
+  "improve_jti",
+  "deploy_outcomes",
+];
 
 // Reads that walk a whole table on purpose, each named with its reason, so a new
 // exception has to be added here explicitly.

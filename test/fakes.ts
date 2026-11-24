@@ -5,7 +5,6 @@ import { gunzipSync } from "node:zlib";
 // The D1 fake is row-backed: WHERE clauses resolve against the bound values, so a
 // handler asking for the wrong row gets nothing back. A fake that cannot disagree
 // with the handler cannot test it.
-//
 // improve_jti, the one improve table left, is the live replay cache (loopTableExec below).
 import type { OpsFeedData } from "../src/ops-feed.ts";
 import { recordFor, type AgentRecord } from "../src/agent-record.ts";
@@ -545,6 +544,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       autoId: true,
       defaults: () => ({ at: sqliteNow() }),
     },
+    deploy_outcomes: { rows: [], unique: [], defaults: () => ({}) },
     agents: {
       rows: rows.agents,
       unique: [["id"], ["name"], ["key_hash"]],

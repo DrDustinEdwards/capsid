@@ -44,7 +44,7 @@ async function plant(): Promise<void> {
       `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by) VALUES (?1, ?2, 'a sample job', 'body', 'done', 'github:sample', ?3)`,
     ).bind(JOB, NS, AGENT),
     env.DB.prepare(
-      `INSERT INTO job_claims (job_id, action, agent, namespace, raw, commits) VALUES (?1, 'complete', ?2, ?3, '{}', 4)`,
+      `INSERT INTO job_claims (job_id, action, agent, namespace, raw) VALUES (?1, 'complete', ?2, ?3, '{}')`,
     ).bind(JOB, AGENT, NS),
     env.DB.prepare(
       `INSERT INTO job_evaluations (job_id, claim_id, name, score_value, score_label, claimed, verified, agreement, evaluator, evaluator_id)
@@ -83,7 +83,7 @@ describe("GET /portal/api/claims", () => {
     const body = (await response.json()) as PortalClaimsJob;
     expect(body.job.id).toBe(JOB);
     expect(body.claims).toHaveLength(1);
-    expect(body.claims[0].commits).toBe(4);
+    expect(body.claims[0].action).toBe("complete");
     expect(body.evaluations[0].claim_id).toBe(body.claims[0].id);
     expect(body.touches.map((t) => t.kind)).toEqual(["approval"]);
     expect(body.outcome).toBeNull();

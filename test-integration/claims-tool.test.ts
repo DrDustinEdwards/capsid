@@ -90,8 +90,8 @@ async function plantJob(ns: string, job: string): Promise<void> {
        VALUES (?1, ?2, 'note', 'access:admin@example.com', 'human', 3000, '2026-09-01T10:00:03.000Z')`,
     ).bind(job, ns),
     env.DB.prepare(
-      `INSERT INTO job_claims (job_id, action, agent, namespace, raw, prs_opened_urls, prs_opened, commits, recorded_at)
-       VALUES (?1, 'complete', ?2, ?3, '{"evidence":{"commits":3}}', '["https://github.com/example/sample/pull/1"]', 1, 3, '2026-09-01T11:00:00.000Z')`,
+      `INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at)
+       VALUES (?1, 'complete', ?2, ?3, '{"evidence":{"commits":3}}', '2026-09-01T11:00:00.000Z')`,
     ).bind(job, AGENT, ns),
     env.DB.prepare(
       `INSERT INTO job_evaluations (job_id, claim_id, name, score_value, score_label, claimed, verified, agreement, evaluator, evaluator_id, recorded_at)
@@ -286,11 +286,7 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
     expect(out.outcome?.job_id).toBe(job);
     expect(out.claims.map((c) => c.action)).toEqual(["block", "complete"]);
     const complete = out.claims[1];
-    expect(complete.commits).toBe(3);
-    expect(complete.prs_opened).toBe(1);
-    // Not stated is null, never 0.
-    expect(complete.files_changed).toBeNull();
-    expect(complete.tests_run).toBeNull();
+    expect(JSON.parse(complete.raw)).toEqual({ evidence: { commits: 3 } });
     expect(out.evaluations.map((e) => e.name)).toEqual(["commits", "prs_opened", "ci_green"]);
     for (const e of out.evaluations) expect(e.claim_id).toBe(complete.id);
     const commits = out.evaluations[0];

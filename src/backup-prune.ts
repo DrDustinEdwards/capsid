@@ -10,6 +10,8 @@ import { DAY_MS } from "./time";
 // Retention for the history tables. Both are covered by the dump shelf life above.
 const VERSION_RETENTION_DAYS = 90;
 const AUDIT_RETENTION_DAYS = 365;
+// Deploy outcomes: DORA's readers look back weeks, not a year; the largest table that grew with every deploy.
+const DEPLOY_RETENTION_DAYS = 365;
 
 // CSP and COOP violation reports. Nothing else prunes this prefix, and a public
 // unauthenticated path writes it.
@@ -59,7 +61,9 @@ export async function pruneReports(env: Env, now: string): Promise<number> {
 // Prunes history after the export, so the rows leaving D1 are in today's dump.
 // meta.changes is inflated by the FTS5 triggers, so each DELETE is preceded by a
 // COUNT over the same predicate in the same transaction.
-export async function pruneD1(env: Env): Promise<{ versions: number; audit: number }> {
+export async function pruneD1(
+  env: Env,
+): Promise<{ versions: number; audit: number; deploys: number }> {
   const pruned = await env.DB.batch<{ n: number }>([
     env.DB.prepare(
       "SELECT COUNT(*) AS n FROM document_versions WHERE snapshot_at < datetime('now', ?1)",
@@ -76,8 +80,18 @@ export async function pruneD1(env: Env): Promise<{ versions: number; audit: numb
     // The replay cache, appended last so the count/delete pairs above keep the
     // positions their counters read. A jti matters only inside the signature window.
     env.DB.prepare("DELETE FROM improve_jti WHERE seen_at < datetime('now', '-1 day')"),
+    env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM deploy_outcomes WHERE run_at < datetime('now', ?1)",
+    ).bind(`-${DEPLOY_RETENTION_DAYS} days`),
+    env.DB.prepare("DELETE FROM deploy_outcomes WHERE run_at < datetime('now', ?1)").bind(
+      `-${DEPLOY_RETENTION_DAYS} days`,
+    ),
   ]);
-  return { versions: pruned[0]?.results?.[0]?.n ?? 0, audit: pruned[2]?.results?.[0]?.n ?? 0 };
+  return {
+    versions: pruned[0]?.results?.[0]?.n ?? 0,
+    audit: pruned[2]?.results?.[0]?.n ?? 0,
+    deploys: pruned[5]?.results?.[0]?.n ?? 0,
+  };
 }
 
 // The 404 counts, the daily uptime rows and the ended Portal sessions, pruned after the export.

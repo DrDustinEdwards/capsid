@@ -113,19 +113,11 @@ describe("job_claims: what the agent said", () => {
     expect(claim.action).toBe("complete");
     expect(claim.agent).toBe(DRIVER_ACTOR);
     expect(claim.namespace).toBe(NS);
-    // The driver's numbers, not GitHub's five and eight.
-    expect(claim.commits).toBe(2);
-    expect(claim.files_changed).toBe(1);
-    expect(claim.tests_added).toBe(3);
-    expect(claim.prs_opened).toBe(1);
-    expect(claim.prs_merged).toBe(1);
-    expect([claim.tests_run, claim.tests_passed, claim.tests_failed, claim.tests_result]).toEqual([
-      40,
-      40,
-      0,
-      "pass",
-    ]);
-    expect(claim.deploy_state).toBe("none");
+    // The driver's numbers, not GitHub's five and eight, whole in raw.
+    expect(JSON.parse(String(claim.raw))).toMatchObject({
+      evidence: { commits: 2, files_changed: 1, tests_added: 3 },
+      claim: { tests: { run: 40, passed: 40, failed: 0, result: "pass" }, deploy_state: "none" },
+    });
     expect(claim.capsid_sha).toBe("integration");
     expect(JSON.parse(String(claim.raw))).toMatchObject({
       evidence: { commits: 2 },
@@ -196,30 +188,9 @@ describe("job_claims: what the agent said", () => {
     const done = await completeJob(jobsEnv(), DRIVER, LATER, id, { result_summary: "landed" });
     expect(done.ok, done.refusal).toBe(true);
     const [claim] = await claimsFor(id);
-    for (const column of [
-      "prs_opened_urls",
-      "prs_merged_urls",
-      "prs_opened",
-      "prs_merged",
-      "commits",
-      "files_changed",
-      "tests_added",
-      "tests_run",
-      "tests_passed",
-      "tests_failed",
-      "tests_result",
-      "deploy_state",
-      "files_touched",
-      "model_id",
-      "client_name",
-      "client_version",
-      "permission_mode",
-    ]) {
-      expect(
-        claim[column],
-        `${column} was stored as something other than NULL with nothing said`,
-      ).toBeNull();
-    }
+    expect(JSON.parse(String(claim.raw)), "nothing said stores no key at all").toEqual({
+      result_summary: "landed",
+    });
     for (const e of await evaluationsFor(id)) {
       expect(e.claimed, `${e.name}.claimed`).toBeNull();
       expect(e.verified, `${e.name}.verified`).toBeNull();
@@ -239,8 +210,6 @@ describe("job_claims: what the agent said", () => {
     const claims = await claimsFor(id);
     expect(claims.length).toBe(1);
     expect(claims[0].action).toBe("block");
-    expect(JSON.parse(String(claims[0].files_touched))).toEqual(["src/a.ts"]);
-    expect(claims[0].client_name).toBe("claude-code");
     expect(JSON.parse(String(claims[0].raw))).toEqual({
       claim: { files_touched: ["src/a.ts"], versions: { client_name: "claude-code" } },
       reason: "needs a push",
@@ -258,8 +227,11 @@ describe("job_claims: what the agent said", () => {
     const claims = await claimsFor(id);
     expect(claims.length).toBe(1);
     expect(claims[0].action).toBe("fail");
-    expect(claims[0].tests_failed).toBe(3);
-    expect(claims[0].tests_passed).toBeNull();
+    expect(JSON.parse(String(claims[0].raw)).claim.tests).toEqual({
+      run: 3,
+      failed: 3,
+      result: "fail",
+    });
     const evaluations = await evaluationsFor(id);
     expect(evaluations.length).toBe(5);
     for (const e of evaluations) expect(e.claim_id).toBe(claims[0].id);
@@ -399,8 +371,6 @@ describe("the jobs tool takes claim as an object or a JSON string", () => {
         })) as { isError?: boolean; content: Array<{ text: string }> };
         expect(result.isError, `${form}: ${result.content[0]?.text}`).toBeFalsy();
         const [row] = await claimsFor(id);
-        expect(row?.tests_run, form).toBe(7);
-        expect(row?.model_id, form).toBe("model-x");
         expect(JSON.parse(String(row?.raw)).claim, form).toEqual(claim);
       }
     } finally {
@@ -442,14 +412,13 @@ describe("append-only", () => {
     expect(blocked.ok, blocked.refusal).toBe(true);
     expect((await claimsFor(id)).length, "no row to protect, so this proves nothing").toBe(1);
     await expect(
-      env.DB.prepare("UPDATE job_claims SET commits = 99 WHERE job_id = ?1").bind(id).run(),
+      env.DB.prepare("UPDATE job_claims SET agent = 'x' WHERE job_id = ?1").bind(id).run(),
     ).rejects.toThrow(/append-only/);
     await expect(
       env.DB.prepare("DELETE FROM job_claims WHERE job_id = ?1").bind(id).run(),
     ).rejects.toThrow(/append-only/);
     const [row] = await claimsFor(id);
-    expect(row.commits).toBeNull();
-    expect(row.deploy_state).toBe("pending");
+    expect(JSON.parse(String(row.raw)).claim.deploy_state).toBe("pending");
   });
 
   it("PLANT: job_evaluations refuses UPDATE and DELETE", async () => {
