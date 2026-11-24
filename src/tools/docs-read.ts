@@ -78,7 +78,6 @@ export function defineListOperation(server: McpServer, ctx: ToolCtx): void {
       }
       const { results } = await db
         .prepare(
-          // frontmatter and publish_at are not selected: nothing here reads or writes them. They stay in the table because dropping a column means a migration, a rebuild of the FTS triggers and a change to the backup table guard, to reclaim nothing.
           `SELECT id, namespace, path, title, type, status, tags, created_at, updated_at
            FROM documents
            WHERE (?1 IS NULL OR namespace = ?1) AND (?2 IS NULL OR type = ?2) AND (?3 IS NULL OR status = ?3)
