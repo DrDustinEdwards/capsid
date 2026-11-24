@@ -29,7 +29,7 @@
     },
     "legacy": {},
     "size": {
-      "dashboard/dev/mock-api.ts": 3208,
+      "dashboard/dev/mock-api.ts": 3178,
       "dashboard/src/app/App.tsx": 700,
       "dashboard/src/app/ConfirmDialog.tsx": 552,
       "dashboard/src/lib/derive.ts": 543,

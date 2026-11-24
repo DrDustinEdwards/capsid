@@ -264,8 +264,8 @@ test("the lease is released even when the run throws", async () => {
   assert.equal(kv.store.has("backup:lease"), false, "the lease outlived the failed run");
 });
 
-test("versions_pruned and audit_pruned come from a COUNT, not meta.changes", async () => {
-  const { env, batches } = makeEnv({ documents: DOCS, dueCounts: [3, 7] }, MIRROR);
+test("versions_pruned, audit_pruned and deploys_pruned come from a COUNT, not meta.changes", async () => {
+  const { env, batches } = makeEnv({ documents: DOCS, dueCounts: [3, 7, 2] }, MIRROR);
   const result = await runBackup(env);
   assert.equal(result.ran, true);
   if (!result.ran) return;
@@ -274,6 +274,7 @@ test("versions_pruned and audit_pruned come from a COUNT, not meta.changes", asy
   // (FTS5 triggers inflate it). Reading it would show 999.
   assert.equal(result.versions_pruned, 3);
   assert.equal(result.audit_pruned, 7);
+  assert.equal(result.deploys_pruned, 2);
   // The count and the delete must carry the identical predicate, or the count is of
   // a different set of rows than the one that leaves. The prune batch is found by
   // what it contains rather than by position, so another batch cannot retarget these
@@ -282,7 +283,8 @@ test("versions_pruned and audit_pruned come from a COUNT, not meta.changes", asy
     b.some((sql) => sql.startsWith("DELETE FROM document_versions")),
   );
   assert.ok(pruneBatch, "no batch carried the prune");
-  const [countVersions, deleteVersions, countAudit, deleteAudit] = pruneBatch;
+  const [countVersions, deleteVersions, countAudit, deleteAudit, , countDeploys, deleteDeploys] =
+    pruneBatch;
   assert.match(
     countVersions,
     /^SELECT COUNT\(\*\) AS n FROM document_versions WHERE snapshot_at < /,
@@ -290,6 +292,7 @@ test("versions_pruned and audit_pruned come from a COUNT, not meta.changes", asy
   assert.equal(deleteVersions.replace(/^DELETE FROM/, "SELECT COUNT(*) AS n FROM"), countVersions);
   assert.match(countAudit, /^SELECT COUNT\(\*\) AS n FROM audit_log WHERE at < /);
   assert.equal(deleteAudit.replace(/^DELETE FROM/, "SELECT COUNT(*) AS n FROM"), countAudit);
+  assert.equal(deleteDeploys.replace(/^DELETE FROM/, "SELECT COUNT(*) AS n FROM"), countDeploys);
 });
 
 test("a clean run stamps backup:last-ok with the run timestamp", async () => {

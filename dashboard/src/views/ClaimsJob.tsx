@@ -76,39 +76,61 @@ export function counts(record: Record<string, number>): string {
   return entries.length ? entries.map(([k, n]) => `${k} ${n}`).join(" · ") : "";
 }
 
-// What a claim row states, field by field, skipping what the agent did not state.
-function stated(c: JobClaimRow): string[] {
-  const out: string[] = [];
-  const add = (label: string, v: number | string | null) => v !== null && out.push(`${label} ${v}`);
-  add("PRs opened", c.prs_opened);
-  add("PRs merged", c.prs_merged);
-  add("commits", c.commits);
-  add("files changed", c.files_changed);
-  add("tests added", c.tests_added);
-  add("tests run", c.tests_run);
-  add("passed", c.tests_passed);
-  add("failed", c.tests_failed);
-  add("tests", c.tests_result);
-  add("deploy", c.deploy_state);
-  if (c.files_touched !== null) {
-    let n: number | string = "?";
-    try {
-      const parsed: unknown = JSON.parse(c.files_touched);
-      if (Array.isArray(parsed)) n = parsed.length;
-    } catch (e) {
-      // Stored by the Worker as JSON; a row that does not parse is shown as unreadable, and said so.
-      n = `unreadable (${e instanceof Error ? e.message : String(e)})`;
-    }
-    out.push(`files touched ${n}`);
+type Said = {
+  evidence?: { prs?: unknown[]; commits?: number; files_changed?: number; tests_added?: number };
+  claim?: {
+    prs_opened?: unknown[];
+    prs_merged?: unknown[];
+    tests?: { run?: number; passed?: number; failed?: number; result?: string };
+    deploy_state?: string;
+    files_touched?: unknown[];
+    versions?: {
+      model_id?: string;
+      client_name?: string;
+      client_version?: string;
+      permission_mode?: string;
+    };
+  };
+};
+
+// The claim as the agent sent it, which job_claims.raw keeps whole. A row whose raw does not
+// parse is shown as unreadable, and said so.
+function saidOf(c: JobClaimRow): Said | string {
+  try {
+    return JSON.parse(c.raw) as Said;
+  } catch (e) {
+    return `unreadable (${e instanceof Error ? e.message : String(e)})`;
   }
+}
+
+// What a claim states, field by field, skipping what the agent did not state.
+function stated(c: JobClaimRow): string[] {
+  const said = saidOf(c);
+  if (typeof said === "string") return [said];
+  const { evidence: e, claim: k } = said;
+  const out: string[] = [];
+  const add = (label: string, v: number | string | undefined) =>
+    v !== undefined && out.push(`${label} ${v}`);
+  add("PRs opened", (k?.prs_opened ?? e?.prs)?.length);
+  add("PRs merged", k?.prs_merged?.length);
+  add("commits", e?.commits);
+  add("files changed", e?.files_changed);
+  add("tests added", e?.tests_added);
+  add("tests run", k?.tests?.run);
+  add("passed", k?.tests?.passed);
+  add("failed", k?.tests?.failed);
+  add("tests", k?.tests?.result);
+  add("deploy", k?.deploy_state);
+  add("files touched", k?.files_touched?.length);
   return out;
 }
 
 function versions(c: JobClaimRow): string {
+  const v = typeof saidOf(c) === "string" ? undefined : (saidOf(c) as Said).claim?.versions;
   return [
-    c.model_id,
-    c.client_name && `${c.client_name}${c.client_version ? ` ${c.client_version}` : ""}`,
-    c.permission_mode,
+    v?.model_id,
+    v?.client_name && `${v.client_name}${v.client_version ? ` ${v.client_version}` : ""}`,
+    v?.permission_mode,
   ]
     .filter(Boolean)
     .join(" · ");

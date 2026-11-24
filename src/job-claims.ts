@@ -169,8 +169,18 @@ export function rawJson(raw: ClaimRaw): string {
   });
 }
 
-// The row as inserted: the stored row (src/ops-types/claims.ts) before D1 gives it an id.
-export type JobClaimRow = Omit<StoredClaimRow, "id">;
+// The row as inserted (the stored row, src/ops-types/claims.ts, before D1 gives it an id) with
+// the facts read off the claim for this call only. They are not columns: raw holds the claim
+// whole, and the evaluations store the counts they were checked against.
+export type JobClaimRow = Omit<StoredClaimRow, "id"> & {
+  prs_opened_urls: string | null;
+  prs_merged_urls: string | null;
+  prs_opened: number | null;
+  prs_merged: number | null;
+  commits: number | null;
+  files_changed: number | null;
+  model_id: string | null;
+};
 type ClaimAction = JobClaimRow["action"];
 
 const listColumn = (list: readonly string[] | undefined): string | null =>
@@ -207,17 +217,7 @@ export function claimRow(input: {
     prs_merged: merged === undefined ? null : merged.length,
     commits: evidence?.commits ?? null,
     files_changed: evidence?.files_changed ?? null,
-    tests_added: evidence?.tests_added ?? null,
-    tests_run: claim?.tests?.run ?? null,
-    tests_passed: claim?.tests?.passed ?? null,
-    tests_failed: claim?.tests?.failed ?? null,
-    tests_result: claim?.tests?.result ?? null,
-    deploy_state: claim?.deploy_state ?? null,
-    files_touched: listColumn(claim?.files_touched),
     model_id: claim?.versions?.model_id ?? null,
-    client_name: claim?.versions?.client_name ?? null,
-    client_version: claim?.versions?.client_version ?? null,
-    permission_mode: claim?.versions?.permission_mode ?? null,
     capsid_sha: input.capsid_sha ?? null,
     recorded_at: input.now.toISOString(),
   };
@@ -228,10 +228,8 @@ export function claimRow(input: {
 export function claimStatement(db: D1Database, row: JobClaimRow): D1PreparedStatement {
   return db
     .prepare(
-      `INSERT INTO job_claims (job_id, action, agent, namespace, raw, prs_opened_urls, prs_merged_urls, prs_opened,
-         prs_merged, commits, files_changed, tests_added, tests_run, tests_passed, tests_failed, tests_result,
-         deploy_state, files_touched, model_id, client_name, client_version, permission_mode, capsid_sha, recorded_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)`,
+      `INSERT INTO job_claims (job_id, action, agent, namespace, raw, capsid_sha, recorded_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
     )
     .bind(
       row.job_id,
@@ -239,23 +237,6 @@ export function claimStatement(db: D1Database, row: JobClaimRow): D1PreparedStat
       row.agent,
       row.namespace,
       row.raw,
-      row.prs_opened_urls,
-      row.prs_merged_urls,
-      row.prs_opened,
-      row.prs_merged,
-      row.commits,
-      row.files_changed,
-      row.tests_added,
-      row.tests_run,
-      row.tests_passed,
-      row.tests_failed,
-      row.tests_result,
-      row.deploy_state,
-      row.files_touched,
-      row.model_id,
-      row.client_name,
-      row.client_version,
-      row.permission_mode,
       row.capsid_sha,
       row.recorded_at,
     );

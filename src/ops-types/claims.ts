@@ -93,23 +93,6 @@ export interface JobClaimRow {
   agent: string;
   namespace: string;
   raw: string;
-  prs_opened_urls: string | null;
-  prs_merged_urls: string | null;
-  prs_opened: number | null;
-  prs_merged: number | null;
-  commits: number | null;
-  files_changed: number | null;
-  tests_added: number | null;
-  tests_run: number | null;
-  tests_passed: number | null;
-  tests_failed: number | null;
-  tests_result: string | null;
-  deploy_state: string | null;
-  files_touched: string | null;
-  model_id: string | null;
-  client_name: string | null;
-  client_version: string | null;
-  permission_mode: string | null;
   capsid_sha: string | null;
   recorded_at: string;
 }
