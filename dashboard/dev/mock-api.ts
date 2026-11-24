@@ -1985,7 +1985,6 @@ function digest(f: OpsFeed, since: string): PortalDigest {
       duration_minutes: null,
       blocked_count: j.blocked_count,
       usage: none,
-      usage_source: "none",
     })),
     blocked: blocked.map((j) => ({
       id: j.id,
@@ -1995,7 +1994,6 @@ function digest(f: OpsFeed, since: string): PortalDigest {
       summary: j.waits_on ?? "",
       pull_requests: [],
       usage: none,
-      usage_source: "none",
     })),
     pull_requests_ready: prs
       .filter((p) => p.merged !== true)
@@ -2008,8 +2006,7 @@ function digest(f: OpsFeed, since: string): PortalDigest {
       })),
     pull_requests_merged: prs.filter((p) => p.merged === true).length,
     totals: {
-      telemetry: { ...none, jobs: 0 },
-      reported: { ...none, jobs: 0 },
+      usage: { ...none, jobs: 0 },
       jobs_without_usage: finished.length,
     },
     truncated: [],
