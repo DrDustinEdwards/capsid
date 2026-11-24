@@ -1427,23 +1427,6 @@ function plan(
         apply: () => undefined,
       };
     }
-    case "run_job": {
-      const ns = need(params, "namespace", "The site");
-      const name = need(params, "name", "The job");
-      const site = f.live.sites.find((s) => s.namespace === ns);
-      if (ns !== "capsid" && !site?.operator)
-        throw new Refusal(400, `${ns} has no operator API configured.`);
-      return {
-        summary: `Run ${name} on ${ns} now.`,
-        done: `${ns}: run_job ran: ${name} ok in 40 ms.`,
-        changes: [
-          ns === "capsid"
-            ? `Capsid runs its own ${name} job now, as its nightly cron does.`
-            : `${ns}: POST ${site!.origin}${site!.operator!.path} with tool run_job { job: "${name}" }, authorized by ${site!.operator!.auth_var}.`,
-        ],
-        apply: () => undefined,
-      };
-    }
     // A signed change to the promoted units: the typed version must be the next one.
     case "sign_policy_change": {
       const change = need(params, "change", "The change");
