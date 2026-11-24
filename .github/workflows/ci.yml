@@ -208,7 +208,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     permissions:
       contents: read
-    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@7ca141c8b91ba55a0fbb95e381e3b7f978ac030a # v0.59.3
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@4230c8b8244c415f925268d79e38e1fdfc1549cc # v0.59.4
     with:
       worker-name: capsid-mcp
       health-url: https://mcp.dustinedwards.info/health
