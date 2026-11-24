@@ -12,6 +12,9 @@
     "test/**/*.ts",
     "test-integration/**/*.ts",
     "dashboard/src/types.ts",
+    // The dev mock dashboard/vite.config.ts imports, read here too so the devkit-no-bloat check counts it as source, not as
+    // part of a Knip config (it would otherwise treat every line deleted from it as a narrower measure).
+    "dashboard/dev/mock-api.ts",
   ],
   "project": ["src/**/*.ts", "scripts/**/*.{mjs,ts}", "test/**/*.ts", "test-integration/**/*.ts"],
   // jscpd is run by devkit-no-bloat (.no-bloat.json), and @modelcontextprotocol/conformance by
