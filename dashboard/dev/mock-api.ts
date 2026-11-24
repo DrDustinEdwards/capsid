@@ -1611,8 +1611,10 @@ function plan(
           "Kept: the audit_log rows and the nightly backup objects.",
         ],
         apply: (st) =>
-          void (st.projectsRemoved.add(ns),
-          (st.sites = st.sites.filter((s) => s.namespace !== ns))),
+          void (
+            st.projectsRemoved.add(ns),
+            (st.sites = st.sites.filter((s) => s.namespace !== ns))
+          ),
       };
     }
     case "site_key_rotate": {
