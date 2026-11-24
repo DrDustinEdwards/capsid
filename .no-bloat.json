@@ -12,7 +12,7 @@
     }
   ],
   "baseline": {
-    "measured_at": "1b4fbfd",
+    "measured_at": "6ea9b4d5",
     "knip (Worker)": {},
     "knip (dashboard)": {
       "exports": 5
@@ -44,12 +44,12 @@
     },
     "tests": {
       "files": 273,
-      "cases": 2347
+      "cases": 2346
     },
     "comments": {
-      "lines": 14941,
-      "code": 131257,
-      "percentage": 10.22
+      "lines": 14927,
+      "code": 130785,
+      "percentage": 10.24
     }
   }
 }

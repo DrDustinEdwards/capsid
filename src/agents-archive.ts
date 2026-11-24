@@ -1,7 +1,7 @@
 import { auditStatement } from "./store-guards";
 
 // Revoked agents leave the live inventory and keep their history: archive and hide, never
-// delete an agent with history (migrations/0038_agents_archive.sql says why). An archived
+// delete an agent with history (docs/auth.md says why). An archived
 // agent is a revoked agents row with archived_at set (migrations/0066), so its name stays
 // reserved (mintAgent) and its key stays refused (resolveAgent) with no second table to read.
 

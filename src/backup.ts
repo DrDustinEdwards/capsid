@@ -67,10 +67,6 @@ export const EXCLUDED = ["d1_migrations", "push_subscriptions"] as const;
 // The credential-column check (d1-dump `credentials`): these columns match its pattern
 // by name and hold counts, not tokens.
 export const CREDENTIAL_ALLOW: Record<string, string> = {
-  "job_outcomes.tokens_input": "a model token count",
-  "job_outcomes.tokens_output": "a model token count",
-  "job_outcomes.tokens_cache_read": "a model token count",
-  "job_outcomes.tokens_cache_creation": "a model token count",
   "bench_runs.input_tokens": "a model token count",
   "bench_runs.output_tokens": "a model token count",
   "bench_runs.cache_read_tokens": "a model token count",
@@ -113,8 +109,6 @@ export const TABLES = [
   "shared_packages",
   // The merge pipeline's approvals (migrations/0037_pr_approvals.sql). Never pruned.
   "pr_approvals",
-  // Revoked agents moved out of agents (migrations/0038_agents_archive.sql); the row keeps a name reserved.
-  "agents_archive",
   "deploy_outcomes",
   // The methods paper's paired comparison (migrations/0047_bench.sql). Insert-only and close-once by trigger.
   "bench_tasks",
