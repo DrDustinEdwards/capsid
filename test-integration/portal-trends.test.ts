@@ -105,17 +105,6 @@ describe("the trends series", () => {
         .run();
     }
 
-    // Cost: two outcomes this week with a cost and one without; none the week before.
-    const outcome = (id: string, cost: number | null, at: string) =>
-      env.DB.prepare(
-        "INSERT INTO job_outcomes (job_id, agent, namespace, blocked_count, resumed_count, result_kind, verified, cost_usd, recorded_at) VALUES (?1, 'agent:sample-driver', 'sample', 0, 0, 'complete', '{}', ?2, ?3)",
-      )
-        .bind(id, cost, at)
-        .run();
-    await outcome("job_0000000000c1", 1.25, "2030-01-14 09:00:00");
-    await outcome("job_0000000000c2", 0.5, "2030-01-15 09:00:00");
-    await outcome("job_0000000000c3", null, "2030-01-15 10:00:00");
-
     // Backups: one complete run today, one run with no marker.
     await env.MEDIA.put("backups/json/2030-01-16T03-10-00-000Z/_complete.json", "{}");
     await env.MEDIA.put("backups/json/2030-01-15T03-10-00-000Z/documents.json", "[]");
@@ -158,11 +147,6 @@ describe("the trends series", () => {
         pr: 12,
         outcome: "rolled_back",
       },
-    ]);
-
-    expect(t.cost.weeks.map((w) => [w.week, w.usd, w.jobs])).toEqual([
-      ["2030-W02", null, 0],
-      ["2030-W03", 1.75, 2],
     ]);
 
     expect(t.backups.error).toBeNull();

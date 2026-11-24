@@ -664,15 +664,6 @@ function mockTrends(weeks: number): PortalTrends {
         },
       ],
     },
-    // Weekly model spend: one week with no costed outcome (a gap, not a zero).
-    cost: {
-      weeks: weekRows.map((w, i) => ({
-        week: w.week,
-        start: w.start,
-        usd: i === 1 && weeks > 3 ? null : 6 + ((i * 7) % 9) * 1.5,
-        jobs: i === 1 && weeks > 3 ? 0 : 3 + (i % 4),
-      })),
-    },
     backups: {
       runs: 27,
       error: null,
@@ -1994,7 +1985,6 @@ function digest(f: OpsFeed, since: string): PortalDigest {
       duration_minutes: null,
       blocked_count: j.blocked_count,
       usage: none,
-      usage_source: "none",
     })),
     blocked: blocked.map((j) => ({
       id: j.id,
@@ -2004,7 +1994,6 @@ function digest(f: OpsFeed, since: string): PortalDigest {
       summary: j.waits_on ?? "",
       pull_requests: [],
       usage: none,
-      usage_source: "none",
     })),
     pull_requests_ready: prs
       .filter((p) => p.merged !== true)
@@ -2017,8 +2006,7 @@ function digest(f: OpsFeed, since: string): PortalDigest {
       })),
     pull_requests_merged: prs.filter((p) => p.merged === true).length,
     totals: {
-      telemetry: { ...none, jobs: 0 },
-      reported: { ...none, jobs: 0 },
+      usage: { ...none, jobs: 0 },
       jobs_without_usage: finished.length,
     },
     truncated: [],

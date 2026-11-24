@@ -24,12 +24,7 @@ import {
   type PlanJobRow,
   type RepoOf,
 } from "../src/overnight-plan.ts";
-import {
-  chooseUsage,
-  digestSinceFrom,
-  pullRequestsIn,
-  readOvernightDigest,
-} from "../src/overnight-digest.ts";
+import { digestSinceFrom, pullRequestsIn, readOvernightDigest } from "../src/overnight-digest.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // The overnight run's switch, plan and digest (src/overnight.ts, src/overnight-plan.ts, src/overnight-digest.ts).
@@ -522,23 +517,6 @@ test("pullRequestsIn finds pull request URLs and nothing else, once each", () =>
   assert.deepEqual(pullRequestsIn(null), []);
 });
 
-test("chooseUsage prefers telemetry, else the agent's report, else none; the two are never added", () => {
-  const some = {
-    cost_usd: 1,
-    active_seconds: null,
-    tokens_input: null,
-    tokens_output: null,
-    tokens_cache_read: null,
-    tokens_cache_creation: null,
-  };
-  const none = { ...some, cost_usd: null };
-  assert.equal(chooseUsage(some, { ...some, cost_usd: 9 }).usage.cost_usd, 1);
-  assert.equal(chooseUsage(some, undefined).source, "telemetry");
-  assert.equal(chooseUsage(none, { ...some, cost_usd: 9 }).source, "reported");
-  assert.equal(chooseUsage(none, undefined).source, "none");
-  assert.equal(chooseUsage(none, none).source, "none");
-});
-
 test("digestSinceFrom defaults to the last 24 hours and refuses a time that is not ISO", () => {
   const d = digestSinceFrom(undefined, NOW);
   assert.ok(d.ok && d.since === "2026-10-03T22:00:00.000Z");
@@ -591,12 +569,6 @@ const outcome = (id: string, over: object = {}) => ({
   result_kind: "pr",
   duration_minutes: 12,
   blocked_count: 0,
-  cost_usd: null,
-  tokens_input: null,
-  tokens_output: null,
-  tokens_cache_read: null,
-  tokens_cache_creation: null,
-  active_seconds: null,
   ...over,
 });
 const reportedRow = (id: string, cost: number) => ({
@@ -609,17 +581,12 @@ const reportedRow = (id: string, cost: number) => ({
   tokens_cache_creation: null,
 });
 
-test("the digest lists finished jobs with usage from telemetry or the agent's report, never both, and totals each source apart", async () => {
+test("the digest lists finished jobs with the usage their agent reported, and totals it", async () => {
   const { db, calls } = digestDb({
-    outcomes: [
-      outcome("t", { cost_usd: 2, active_seconds: 100 }),
-      outcome("r"),
-      outcome("both", { cost_usd: 5 }),
-      outcome("n"),
-    ],
+    outcomes: [outcome("r"), outcome("r2"), outcome("n")],
     blocked: [],
     prs: [],
-    reported: [reportedRow("r", 1.5), reportedRow("both", 99)],
+    reported: [reportedRow("r", 1.5), reportedRow("r2", 0.25)],
   });
   const out = await readOvernightDigest(
     fakeEnv({ DB: db }),
@@ -627,17 +594,9 @@ test("the digest lists finished jobs with usage from telemetry or the agent's re
     NOW,
   );
   const by = Object.fromEntries(out.finished.map((j) => [j.id, j]));
-  assert.deepEqual([by.t.usage_source, by.t.usage.cost_usd], ["telemetry", 2]);
-  assert.deepEqual([by.r.usage_source, by.r.usage.cost_usd], ["reported", 1.5]);
-  assert.deepEqual(
-    [by.both.usage_source, by.both.usage.cost_usd],
-    ["telemetry", 5],
-    "the report of a job with telemetry is not added",
-  );
-  assert.equal(by.n.usage_source, "none");
+  assert.equal(by.r.usage.cost_usd, 1.5);
   assert.equal(by.n.usage.cost_usd, null, "no usage is null, not 0");
-  assert.deepEqual([out.totals.telemetry.jobs, out.totals.telemetry.cost_usd], [2, 7]);
-  assert.deepEqual([out.totals.reported.jobs, out.totals.reported.cost_usd], [1, 1.5]);
+  assert.deepEqual([out.totals.usage.jobs, out.totals.usage.cost_usd], [2, 1.75]);
   assert.equal(out.totals.jobs_without_usage, 1);
   // Every read is bounded, binds its filter and does not write.
   for (const c of calls) {

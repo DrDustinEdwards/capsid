@@ -21,7 +21,7 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 // its lane is claimed by the session that was running it.
 //
 // THE DIGEST says what happened: pull requests ready, what blocked and why, and what each
-// job cost, from the outcome row (telemetry) or the agent's own claim.usage, never summed.
+// job cost, from the agent's own claim.usage.
 
 const OVERNIGHT_POLICY_NAMESPACE = "capsid";
 const OVERNIGHT_POLICY_PATH = "policy/overnight.md";

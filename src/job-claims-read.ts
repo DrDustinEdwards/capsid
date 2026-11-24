@@ -170,28 +170,15 @@ interface UsageSqlRow {
 
 const groupKey = (agent: string | null, namespace: string) => JSON.stringify([agent, namespace]);
 
-const NO_USAGE_TOTALS: ClaimsUsageTotals = {
-  rows: 0,
-  cost_usd: null,
-  active_seconds: null,
-  tokens_input: null,
-  tokens_output: null,
-  tokens_cache_read: null,
-  tokens_cache_creation: null,
-};
-
-const usageTotals = (row: UsageSqlRow | undefined): ClaimsUsageTotals =>
-  row
-    ? {
-        rows: row.n,
-        cost_usd: row.cost_usd,
-        active_seconds: row.active_seconds,
-        tokens_input: row.tokens_input,
-        tokens_output: row.tokens_output,
-        tokens_cache_read: row.tokens_cache_read,
-        tokens_cache_creation: row.tokens_cache_creation,
-      }
-    : NO_USAGE_TOTALS;
+const usageTotals = (row: UsageSqlRow): ClaimsUsageTotals => ({
+  rows: row.n,
+  cost_usd: row.cost_usd,
+  active_seconds: row.active_seconds,
+  tokens_input: row.tokens_input,
+  tokens_output: row.tokens_output,
+  tokens_cache_read: row.tokens_cache_read,
+  tokens_cache_creation: row.tokens_cache_creation,
+});
 
 const WAIT_CLASS_NEEDS_HUMAN = "needs_human";
 const WAIT_CLASS_UNREADABLE = "unreadable_gate";
@@ -242,44 +229,43 @@ export async function readClaimsAggregate(
   filter: ClaimsFilter,
 ): Promise<ClaimsAggregate> {
   const { namespace, agent, since, until } = filter;
-  const [claimRows, evaluationRows, touchRows, waitRows, telemetryRows, reportedRows] =
-    await Promise.all([
-      db
-        .prepare(
-          `SELECT agent, namespace, COUNT(DISTINCT job_id) AS jobs, COUNT(*) AS claims FROM job_claims
+  const [claimRows, evaluationRows, touchRows, waitRows, usageRows] = await Promise.all([
+    db
+      .prepare(
+        `SELECT agent, namespace, COUNT(DISTINCT job_id) AS jobs, COUNT(*) AS claims FROM job_claims
          WHERE (?1 IS NULL OR namespace = ?1) AND (?2 IS NULL OR agent = ?2)
            AND (?3 IS NULL OR recorded_at >= ?3) AND (?4 IS NULL OR recorded_at < ?4)
          GROUP BY agent, namespace ORDER BY agent, namespace LIMIT ?5`,
-        )
-        .bind(namespace, agent, since, until, CLAIMS_GROUP_LIMIT + 1)
-        .all<ClaimCountRow>(),
-      db
-        .prepare(
-          `SELECT c.agent AS agent, c.namespace AS namespace, e.name AS name, e.agreement AS agreement, COUNT(*) AS n
+      )
+      .bind(namespace, agent, since, until, CLAIMS_GROUP_LIMIT + 1)
+      .all<ClaimCountRow>(),
+    db
+      .prepare(
+        `SELECT c.agent AS agent, c.namespace AS namespace, e.name AS name, e.agreement AS agreement, COUNT(*) AS n
          FROM job_evaluations e JOIN job_claims c ON c.id = e.claim_id
          WHERE (?1 IS NULL OR c.namespace = ?1) AND (?2 IS NULL OR c.agent = ?2)
            AND (?3 IS NULL OR e.recorded_at >= ?3) AND (?4 IS NULL OR e.recorded_at < ?4)
          GROUP BY c.agent, c.namespace, e.name, e.agreement ORDER BY c.agent, c.namespace, e.name, e.agreement LIMIT ?5`,
-        )
-        .bind(namespace, agent, since, until, EVALUATION_ROWS + 1)
-        .all<EvaluationCountRow>(),
-      db
-        .prepare(
-          `SELECT a.agent AS agent, t.namespace AS namespace, t.kind AS kind, t.actor_kind AS actor_kind, t.waited_ms AS waited_ms
+      )
+      .bind(namespace, agent, since, until, EVALUATION_ROWS + 1)
+      .all<EvaluationCountRow>(),
+    db
+      .prepare(
+        `SELECT a.agent AS agent, t.namespace AS namespace, t.kind AS kind, t.actor_kind AS actor_kind, t.waited_ms AS waited_ms
          FROM job_touches t LEFT JOIN (SELECT DISTINCT job_id, agent FROM job_claims) a ON a.job_id = t.job_id
          WHERE (?1 IS NULL OR t.namespace = ?1) AND (?2 IS NULL OR a.agent = ?2)
            AND (?3 IS NULL OR t.at >= ?3) AND (?4 IS NULL OR t.at < ?4)
          ORDER BY t.id LIMIT ?5`,
-        )
-        .bind(namespace, agent, since, until, TOUCH_ROWS + 1)
-        .all<TouchFoldRow>(),
-      // Each ended wait once, with the gate it ended: the latest gate row on the job
-      // before the touch, which is the row touchStatement measured waited_ms from. The
-      // agent filter is a test, not a join, so a job two agents claimed is not counted
-      // twice.
-      db
-        .prepare(
-          `SELECT t.namespace AS namespace, t.actor_kind AS actor_kind, t.waited_ms AS waited_ms,
+      )
+      .bind(namespace, agent, since, until, TOUCH_ROWS + 1)
+      .all<TouchFoldRow>(),
+    // Each ended wait once, with the gate it ended: the latest gate row on the job
+    // before the touch, which is the row touchStatement measured waited_ms from. The
+    // agent filter is a test, not a join, so a job two agents claimed is not counted
+    // twice.
+    db
+      .prepare(
+        `SELECT t.namespace AS namespace, t.actor_kind AS actor_kind, t.waited_ms AS waited_ms,
            (SELECT g.detail FROM job_touches g WHERE g.job_id = t.job_id AND g.kind = 'gate' AND g.id < t.id
             ORDER BY g.id DESC LIMIT 1) AS gate_detail
          FROM job_touches t
@@ -287,30 +273,14 @@ export async function readClaimsAggregate(
            AND (?2 IS NULL OR EXISTS (SELECT 1 FROM job_claims c WHERE c.job_id = t.job_id AND c.agent = ?2))
            AND (?3 IS NULL OR t.at >= ?3) AND (?4 IS NULL OR t.at < ?4)
          ORDER BY t.id LIMIT ?5`,
-        )
-        .bind(namespace, agent, since, until, TOUCH_ROWS + 1)
-        .all<WaitFoldRow>(),
-      // Telemetry: the job_outcomes columns the OTLP receiver fills. A job with none of
-      // the six is not a row here, so "rows" counts jobs that reported something.
-      db
-        .prepare(
-          `SELECT namespace, COUNT(*) AS n, SUM(cost_usd) AS cost_usd, SUM(active_seconds) AS active_seconds,
-           SUM(tokens_input) AS tokens_input, SUM(tokens_output) AS tokens_output,
-           SUM(tokens_cache_read) AS tokens_cache_read, SUM(tokens_cache_creation) AS tokens_cache_creation
-         FROM job_outcomes
-         WHERE (cost_usd IS NOT NULL OR active_seconds IS NOT NULL OR tokens_input IS NOT NULL OR tokens_output IS NOT NULL
-                OR tokens_cache_read IS NOT NULL OR tokens_cache_creation IS NOT NULL)
-           AND (?1 IS NULL OR namespace = ?1) AND (?2 IS NULL OR agent = ?2)
-           AND (?3 IS NULL OR recorded_at >= ?3) AND (?4 IS NULL OR recorded_at < ?4)
-         GROUP BY namespace ORDER BY namespace LIMIT ?5`,
-        )
-        .bind(namespace, agent, since, until, CLAIMS_GROUP_LIMIT + 1)
-        .all<UsageSqlRow>(),
-      // Reported: claim.usage as the agent sent it, kept whole in job_claims.raw. Each
-      // claim is one session's own total, so claims on a job are summed.
-      db
-        .prepare(
-          `SELECT namespace, COUNT(*) AS n,
+      )
+      .bind(namespace, agent, since, until, TOUCH_ROWS + 1)
+      .all<WaitFoldRow>(),
+    // claim.usage as the agent sent it, kept whole in job_claims.raw. Each claim is one
+    // session's own total, so claims on a job are summed.
+    db
+      .prepare(
+        `SELECT namespace, COUNT(*) AS n,
            SUM(json_extract(raw, '$.claim.usage.cost_usd')) AS cost_usd,
            SUM(json_extract(raw, '$.claim.usage.active_seconds')) AS active_seconds,
            SUM(json_extract(raw, '$.claim.usage.tokens.input')) AS tokens_input,
@@ -322,10 +292,10 @@ export async function readClaimsAggregate(
            AND (?1 IS NULL OR namespace = ?1) AND (?2 IS NULL OR agent = ?2)
            AND (?3 IS NULL OR recorded_at >= ?3) AND (?4 IS NULL OR recorded_at < ?4)
          GROUP BY namespace ORDER BY namespace LIMIT ?5`,
-        )
-        .bind(namespace, agent, since, until, CLAIMS_GROUP_LIMIT + 1)
-        .all<UsageSqlRow>(),
-    ]);
+      )
+      .bind(namespace, agent, since, until, CLAIMS_GROUP_LIMIT + 1)
+      .all<UsageSqlRow>(),
+  ]);
 
   const truncated: string[] = [];
   const within = <T>(name: string, rows: T[] | undefined, bound: number): T[] => {
@@ -429,22 +399,9 @@ export async function readClaimsAggregate(
         a.gate_class.localeCompare(b.gate_class),
     );
 
-  const telemetry = new Map(
-    within("usage_telemetry", telemetryRows.results, CLAIMS_GROUP_LIMIT).map((r) => [
-      r.namespace,
-      r,
-    ]),
+  const usage: ClaimsUsageRow[] = within("usage", usageRows.results, CLAIMS_GROUP_LIMIT).map(
+    (r) => ({ namespace: r.namespace, ...usageTotals(r) }),
   );
-  const reported = new Map(
-    within("usage_reported", reportedRows.results, CLAIMS_GROUP_LIMIT).map((r) => [r.namespace, r]),
-  );
-  const usage: ClaimsUsageRow[] = [...new Set([...telemetry.keys(), ...reported.keys()])]
-    .sort()
-    .map((ns) => ({
-      namespace: ns,
-      telemetry: usageTotals(telemetry.get(ns)),
-      reported: usageTotals(reported.get(ns)),
-    }));
 
   return { filter, groups: ordered, waits: waitsRanked, usage, truncated };
 }

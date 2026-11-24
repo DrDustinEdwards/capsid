@@ -4,7 +4,6 @@ import { readBackups, readCi } from "./trends-outside";
 import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
 import type { Env } from "./env";
 import type {
-  TrendCostWeek,
   TrendDeployRepo,
   TrendMergeWeek,
   TrendMinutesWeek,
@@ -21,7 +20,6 @@ import { MINUTE_MS, isoWeek, timeMs, utcDay } from "./time";
 //   queue      visual 3: per day, jobs posted, jobs ended, and jobs open at the day's end
 //   merges     visual 7: per week, merged by the policy, by an approval, by the seat, closed;
 //              and each rollback as an event
-//   cost       visual 6: per week, model spend of the jobs that ended, against the cap in the feed
 //   backups    visual 10: the retention slots, 14 daily, 4 weekly, 3 monthly, filled or not
 //   ci         visual 11: per roster repo and day, the default branch green, red or not run
 //
@@ -294,51 +292,14 @@ async function readDeploys(db: D1Database, mondays: string[]): Promise<TrendDepl
   return deployStats(rows.results, mondays.length);
 }
 
-/** Model spend per week from outcome rows summed by day (cost_usd, rows that carried one).
- *  A week with no costed outcome is null, never 0: no telemetry is not a free week. */
-export function costWeeks(
-  rows: Array<{ day: string; usd: number; n: number }>,
-  mondays: string[],
-): TrendCostWeek[] {
-  const weeks = new Map<string, { usd: number; jobs: number }>(
-    mondays.map((m) => [m, { usd: 0, jobs: 0 }]),
-  );
-  for (const r of rows) {
-    const w = weeks.get(mondayOf(r.day));
-    if (!w) continue;
-    w.usd += r.usd;
-    w.jobs += r.n;
-  }
-  return mondays.map((m) => {
-    const w = weeks.get(m)!;
-    return {
-      week: isoWeek(new Date(`${m}T00:00:00Z`)),
-      start: m,
-      usd: w.jobs ? Math.round(w.usd * 100) / 100 : null,
-      jobs: w.jobs,
-    };
-  });
-}
-
-async function readCost(db: D1Database, mondays: string[]): Promise<TrendCostWeek[]> {
-  const rows = await db
-    .prepare(
-      "SELECT substr(recorded_at, 1, 10) AS day, SUM(cost_usd) AS usd, COUNT(cost_usd) AS n FROM job_outcomes WHERE recorded_at >= ?1 AND cost_usd IS NOT NULL GROUP BY day",
-    )
-    .bind(mondays[0])
-    .all<{ day: string; usd: number; n: number }>();
-  return costWeeks(rows.results, mondays);
-}
-
 /** Every series, for `weeks` weeks of the weekly ones. */
 export async function readTrends(env: Env, now: Date, weeks: number): Promise<PortalTrends> {
   const mondays = weekStarts(now, weeks);
-  const [minutes, queue, merges, deploys, cost, backups, ci] = await Promise.all([
+  const [minutes, queue, merges, deploys, backups, ci] = await Promise.all([
     readMinutes(env.DB, mondays),
     readQueue(env.DB, lastDays(now, TRENDS_QUEUE_DAYS)),
     readMerges(env.DB, mondays),
     readDeploys(env.DB, mondays),
-    readCost(env.DB, mondays),
     readBackups(env, now),
     readCi(env, now),
   ]);
@@ -353,7 +314,6 @@ export async function readTrends(env: Env, now: Date, weeks: number): Promise<Po
     queue,
     merges,
     deploys: { repos: deploys },
-    cost: { weeks: cost },
     backups,
     ci,
   };

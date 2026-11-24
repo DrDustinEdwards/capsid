@@ -335,7 +335,7 @@ test("PLANT: a risky job or one that names its model never takes an arm, and kin
   );
 });
 
-test("trialStatus: collecting below the minimum, then the verdict proposeRuleChanges gives, with cost", () => {
+test("trialStatus: collecting below the minimum, then the verdict proposeRuleChanges gives", () => {
   const thin = trialStatus(
     cellsOf([...many(MIN_SAMPLE - 1, 9, "docs", "haiku"), ...many(40, 30, "docs", "sonnet")]),
   );
@@ -347,19 +347,12 @@ test("trialStatus: collecting below the minimum, then the verdict proposeRuleCha
   );
   assert.equal(thin.find((t) => t.kind === "watcher")!.verdict, "collecting");
 
-  const cost = (usd: number) => (f: OutcomeFact) => ({ ...f, cost_usd: usd });
   const good = trialStatus(
-    cellsOf([
-      ...many(12, 10, "docs", "haiku").map(cost(0.1)),
-      ...many(12, 10, "docs", "sonnet").map(cost(1.5)),
-    ]),
+    cellsOf([...many(12, 10, "docs", "haiku"), ...many(12, 10, "docs", "sonnet")]),
   );
   const supports = good.find((t) => t.kind === "docs")!;
   assert.equal(supports.verdict, "supports");
-  assert.match(
-    supports.why,
-    /haiku merged green 10\/12 at \$0\.10 a job, sonnet 10\/12 at \$1\.50 a job/,
-  );
+  assert.match(supports.why, /haiku merged green 10\/12, sonnet 10\/12/);
   const bad = trialStatus(
     cellsOf([...many(12, 6, "maintenance", "haiku"), ...many(12, 11, "maintenance", "sonnet")]),
   );
@@ -523,8 +516,6 @@ const fact = (
   prs_merged: good ? 1 : 0,
   ci_green: good ? 1 : 0,
   corrections: 0,
-  cost_usd: null,
-  tokens: null,
   ...over,
 });
 const many = (n: number, good: number, kind: string, model: string) =>

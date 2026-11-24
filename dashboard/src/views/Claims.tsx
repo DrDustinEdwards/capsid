@@ -375,11 +375,8 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
     downloadCsv(
       `claims-usage-${stamp}${cut}.csv`,
       toCsv(
-        ["namespace", "source", ...cols],
-        data.usage.flatMap((u) => [
-          [u.namespace, "telemetry", ...cols.map((c) => u.telemetry[c])],
-          [u.namespace, "reported", ...cols.map((c) => u.reported[c])],
-        ]),
+        ["namespace", ...cols],
+        data.usage.map((u) => [u.namespace, ...cols.map((c) => u[c])]),
       ),
     );
   };

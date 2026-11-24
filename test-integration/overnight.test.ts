@@ -118,7 +118,7 @@ describe("the overnight plan on a real D1", () => {
 });
 
 describe("the morning digest on a real D1", () => {
-  it("lists finished jobs with usage from telemetry or the agent's report, what blocked, and the pull requests ready", async () => {
+  it("lists finished jobs with the usage the agent reported, what blocked, and the pull requests ready", async () => {
     const { ns, id } = fresh("morning");
     const at = "2026-10-05T03:00:00.000Z";
     const since = "2026-10-05T00:00:00.000Z";
@@ -126,11 +126,11 @@ describe("the morning digest on a real D1", () => {
       env.DB.prepare(
         `INSERT INTO jobs (id, namespace, title, body, status, posted_by, result_summary, updated_at) VALUES (?1, ?2, ?3, 'body', ?4, 'github:sample', ?5, ?6)`,
       ).bind(id(n), ns, `Job ${n}`, status, summary, at);
-    const outcome = (n: number, cost: number | null) =>
+    const outcome = (n: number) =>
       env.DB.prepare(
-        `INSERT INTO job_outcomes (job_id, agent, namespace, blocked_count, resumed_count, duration_minutes, result_kind, verified, recorded_at, cost_usd, active_seconds)
-         VALUES (?1, 'agent:sample-driver', ?2, 0, 0, 12, 'pr', '{}', ?3, ?4, ?5)`,
-      ).bind(id(n), ns, at, cost, cost === null ? null : 300);
+        `INSERT INTO job_outcomes (job_id, agent, namespace, blocked_count, resumed_count, duration_minutes, result_kind, verified, recorded_at)
+         VALUES (?1, 'agent:sample-driver', ?2, 0, 0, 12, 'pr', '{}', ?3)`,
+      ).bind(id(n), ns, at);
     const claim = (n: number, usage: object | null, action = "complete") =>
       env.DB.prepare(
         `INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, ?2, 'agent:sample-driver', ?3, ?4, ?5)`,
@@ -140,9 +140,9 @@ describe("the morning digest on a real D1", () => {
       job(2, "done"),
       job(3, "done"),
       job(4, "blocked", "Opened https://github.com/example/sample/pull/41.\n\nRun this: merge it"),
-      outcome(1, 2.5),
-      outcome(2, null),
-      outcome(3, null),
+      outcome(1),
+      outcome(2),
+      outcome(3),
       claim(2, { cost_usd: 1.25, active_seconds: 90 }),
       claim(3, null),
       // The blocked job's two sessions reported usage; claims on a job are summed.
@@ -157,16 +157,10 @@ describe("the morning digest on a real D1", () => {
     const out = await readOvernightDigest(env as never, { namespace: ns, since }, NOW);
     expect(out.truncated).toEqual([]);
     const by = Object.fromEntries(out.finished.map((j) => [j.id, j]));
-    expect([by[id(1)].usage_source, by[id(1)].usage.cost_usd]).toEqual(["telemetry", 2.5]);
-    expect([
-      by[id(2)].usage_source,
-      by[id(2)].usage.cost_usd,
-      by[id(2)].usage.active_seconds,
-    ]).toEqual(["reported", 1.25, 90]);
-    expect([by[id(3)].usage_source, by[id(3)].usage.cost_usd]).toEqual(["none", null]);
-    expect(out.blocked.map((b) => [b.id, b.usage_source, b.usage.cost_usd])).toEqual([
-      [id(4), "reported", 0.5],
-    ]);
+    expect([by[id(2)].usage.cost_usd, by[id(2)].usage.active_seconds]).toEqual([1.25, 90]);
+    expect(by[id(1)].usage.cost_usd).toBeNull();
+    expect(by[id(3)].usage.cost_usd).toBeNull();
+    expect(out.blocked.map((b) => [b.id, b.usage.cost_usd])).toEqual([[id(4), 0.5]]);
     expect(out.blocked[0].pull_requests).toEqual(["https://github.com/example/sample/pull/41"]);
     expect(out.pull_requests_ready.map((p) => [p.url.split("/").pop(), p.state, p.source])).toEqual(
       [
@@ -175,10 +169,8 @@ describe("the morning digest on a real D1", () => {
       ],
     );
     expect(out.pull_requests_merged).toBe(1);
-    // Per source, never added: the telemetry job's report would not have counted either.
-    expect([out.totals.telemetry.jobs, out.totals.telemetry.cost_usd]).toEqual([1, 2.5]);
-    expect([out.totals.reported.jobs, out.totals.reported.cost_usd]).toEqual([2, 1.75]);
-    expect(out.totals.jobs_without_usage).toBe(1);
+    expect([out.totals.usage.jobs, out.totals.usage.cost_usd]).toEqual([2, 1.75]);
+    expect(out.totals.jobs_without_usage).toBe(2);
   });
 
   it("a window with nothing in it is empty, not an error", async () => {

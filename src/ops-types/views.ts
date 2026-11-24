@@ -136,16 +136,6 @@ export interface TrendMergeWeek {
   closed: number; // closed without merging, from chat or the Portal
 }
 
-export interface TrendCostWeek {
-  week: string;
-  start: string;
-  // Model spend of the jobs that ended that week, from their outcome rows' telemetry
-  // cost. Null when no outcome that week carried a cost, which is not a spend of zero.
-  usd: number | null;
-  // Outcome rows that carried a cost.
-  jobs: number;
-}
-
 export interface TrendBackupSlot {
   key: string; // a day, a week's Monday, or a month (YYYY-MM)
   filled: boolean;
@@ -197,8 +187,6 @@ export interface PortalTrends {
     }>;
   };
   deploys: { repos: TrendDeployRepo[] };
-  // Visual 6: model spend per week (a read-only sum over job_outcomes.cost_usd).
-  cost: { weeks: TrendCostWeek[] };
   // null slots and runs, with error set, when the bucket could not be listed.
   backups: {
     slots: {
@@ -435,7 +423,6 @@ export interface DigestJob {
   duration_minutes: number | null;
   blocked_count: number | null;
   usage: UsageTotals;
-  usage_source: UsageSource;
 }
 
 export interface DigestBlocked {
@@ -447,7 +434,6 @@ export interface DigestBlocked {
   summary: string;
   pull_requests: string[];
   usage: UsageTotals;
-  usage_source: UsageSource;
 }
 
 export interface DigestPr {
@@ -467,16 +453,13 @@ export interface OvernightDigest {
   blocked: DigestBlocked[];
   pull_requests_ready: DigestPr[];
   pull_requests_merged: number;
-  // Per source, never one added to the other: a job in both would count twice.
+  // What the agents reported in claim.usage, summed over the jobs that reported any.
   totals: {
-    telemetry: UsageTotals & { jobs: number };
-    reported: UsageTotals & { jobs: number };
+    usage: UsageTotals & { jobs: number };
     jobs_without_usage: number;
   };
   truncated: string[];
 }
-
-export type UsageSource = "telemetry" | "reported" | "none";
 
 // GET /portal/api/plan -> PortalPlan: the overnight plan over every namespace.
 export type PortalPlan = OvernightPlan;

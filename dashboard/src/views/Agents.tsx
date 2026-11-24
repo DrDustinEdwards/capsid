@@ -1,5 +1,3 @@
-import { trendChart } from "./charts";
-import { ChartSlot } from "../ui/ChartSlot";
 import { AGENT_TABS, tabOf, useApp } from "../app/ctx";
 import { KIND_STATUS } from "../lib/derive";
 import { agentState, archiveAgents, nsList, rosterAgents } from "../lib/agents";
@@ -11,9 +9,6 @@ import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
 import { Missing } from "capsomer/react/empty";
 import type { OpsAgent } from "../types";
-
-// Chart 6, weekly model spend, sits under the roster.
-const CostChart = trendChart("CostChart");
 
 // Three tabs (the Portal audit's new map, 2026-11-06): the roster, the archive of revoked
 // agents, and the AI access granted on each server. The claim checks are Jobs' Checks tab.
@@ -230,9 +225,6 @@ function Roster() {
           </table>
         </div>
       </Panel>
-      <ChartSlot>
-        <CostChart />
-      </ChartSlot>
     </div>
   );
 }

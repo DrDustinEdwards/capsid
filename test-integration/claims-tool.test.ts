@@ -208,7 +208,7 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
     expect(nobody.waits).toEqual([]);
   });
 
-  it("aggregate: usage sums claim.usage and the telemetry columns apart, and a figure nobody sent is null", async () => {
+  it("aggregate: usage sums claim.usage per namespace, and a figure nobody sent is null", async () => {
     const { ns, job } = fresh("claims-usage");
     await env.DB.batch([
       env.DB.prepare(
@@ -231,33 +231,18 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
       env.DB.prepare(
         `INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'fail', ?2, ?3, ?4, '2026-09-03T12:00:00.000Z')`,
       ).bind(job, AGENT, ns, JSON.stringify({ claim: { prs_opened: [] } })),
-      env.DB.prepare(
-        `INSERT INTO job_outcomes (job_id, agent, namespace, blocked_count, resumed_count, result_kind, verified, recorded_at, cost_usd)
-         VALUES (?1, ?2, ?3, 0, 0, 'none', '{}', '2026-09-03 12:00:00', 9)`,
-      ).bind(job, AGENT, ns),
     ]);
     const out = await adminRead<ClaimsAggregate>({ namespace: ns });
     expect(out.usage).toEqual([
       {
         namespace: ns,
-        telemetry: {
-          rows: 1,
-          cost_usd: 9,
-          active_seconds: null,
-          tokens_input: null,
-          tokens_output: null,
-          tokens_cache_read: null,
-          tokens_cache_creation: null,
-        },
-        reported: {
-          rows: 2,
-          cost_usd: 2,
-          active_seconds: 60,
-          tokens_input: 10,
-          tokens_output: null,
-          tokens_cache_read: null,
-          tokens_cache_creation: null,
-        },
+        rows: 2,
+        cost_usd: 2,
+        active_seconds: 60,
+        tokens_input: 10,
+        tokens_output: null,
+        tokens_cache_read: null,
+        tokens_cache_creation: null,
       },
     ]);
   });

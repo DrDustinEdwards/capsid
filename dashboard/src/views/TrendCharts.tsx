@@ -25,7 +25,6 @@ import type {
 } from "../types";
 import { errorTotals } from "../ui/charts";
 import { Status } from "capsomer/react/status";
-import { formatMoney } from "@dustinedwards/site-runtime/money";
 import "./TrendCharts.css";
 
 // The Portal's charts drawn with Enarratio's primitives (docs/design/design-portal-evaluation.md
@@ -33,7 +32,7 @@ import "./TrendCharts.css";
 // 4 Tonight as a timeline (Queue), 10 the backup retention slots and 11 the default branches
 // by day (Health). Chart 8, each site's uptime, is ui/charts.tsx's UptimeTicks, and its
 // uptimeStrip is in the initial bundle with the Sites table. Charts 2 (waiting), 3 (the
-// queue), 5 (claims against verified), 6 (cost), 7 (merges) and 9 (errors and deploys) are
+// queue), 5 (claims against verified), 7 (merges) and 9 (errors and deploys) are
 // Enarratio's bar, line and area charts from enarratio/lite, which drop Observable Plot and
 // fit the chunk budget. This module loads with the page that shows a chart, never in the
 // initial bundle. Each is Enarratio's whole figure (title, finding, notes, source, and a toolbar with the data download)
@@ -379,41 +378,6 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
             })
           : barChart({ ...opts, width: Math.min(900, width), height: 260 })
       }
-    />
-  );
-}
-
-/** Agents' chart: model spend per week. */
-export function CostChart() {
-  const { data, error, loading } = useTrends();
-  if (loading && !data) return null;
-  if (!data) return <Unread what="Weekly cost" error={error} />;
-  const weeks = data.cost.weeks;
-  if (!weeks.some((w) => w.usd !== null))
-    return (
-      <p className="cap-text" data-tone="dim">
-        No model cost was recorded in these {weeks.length} weeks.
-      </p>
-    );
-  const now = weeks[weeks.length - 1]!;
-  const opts = {
-    data: weeks.map((w) => ({ week: w.start, usd: w.usd })),
-    x: "week",
-    y: "usd",
-    xLabel: "Week starting",
-    yLabel: "Model spend (USD)",
-    formatValue: (v: number) => formatMoney(v, "usd", { scale: 0 }),
-    height: 240,
-    title: "What does the work cost?",
-    alt: `Model spend per week for the last ${weeks.length} weeks${now.usd === null ? ", none recorded this week" : `, ${formatMoney(now.usd, "usd", { scale: 0 })} this week`}. Weeks with no recorded cost are gaps.`,
-    caption: "A week with no job outcome carrying a cost is a gap, not a free week.",
-    source: { name: "Job outcomes, telemetry cost, an estimate" },
-  } as const;
-  return (
-    <ChartPanel
-      id="cost-trend"
-      stale={error}
-      draw={(width, fit) => lineChart({ ...opts, width, ...fit })}
     />
   );
 }
