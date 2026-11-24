@@ -126,6 +126,9 @@ export default defineConfig({
   test: {
     include: ["test-integration/**/*.test.ts"],
     setupFiles: ["./test-integration/apply-migrations.ts"],
+    // Off: vitest 5's file module cache sends each fresh isolate a snapshot of every cached module, and the Workers pool
+    // inlines it into one WebSocket message that grows with the app, past workerd's limit ("Message is too large").
+    fsModuleCache: false,
     // THE DEFAULT 5s IS TOO TIGHT FOR WHAT THESE ACTUALLY DO, and finding that
     // out from a flake is worse than saying it here. One test applies every
     // migration and dumps every table to R2; another runs EXPLAIN QUERY PLAN over
