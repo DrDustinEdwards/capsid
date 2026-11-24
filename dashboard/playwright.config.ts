@@ -12,7 +12,7 @@ export default defineConfig({
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  reporter: process.env.CI ? [["list"]] : [["list"]],
+  reporter: "list",
   use: {
     baseURL: `http://localhost:${PORT}/`,
     trace: "retain-on-failure",
