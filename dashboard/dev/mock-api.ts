@@ -1601,9 +1601,8 @@ function plan(
           "Deleted: the namespaces row and its repo mapping, recorded in the audit row.",
           "Kept: the audit_log rows and the nightly backup objects.",
         ],
-        apply: (st) =>
-          void (st.projectsRemoved.add(ns),
-          (st.sites = st.sites.filter((s) => s.namespace !== ns))),
+        apply: (s) =>
+          void (s.projectsRemoved.add(ns), (s.sites = s.sites.filter((x) => x.namespace !== ns))),
       };
     }
     case "site_key_rotate": {

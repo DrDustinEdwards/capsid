@@ -39,12 +39,12 @@
     "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.17.1",
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.181.2",
     "@modelcontextprotocol/server": "2.4.0",
-    "agents": "0.33.0",
+    "agents": "0.34.0",
     "capsomer": "github:DrDustinEdwards/capsomer#v0.164.10",
     "hastscript": "9.0.3",
     "htmlparser2": "12.0.0",
-    "jose": "6.2.17",
-    "tldts": "7.5.4",
+    "jose": "6.2.18",
+    "tldts": "7.5.5",
     "yaml": "2.9.1",
     "zod": "4.6.7"
   },
@@ -56,10 +56,10 @@
     "@modelcontextprotocol/conformance": "0.2.0-alpha.12",
     "@types/node": "24.19.2",
     "jscpd": "5.4.3",
-    "knip": "6.45.1",
-    "oxfmt": "0.78.0",
-    "oxlint": "1.93.0",
-    "oxlint-tsgolint": "7.0.2007",
+    "knip": "6.47.0",
+    "oxfmt": "0.79.0",
+    "oxlint": "1.94.0",
+    "oxlint-tsgolint": "7.0.2008",
     "typescript": "7.0.2",
     "vitest": "5.1.1",
     "wrangler": "4.166.0"
@@ -70,11 +70,11 @@
       "@modelcontextprotocol/sdk": "1.32.2"
     },
     "sharp": "0.35.5",
-    "undici": "8.12.4"
+    "undici": "8.13.1"
   },
   "engines": {
     "node": ">=26.11.1",
-    "npm": "12.2.2"
+    "npm": "12.2.3"
   },
   "allowScripts": {
     "core-js-pure": false,
