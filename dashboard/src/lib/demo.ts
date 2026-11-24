@@ -1,8 +1,8 @@
-// The Portal's chart demo (devkit live/areas.json, area 10): the same app, built a second time at
-// /demos/ (vite.config.ts, mode "demo") and served on portal.dustinedwards.info with no sign-in, so a
+// The Portal's chart demo (devkit live/areas.json, area 10): the same app, served under
+// /demos (src/routes.ts) on portal.dustinedwards.info with no sign-in, so a
 // live check sees the charts a signed-in owner sees. Its data is dev/sample-feed.json and the dev
 // mock's other answers (example.com sites, "sample" namespaces), captured once at build time into
-// /demos/api/*.json by scripts/demo-api.ts. Nothing in it is read from Capsid, and nothing is written:
+// /demos/api/*.json by scripts/demo-api.mjs. Nothing in it is read from Capsid, and nothing is written:
 // every request that is not a GET is answered here with a refusal and never leaves the browser.
 
 export const DEMO_BASE = "/demos";
