@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4",
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.67.1",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.68.0",
     "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.17.1",
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.181.2",
     "@modelcontextprotocol/server": "2.4.0",
@@ -51,7 +51,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.9.0",
     "@cloudflare/workers-types": "5.20261120.1",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.59.5",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.59.6",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/conformance": "0.2.0-alpha.12",
     "@types/node": "24.19.2",
