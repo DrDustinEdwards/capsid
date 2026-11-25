@@ -36,7 +36,7 @@ jobs:
       pull-requests: write
       id-token: write
       checks: write
-    uses: DrDustinEdwards/devkit/.github/workflows/pr.yml@e95385c2ad8ab530753a3ee45ea11329afac8415 # v0.62.0
+    uses: DrDustinEdwards/devkit/.github/workflows/pr.yml@1f8d35b63b7e78eabbef60752f798513646fe9b9 # v0.64.0
     with:
       review: true
       # The three installs: the knip (dashboard) run reads dashboard/, its own package, and the Worker bundles the Portal's
