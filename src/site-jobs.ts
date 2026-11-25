@@ -3,7 +3,7 @@ import { exportAuditLog } from "@dustinedwards/site-runtime/audit-log";
 import { describeRuns, runsSucceeded } from "@dustinedwards/site-runtime/cron";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { withAuditKey } from "./audit-key";
-import { backupTaskResult, runBackup } from "./backup";
+import { backupLeaseHeld, backupTaskResult, runBackup } from "./backup";
 import { readSiteRow } from "./ops-sites";
 import type { SiteOperator } from "./ops-types/sites";
 import { callOperator, tokenSet, type FetchLike } from "./site-operator";
@@ -71,9 +71,7 @@ export type CapsidJob = keyof typeof CAPSID_JOB_BODIES;
 export const CAPSID_JOBS = Object.keys(CAPSID_JOB_BODIES) as CapsidJob[];
 const isCapsidJob = (name: string): name is CapsidJob => Object.hasOwn(CAPSID_JOB_BODIES, name);
 
-// One of Capsid's own BACKUP_CRON jobs through runTask, as the cron runs it: the nightly trigger
-// passes rethrow, so a throw fails the invocation; a run now does not, and reads the line. Each
-// writes its own task_runs row. /
+// One of Capsid's own BACKUP_CRON jobs through runTask; only the nightly trigger rethrows a throw.
 export async function runCapsidJob(env: Env, name: CapsidJob, rethrow: boolean): Promise<Judged> {
   const job = CAPSID_JOB_BODIES[name];
   let judged: TaskResult = null;
@@ -94,6 +92,34 @@ export async function runCapsidJob(env: Env, name: CapsidJob, rethrow: boolean):
       line: `capsid ${name}: ${result.outcome}: ${result.reason}`,
     };
   return { ok: true, line: `capsid ${name}: ran, nothing to record` };
+}
+
+// A run now never runs in the click's request, which is cancelled when the client disconnects (waitUntil adds 30 s;
+// a dump cut there held its lease an hour, 2026-11-25). The next TICK_CRON runs the ask with the cron's 15-minute wall.
+const RUN_NOW_KEY = (name: CapsidJob) => `capsid:run-now:${name}`;
+const RUN_NOW_TTL_SECONDS = 86400;
+
+/** Ask the next tick to run one of Capsid's own jobs; answers at once. */
+export async function queueCapsidJob(env: Env, name: CapsidJob, actor: string): Promise<Judged> {
+  await env.APP_KV.put(RUN_NOW_KEY(name), `${new Date().toISOString()} ${actor}`, {
+    expirationTtl: RUN_NOW_TTL_SECONDS,
+  });
+  return {
+    ok: true,
+    line: `capsid ${name}: started; it runs within five minutes, on the next tick, and records a task_runs row (${CAPSID_JOB_BODIES[name].task})`,
+  };
+}
+
+// Each ask runs once; a backup asked while the lease is held waits for a later tick.
+export async function runQueuedCapsidJobs(env: Env): Promise<void> {
+  await Promise.all(
+    CAPSID_JOBS.map(async (name) => {
+      if ((await env.APP_KV.get(RUN_NOW_KEY(name))) === null) return;
+      if (name === "backup" && (await backupLeaseHeld(env))) return;
+      await env.APP_KV.delete(RUN_NOW_KEY(name));
+      await runCapsidJob(env, name, false);
+    }),
+  );
 }
 
 /** Why `name` cannot run on `namespace`, or null. Reads only, so the preview refuses what the run refuses. */
@@ -146,7 +172,7 @@ export async function runSiteJob(
   const refusal = await jobRefusal(env, args.namespace, args.name);
   if (refusal) return { ran: false, refusal };
   if (args.namespace === CAPSID_NAMESPACE) {
-    const done = await runCapsidJob(env, args.name as CapsidJob, false);
+    const done = await queueCapsidJob(env, args.name as CapsidJob, args.actor);
     return { ran: true, ok: done.ok, line: done.line, recorded: true };
   }
   const row = await readSiteRow(env.DB, args.namespace);

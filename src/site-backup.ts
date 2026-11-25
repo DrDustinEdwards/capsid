@@ -7,7 +7,7 @@ import type { SiteOperator } from "./ops-types/sites";
 import type { PortalBackups, SiteBackupRow, SiteBackupStatus } from "./ops-types/views";
 import { callOperator, tokenSet, type FetchLike, type OperatorCall } from "./site-operator";
 import { describeRuns } from "@dustinedwards/site-runtime/cron";
-import { operatorRefusal, runCapsidJob } from "./site-jobs";
+import { operatorRefusal } from "./site-jobs";
 import { takeLimit } from "./site-repair";
 import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";
@@ -217,10 +217,3 @@ export async function runSiteBackups(
 
 /** The namespace that backs up Capsid's own D1 dump, by this Worker rather than through an operator API. */
 export const CAPSID_DUMP = "capsid";
-
-// Back up now for Capsid itself: the nightly cron's run, on demand. It takes the cron's lease
-// (src/backup.ts runBackup), so a run that overlaps the cron skips and prunes nothing, and it
-// writes the same task_runs row (backup) the Portal reads. /
-export async function runCapsidDump(env: Env): Promise<{ ok: boolean; line: string }> {
-  return runCapsidJob(env, "backup", false);
-}

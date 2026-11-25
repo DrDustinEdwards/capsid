@@ -212,7 +212,7 @@ export async function planJobAction(
         return {
           ok: true,
           changes: [
-            `capsid: run Capsid's own ${p.name} job now, the same run as the nightly 09:00 UTC cron, with its task_runs row (${p.name}). The dump takes the cron's lease, so a run that overlaps the cron skips.`,
+            `capsid: run Capsid's own ${p.name} job within five minutes, on the next tick, the same run as the nightly 09:00 UTC cron, with its task_runs row (${p.name}). The dump waits for the cron's lease, so it never overlaps a run.`,
           ],
           audit: [`site-job by ${actor}`, click],
         };

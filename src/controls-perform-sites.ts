@@ -11,7 +11,8 @@ import {
 } from "./ops-package-config";
 import { removeSite, validateSite, addSite, editSite, describeSite } from "./ops-sites";
 import { runSiteRepair } from "./site-repair";
-import { CAPSID_DUMP, runCapsidDump, runSiteBackups } from "./site-backup";
+import { CAPSID_DUMP, runSiteBackups } from "./site-backup";
+import { queueCapsidJob } from "./site-jobs";
 
 export async function performSiteAction(
   c: PerformContext,
@@ -157,7 +158,7 @@ export async function performSiteAction(
       // change before the click.
       const namespace = params.namespace?.trim() || undefined;
       if (namespace === CAPSID_DUMP) {
-        const dump = await runCapsidDump(env);
+        const dump = await queueCapsidJob(env, "backup", actor);
         if (!dump.ok) return { ok: false, refusal: dump.line };
         state.committed = true;
         state.summary = `${dump.line}.`;
