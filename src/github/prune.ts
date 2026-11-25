@@ -2,21 +2,13 @@ import { readAllPages } from "@dustinedwards/site-runtime/github";
 import type { RepoEnv as Env } from "../env";
 import { encodePath, getDefaultBranch, ghFetch, invalidateRepoReads, resolveRepo } from "./client";
 
-// PRUNE MERGED BRANCHES. capsid_close_pr action delete_branch with merged:true
-// finds the branches whose work has landed and, only with confirm:true, deletes them. A branch
-// is pruned only when its LATEST pull request in this repo merged AND the branch tip is the
-// commit that pull request merged from, so a commit pushed after the merge is never lost.
-// Anything uncertain is kept: no pull request, one that is open or was closed unmerged, a
-// reopened branch, or a list this call could not read in full.
-//
-// Reads are live (ghFetch), not the cached reads the other tools use, because a stale list
-// is how a branch with new work gets deleted. A confirmed call re-reads each branch's tip
-// immediately before deleting it.
+// Reads are live (ghFetch), not cached: a stale list is how a branch with new work gets deleted. A
+// branch is pruned only when its latest pull request merged and its tip is the merged commit;
+// anything uncertain is kept.
 
 const PAGE_SIZE = 100;
 const PAGE_CAP = 10;
-// A confirmed call deletes at most this many, and says how many are left, so one call's
-// subrequests stay bounded however many branches are stale. The seat repeats until none remain.
+// Capped so one call's subrequests stay bounded; the seat repeats until none remain.
 const DELETE_CAP = 40;
 const KEPT_LISTED = 200;
 const NEVER_PRUNED = new Set(["screenshots", "results", "gh-pages"]);
@@ -44,17 +36,13 @@ export interface PruneKept {
 export interface PruneCandidate {
   branch: string;
   sha: string;
-  // The merged pull request, or null for a branch the daily pass deletes for its age alone
-  // (src/maintenance-branches.ts).
   pr: number | null;
 }
 
-// Screenshot branches: a pull request's images live on a branch of their
-// own, named shots/... or ...-shots, that no pull request has as its head. One is kept while
-// an open pull request's description names it or its tip, and is an orphan after that.
+// Screenshot branches (shots/... or ...-shots) are kept while an open pull request's description
+// names them.
 const SHOTS_BRANCH = /^shots\/|-shots$/;
 
-/** The open pull request whose description shows a screenshot branch's images, or null. */
 function shotsInUse(
   branch: { name: string; sha: string },
   open: ReadonlyArray<{ number: number; body?: string | null }>,
@@ -66,13 +54,8 @@ function shotsInUse(
   return used ? used.number : null;
 }
 
-// orphan: kept only because the rule cannot prove its work landed (no pull request, one
-// closed without merging, or commits after the merge), so its age is what says whether it
-// is still wanted. A branch kept for what it is (default, protected, by name) or for an open pull request is not an orphan.
 type PruneVerdict = { prune: true; pr: number } | { prune: false; reason: string; orphan: boolean };
 
-/** Whether a branch may be pruned, from the facts about it. Pure, so every rule is tested
- *  without GitHub. `latest` is the branch's newest pull request in this repo, or undefined. */
 export function pruneVerdict(
   branch: { name: string; sha: string; protected: boolean },
   defaultBranch: string,
@@ -126,8 +109,6 @@ export function pruneVerdict(
   return { prune: true, pr: latest.number };
 }
 
-// A refused page throws (the plan cannot be judged on part of a list); a list longer than
-// PAGE_CAP pages comes back marked incomplete.
 async function paged<T>(
   env: Env,
   owner: string,
@@ -147,9 +128,6 @@ async function paged<T>(
   return { rows: items, complete: problem === null };
 }
 
-/** What the prune rule makes of a repo's branches: the ones it would delete, and every other
- *  with the reason it is kept. The tool's preview and the daily maintenance pass
- *  (src/maintenance-branches.ts) both read it, so the rule is spelled once. */
 export interface PrunePlan {
   owner: string;
   name: string;
@@ -157,14 +135,11 @@ export interface PrunePlan {
   defaultBranch: string;
   branchesRead: number;
   listsComplete: boolean;
-  /** Whether the open pull request list was read in full, so "no open pull request" is known. */
   openComplete: boolean;
   prune: PruneCandidate[];
   kept: PruneKeptRow[];
 }
 
-/** A kept branch with its tip, and whether nothing but its age says it is still wanted:
- *  no pull request, one closed without merging, or commits after the merge. */
 interface PruneKeptRow extends PruneKept {
   sha: string;
   orphan: boolean;
@@ -211,7 +186,6 @@ export async function readPrunePlan(
 
   const prune: PruneCandidate[] = [];
   const kept: PruneKeptRow[] = [];
-  // Names the caller said to leave alone, whatever their pull request says.
   const keepNames = new Set(keep);
   for (const b of branches.rows) {
     if (keepNames.has(b.name)) {
@@ -264,10 +238,10 @@ export async function readPrunePlan(
   };
 }
 
-/** Delete up to `cap` of the plan's candidates. Each tip is re-read immediately before its
- *  delete, and a branch that moved since the plan was read is skipped, not deleted.
- *  `onDeleted` runs after each delete and before the next, so a caller's record of one
- *  delete is written before another happens; if it throws, nothing more is deleted. */
+/**
+ * Each tip is re-read before its delete; a branch that moved since the plan is skipped. If onDeleted
+ * throws, nothing more is deleted.
+ */
 export async function deletePruneCandidates(
   env: Env,
   plan: PrunePlan,
@@ -280,7 +254,6 @@ export async function deletePruneCandidates(
   const skipped: PruneKept[] = [];
   const batch = plan.prune.slice(0, cap);
   for (const c of batch) {
-    // The tip as it is now. A branch that moved since the list was read has new work.
     let tip: string | undefined;
     try {
       const ref = await ghFetch(env, owner, repo, `${base}/git/ref/heads/${encodePath(c.branch)}`);

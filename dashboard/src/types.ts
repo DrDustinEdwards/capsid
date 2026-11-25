@@ -1,5 +1,4 @@
-// The Watch Floor contract lives in the Worker's src/ops-types/. Types only: the
-// app never imports runtime code from the Worker.
+// Types only: the app never imports runtime code from the Worker.
 export type {
   ClaimsAgreement,
   ClaimsAgreementCounts,

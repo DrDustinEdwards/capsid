@@ -18,12 +18,6 @@ import type { LibraryEntry, LibraryShelf, PortalLibrary } from "../types";
 import { Status } from "capsomer/react/status";
 import { PageHead } from "./shared";
 
-// LIBRARY (capsid/decisions.md 2026-10-09, Portal review item 4; experience review answer
-// 11): the knowledge store, read-only. The shelves (decisions, rulings, research) when it
-// opens, a search with ?q=, one document with ?doc=<namespace>/<path>. A job id in a
-// document opens that job's drawer over the page. Nothing here writes: writing stays in
-// chat and with drivers. Read from GET /portal/api/library.
-
 const SHELVES: Array<{ id: LibraryShelf; title: string; none: string }> = [
   { id: "decisions", title: "Decisions", none: "No decision record yet." },
   { id: "rulings", title: "Rulings", none: "No ruling yet." },
@@ -32,7 +26,6 @@ const SHELVES: Array<{ id: LibraryShelf; title: string; none: string }> = [
 
 const JOB_ID = /\bjob_[0-9a-f]{12}\b/g;
 
-/** The ?doc= value for a document: its namespace, a slash, its path. */
 function docParam(ns: string, path: string): string {
   return `${ns}/${path}`;
 }
@@ -41,7 +34,6 @@ function docHref(ns: string, path: string): string {
   return `${routePath("library")}?${new URLSearchParams({ doc: docParam(ns, path) }).toString()}`;
 }
 
-/** Text with each job id made a link to that job's drawer over the Library. */
 function withJobLinks(text: string, back: string): ReactNode[] {
   const out: ReactNode[] = [];
   let last = 0;
@@ -79,7 +71,6 @@ export function Library() {
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const next = String(new FormData(e.currentTarget).get("q") ?? "");
-    // The page itself, not location: a search made with a job's drawer open closes it.
     navigate(withParams(routePath("library"), { q: next }));
   };
   const data = load.data;

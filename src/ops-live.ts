@@ -29,9 +29,9 @@ import { toSqlTime } from "@dustinedwards/site-runtime/time";
 
 const WEEK_MS = 7 * DAY_MS;
 
-/** An instant as ISO. Columns written by datetime('now') read "YYYY-MM-DD HH:MM:SS",
- *  which is UTC but which a browser's Date.parse reads as local time, so the feed
- *  hands every timestamp over in one unambiguous form. Anything else passes through. */
+// An instant as ISO. Columns written by datetime('now') read "YYYY-MM-DD HH:MM:SS", which is UTC
+// but which a browser's Date.parse reads as local time, so the feed hands every timestamp over in
+// one unambiguous form. Anything else passes through.
 export function isoTime(value: string): string;
 export function isoTime(value: string | null): string | null;
 export function isoTime(value: string | null): string | null {
@@ -71,8 +71,8 @@ export interface JobFeedRow {
 // runs both over one set of titles so the two cannot disagree.
 const FINGERPRINT = /\[([^\]]+)\]\s*$/;
 
-/** A job as the feed shows it. A blocked job's summary is split into what it waits on
- *  and the exact command (commandFromSummary), so the app can show the command to copy. */
+// A job as the feed shows it. A blocked job's summary is split into what it waits on and the exact
+// command (commandFromSummary), so the app can show the command to copy.
 export function opsJobFrom(
   row: JobFeedRow,
   commandSignature: SignatureCheck | null = null,
@@ -118,8 +118,8 @@ export function opsJobFrom(
   };
 }
 
-/** One credential as the feed shows it: the inventory capsid_read_status action status serves, with its
- *  record. Grants are left out; the contract carries flags only. */
+// One credential as the feed shows it: the inventory capsid_read_status action status serves, with
+// its record. Grants are left out; the contract carries flags only.
 export function opsAgentFrom(agent: AgentSummary): OpsAgent {
   const r = agent.record;
   return {
@@ -142,9 +142,9 @@ export function opsAgentFrom(agent: AgentSummary): OpsAgent {
   };
 }
 
-/** The auto-merge tick's awaiting-seat set. A value that does not parse is logged and
- *  shown as empty, because the contract has no field to carry the reason; a KV read
- *  that fails throws and fails the feed. */
+// The auto-merge tick's awaiting-seat set. A value that does not parse is logged and shown as
+// empty, because the contract has no field to carry the reason; a KV read that fails throws and
+// fails the feed.
 export function awaitingFrom(raw: string | null): OpsAwaitingSeat[] {
   if (raw === null) return [];
   try {
@@ -163,7 +163,7 @@ export function awaitingFrom(raw: string | null): OpsAwaitingSeat[] {
   }
 }
 
-// The store's size against D1's cap. Every D1 result carries the database's size in meta.size_after, so the jobs read below reports it and the feed makes no extra read (PRAGMA page_count is not authorized on D1). 10 GB is the Workers Paid per-database cap (developers.cloudflare.com/d1/platform/limits); on Free it is 500 MB, and this is the one line to change.
+// The store's size against D1's cap.
 export const D1_CAP_BYTES = 10 * 1024 ** 3;
 
 /** The size a D1 result reports, or null when its meta has no number for it. */
@@ -178,7 +178,9 @@ async function liveJobs(
   secret: string | undefined,
 ): Promise<{ jobs: OpsJob[]; sizeBytes: number | null }> {
   const open = OPEN_JOB_STATUSES.map((_, i) => `?${i + 2}`).join(", ");
-  // datetime() on both sides: updated_at is written both as ISO and as D1's default text form, which do not compare as text. The watcher's finding row joins on the job it is currently filed as (one row per fingerprint, so the join cannot multiply a job). A parked job is not open (src/jobs-schema.ts) but is listed whatever its age, so it does not vanish from the Queue a day after it was parked.
+  // datetime() on both sides: updated_at is written both as ISO and as D1's default text form,
+  // which do not compare as text. The watcher's finding row joins on the job it is currently filed
+  // as (one row per fingerprint, so the join cannot multiply a job).
   const { results, meta } = await db
     .prepare(
       `SELECT j.id, j.namespace, j.title, j.status, j.priority, j.posted_by, j.claimed_by, j.created_at, j.updated_at,

@@ -6,34 +6,10 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { DAY_MS, isoWeek, utcDay } from "./time";
 import { callSignal } from "./call-signal";
 
-// The packages Capsid Portal watches Configured like the sites (src/ops-sites.ts): rows in D1 (ops_packages,
-// migrations/0028) edited in the Portal's Settings view through the same preview and
-// perform. With no row, the watcher reads nothing for packages and the Portal hides the
-// Packages view.
-//
-// Source shapes, from each one's documentation:
-//   registry.npmjs.org/<name> with Accept: application/vnd.npm.install-v1+json, the
-//     abbreviated document: dist-tags, versions, modified; no time object
-//     (github.com/npm/registry, docs/responses/package-metadata.md).
-//   api.npmjs.org/downloads/point/{last-week,last-month}/<name> and
-//     /downloads/range/<start>:<end>/<name>: "at most 18 months of data" per query
-//     (the API moves a longer range's start forward rather than refusing it), counted
-//     "daily after UTC midnight", nothing before 2015-01-10. A package npm has no counts
-//     for yet answers 404 "not found", which is zero, not a failure. /versions/<name>/
-//     last-week is per version for the last 7 days and nothing else
-//     (docs/download-counts.md). No rate limit is published for either host; npm has
-//     said anonymous callers may see 429.
-//   api.deps.dev/v3/systems/npm/packages/<name> for the default version, then
-//     /v3alpha/.../versions/<v>:dependents: counts of "distinct packages known to depend
-//     on a given package version, either directly or indirectly", "indicative of
-//     relative popularity rather than precisely accurate", and an alpha endpoint that
-//     "may change". It returns counts, not a list: no documented public API lists an
-//     npm package's dependents, and GitHub has no API for "Used by". So the panel links
-//     to npmjs.com's and deps.dev's pages for the list rather than inventing one.
-//   GitHub, through the App: stars and open_issues_count from /repos/<o>/<r> (which
-//     counts pull requests as issues, so the open pull requests are subtracted), open
-//     pull requests from /pulls?state=open (one page of 100: more is reported as 100
-//     and marked capped), the latest release from /releases/latest (404 when none).
+// The packages Capsid Portal watches Configured like the sites (src/ops-sites.ts): rows in D1
+// (ops_packages, migrations/0028) edited in the Portal's Settings view through the same preview and
+// perform. With no row, the watcher reads nothing for packages and the Portal hides the Packages
+// view.
 
 const FETCH_TIMEOUT_MS = 8000;
 const USER_AGENT = "capsid-watcher (packages; https://github.com/DrDustinEdwards/capsid)";
@@ -84,10 +60,9 @@ async function getJson(
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-/** The versions npm has published for `name`, or null when npm has no such package. A
- *  failed read throws, so a caller cannot read it as "not published". For a blocked
- *  job's "check: npm <name>@<version>" line (src/manual-steps.ts) and the job body fact
- *  check (src/job-fact-check.ts). */
+// The versions npm has published for `name`, or null when npm has no such package. A failed read
+// throws, so a caller cannot read it as "not published". For a blocked job's "check: npm
+// <name>@<version>" line (src/manual-steps.ts) and the job body fact check (src/job-fact-check.ts).
 export async function npmVersions(fetchImpl: FetchLike, name: string): Promise<string[] | null> {
   const got = await getJson(
     fetchImpl,
@@ -132,9 +107,9 @@ export async function readNpm(fetchImpl: FetchLike, name: string): Promise<Packa
   };
 }
 
-/** Every version npm has published of `name`, for the versions model's "behind" count
- *  (src/shared-code.ts). The same abbreviated document readNpm reads; throws with npm's
- *  answer when it cannot be read. */
+// Every version npm has published of `name`, for the versions model's "behind" count
+// (src/shared-code.ts). The same abbreviated document readNpm reads; throws with npm's answer when
+// it cannot be read.
 export async function readNpmVersions(fetchImpl: FetchLike, name: string): Promise<string[]> {
   const got = await getJson(
     fetchImpl,
@@ -283,8 +258,8 @@ async function readGithub(env: Env, repo: string | null): Promise<PackageSnapsho
   };
 }
 
-/** One package, as one watcher pass reads it: nine requests at most, sequential, each
- *  failing on its own so one unreachable source does not blank the others. */
+// One package, as one watcher pass reads it: nine requests at most, sequential, each failing on its
+// own so one unreachable source does not blank the others.
 export async function readPackage(
   env: Env,
   cfg: OpsPackageConfig,
@@ -302,8 +277,8 @@ export async function readPackage(
   };
 }
 
-/** The week's GitHub numbers, written once: the first pass of each ISO week that read
- *  the repository keeps its row, and later passes that week change nothing. */
+// The week's GitHub numbers, written once: the first pass of each ISO week that read the repository
+// keeps its row, and later passes that week change nothing.
 export function weekStatement(
   db: D1Database,
   snap: PackageSnapshot,
@@ -327,9 +302,9 @@ export function weekStatement(
     );
 }
 
-/** When npm first published `name`, from the full document's time.created (the
- *  abbreviated one has no time object). An unpublished package keeps its document and
- *  its created time, so a former name still has a start. */
+// When npm first published `name`, from the full document's time.created (the abbreviated one has
+// no time object). An unpublished package keeps its document and its created time, so a former name
+// still has a start.
 async function firstPublished(fetchImpl: FetchLike, name: string): Promise<string | null> {
   const got = await getJson(fetchImpl, `https://registry.npmjs.org/${pathName(name)}`);
   if (!got.ok) return null;
@@ -384,8 +359,8 @@ async function dailyDownloads(
   return days;
 }
 
-/** The package's daily downloads, and its former name's, oldest first, with its weekly
- *  GitHub rows. Cached for HISTORY_TTL_SECONDS under historyKey. */
+// The package's daily downloads, and its former name's, oldest first, with its weekly GitHub rows.
+// Cached for HISTORY_TTL_SECONDS under historyKey.
 export async function packageHistory(
   env: Env,
   cfg: OpsPackageConfig,

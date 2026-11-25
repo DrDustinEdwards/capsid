@@ -1,11 +1,5 @@
-// Runs the unit suite and prints its wall clock.
-//
-// The time is measured here, around the one node --test process, so it is measured
-// the same way on every run.
-//
-// It enforces no budget; the printed line keeps the time visible in every log. The
-// file keeps its name because the auto-merge policy lists it as the runner behind
-// npm test.
+// Runs the unit suite and prints its wall clock; enforces no budget.
+// Kept under this name because the auto-merge policy lists it as the runner behind npm test.
 
 import { spawnSync } from "node:child_process";
 

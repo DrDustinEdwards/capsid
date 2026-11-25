@@ -1,11 +1,4 @@
-// The browser tests' server (playwright.config.ts): the production build, served as the capsid
-// Worker serves it (src/portal-app.ts, src/portal-demo.ts there), with the dev mock in place of
-// the Worker's API routes and no sign-in. Pages render through build/worker/portal.js, the module
-// the Worker bundles; the build's files are served from build/client; every page carries the
-// Worker's own CSP with a fresh nonce, so a script or style the Worker's page would refuse fails
-// the tests too. Build first (npm run build).
-//
-//   node --import ../test/resolve-ts.mjs dev/serve.ts [port]
+// Every page carries the Worker's own CSP with a fresh nonce, so a script or style the Worker would refuse fails the tests too.
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join, normalize } from "node:path";
@@ -52,7 +45,6 @@ async function page(req: IncomingMessage, url: URL): Promise<Response> {
   for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string") headers.set(k, v);
   const request = new Request(url, { headers });
   const csp = dashboardCsp();
-  // The page's cookies go with its reads, as the Worker's do (the mock's wf-mock switch).
   const cookie = req.headers.cookie;
   const read = (path: string) =>
     fetch(`http://localhost:${PORT}/portal/api${path}`, {

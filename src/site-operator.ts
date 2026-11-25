@@ -5,28 +5,12 @@ import { callSignal } from "./call-signal";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { callOperator as operatorCall } from "@dustinedwards/site-runtime/operator";
-// A SITE'S OPERATOR API Capsid is the operations
-// hub and may trigger an allowlist of a site's own repair tools, so the repairs, the
-// convergence view and the watchdog could leave the site. A site opts in by configuration
-// (ops_sites.operator, migrations/0035), never by code here.
-//
-// Two allowlists, both enforced in this Worker before any request leaves it:
-//   - the CEILING, in code: a repair is a sync_* tool (sync_status is a read, not a
-//     repair) or refresh_citations, a backup is backup_status or run_job { backup: true }
-//     (Capsid Admin's backups, src/site-backup.ts: one control for
-//     every site), and a job run is run_job { job } (the
-//     run_job control, src/site-jobs.ts: any of a site's cron jobs
-//     run now, through site-runtime's runJobTool on the site). Nothing else the site's
-//     operator API serves is ever called (save_post, delete_post, decide_mention...).
-//   - the SITE'S OWN list, in its configuration: the tools its repairs map and its weekly
-//     tools name, and the two backup tools only where it sets backup: true. A tool the
-//     ceiling allows but the site does not name is refused too.
-// Capsid never merges and never mints: the token is one the seat set as a Capsid Worker
-// secret, read by name, sent only to the site's own origin, and never logged, returned or
-// put in an audit row.
+// A SITE'S OPERATOR API Capsid is the operations hub and may trigger an allowlist of a site's own
+// repair tools, so the repairs, the convergence view and the watchdog could leave the site. A site
+// opts in by configuration (ops_sites.operator, migrations/0035), never by code here.
 
-/** The two backup tools: the backup state read now, and the site's backup jobs run now
- *  (run_job { backup: true }). */
+// The two backup tools: the backup state read now, and the site's backup jobs run now (run_job {
+// backup: true }).
 const BACKUP_TOOLS = ["backup_status", "run_job"] as const;
 type BackupTool = (typeof BACKUP_TOOLS)[number];
 const isBackupTool = (tool: string): tool is BackupTool =>
@@ -51,19 +35,17 @@ const MAX_JSON = 4000;
 
 export type ParsedOperator = { ok: true; operator: SiteOperator } | { ok: false; refusal: string };
 
-/** Whether a token name belongs to this row: `<NAMESPACE>_OPERATOR_TOKEN` for the row's
- *  own namespace, or for the namespace a further host belongs to (carrel-mcp may use
- *  CARREL_OPERATOR_TOKEN). Without this, an admin caller could point one site's row at
- *  another site's token and send it wherever that row's origin says (Capsid security
- *  review, round 4, finding 2). */
+// Whether a token name belongs to this row: `<NAMESPACE>_OPERATOR_TOKEN` for the row's own
+// namespace, or for the namespace a further host belongs to (carrel-mcp may use
+// CARREL_OPERATOR_TOKEN).
 function tokenBelongsTo(authVar: string, namespace: string): boolean {
   const stem = authVar.slice(0, -"_OPERATOR_TOKEN".length).toLowerCase().replaceAll("_", "-");
   return namespace === stem || namespace.startsWith(`${stem}-`);
 }
 
-/** A site's operator configuration from its stored or edited JSON, checked whole: one bad
- *  entry refuses all of it, so a configuration is never half applied. `namespace` is the
- *  row it is for: the token it names must be that site's own. */
+// A site's operator configuration from its stored or edited JSON, checked whole: one bad entry
+// refuses all of it, so a configuration is never half applied. `namespace` is the row it is for:
+// the token it names must be that site's own.
 export function parseOperator(raw: string, namespace: string): ParsedOperator {
   const refuse = (refusal: string): ParsedOperator => ({
     ok: false,
@@ -145,10 +127,9 @@ export function allowedTools(operator: SiteOperator): string[] {
   return [...new Set([...Object.values(operator.repairs), ...operator.weekly])];
 }
 
-/** Why `tool` may not be called on this site, or null. The ceiling first, then the site's
- *  own list, checked again here before every request, not only when the configuration
- *  was saved: a row written before a ceiling change must not outlive it. A backup tool
- *  goes only where the site set backup: true, and only from the backups (`backup`). */
+// Why `tool` may not be called on this site, or null. The ceiling first, then the site's own list,
+// checked again here before every request, not only when the configuration was saved: a row written
+// before a ceiling change must not outlive it.
 export function toolRefusal(
   operator: SiteOperator,
   tool: string,
@@ -182,8 +163,8 @@ export function tokenSet(env: Env, operator: SiteOperator): boolean {
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-/** What one call to the operator API came to. `converged` is the tool's own read-back
- *  verdict where it gives one; a 200 without it proves nothing and says so. */
+// What one call to the operator API came to. `converged` is the tool's own read-back verdict where
+// it gives one; a 200 without it proves nothing and says so.
 export interface OperatorCall {
   ok: boolean;
   status: number;
@@ -202,9 +183,8 @@ export interface OperatorCall {
 const CALL_TIMEOUT_MS = 5 * MINUTE_MS;
 const ERROR_MAX = 300;
 
-/** One allowlisted call: POST {tool, args} to the site's operator route with the
- *  configured token. Refused before any request when the tool is not allowed or the token
- *  is not set. Never throws. */
+// One allowlisted call: POST {tool, args} to the site's operator route with the configured token.
+// Refused before any request when the tool is not allowed or the token is not set. Never throws.
 export async function callOperator(
   env: Env,
   site: { origin: string; operator: SiteOperator },

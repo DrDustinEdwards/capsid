@@ -10,15 +10,13 @@ import type { JobVersion } from "./jobs-edit";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
-// What every job transition shares: the result shape, the refusal, the row read, the
-// guarded batch every transition commits through, and the checks more than one of
-// claim, holder and seat make. The queue's rules are stated in src/jobs.ts.
+// What every job transition shares: the result shape, the refusal, the row read, the guarded batch
+// every transition commits through, and the checks more than one of claim, holder and seat make.
+// The queue's rules are stated in src/jobs.ts.
 
-// claimed_by carries the same shape as audit_log.actor (migrations/0006), so one
-// query joins a job to what its driver did. A minted agent speaks that vocabulary as
-// `agent:<name>` (agentActor in src/agents-schema.ts), and the name is unique in the
-// agents table and never reused, so the string identifies exactly one credential. The
-// admin is `access:<email>` on the MCP login (docs/auth.md) and `github:<login>` on older rows.
+// A minted agent speaks that vocabulary as `agent:<name>` (agentActor in src/agents-schema.ts),
+// and the name is unique in the agents table and never reused, so the string identifies exactly
+// one credential.
 const ACTOR_SHAPE = /^(access:|github:|agent:)/;
 
 export function actorShapeRefusal(action: string, actor: string): JobResult | null {
@@ -29,9 +27,6 @@ export function actorShapeRefusal(action: string, actor: string): JobResult | nu
   );
 }
 
-// The seat is identified by admin or can_merge, for supersede and for resume. An
-// agent's kind is descriptive and not authorizing (src/agents-schema.ts); can_merge is
-// the flag the seat holds and no driver does.
 export function callerIsSeat(agent: Agent): boolean {
   return agent.admin || agent.scopes.flags.can_merge;
 }
@@ -43,37 +38,26 @@ export interface JobResult {
   jobs?: Array<JobListRow | JobRow>;
   truncated?: boolean;
   note?: string;
-  // post and edit: what the body lacks that a session acts best with (src/job-body-check.ts).
-  // A warning never refuses.
+  // post and edit: what the body lacks that a session acts best with (src/job-body-check.ts). A
+  // warning never refuses.
   warnings?: string[];
   refusal?: string;
-  // The outcome row this transition wrote, returned so the driver sees what the
-  // Worker checked rather than assuming its own numbers were taken. `notes` names
-  // every verification that could not run, which separates a count nobody checked
-  // from a count nobody could check.
+  // The outcome row this transition wrote, returned so the driver sees what the Worker checked
+  // rather than assuming its own numbers were taken. `notes` names every verification that could not
+  // run, which separates a count nobody checked from a count nobody could check.
   outcome?: { row: JobOutcomeRow; notes: string[] };
-  // The latest resume's reason, for a job resumed at least once. See
-  // latestResumeNote in src/jobs-mirror.ts.
   resume_note?: ResumeNote;
-  // Every resume note, newest first (the newest is resume_note), within a byte cap; and how
-  // many the answer leaves out. claim and list for one id (src/jobs-mirror.ts).
+  // Every resume note, newest first (the newest is resume_note), within a byte cap; and how many the
+  // answer leaves out. claim and list for one id (src/jobs-mirror.ts).
   resume_notes?: ResumeNote[];
   resume_notes_dropped?: number;
-  // block and complete: the other open pull requests that change the same files as the one
-  // this call named, or why that could not be checked (src/job-overlaps.ts). Absent when the
-  // call named no pull request of the namespace's repo.
   overlaps?: OverlapReport;
-  // A job somebody marked started (src/jobs-begin.ts): who and when, so a second session
-  // reading it knows. begin, claim and list for one id return it. Never a refusal.
+  // A job somebody marked started (src/jobs-begin.ts): who and when, so a second session reading it
+  // knows. begin, claim and list for one id return it. Never a refusal.
   started?: StartedNotice;
-  // claim: the model Capsid recommends for this job, why, and how to follow it
-  // (src/model-routing.ts), and a note when the pull request it carries could not be read.
   routing?: Record<string, unknown>;
   routing_note?: string;
-  // list view "models": the learning table.
   models?: Record<string, unknown>;
-  // edit, and list for one named id to a caller holding write: the versions earlier
-  // edits replaced, newest first (src/jobs-edit.ts, migrations/0033).
   versions?: JobVersion[];
 }
 
@@ -85,12 +69,9 @@ export async function readJob(db: D1Database, id: string): Promise<JobRow | null
   return db.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<JobRow>();
 }
 
-// The one path that fails a job that cannot be handed over: a corrupt requirement or
-// a bad signature at claim, a bad signature at resume. The UPDATE, the mirror and the
-// audit row are one guarded batch, so they commit only when the row is still as the
-// caller read it. Without the guard, a job another driver had claimed meanwhile would
-// get a mirror and an audit row saying it failed while its row said claimed. When the
-// guard aborts, the caller gets the current row to refuse with.
+// The UPDATE, the mirror and the audit row are one guarded batch, so they commit only when the row
+// is still as the caller read it. Without the guard, a job another driver had claimed meanwhile
+// would get a mirror and an audit row saying it failed while its row said claimed.
 export async function markJobFailed(
   env: Env,
   job: JobRow,
@@ -119,9 +100,6 @@ export async function markJobFailed(
   return { failed: true };
 }
 
-// Every transition and its records are one batch: committing the UPDATE alone and writing the
-// mirror and audit row separately would let a throw leave a moved row with no record.
-//
 // `read` is the row the caller decided on. requireJobUnchanged, first in the batch, aborts it all
 // unless the row still has that status, holder and updated_at, and D1 runs a batch as one
 // transaction. Returns false when the guard aborted: nothing was written and the row changed.
@@ -142,7 +120,6 @@ export async function guardedTransition(
   }
 }
 
-/** The refusal for a job markJobFailed found had already moved. */
 export function movedBeforeFailing(
   action: string,
   id: string,
@@ -155,10 +132,8 @@ export function movedBeforeFailing(
   );
 }
 
-// The track-record bar, checked at claim (migrations/0011). Read only when a job sets one (rare):
-// the record is computed from every outcome row, and making every claim pay for it would put a
-// table scan on the queue's hottest path. It goes through recordFor, the same function
-// capsid_read_status action status and the Portal call, so the bar is the number a human can read.
+// Read only when a job sets one (rare): the record is computed from every outcome row, and making
+// every claim pay for it would put a table scan on the queue's hottest path.
 export async function recordShortfall(
   db: D1Database,
   actor: string,
@@ -168,13 +143,6 @@ export async function recordShortfall(
   return missingForRecord(recordFor(actor, await loadRecordRows(db)), job.min_record);
 }
 
-// The corrections budget is a property of the work, not of the row. corrections_count lives on
-// a row, and the unique open-title index covers `queued`, `claimed` and `blocked`
-// (migrations/0019) but not `failed`, so a failed job leaves (namespace, title) free to be
-// posted again with a count of 0. So the count is per (namespace, title), summed across every row
-// for that work whatever its status. Unindexed on purpose: jobs is a single-user queue of a few
-// hundred rows, and the only (namespace, title) index is the partial one.
-//
 // Fails closed: a read that throws, or a SUM that is not a finite number, returns NaN, and
 // atCorrectionCap treats a budget it cannot read as already spent.
 export async function correctionsForWork(

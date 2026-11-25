@@ -12,8 +12,6 @@ import {
 import { removeSite, validateSite, addSite, editSite, describeSite } from "./ops-sites";
 import { runSiteRepair } from "./site-repair";
 import { CAPSID_DUMP, runCapsidDump, runSiteBackups } from "./site-backup";
-// Performs the site controls, dispatched from performAction (src/controls-perform.ts). Returns a
-// refusal, or null once the mutator has run and state holds its summary.
 
 export async function performSiteAction(
   c: PerformContext,
@@ -31,14 +29,15 @@ export async function performSiteAction(
   const { env, actor, now, params, surface, state, auditClick } = c;
   switch (action) {
     case "site_key_rotate": {
-      // setSiteKey checks the token and the site row again, mints, sets the site then
-      // Carrel, and writes set_site_key. The value never leaves it.
+      // setSiteKey checks the token and the site row again, mints, sets the site then Carrel, and writes
+      // set_site_key. The value never leaves it.
       const namespace = required(params, "namespace") ?? undefined;
       const bad = namespaceNameRefusal(namespace);
       if (bad || !namespace)
         return { ok: false, refusal: bad ?? "site_key_rotate needs a namespace." };
       const result = await setSiteKey(env, actor, namespace);
-      // The site refused: nothing changed, so it is a refusal (its set_site_key row records the attempt).
+      // The site refused: nothing changed, so it is a refusal (its set_site_key row records the
+      // attempt).
       if (!result.site.set)
         return {
           ok: false,
@@ -98,7 +97,6 @@ export async function performSiteAction(
     case "package_add":
     case "package_edit":
     case "package_remove": {
-      // Checked again here, as the site controls are.
       let result;
       if (action === "package_remove") {
         const revision = revisionOf(params.revision);
@@ -133,7 +131,8 @@ export async function performSiteAction(
       return null;
     }
     case "site_repair": {
-      // Every check runs again inside runSiteRepair: the allowlist, token and rate limit can change before the click.
+      // Every check runs again inside runSiteRepair: the allowlist, token and rate limit can change
+      // before the click.
       const namespace = required(params, "namespace");
       const tool = required(params, "tool");
       if (!namespace || !tool)
@@ -154,7 +153,8 @@ export async function performSiteAction(
       return null;
     }
     case "site_backup": {
-      // Every check runs again inside runSiteBackups: the configuration, tokens and rate limit can change before the click.
+      // Every check runs again inside runSiteBackups: the configuration, tokens and rate limit can
+      // change before the click.
       const namespace = params.namespace?.trim() || undefined;
       if (namespace === CAPSID_DUMP) {
         const dump = await runCapsidDump(env);

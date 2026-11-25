@@ -4,14 +4,10 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { withTimeout } from "@dustinedwards/site-runtime/time";
 import { MINUTE_MS, HOUR_MS, DAY_MS } from "./time";
 
-// The run ledger (migrations/0029_task_runs.sql). Every scheduled task goes through runTask,
-// which writes one task_runs row per run: start, finish, outcome and a one-line
-// reason. The Portal reads the newest runs of each task (readTaskRuns) and flags a
-// task that has failed or gone quiet (taskStates).
-//
-// Adapted from Foxhound's runCronJob (app/lib/cron/run.ts): one wrapper, one row per
-// executed run, and the reason column, because "ok" alone cannot tell a sweep that
-// found nothing from one that never looked.
+// The run ledger (migrations/0029_task_runs.sql). Every scheduled task goes through runTask, which
+// writes one task_runs row per run: start, finish, outcome and a one-line reason. The Portal reads
+// the newest runs of each task (readTaskRuns) and flags a task that has failed or gone quiet
+// (taskStates).
 
 export type TaskId =
   | "backup"
@@ -38,22 +34,9 @@ export type TaskId =
   | "signed-in-crawl"
   | "tool-call-log-export";
 
-// Each task, and how long it may go without a run before the Portal says it has
-// gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
-// because one missed run is normal and a flag on it would teach the reader to
-// ignore the flag. Null where runs come and go with the work, so a quiet spell
-// means nothing: those are flagged only when they fail.
-//   tick           */5 * * * *, which carries the five steps below it
-//   backup         0 9 * * *
-//   watcher        on the tick, every cadence_min minutes (src/watcher.ts); its
-//                  period is read from the watcher's own snapshot
-//
-// timeout_ms is given to the three a cron key starts: past it, runTask records
-// the run as threw ("timed out after N ms") and the invocation fails, so a hung run shows
-// in the ledger and on /health rather than holding the trigger silently. The work itself
-// cannot be canceled and may still finish. The tick gets four minutes, inside the five to
-// the next one; the backup and the skills refresh fourteen, inside a cron invocation's
-// fifteen-minute wall limit.
+// Each task, and how long it may go without a run before the Portal says it has gone quiet: twice
+// its period, Foxhound's rule (app/lib/cron/alerts.server.ts), because one missed run is normal and
+// a flag on it would teach the reader to ignore the flag.
 export const TASKS: ReadonlyArray<{
   id: TaskId;
   label: string;
@@ -114,13 +97,9 @@ export const TASKS: ReadonlyArray<{
 ];
 
 const STALE_PERIODS = 2;
-// How long the newest failure of a task without a period counts as current. Such a task
-// records a run only when it acts, so no later "ok" row may ever come to clear a failure:
-// doc-index stays silent while nothing changes, site-repair while no site drifts. Read
-// as current forever, one transient refusal would hold /health at warn after the cause
-// was fixed, so a failure ages out of a window instead.
-// A day is the longest retry among these tasks (the daily digest; site-repair retries every 30 minutes, up to AUTO_PER_DAY times), so a fault that
-// persists fails again, and is flagged again, before its last failure ages out.
+// How long the newest failure of a task without a period counts as current. Such a task records a
+// run only when it acts, so no later "ok" row may ever come to clear a failure: doc-index stays
+// silent while nothing changes, site-repair while no site drifts.
 const EVENT_FAILURE_WINDOW_MS = DAY_MS;
 // Rows older than this are pruned, PRUNE_BATCH at a time on each write.
 export const RUN_RETENTION_DAYS = 14;
@@ -130,9 +109,8 @@ export const RUNS_PER_TASK = 5;
 // A reason is one line: what the run did or why it did not.
 export const REASON_MAX = 300;
 
-/** What a task's body reports about the run it made. Null means it was not due and
- *  made no run (the watcher between passes, the sweep before its day), so nothing is
- *  recorded. */
+// What a task's body reports about the run it made. Null means it was not due and made no run (the
+// watcher between passes, the sweep before its day), so nothing is recorded.
 export type TaskResult = { outcome: Exclude<OpsTaskRunOutcome, "threw">; reason: string } | null;
 
 function oneLine(text: string): string {
@@ -167,9 +145,9 @@ export function taskRunStatements(
   ];
 }
 
-/** Write one run. Never throws, so a failed ledger write cannot stop the task it
- *  records or the tasks after it. A write that fails is said in the log, by task, and
- *  the Portal then shows that task as quiet: the ledger's own failure is visible. */
+// Write one run. Never throws, so a failed ledger write cannot stop the task it records or the
+// tasks after it. A write that fails is said in the log, by task, and the Portal then shows that
+// task as quiet: the ledger's own failure is visible.
 async function record(
   env: Env,
   task: TaskId,
@@ -190,13 +168,7 @@ async function record(
   }
 }
 
-/**
- * Run one scheduled task and record it. A body that throws is recorded as `threw`
- * with the error, logged with `tag`, and then rethrown when `rethrow` is set (a cron
- * branch, so the invocation shows as failed) or swallowed into the record otherwise
- * (a tick step, so one step's throw does not stop the steps after it; the record and
- * the log line are where it is said).
- */
+/** Run one scheduled task and record it. */
 export async function runTask<T>(
   env: Env,
   task: TaskId,
@@ -235,8 +207,8 @@ interface TaskRunRow {
   reason: string;
 }
 
-/** Each task's newest runs: one keyed read per task, through task_runs_task, in one
- *  batch. TASKS.length statements, counted in OPS_FEED_READS (src/ops-feed.ts). */
+// Each task's newest runs: one keyed read per task, through task_runs_task, in one batch.
+// TASKS.length statements, counted in OPS_FEED_READS (src/ops-feed.ts).
 export async function readTaskRuns(db: D1Database): Promise<Map<TaskId, OpsTaskRun[]>> {
   const results = await db.batch<TaskRunRow>(
     TASKS.map((t) =>
@@ -262,13 +234,9 @@ export async function readTaskRuns(db: D1Database): Promise<Map<TaskId, OpsTaskR
   return out;
 }
 
-/** Each task with its newest runs and its flag, decided at `now`.
- *  - `failing`: the newest run threw or was refused; for a task without a period, only
- *    while that run is inside EVENT_FAILURE_WINDOW_MS. A periodic task's next run is its
- *    retry, so its failure stands until that run.
- *  - `quiet`: a periodic task whose newest run is more than STALE_PERIODS periods old.
- *  - `never`: no run in the ledger. A notice, not a fault: after the migration every
- *    task starts here, and the daily ones stay here until their hour. */
+// Each task with its newest runs and its flag, decided at `now`. - `failing`: the newest run threw
+// or was refused; for a task without a period, only while that run is inside
+// EVENT_FAILURE_WINDOW_MS.
 export function taskStates(
   runs: Map<TaskId, OpsTaskRun[]>,
   now: Date,

@@ -9,20 +9,12 @@ import { weakenedTests } from "./test-protection";
 import { checklistItems, unchangedItems } from "./job-checklist";
 
 // The CI gate on complete (docs/work-queue.md, "CI on complete"). A job handed on as done names
-// its pull requests, and each must show CI that ran and passed on its head. Green is the only
-// pass: still running or GitHub unreadable is a wait, failed is red, and no passing check run on
-// a change to code is not green either. A PR that takes a test away is refused too
-// (src/test-protection.ts).
-//
-// A PR Capsid has no way to read (no GitHub App, or a repo the namespace does not map) is not
-// gated: its outcome stays unverified.
+// its pull requests, and each must show CI that ran and passed on its head.
 
 const CHECKS_MAX_PAGES = 10;
 const AGAIN = "Nothing was written; call complete again once it has.";
 const OR_FAIL = `Fix it and push, then complete again, or call fail with the reason; "not done, here's why" is a good outcome.`;
 
-/** What the gate reads of the named pull requests: the first refusal, or the paths they
- *  change, with unread set when one of them could not be read. Null with no GitHub App. */
 export async function readNamedPrs(
   env: Env,
   namespace: string,
@@ -43,8 +35,6 @@ export async function readNamedPrs(
   return { changed, unread };
 }
 
-/** Why complete is refused on CI, on a test taken away, or on a DONE WHEN item no pull
- *  request changed, with the pull request to bind the job to (null when none is named), or null. */
 export async function ciRefusal(
   env: Env,
   namespace: string,
@@ -103,8 +93,6 @@ async function notGreen(
       `Green CI shows nothing once the test that would fail is gone, so this is not done unless the job names it. Put the test back, or call fail with the reason.`
     );
   }
-  // Skipped and neutral fail nothing, and pass nothing: a run a paths filter excluded
-  // did not judge the change.
   if (checks.items.some((c) => c.conclusion === "success")) return files.paths;
   const code = files.paths.filter((p) => pathClassOf(p) !== "docs");
   if (code.length === 0) return files.paths;

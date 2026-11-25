@@ -10,16 +10,8 @@ import {
 } from "./client";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Merge or close an open pull request. Merging can trigger CI deploys in repos with
-// deploy workflows, so callers gate by blast radius.
-//
-// The head branch is deleted when a PR closes or merges, because nothing else cleans
-// up a merged work branch. Two refusals:
-//   1. Never the default branch. A PR whose head is the default branch is a
-//      cross-fork PR or a misconfiguration.
-//   2. Never fails the PR action. The merge or close already succeeded, and failing
-//      the call because a branch delete failed would misreport it. Same rule as
-//      invalidateRepoReads. The outcome is reported in head_branch_deleted.
+// The head branch is deleted on close or merge, except the default branch, and a failed delete
+// never fails the PR action (the merge already succeeded); the outcome is head_branch_deleted.
 async function deleteHeadBranchAfterPr(
   env: Env,
   owner: string,
@@ -45,8 +37,7 @@ async function deleteHeadBranchAfterPr(
     };
     const branch = pr.head.ref;
 
-    // A head branch on a FORK is not this App's to delete, and the token could not
-    // anyway. Compared by full_name rather than inferred from the ref.
+    // A head branch on a FORK is not this App's to delete; compared by full_name.
     const headRepo = pr.head.repo?.full_name;
     if (headRepo && headRepo !== `${owner}/${repo}`) {
       return {
@@ -94,9 +85,8 @@ async function deleteHeadBranchAfterPr(
   }
 }
 
-// A merge refused because the PR head is no longer the sha the caller named. GitHub
-// answers 409 for that case. Thrown only when an expected sha was passed, so a caller
-// that pinned the head can tell this refusal from any other merge failure.
+// GitHub answers 409 when the head is no longer the sha the caller named; thrown only when a sha
+// was passed.
 export class HeadMovedError extends Error {
   readonly expectedSha: string;
   constructor(expectedSha: string, detail: string) {
@@ -113,8 +103,6 @@ export async function managePr(
   action: "merge" | "close",
   mergeMethod: "merge" | "squash" | "rebase" = "squash",
   repoSelector?: string,
-  // For a merge: the head sha the caller judged. Sent as `sha`, so GitHub merges only
-  // that commit and refuses with 409 if the head moved.
   expectedSha?: string,
 ) {
   const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
@@ -132,9 +120,8 @@ export async function managePr(
       throw new HeadMovedError(expectedSha, await resp.text());
     if (!resp.ok) throw new Error(`merge failed (${resp.status}): ${await resp.text()}`);
     const data = (await resp.json()) as { sha: string; merged: boolean; message: string };
-    // A merge changes the base branch's contents, so it is a write to every path the
-    // PR touched. Those paths are not known here, which is why invalidation sweeps
-    // the repo prefix.
+    // A merge writes every path the PR touched; those are unknown here, hence the repo-prefix
+    // sweep.
     await invalidateRepoReads(env, owner, repo);
     const cleanup = await deleteHeadBranchAfterPr(env, owner, repo, number);
     return {
@@ -165,13 +152,6 @@ export async function managePr(
   };
 }
 
-// The read tools below expose what the App installation token already reaches. Each
-// goes through resolveRepo, ghFetch and cachedGet; nothing opens its own path to
-// api.github.com.
-
-/** Branches, tags and open PRs in one call. The triage question is "what is in flight
- *  here", which is three GETs the caller would otherwise make separately.
- *  Ahead/behind is per branch against the default branch. */
 export async function repoRefs(env: Env, namespace: string, repoSelector?: string) {
   const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
   const base = `/repos/${owner}/${repo}`;
@@ -208,10 +188,8 @@ export async function repoRefs(env: Env, namespace: string, repoSelector?: strin
 
   const prByHead = new Map(prRows.map((p) => [p.head.ref, p.number]));
 
-  // Ahead/behind comes from the compare endpoint, one call per branch. The default
-  // branch is skipped: compared with itself it is always 0/0. The fan-out is bounded
-  // by the 100-branch page above; a repo with more branches reports its first hundred
-  // and sets truncated.
+  // Compare endpoint, one call per branch; the default branch is skipped and the fan-out is bounded
+  // by the 100-branch page.
   const branches = await Promise.all(
     branchRows.map(async (b) => {
       const row: {
@@ -274,7 +252,6 @@ export async function repoRefs(env: Env, namespace: string, repoSelector?: strin
   };
 }
 
-/** Delete a branch. Three refusals; force lifts only two, never the default branch. */
 export async function deleteBranch(
   env: Env,
   namespace: string,

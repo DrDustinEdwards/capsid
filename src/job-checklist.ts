@@ -1,11 +1,8 @@
 import { heading, proseOnly } from "./job-body-check";
 
-// The DONE WHEN checklist (docs/work-queue.md, "CI on complete"). The poster numbers the items under DONE WHEN, at most
-// CHECKLIST_MAX of them. An item that says it changes a path in backticks ("3. The breaker
-// skips run keys: changes `src/job-breaker.ts`") is checked at complete: a pull request
-// the complete names must change that path, or the job is not done. A path ending in /
-// is a directory, matched by any file under it. Every other item is the session's to
-// meet and the reviewer's to read; Capsid checks only what it can see in the diff.
+// The DONE WHEN checklist (docs/work-queue.md, "CI on complete"). An item that says it changes a
+// path in backticks ("3. The breaker skips run keys: changes `src/job-breaker.ts`") is checked at
+// complete: a pull request the complete names must change that path, or the job is not done.
 
 const CHECKLIST_MAX = 10;
 
@@ -19,7 +16,6 @@ export interface ChecklistItem {
   paths: string[];
 }
 
-/** The numbered items under DONE WHEN, each with the paths it says it changes. Pure. */
 export function checklistItems(body: string): ChecklistItem[] {
   const raw = body.split(/\r?\n/);
   const prose = proseOnly(body).split("\n");
@@ -35,7 +31,6 @@ export function checklistItems(body: string): ChecklistItem[] {
   return items;
 }
 
-/** A warning when DONE WHEN has more numbered items than CHECKLIST_MAX, or null. */
 export function checklistWarning(body: string): string | null {
   const n = checklistItems(body).length;
   return n > CHECKLIST_MAX
@@ -43,7 +38,6 @@ export function checklistWarning(body: string): string | null {
     : null;
 }
 
-/** The checklist items naming a path no pull request changed, as refusal lines. Pure. */
 export function unchangedItems(
   items: readonly ChecklistItem[],
   changed: readonly string[],

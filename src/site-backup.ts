@@ -13,28 +13,8 @@ import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";
 import { parseDumpStamp, type OffaccountReport } from "./watcher-offaccount";
 
-// BACKUPS FOR EVERY SITE, IN ONE PLACE checking the
-// backups and backing up now are Capsid Admin's, not a tool on each site's own admin MCP.
-// Each site keeps its nightly cron, which does the backing up; this reads what that cron
-// left and runs its files passes on demand.
-//
-//   check  capsid_admin_read_ops action backups: every site that sets backup: true in its
-//          operator configuration, its backup_status read live (the newest complete D1
-//          dump and each files pass, with the site's own warning past 26 hours), beside
-//          the Amazon copy's newest daily run from capsid-backups' last report. Capsid's
-//          own dump is read from this Worker. Reads only, so it is not audited.
-//   run    the site_backup control: run_job { backup: true } on one site, or on every such
-//          site at once: the site's own jobs marked backup (its D1 dump and its files
-//          passes), run now through the path its nightly cron runs (site-runtime
-//          runJobTool), under the dump's own lease and checks, recorded in the site's
-//          cron_runs. Each is safe to repeat: a dump adds a run, a files pass copies.
-//          Each call that leaves the Worker is an audit_log row (site-backup) and a
-//          task_runs row (site-backup), and the per-site rate limit is the repairs' one
-//          (src/site-repair.ts): two minutes between calls of a tool on a site.
-//
-// Capsid never runs a site's work itself: it asks the site to run its own jobs. Capsid's own
-// dump (CAPSID_DUMP below) is the one this Worker runs, under the same lease the nightly
-// cron takes, so a run that overlaps the cron skips.
+// BACKUPS FOR EVERY SITE, IN ONE PLACE checking the backups and backing up now are Capsid Admin's,
+// not a tool on each site's own admin MCP.
 
 const BACKUP_AUDIT_ACTION = "site-backup";
 /** The rate limit's key for back up now (src/site-repair.ts takeLimit): two minutes apart per site. */
@@ -238,11 +218,9 @@ export async function runSiteBackups(
 /** The namespace that backs up Capsid's own D1 dump, by this Worker rather than through an operator API. */
 export const CAPSID_DUMP = "capsid";
 
-/**
- * Back up now for Capsid itself: the nightly cron's run, on demand. It
- * takes the cron's lease (src/backup.ts runBackup), so a run that overlaps the cron skips
- * and prunes nothing, and it writes the same task_runs row (backup) the Portal reads.
- */
+// Back up now for Capsid itself: the nightly cron's run, on demand. It takes the cron's lease
+// (src/backup.ts runBackup), so a run that overlaps the cron skips and prunes nothing, and it
+// writes the same task_runs row (backup) the Portal reads. /
 export async function runCapsidDump(env: Env): Promise<{ ok: boolean; line: string }> {
   return runCapsidJob(env, "backup", false);
 }

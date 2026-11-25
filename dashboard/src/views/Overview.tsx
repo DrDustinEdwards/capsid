@@ -7,15 +7,6 @@ import { parse } from "capsomer/behavior/time";
 import "capsomer/stat-tile.css";
 import type { OpsFeed } from "../types";
 
-// The tiles at the top of Health (docs/design/design-portal-evaluation.md section 2; the UX
-// audit's m2 and m3, 2026-10): sites up, open findings, the primary backup and the
-// Amazon backup copy, each a link to the tab that holds it. Backup and Amazon copy are two
-// tiles, so a stale copy never turns a good primary backup red. What waits on you is
-// counted on Needs you only, so there is no "Blocked on you" tile. With no site configured
-// there is no site tile.
-
-// Capsomer's StatTile; `go` is a page, or a page and its tab ("health#backups"), as placePath reads it.
-// Distributed over StatTileProps's union, so a no-data tile keeps its reason and no figure.
 type Tile = StatTileProps extends infer P
   ? P extends StatTileProps
     ? Omit<P, "href" | "renderLink"> & { go: string }
@@ -127,8 +118,7 @@ export function Overview() {
   ];
   return (
     <div className="cap-stack" id="summary">
-      {/* Figure and label on one line, the detail under them; a tile is never narrower
-          than its text, so the row wraps instead of cutting a word (design D3). */}
+      {/* A tile is never narrower than its text, so the row wraps instead of cutting a word (design D3). */}
       <StatTiles label="Health figures">
         {tiles.map(({ go, ...t }) => (
           <StatTile

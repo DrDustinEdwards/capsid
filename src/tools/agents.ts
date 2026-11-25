@@ -12,10 +12,8 @@ const AGENT_ACTIONS = ["mint", "list", "revoke", "update_scopes"] as const;
 export function defineAgentOperations(server: McpServer, ctx: ToolCtx): void {
   const { db, actor } = ctx;
 
-  // The credential control plane's one tool, a ruled exception to the tool surface
-  // rule (CLAUDE.md). Minting by hand would leave the scope rows
-  // with no audit trail and no validation. Its actions share one tool because they
-  // are one subsystem with one row shape.
+  // A ruled exception to the tool surface rule (CLAUDE.md): minting by hand would leave the scope
+  // rows with no audit trail or validation.
   ctx.ops.define(
     "agents",
     {
@@ -66,8 +64,8 @@ export function defineAgentOperations(server: McpServer, ctx: ToolCtx): void {
     },
     async (args) => {
       try {
-        // Admin only, every action. TOOL_GRANTS.capsid_admin_manage_agents in src/scope.ts states it and the
-        // registrar refuses a minted agent before this handler runs.
+        // Admin only: TOOL_GRANTS.capsid_admin_manage_agents (src/scope.ts), enforced by the
+        // registrar.
         const scopeArgs = {
           namespaces: args.namespaces,
           repos: args.repos,

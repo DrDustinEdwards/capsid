@@ -3,13 +3,9 @@ import type { Env } from "./env";
 import { hmacSha256Hex, sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The Worker signs the documents it later acts on: a job's body (src/jobs-claim.ts) and
-// the two autonomy policies (src/policy-sign.ts). One key, derived from
-// IMPROVE_SCORE_SECRET under its own context string, distinct from the backup
-// credential's (src/signed-requests.ts) on purpose.
-//
-// The context string keeps the improve loop's name, where this signing began: changing
-// it would invalidate every signed job and policy already stored.
+// The Worker signs the documents it later acts on: a job's body (src/jobs-claim.ts) and the two
+// autonomy policies (src/policy-sign.ts). One key, derived from IMPROVE_SCORE_SECRET under its own
+// context string, distinct from the backup credential's (src/signed-requests.ts) on purpose.
 const TASK_KEY_CONTEXT = "capsid-improve-task:v1";
 
 export async function deriveTaskKey(rootSecret: string): Promise<string> {
@@ -20,14 +16,7 @@ export const TASK_SIGNATURE_FIELD = "capsid-task-signature";
 
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/;
 
-/**
- * Split a signed document into its frontmatter signature and the signed body.
- *
- * `strayLines` counts every frontmatter line other than the one signature line.
- * signTaskBody writes exactly one line there, and the HMAC does not cover the
- * frontmatter, so any other line is unsigned text sitting beside the signature.
- * verifySignedBody refuses a document that carries one.
- */
+/** Split a signed document into its frontmatter signature and the signed body. */
 export function splitSignedTask(text: string): {
   signature: string | null;
   body: string;
@@ -93,31 +82,24 @@ export async function verifySignedBody(
   return { ok: true, body };
 }
 
-// One reader for both signed policies (capsid/policy/auto-merge.md and gates.md). Both
-// are read, verified and parsed the same way, so a fix to that path is made once. Each
-// loader keeps only what differs: which document, and what its parsed lists must agree
-// with. It lives beside the verifier so one refused-list entry covers both.
+// One reader for both signed policies (capsid/policy/auto-merge.md and gates.md). Both are read,
+// verified and parsed the same way, so a fix to that path is made once. Each loader keeps only what
+// differs: which document, and what its parsed lists must agree with.
 const POLICY_NAMESPACE = "capsid";
 
 // Where the signed policies live. sign_policy signs nothing outside it.
 export const POLICY_PREFIX = "policy/";
 
-/**
- * The ordinary write tools refuse a policy document. The Worker reads them as
- * authority: capsid/policy/auto-merge.md says what it may merge with no human, and
- * capsid/policy/gates.md which blocked commands the seat may approve without one. So
- * a write here is a ruling, accepted only with allow_improve_paths (a name kept from
- * a removed loop), which needs can_touch_protected.
- */
+// The ordinary write tools refuse a policy document. The Worker reads them as authority:
+// capsid/policy/auto-merge.md says what it may merge with no human, and capsid/policy/gates.md
+// which blocked commands the seat may approve without one.
 export function policyWriteRefusal(namespace: string, path: string, allow: boolean): string | null {
   if (allow || !path.startsWith(POLICY_PREFIX)) return null;
   return `${namespace}/${path} is an autonomy policy document. It decides what this Worker may do without a human, so a write here is a ruling. Pass allow_improve_paths: true to write it anyway; the flag needs the can_touch_protected scope and is audit-logged.`;
 }
 
-/**
- * Read capsid/<path> and return the signed body, or a refusal. `ifAbsent` finishes
- * the sentence that reports a missing document ("so nothing is auto-merged").
- */
+// Read capsid/<path> and return the signed body, or a refusal. `ifAbsent` finishes the sentence
+// that reports a missing document ("so nothing is auto-merged"). /
 export async function readSignedPolicy(
   env: Pick<Env, "DB" | "IMPROVE_SCORE_SECRET" | "APP_KV">,
   path: string,
@@ -136,16 +118,9 @@ export async function readSignedPolicy(
   return { body: verdict.body };
 }
 
-// Anti-rollback. A signature proves the Worker signed these bytes once, not that they
-// are current. Every signed version stays in document_versions, and `capsid_write_doc`
-// action restore or a plain write can put an older one back with its signature still verifying. So APP_KV
-// records, under policyPinKey(path), the sha256 of the current signed body (plus its
-// `- version:` for the refusal text), and a load refuses any other signed body.
-// The pin is the hash, not the version, because a lower version signed on purpose (the
-// seat withdrawing a change) must hold, and a higher version put back after it must
-// not. sign_policy writes it before storing the signed document, so the body it signs
-// becomes the only one that loads; re-signing the same body writes the same hash. A
-// load writes it only when no record exists yet, pinning the signed body stored then.
+// Anti-rollback. A signature proves the Worker signed these bytes once, not that they are current.
+// Every signed version stays in document_versions, and `capsid_write_doc` action restore or a plain
+// write can put an older one back with its signature still verifying.
 export const policyPinKey = (path: string): string => `policy:signed:${path}`;
 
 export interface PolicyPin {

@@ -10,26 +10,10 @@ import { failingCheckNames } from "@dustinedwards/site-runtime/health-read";
 import { healthUrl } from "./ops-sites";
 import { callSignal } from "./call-signal";
 
-// THE WATCHER'S SITE REPAIRS the one watcher for every site. On each watcher pass, for every site with a health route (ops_sites.health_path):
-//   1. Read its health route. Healthy (200, ok, and no alert named in `alerts`): nothing to do.
-//   2. Unhealthy: the failing checks' names, alert checks included. A site with no operator
-//      API is reported as it is. One that opted in (ops_sites.operator) is repaired only when
-//      EVERY failing check maps to an allowlisted repair (the site's own rule,
-//      app/lib/health/repair.mjs): an unmapped failure may share a cause with the rest, so
-//      nothing is repaired and it is reported. An alert (site-runtime's `alert: true`, such as
-//      auth-spike) maps to no repair, so it is always reported.
-//   3. Each repair through runSiteRepair (src/site-repair.ts): allowlisted, rate-limited,
-//      audit-logged and one task_runs row each. Then the health is read again, and when
-//      every repair converged, up to three more times thirty seconds apart.
-//   4. Still unhealthy, or a repair failed: one finding, site-health-<namespace>, which the
-//      Portal shows under Incidents and which clears when a pass finds the site healthy.
-//   5. Its weekly tools (refresh_citations) once every WEEK_MS, where it opted in.
-// A red-to-green or green-to-red change mails Dustin once, where the seat has bound a
-// send_email binding; the finding opens either way.
-//
-// The watcher still decides nothing a person has not configured: the site names which
-// check maps to which tool, the Worker's ceiling bounds what any site may name, and the
-// rate limit stops a stuck check from looping.
+// THE WATCHER'S SITE REPAIRS the one watcher for every site. On each watcher pass, for every site
+// with a health route (ops_sites.health_path): 1. Read its health route. Healthy (200, ok, and no
+// alert named in `alerts`): nothing to do. 2. Unhealthy: the failing checks' names, alert checks
+// included.
 
 const HEALTH_TIMEOUT_MS = 10_000;
 const WEEK_MS = 7 * DAY_MS;
@@ -70,8 +54,8 @@ interface Reading {
 
 export const clip = (s: string) => (s.length > TEXT_MAX ? `${s.slice(0, TEXT_MAX - 1)}…` : s);
 
-/** A site's health route, read once: its status and JSON body, or why it could not be read.
- *  The watcher and the Portal's convergence view (src/site-convergence.ts) both read it here. */
+// A site's health route, read once: its status and JSON body, or why it could not be read. The
+// watcher and the Portal's convergence view (src/site-convergence.ts) both read it here.
 export async function readHealth(fetchImpl: FetchLike, url: string): Promise<Reading> {
   try {
     const res = await fetchImpl(url, {
@@ -85,8 +69,8 @@ export async function readHealth(fetchImpl: FetchLike, url: string): Promise<Rea
   }
 }
 
-/** The checks a site-runtime health body names in `alerts` (0.59.0): a failure someone
- *  should hear of now, though the check is only a warning and `ok` stays true. */
+// The checks a site-runtime health body names in `alerts` (0.59.0): a failure someone should hear
+// of now, though the check is only a warning and `ok` stays true.
 function alertChecks(body: unknown): string[] {
   const alerts = (body as { alerts?: unknown } | null)?.alerts;
   return Array.isArray(alerts)
@@ -99,8 +83,8 @@ const healthy = (r: Reading) =>
   (r.body as { ok?: unknown } | null)?.ok === true &&
   alertChecks(r.body).length === 0;
 
-/** The failing checks' names, read as the watcher reads every health body
- *  (site-runtime ./health-read), each cut to one line, and every alert the body names. */
+// The failing checks' names, read as the watcher reads every health body (site-runtime
+// ./health-read), each cut to one line, and every alert the body names.
 export function failingChecks(body: unknown): string[] {
   return [
     ...new Set([
@@ -110,8 +94,8 @@ export function failingChecks(body: unknown): string[] {
   ];
 }
 
-/** What to do about a failing health reading: the repairs, in the configuration's order,
- *  or why nothing is repaired. */
+// What to do about a failing health reading: the repairs, in the configuration's order, or why
+// nothing is repaired.
 export function repairPlan(
   failing: string[],
   operator: SiteOperator,
@@ -240,10 +224,9 @@ async function watchSite(
       if (!outcome.ran || !outcome.call.ok || outcome.call.converged === false) missed = true;
     }
     let recheck = await readHealth(fetchImpl, url);
-    // Every repair said it converged and the re-read still fails: a store the repair rewrote can list short
-    // for about a minute after (dustinedwards.info's Ask index read 157 then 155 after its own sync_ask), so
-    // it is re-read a few times before it is a finding and a mail. Waiting spends no CPU, and a cron
-    // invocation has fifteen minutes of wall time.
+    // Every repair said it converged and the re-read still fails: a store the repair rewrote can
+    // list short for about a minute after (dustinedwards.info's Ask index read 157 then 155 after
+    // its own sync_ask), so it is re-read a few times before it is a finding and a mail.
     for (
       let poll = 0;
       !missed && recheck.status !== 0 && !healthy(recheck) && poll < SETTLE_POLLS;
@@ -325,8 +308,8 @@ interface AlertState {
   since: string;
 }
 
-/** Mails once on a change between healthy and not. The state moves only once the mail is
- *  sent, or when there is nothing to send it with, so a failed send retries next pass. */
+// Mails once on a change between healthy and not. The state moves only once the mail is sent, or
+// when there is nothing to send it with, so a failed send retries next pass.
 async function mailOnChange(
   env: Env,
   namespace: string,

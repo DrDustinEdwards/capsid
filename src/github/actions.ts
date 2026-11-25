@@ -5,13 +5,11 @@ import { assertRepoArg, cachedGet, ghFetch, resolveRepo } from "./client";
 const ACTIONS_READ_MISSING =
   "ci_status: the capsid-repo-access GitHub App lacks Actions: Read. Add that permission in the App settings and accept the installation prompt, then retry.";
 
-// Recent CI workflow runs for a namespace's repo, via the GitHub App (Actions: Read; a 403 is surfaced as a named error). Read-only. For the most recent failed run it also returns the failing jobs and steps and a bounded log tail.
-//
-// The log tail is withheld from read-only keys: run metadata (name, sha, conclusion) is inert, but a build log carries whatever the workflow echoed (binding ids, account ids, wrangler output, any variable a step printed by accident). Every log text returned, to anyone, is redacted first (site-runtime ./redact). With run_id, jobs/job/step drill into any run the same way (ciRunJobs below), behind the same log gate.
+// Read-only keys get no log tail: a build log carries whatever a step echoed (ids, wrangler
+// output), which run metadata does not. Every log text is redacted first (site-runtime ./redact).
 
-// A ref matching this shape is filtered as a head sha, anything else as a branch.
-// GitHub has two query parameters for these and none that accepts either, so the
-// tool takes one `ref` and decides here.
+// GitHub has two query parameters (head sha, branch) and none that accepts either, so one `ref` is
+// classified here.
 const SHA_SHAPE = /^[0-9a-f]{7,40}$/i;
 
 interface CiRunsOpts {
@@ -31,9 +29,8 @@ interface CiDrillOpts extends CiRunsOpts {
 type CiRunsResult = Awaited<ReturnType<typeof ciStatusFromRuns>>;
 type CiJobsResult = Awaited<ReturnType<typeof ciRunJobs>>;
 
-// Without the drill-in arguments the answer is always the run list, and the callers
-// that read `runs` (job-outcomes.ts, watcher.ts) keep that type. Only a call that
-// passes jobs, job or step can get the jobs view back.
+// Without the drill-in arguments the answer is always the run list, which job-outcomes.ts and
+// watcher.ts read by type.
 export async function ciStatus(
   env: Env,
   namespace: string,
@@ -52,9 +49,8 @@ export async function ciStatus(
   repoSelector?: string,
   opts: CiDrillOpts = {},
 ) {
-  // The drill-in arguments narrow one run, so each needs the one above it. Refused
-  // before any GitHub call rather than ignored, so a caller never reads a run list
-  // believing it is the step it asked for.
+  // Each drill-in argument needs the one above it; refused rather than ignored, so a run list is
+  // never read as the step asked for.
   if (opts.step !== undefined && opts.job === undefined) {
     throw new Error("ci_status: step needs job, the job (name or id) the step ran in, and run_id");
   }
@@ -83,8 +79,6 @@ export async function ciStatus(
     ? `/repos/${owner}/${repo}/actions/workflows/${opts.workflow}/runs?per_page=${limit}`
     : `/repos/${owner}/${repo}/actions/runs?per_page=${limit}`;
   if (opts.runId) {
-    // One run, by id. Wrapped back into the list's shape so the failed-run drill-in
-    // has one code path.
     const one = await ghFetch(
       env,
       owner,
@@ -109,9 +103,8 @@ export async function ciStatus(
   }
   if (opts.ref) {
     if (SHA_SHAPE.test(opts.ref)) {
-      // An abbreviated sha is expanded first. GitHub matches head_sha exactly and
-      // documents nothing, so a short sha returns an empty run list rather than an
-      // error. One extra GET, only when the ref is short.
+      // GitHub matches head_sha exactly and returns an empty list, not an error, for a short sha,
+      // so it is expanded first.
       let full40 = opts.ref;
       if (opts.ref.length < 40) {
         const commit = await cachedGet(
@@ -162,13 +155,16 @@ interface CiRun {
   html_url: string;
 }
 
-// The failing step's log, 64KB from its end, for write-grant keys. A job log ends with post-run cleanup, so the last few thousand characters of a failed run are `git config --unset-all` lines and the failure is far earlier; the region is found by the failing step, then tailed.
+// A job log ends with post-run cleanup, so the failure is far above the last few thousand
+// characters: tail from the failing step's region, 64KB.
 export const CI_LOG_BUDGET = 64 * 1024;
 
-// Actions labels groups by command, not step name, so a name search matches an incidental later occurrence. The failing step is found by its started_at..completed_at window instead, since every log line carries an ISO timestamp. The jobs API truncates those to the second while log lines carry sub-second stamps, so the upper bound is extended to the end of that second or the last second of output (where the error is) is dropped. Truncating down only widens the lower bound, so `from` needs no adjustment.
+// The failing step is found by its started_at..completed_at window, since a name search matches an
+// incidental later occurrence. The jobs API truncates to the second, so the upper bound extends to
+// the end of that second.
 const STEP_STAMP_PRECISION_MS = 1000;
 
-// Every log text ci_status returns is redacted (site-runtime ./redact), and BEFORE the budget cut: a cut first could split a secret so its remaining half no longer matches any pattern, or keep a private key's body without its BEGIN line. `label` names the region: "failing step" for the failed-run drill-in, "step" for a step asked for by name.
+// Redact BEFORE the budget cut: a cut first could split a secret so neither half matches a pattern.
 function stepLog(
   log: string,
   step: { name?: string; started_at?: string | null; completed_at?: string | null } | undefined,
@@ -201,8 +197,8 @@ function stepLog(
     }
   }
 
-  // NAMED FALLBACK, not a silent one. "The end of the job log" and "the failing
-  // step" are different claims and the caller is told which one this is.
+  // NAMED FALLBACK, not a silent one: "the end of the job log" and "the failing step" are different
+  // claims.
   const clean = redact(log);
   return {
     text: clean.text.slice(-CI_LOG_BUDGET),
@@ -213,8 +209,6 @@ function stepLog(
   };
 }
 
-// A GitHub error body is echoed into a result too, so it is redacted as well, before
-// its 200-character cut for the same reason as above.
 const errorBody = async (resp: Response): Promise<string> =>
   redactText(await resp.text()).slice(0, 200) || "no response body";
 
@@ -234,8 +228,6 @@ async function ciStatusFromRuns(
     conclusion: r.conclusion,
     event: r.event,
     created_at: r.created_at,
-    // When a completed run finished: the watcher's deploy-drift check waits a settle
-    // window after master's own CI run ends (src/watcher-detect.ts, deployVerdict).
     updated_at: r.updated_at ?? null,
     url: r.html_url,
   }));
@@ -248,7 +240,8 @@ async function ciStatusFromRuns(
   } = { repo: full, runs };
   if (filter.ref || filter.run_id) result.filter = filter;
 
-  // Drill into the most recent failed run so the caller sees why. Every degraded path is named: an errored jobs or log fetch is reported rather than dropped, so a write-grant caller can tell "no log" from "the log was refused for you".
+  // Every degraded path is named, so a write-grant caller can tell "no log" from "the log was
+  // refused for you".
   const failed = workflowRuns.find((r) => r.conclusion === "failure");
   if (failed) {
     const failedRun: Record<string, unknown> = {
@@ -288,7 +281,6 @@ async function ciStatusFromRuns(
         }));
       const firstFailedJob = jobsData.jobs.find((j) => j.conclusion === "failure");
       if (!logTail) {
-        // Unchanged: this is the read-only tier's boundary, not a degraded path.
         failedRun.log_tail_withheld =
           "read-only key: run metadata only. A write-grant key returns the failing step's log.";
       } else if (!firstFailedJob) {
@@ -320,8 +312,6 @@ async function ciStatusFromRuns(
   return result;
 }
 
-// One page of a run's jobs, the latest attempt only. GitHub's page limit, and the cap:
-// a run with more jobs than this says so rather than being paged through.
 export const CI_JOBS_MAX = 100;
 
 interface CiJob {
@@ -364,9 +354,7 @@ const jobView = (j: CiJob) => ({
   steps: (j.steps ?? []).map(stepView),
 });
 
-// A job or step named by the caller: a number is tried as the id (a job) or the number
-// (a step) first, then as a name. A name two entries share is refused with what tells
-// them apart, never resolved to the first.
+// A name two entries share is refused with what tells them apart, never resolved to the first.
 function pickOne<T extends { name: string }>(
   items: T[],
   wanted: string,
@@ -391,9 +379,6 @@ function pickOne<T extends { name: string }>(
   );
 }
 
-/** Every job of one run with its steps (jobs: true), or one job, or one step of it with
- *  that step's log. For any run, not only a failed one. The log is withheld from a
- *  read-only caller exactly as the failed-run tail is, and redacted for everyone else. */
 async function ciRunJobs(
   env: Env,
   target: { owner: string; repo: string; full: string },
@@ -455,7 +440,6 @@ async function ciRunJobs(
   const step = pickOne(job.steps ?? [], opts.step, (s) => s.number, "step", `job "${job.name}"`);
   result.step = stepView(step);
   if (!opts.logTail) {
-    // The read-only tier's boundary, worded as the failed-run tail's is.
     result.log_withheld =
       "read-only key: step metadata only. A write-grant key returns the step's log.";
     return result;

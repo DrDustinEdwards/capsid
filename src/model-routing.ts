@@ -1,15 +1,9 @@
 import { AUTO_MERGE_REFUSED_PATHS } from "./auto-merge-policy";
 import { isMoneyPath } from "./scope";
 
-// AUTOMATIC MODEL ROUTING (capsid/research/design-model-routing.md). Capsid picks the
-// model for every job from its kind and its risk, so nobody chooses a model by hand. The
-// recommendation is a function of the job and the rules below; the rules are data, and
-// they change only through a seat-approved edit here, never from the evidence alone
-// (proposeRuleChanges only proposes).
-//
-// What this module does NOT do: start a session on the model. That is the driver's step
-// (capsid/conventions.md, "Model routing"): a launch passes --model, and an interactive
-// driver runs the job's work in a subagent on the recommended model.
+// AUTOMATIC MODEL ROUTING (capsid/research/design-model-routing.md). the rules are data, and they
+// change only through a seat-approved edit here, never from the evidence alone (proposeRuleChanges
+// only proposes).
 
 export const JOB_KINDS = [
   "watcher",
@@ -26,26 +20,21 @@ export type JobKind = (typeof JOB_KINDS)[number];
 export const isJobKind = (value: unknown): value is JobKind =>
   typeof value === "string" && (JOB_KINDS as readonly string[]).includes(value);
 
-// Claude Code's model aliases (code.claude.com/docs/en/model-config): opusplan is Opus in
-// plan mode and Sonnet for execution. Ordered cheapest first, which is the order the
-// learning step reads "cheaper" and "more capable" in.
+// Claude Code's model aliases (code.claude.com/docs/en/model-config): opusplan is Opus in plan
+// mode and Sonnet for execution. Ordered cheapest first, which is the order the learning step
+// reads "cheaper" and "more capable" in.
 export const MODELS = ["haiku", "sonnet", "opusplan", "opus"] as const;
 export type RoutedModel = (typeof MODELS)[number];
 
 const EFFORTS = ["low", "medium", "high"] as const;
 type Effort = (typeof EFFORTS)[number];
 
-// Bumped when ROUTING_RULES, TRIAL_ARMS or KIND_RULES change, and stored with each recommendation's
-// reason, so an outcome can be read against the rules that chose its model.
 export const ROUTING_RULES_VERSION = 2;
 
-// THE WATCHER'S ACTOR, as src/watcher.ts defines it. A literal here so this module does
-// not import the watcher; test/model-routing.test.ts holds the two together.
 export const WATCHER_ACTOR_NAME = "agent:watcher";
 
-// How a job's kind is read when the poster gave none. First match wins. The title is
-// read, never the body: a body is long, and almost every Capsid body mentions backups,
-// secrets and docs.
+// How a job's kind is read when the poster gave none. First match wins. The title is read, never
+// the body: a body is long, and almost every Capsid body mentions backups, secrets and docs.
 const KIND_RULES: ReadonlyArray<{ kind: JobKind; title: RegExp; why: string }> = [
   { kind: "watcher", title: /^Watcher:/, why: "a watcher finding" },
   { kind: "design", title: /^Design\b/i, why: "a design job" },
@@ -76,7 +65,6 @@ const KIND_RULES: ReadonlyArray<{ kind: JobKind; title: RegExp; why: string }> =
 
 export interface KindVerdict {
   kind: JobKind;
-  // "given" (the poster set it), "title" (a KIND_RULES match), "default" (nothing matched).
   source: "given" | "watcher" | "title" | "default";
 }
 
@@ -91,13 +79,12 @@ export function deriveKind(job: {
   return hit ? { kind: hit.kind, source: "title" } : { kind: "other", source: "default" };
 }
 
-// Namespaces whose work is risky by what they are: foxhound takes payments
-// (capsid/conventions.md leaves its parity-first rule in force).
+// Namespaces whose work is risky by what they are: foxhound takes payments (capsid/conventions.md
+// leaves its parity-first rule in force).
 const HIGH_RISK_NAMESPACES: ReadonlyArray<{ namespace: string; why: string }> = [
   { namespace: "foxhound", why: "a payments product" },
 ];
 
-// A job that asks the driver for blast radius is risky however it is titled.
 const HIGH_RISK_FLAGS = new Set(["can_merge", "can_touch_protected"]);
 
 export interface Risk {
@@ -107,8 +94,6 @@ export interface Risk {
   files_read: number;
 }
 
-/** Risk before a pull request exists, from what the job says about itself: its
- *  namespace, the flags it requires and whether it already needs a human. */
 export function riskFromJob(job: {
   namespace: string;
   required_flags?: readonly string[];
@@ -130,13 +115,14 @@ export interface ChangedFile {
   deletions?: number;
 }
 
-// Deleted lines in one change above which the work is risky however the files are named.
 export const DELETION_LINES_HIGH = 300;
 const BACKUP_PATH = /(^|\/)(backups?|restore[-_a-z]*|dump[-_a-z]*)(\/|[-_.]|$)/i;
 
-/** Risk once a pull request exists, from its changed files: the money paths and the
- *  refused paths that auto-merge already names, plus deletions and backups. A rename is
- *  judged under both names. No files is "unread", never "routine". */
+/**
+ * Risk once a pull request exists, from its changed files: the money paths and the refused paths
+ * that auto-merge already names, plus deletions and backups. A rename is judged under both names.
+ * No files is "unread", never "routine".
+ */
 export function riskOf(files: readonly ChangedFile[]): Risk {
   if (files.length === 0)
     return { level: "unread", reasons: ["no changed files were read"], files_read: 0 };
@@ -163,23 +149,17 @@ export function riskOf(files: readonly ChangedFile[]): Risk {
   };
 }
 
-// WORTH A REVIEWER (design D5). riskOf routes models, and for that a dependency bump or a
-// backup document is reason enough for the stronger model. It is too broad to decide where a
-// second reader earns its cost (it flagged about 7 in 10 of the last 100 merged capsid PRs,
-// mostly lockfile bumps, backup docs and a deleted screenshot). This narrower test asks: does
-// the change edit code that enforces something, where a subtle mistake ships quietly?
-//
-// Only code is judged: a document, image, test, lockfile or JSON manifest is never the
-// reason on its own.
+// Only code is judged: a document, image, test, lockfile or JSON manifest is never the reason on
+// its own.
 const CODE_FILE = /\.(ts|tsx|mts|cts|js|mjs|cjs|sql|sh)$/i;
 const WORKFLOW_FILE = /^\.github\/workflows\/[^/]+\.ya?ml$/i;
 export const TEST_FILE =
   /(^|\/)(test|tests|test-integration|e2e|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/i;
 
-// The sources that hold this repo's invariants and credentials but are not on auto-merge's
-// refused list, because a green PR there may still merge (the snapshot, one enforcement
-// point and path mutation invariants, test/write-invariants.test.ts, test/scope.test.ts
-// and test/path-mutation.test.ts, and the login and key paths). The refused list covers the judges; this covers what they guard.
+// The sources that hold this repo's invariants and credentials but are not on auto-merge's refused
+// list, because a green PR there may still merge (the snapshot, one enforcement point and path
+// mutation invariants, test/write-invariants.test.ts, test/scope.test.ts and
+// test/path-mutation.test.ts, and the login and key paths).
 const GUARD_SOURCES: ReadonlyArray<{ pattern: RegExp; why: string }> = [
   {
     pattern: /^src\/store-guards\.ts$/i,
@@ -201,10 +181,11 @@ export interface ReviewWorthiness {
   files_read: number;
 }
 
-/** Whether a pull request's diff is worth a second reader: code that is money, a judge
- *  on auto-merge's refused list, a guard or credential source, a migration, a workflow,
- *  or backup and restore code. A rename is judged under both names. No files is
- *  "unread", never "skip". Narrower than riskOf by design; see above. */
+/**
+ * Whether a pull request's diff is worth a second reader: code that is money, a judge on
+ * auto-merge's refused list, a guard or credential source, a migration, a workflow, or backup and
+ * restore code. No files is "unread", never "skip".
+ */
 export function worthReviewer(files: readonly ChangedFile[]): ReviewWorthiness {
   if (files.length === 0)
     return { level: "unread", reasons: ["no changed files were read"], files_read: 0 };
@@ -224,7 +205,6 @@ export function worthReviewer(files: readonly ChangedFile[]): ReviewWorthiness {
       if (refused) reasons.add(`${path} is ${refused.why}`);
       const guard = GUARD_SOURCES.find(({ pattern }) => pattern.test(path));
       if (guard) reasons.add(`${path} is ${guard.why}`);
-      // The Worker's and the scripts' backup code, not the Portal's Backups view.
       if (BACKUP_PATH.test(path) && /^(src|scripts)\//i.test(path))
         reasons.add(`${path} is backup or restore code`);
     }
@@ -236,8 +216,8 @@ export function worthReviewer(files: readonly ChangedFile[]): ReviewWorthiness {
   };
 }
 
-// THE RULES, as data. First match wins; a high risk comes first, so a routine kind with a
-// risky shape is upgraded rather than left on the cheap model.
+// THE RULES, as data. First match wins; a high risk comes first, so a routine kind with a risky
+// shape is upgraded rather than left on the cheap model.
 export interface RoutingRule {
   when: { risk?: "high"; kind?: JobKind };
   model: RoutedModel;
@@ -287,16 +267,9 @@ export const ROUTING_RULES: readonly RoutingRule[] = [
   },
 ];
 
-// TRIAL ARMS. An arm sends a fixed share of a kind's routine jobs to another model, so the
-// learning table has outcomes on both. It switches no kind: moving a kind is a seat-approved
-// edit to its rule, made when trialStatus says the evidence supports it. Claude Haiku 5.5
-// costs $0.10 in and $0.50 out per million tokens (up to 100K prompt) against Sonnet 5.5's $2
-// and $10 (platform.claude.com models overview); mechanical edits already route to haiku, so
-// they have no arm.
-//
-// An arm keeps the rule's effort, so the comparison is of the model alone. A risky job, or
-// one whose body names its model, never takes an arm. Which jobs take it is a stable hash of
-// the job id, so post and claim agree.
+// An arm keeps the rule's effort, so the comparison is of the model alone. A risky job, or one
+// whose body names its model, never takes an arm. Which jobs take it is a stable hash of the job
+// id, so post and claim agree.
 export interface TrialArm {
   kind: JobKind;
   model: RoutedModel;
@@ -309,8 +282,10 @@ export const TRIAL_ARMS: readonly TrialArm[] = [
   { kind: "docs", model: "haiku", percent: 25 },
 ];
 
-/** The job's place, 0 to 99, in every trial: FNV-1a over the id. Deterministic and
- *  synchronous, so the post and every later claim of the job read the same number. */
+/**
+ * The job's place, 0 to 99, in every trial: FNV-1a over the id. Deterministic and synchronous, so
+ * the post and every later claim of the job read the same number.
+ */
 export function trialBucket(id: string): number {
   let hash = 0x811c9dc5;
   for (let i = 0; i < id.length; i++) {
@@ -331,8 +306,8 @@ export interface Routing {
   rules_version: number;
 }
 
-// A model a job names for itself, "model: opus" on a line of its own in the body. Read
-// from the body's own text, which the signature covers, so it is the poster's word.
+// A model a job names for itself, "model: opus" on a line of its own in the body. Read from the
+// body's own text, which the signature covers, so it is the poster's word.
 const NAMED_MODEL = /^\s*model\s*[:=]\s*(haiku|sonnet|opusplan|opus)\s*$/im;
 
 export function routeJob(job: {
@@ -344,7 +319,6 @@ export function routeJob(job: {
   kind?: string | null;
   required_flags?: readonly string[];
   gate_required?: boolean;
-  // A pull request's risk, where one was read (claim on a job that already carries a PR).
   pr_risk?: Risk | null;
 }): Routing {
   const k = deriveKind(job);

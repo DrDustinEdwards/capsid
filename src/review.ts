@@ -37,32 +37,11 @@ async function issuerKeys(): Promise<KeySource> {
   return keys;
 }
 
-// THE AUTOMATIC PR REVIEWER (D5). A reviewer that did not
-// build the work reads a pull request and says whether it does what it claims. It catches
-// what CI and the claim checks cannot: work that passes and is still wrong (a misread job, a
-// skipped requirement, a weak test). An ADVISORY TRIAL of four weeks: it never fails a check
-// and never blocks a merge. Each verdict is recorded in the audit log, and after the trial
-// the verdicts are compared with what really went wrong (reverts, fix-up PRs, defects Dustin
-// flagged). It becomes a required check only if it caught real problems with few false
-// alarms; otherwise it is removed.
-//
-// devkit's shared review.yml calls this from every network repository with its GitHub
-// Actions OIDC token, so no key is stored anywhere. Capsid reads the pull request itself
-// with its GitHub App, decides whether it is worth a review, asks the model and records the
-// verdict. The workflow writes the verdict to the pull request's checks, never a comment
-// (comments notify).
-//
-// GOLDFISH INPUT (Google's Elephant-Goldfish model). The reviewer sees the diff, the
-// description, the job the description names (if any) and the repository's CLAUDE.md at the
-// BASE, so a pull request cannot rewrite the rules it is judged by. It never sees the session
-// that wrote the code.
-//
-// THE MODEL. DeepSeek V4.1 Flash on Workers AI, through the account's `default` AI Gateway,
-// so the gateway's logs, analytics and spend limit apply. Another vendor than the author, so
-// it does not share Claude's blind spots. Swapping it is the one line below.
-//
-//   POST /review/run   reviews the token's pull request at its head, or answers with the
-//                      verdict already recorded for that head
+// THE AUTOMATIC PR REVIEWER (D5). A reviewer that did not build the work reads a pull request and
+// says whether it does what it claims. It catches what CI and the claim checks cannot: work that
+// passes and is still wrong (a misread job, a skipped requirement, a weak test). The reviewer sees
+// the diff, the description, the job the description names (if any) and the repository's CLAUDE.md
+// at the BASE, so a pull request cannot rewrite the rules it is judged by.
 
 export const REVIEW_RUN_PATH = "/review/run";
 const REVIEW_MODEL = "@cf/deepseek-ai/deepseek-v4.1-flash-1017";
@@ -142,8 +121,8 @@ export interface ReviewCaller {
   pr: number;
 }
 
-/** Who a verified token's claims admit: devkit's review.yml, on a pull request, in a
- *  repository Dustin owns. Anything else is refused with the reason. */
+// Who a verified token's claims admit: devkit's review.yml, on a pull request, in a repository
+// Dustin owns. Anything else is refused with the reason.
 export function reviewCaller(claims: Record<string, unknown>): ReviewCaller | { refusal: string } {
   const claim = (name: string) =>
     typeof claims[name] === "string" ? (claims[name] as string) : "";
@@ -267,8 +246,8 @@ async function readNamedJob(
     : null;
 }
 
-/** The diff as the model reads it: each file's patch under its name, lockfiles left out, cut
- *  at the cap with a line that says so. */
+// The diff as the model reads it: each file's patch under its name, lockfiles left out, cut at the
+// cap with a line that says so.
 function diffText(files: readonly PullFile[]): string {
   let out = "";
   for (const f of files) {

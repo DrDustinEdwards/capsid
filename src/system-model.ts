@@ -3,16 +3,9 @@ import { z } from "zod";
 import { SLUG_PATTERN } from "@drdustinedwards/site-helpers/slug";
 import { bounded } from "./limits";
 
-// The system model (capsid/rulings/system-explorer-2026-10-10.md, answers 1 and 2;
-// design capsid/research/design-system-explorer.md, sections 1 and 2). One
-// machine-readable model of Dustin's systems, hand-written in system/model.json and
-// changed by pull request. Every map and diagram is drawn from what toPublic makes of
-// it, never from the file itself.
-//
-// Every system is drawn whole, its parts and lines included, whether its repo is public
-// or private. A private repo shows no link and no code map; nothing else differs.
-// The file is in a public repo, so it holds only what may be published: what a system is
-// for and what it is made of, never a secret, an id or an internal address.
+// The system model (capsid/rulings/system-explorer-2026-10-10.md, answers 1 and 2; design
+// capsid/research/design-system-explorer.md, sections 1 and 2). One machine-readable model of
+// Dustin's systems, hand-written in system/model.json and changed by pull request.
 
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/;
@@ -226,22 +219,22 @@ export function parseSystemModel(
   };
 }
 
-/** Repo visibility as GitHub reports it, keyed by "owner/name" in lower case: true for
- *  a private repo, false for a public one. A repo missing from the map is unknown. */
+// Repo visibility as GitHub reports it, keyed by "owner/name" in lower case: true for a private
+// repo, false for a public one. A repo missing from the map is unknown.
 export type RepoPrivacy = ReadonlyMap<string, boolean>;
 
 /** A relationship's published id, derived from its ends and kind, never copied from text. */
 const relationshipId = (r: { from: string; kind: string; to: string }) =>
   `${r.from}--${r.kind}--${r.to}`;
 
-/** Public only when GitHub says every repo the system lists is public. Any other
- *  answer, an unknown repo included, is private. */
+// Public only when GitHub says every repo the system lists is public. Any other answer, an unknown
+// repo included, is private.
 function isPublicSystem(s: ModelSystem, privacy: RepoPrivacy): boolean {
   return s.repos.every((r) => privacy.get(r.toLowerCase()) === false);
 }
 
-/** Every repo of a public system, with its system: the only repos whose code maps may be
- *  published (design section 2, rule 2). */
+// Every repo of a public system, with its system: the only repos whose code maps may be published
+// (design section 2, rule 2).
 export function publicRepos(
   model: SystemModel,
   privacy: RepoPrivacy,
@@ -251,15 +244,9 @@ export function publicRepos(
     .flatMap((s) => s.repos.map((repo) => ({ system: s.id, repo })));
 }
 
-/**
- * The public document: what the explorer and the dustinedwards.info map read.
- *
- * Built by picking named fields into new objects, never by copying an input object and
- * deleting from it, so a field nobody listed here cannot pass through. Every system,
- * part, line and flow is published; a system is private unless GitHub says every repo
- * it lists is public, and a private system carries no repo link. An output id is
- * derived from its ends, never copied from text.
- */
+// The public document: what the explorer and the dustinedwards.info map read. Built by picking
+// named fields into new objects, never by copying an input object and deleting from it, so a field
+// nobody listed here cannot pass through.
 export function toPublic(model: SystemModel, privacy: RepoPrivacy, asOf: string): PublicModel {
   const open = new Set(model.systems.filter((s) => isPublicSystem(s, privacy)).map((s) => s.id));
 

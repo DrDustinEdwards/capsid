@@ -6,22 +6,9 @@ import { heading, proseOnly } from "./job-body-check";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { parsePrUrl, PR_URL_SOURCE } from "@dustinedwards/site-runtime/github";
-// The third job body check (src/job-body-check.ts): a body that states a pull request is
-// merged, a version is tagged or a package version is published is checked against GitHub and
-// npm at post and edit, and refused when what Capsid reads says otherwise (a seat once said a
-// version was on npm while it was only staged, and the session built on a release that did not
-// exist).
-//
-// The parser is deliberately narrow, because a false refusal costs more than a miss. It reads
-// only prose (code blocks, fences and inline code are exempt), skips the DONE WHEN and OUT OF
-// SCOPE parts, block quotes and double-quoted text, and any sentence that is a question or
-// carries a word of plan, condition, negation or report ("once", "will", "not", "said"). What
-// is left is a claim stated as done: "#12 is merged", "tagged v1.2.0", "enarratio@0.3.0 is
-// published", "Enarratio 0.3.0 is on npm".
-//
-// A claim Capsid could not check (a read failed, the repo is not mapped, the package is not
-// known) is accepted with a warning, never refused. At most MAX_CLAIMS claims and MAX_READS
-// network reads are spent on one body.
+// A claim Capsid could not check (a read failed, the repo is not mapped, the package is not known)
+// is accepted with a warning, never refused. At most MAX_CLAIMS claims and MAX_READS network reads
+// are spent on one body.
 
 const MAX_CLAIMS = 10;
 const MAX_READS = 20;
@@ -40,23 +27,19 @@ export type FactClaim =
       version: string;
     };
 
-// A sentence holding any of these is not a claim stated as done.
 const NOT_DONE =
   /\b(?:not|no|never|yet|once|after|before|when|whenever|until|unless|if|whether|will|would|should|shall|must|can|could|may|might|needs?|needed|pending|planned|plans?|going\s+to|about\s+to|ready|wait|waiting|waits|ensure|make\s+sure|check|verify|confirm|expect|expected|assume|assuming|hope|be|get|gets|getting|said|says|claimed|claims|reported|told|supposedly|allegedly|later|soon|tomorrow|otherwise)\b|n[’']t\b/i;
 
 const SKIPPED_PARTS = heading("DONE WHEN|OUT OF SCOPE");
 const OTHER_PARTS = heading("GOAL|DO|DECIDED|RULES");
 
-// A pull request is site-runtime's URL pattern or a bare #N; its groups sit inside each list's own group 1.
 const PR_ITEM = String.raw`(?:${PR_URL_SOURCE}|#\d+)(?![\w/])`;
 const PR_LIST = String.raw`${PR_ITEM}(?:(?:\s*,\s*(?:and\s+)?|\s+and\s+|\s*&\s*)${PR_ITEM})*`;
 const PR_NOUN = String.raw`(?:(?:PRs?|pull\s+requests?)\s+)?`;
-// The verb's state, required except at the start of a sentence ("- #12 merged").
 const BE = String.raw`\s+(?:is|was|are|were|has\s+been|have\s+been|got)(?:\s+(?:now|already|also|both|all))?`;
 const LEAD = String.raw`^\s*(?:[-*+]\s+|\d+[.)]\s+)?`;
 const NAME = String.raw`(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[A-Za-z0-9~][A-Za-z0-9._~-]*`;
 const VERSION = String.raw`v?\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?(?![0-9A-Za-z]|\.\d)`;
-// [name][@ or space]version: groups name, separator, version.
 const VITEM = String.raw`(?:(?<![\w@./-])(${NAME})(@|\s+))?(?<![\w.-])(${VERSION})`;
 
 const MERGED: RegExp[] = [
@@ -104,8 +87,6 @@ function named(raw: string | undefined): string | null {
   return raw && !NOT_NAMES.has(raw.toLowerCase()) && !/^v?\d/.test(raw) ? raw : null;
 }
 
-/** The sentences of a line, each with whether it ends as a question. A dot inside a version
- *  or a URL does not end a sentence; one followed by a space or the line's end does. */
 function sentences(line: string): Array<{ text: string; question: boolean }> {
   return (line.match(/(?:[^.!?;:]|[.!?;:](?!\s|$))+[.!?;:]?/g) ?? []).map((text) => ({
     text,
@@ -185,15 +166,10 @@ type FactRead<T> = { ok: true; value: T } | { ok: false; reason: string };
 
 /** What the check reads, injected so the tests need no network. */
 export interface FactReaders {
-  /** The repos the job's namespace maps, as owner/name. */
   repos(): Promise<FactRead<string[]>>;
-  /** The npm packages configured in the Portal (ops_packages), with their repos. */
   packages(): Promise<FactRead<Array<{ name: string; repo: string | null }>>>;
-  /** A pull request's state, or null when GitHub has none by that number. */
   pull(repo: string, number: number): Promise<FactRead<{ merged: boolean; state: string } | null>>;
-  /** Whether the repo has the tag. */
   tag(repo: string, tag: string): Promise<FactRead<boolean>>;
-  /** Every version npm lists for the package, or null when npm has no such package. */
   npm(name: string): Promise<FactRead<string[] | null>>;
 }
 
@@ -211,8 +187,6 @@ export interface FactCheck {
   warnings: string[];
 }
 
-/** Check each claim `body` states against what `readers` read. Refuses only a claim read as
- *  false; a claim that could not be read is a warning. */
 export async function checkBodyFacts(
   namespace: string,
   body: string,
@@ -338,8 +312,6 @@ export async function checkBodyFacts(
 
   async function published(claim: Extract<FactClaim, { kind: "published" }>): Promise<Verdict> {
     const name = await packageName(claim);
-    // Not said to be on npm and naming no npm package Capsid knows: a GitHub release or
-    // another registry, which this check does not read.
     if (name === null) return { state: "skip" };
     if (!name.ok) return { state: "unchecked", reason: name.reason };
     let doc = npmDocs.get(name.value);
@@ -401,8 +373,10 @@ export async function checkBodyFacts(
 
 const reason = (err: unknown) => errorMessage(err).slice(0, 160);
 
-/** The readers post and edit use: the namespace's mapping in D1, the Portal's package rows,
- *  GitHub through the App, and npm's registry. */
+/**
+ * The readers post and edit use: the namespace's mapping in D1, the Portal's package rows, GitHub
+ * through the App, and npm's registry.
+ */
 function liveFactReaders(
   env: Env,
   namespace: string,
@@ -484,7 +458,6 @@ function liveFactReaders(
   };
 }
 
-/** The check post and edit run, on the live readers. */
 export function factCheckBody(env: Env, namespace: string, body: string): Promise<FactCheck> {
   return checkBodyFacts(namespace, body, liveFactReaders(env, namespace));
 }

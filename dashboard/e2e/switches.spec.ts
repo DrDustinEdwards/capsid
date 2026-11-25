@@ -1,11 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { visit } from "./views.ts";
 
-// The automation switches on Namespaces (ruled 2026-09-30, DECIDE 5, 6 and 7): a switch
-// does not move until its reason is applied, a reason is required in both directions,
-// Esc cancels, and an applied change leaves a message with Undo that stays until it is
-// dismissed or replaced. Undo is its own action, recorded as an undo. Every test that
-// changes the mock's state undoes it, so later specs read the fixture as it was.
+// Every test that changes the mock's state undoes it, so later specs read the fixture as it was.
 
 const PREVIEW_URL = "**/api/actions/preview";
 
@@ -29,7 +25,6 @@ test("PLANT: flipping a switch opens a reason field and does not move it; an emp
   await seat(page).click();
   const field = page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/);
   await expect(field).toBeFocused();
-  // Not moved: the reason has not been applied.
   await expect(seat(page)).not.toBeChecked();
   await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(field).toHaveAttribute("aria-invalid", "true");
@@ -65,7 +60,6 @@ test("PLANT: the switch's accessible name is the same in both states", async ({ 
   await page.keyboard.press("Enter");
   await expect(seat(page)).toBeChecked();
   await expect(seat(page)).toHaveAccessibleName("Overnight run");
-  // Leave it as found.
   await message(page).getByRole("button", { name: "Undo" }).click();
   await expect(seat(page)).not.toBeChecked();
 });
@@ -85,7 +79,6 @@ test("PLANT: applying moves the switch, returns focus to it, and leaves a messag
   await expect(message(page)).toHaveAttribute("role", "status");
   await expect(message(page)).toContainText("The overnight run is now api.");
   expect(await newestActivity(page)).toBe("portal.overnight");
-  // It stays: no timer clears it.
   await page.clock.runFor(10_000);
   await expect(message(page)).toContainText("The overnight run is now api.");
   const undo = message(page).getByRole("button", { name: "Undo" });
@@ -127,14 +120,10 @@ test("Queue and Agents have no automation control of their own", async ({ page }
   await visit(page, "queue");
   await expect(page.getByRole("button", { name: /^Turn (on|off)$/ })).toHaveCount(0);
   await visit(page, "agents");
-  // The header's theme button is "Switch to dark theme"; only the page is checked.
   await expect(
     page.locator("main").getByRole("button", { name: /^(Switch to|Turn off)/ }),
   ).toHaveCount(0);
 });
-
-// The overnight run's switch (docs/overnight.md), with its "Runs on" choice. Choosing the subscription records Dustin's decision with the switch, and the
-// panel shows it. Undone at the end, so later specs read the fixture as it was.
 
 const overnight = (page: Page) => page.getByRole("switch", { name: "Overnight run", exact: true });
 
@@ -175,7 +164,6 @@ test("PLANT: choosing the subscription records Dustin's decision, its date and i
   await expect(decision).toContainText("first supervised night");
   expect(await newestActivity(page)).toBe("portal.overnight");
 
-  // Leave it as found.
   await message(page).getByRole("button", { name: "Undo" }).click();
   await expect(overnight(page)).not.toBeChecked();
   await expect(page.locator("#overnight-decision")).toHaveCount(0);

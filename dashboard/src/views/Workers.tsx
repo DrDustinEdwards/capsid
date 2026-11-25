@@ -9,13 +9,6 @@ import { parse } from "capsomer/behavior/time";
 import type { ResourcesDoc } from "../types";
 import { Status } from "capsomer/react/status";
 
-// WORKERS: the secrets and data model (src/system-resources.ts), as the nightly build read it
-// from Cloudflare. One panel per Worker with its system, its secret and variable names (never
-// a value) and what it binds: a site's own Workers on its Setup tab, the rest on Health's
-// Cloudflare tab with every D1 database, KV namespace and R2 bucket and who uses each, so a
-// cleanup can see what is safe to remove. Private: behind the Portal's sign-in only. Nothing
-// here changes anything.
-
 type Worker = ResourcesDoc["workers"][number];
 type User = ResourcesDoc["databases"][number]["used_by"][number];
 
@@ -195,7 +188,6 @@ function useResources() {
   return useAnswer<ResourcesDoc>(["resources"], fetchResources);
 }
 
-// The read's state when it has no document to show yet, or null when it has one.
 function NotRead({ load }: { load: ReturnType<typeof useResources> }) {
   const doc = load.data;
   if (load.loading && !doc) {
@@ -230,8 +222,6 @@ function ReadNote({ doc }: { doc: ResourcesDoc }) {
   );
 }
 
-/** The Workers a site owns: its own script, and every Worker its system lists beside it
- *  (system/model.json), such as a site's desk. */
 function ownedScripts(doc: ResourcesDoc, scripts: ReadonlyArray<string>): string[] {
   const systems = new Set(
     doc.workers.filter((w) => scripts.includes(w.script) && w.system).map((w) => w.system),
@@ -241,7 +231,6 @@ function ownedScripts(doc: ResourcesDoc, scripts: ReadonlyArray<string>): string
     .map((w) => w.script);
 }
 
-/** A site's Setup tab: what each of its Workers binds, and its secret and variable names. */
 export function SiteWorkers({ scripts }: { scripts: ReadonlyArray<string> }) {
   const load = useResources();
   const doc = load.data;
@@ -267,7 +256,6 @@ export function SiteWorkers({ scripts }: { scripts: ReadonlyArray<string> }) {
   );
 }
 
-/** Health's Cloudflare tab: the Workers no site owns, then every store and who uses it. */
 export function UnownedResources({ siteScripts }: { siteScripts: ReadonlyArray<string> }) {
   const load = useResources();
   const doc = load.data;

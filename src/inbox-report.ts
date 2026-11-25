@@ -3,27 +3,14 @@ import type { Agent } from "./agents";
 import type { InboxItem } from "./inbox";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// WHAT AN APP REPORTS ABOUT ITSELF TO THE INBOX (design capsid/research/design-inbox-report.md).
-// Some things that need Dustin live only in an app's own database (Carrel's AI drafts waiting).
-// Capsid does not read that database; the app posts its present state to POST /ops/inbox/report
-// with its own scoped key, and the inbox reads the last report back as kind "report".
-//
 // - The key must hold the write grant on the namespace the report names, through checkScope (one
-//   enforcement point, test/scope.test.ts); any other namespace is refused.
-// - A report replaces the last one whole and expires after 6 hours: a stale "needs you" is worse
-//   than none.
-// - No severity field: a reported item always counts as needs-you, so an app cannot quiet its badge.
-// - The items are the app's words. A link must stay on the app's own origin (its ops_sites row),
-//   and capsid_read_status action status fences the title as external before an agent reads it.
-// - About one report per minute per key, fail closed: this is a write path. The count is a KV
-//   get then put, so two reports at once, or from two colos inside KV's propagation delay, can both
-//   pass; the limit is approximate, and the write itself is bounded (20 items, 16 KiB).
+// enforcement point, test/scope.test.ts); - A report replaces the last one whole and expires after
+// 6 hours: a stale "needs you" is worse than none.
 
 const INBOX_REPORT_PATH = "/ops/inbox/report";
 const REPORT_PREFIX = "inbox:report:";
 const REPORT_RATE_PREFIX = "inbox:report-rate:";
 export const REPORT_TTL_SECONDS = 6 * 3600;
-// KV's smallest expiry, which is also the rate window.
 const REPORT_RATE_SECONDS = 60;
 export const MAX_REPORT_ITEMS = 20;
 export const MAX_REPORT_TITLE = 200;
@@ -96,7 +83,6 @@ export function parseReport(
   return { ok: true, value: { namespace: record.namespace, items } };
 }
 
-/** Why `link` is not on the app's own origin, or null. */
 function linkRefusal(link: string, origin: string | null): string | null {
   if (origin === null)
     return "this namespace serves no site, so its report items may not carry a link";
@@ -111,15 +97,13 @@ function linkRefusal(link: string, origin: string | null): string | null {
   return null;
 }
 
-/** Why `agent` may not report for `namespace`, or null. */
 export function reportCallerRefusal(agent: Agent, namespace: string): string | null {
   return checkScope(agent, { tool: INBOX_REPORT_PATH, grant: "write", namespace });
 }
 
 /**
- * Spend the key's one report this minute, or say why not. Fails closed: a counter that
- * cannot be read or written refuses, because an unbounded write path is the thing the
- * limit exists to stop.
+ * Spend the key's one report this minute, or say why not. Fails closed: a counter that cannot be
+ * read or written refuses, because an unbounded write path is the thing the limit exists to stop.
  */
 export async function spendReportRate(
   kv: KVNamespace,
@@ -150,9 +134,6 @@ export async function storeReport(kv: KVNamespace, report: StoredReport): Promis
   });
 }
 
-/** A stored report's items, or none when it is missing, malformed or older than the
- *  expiry. KV's own expiry removes the value; the age check here holds the same line
- *  for a value KV has not dropped yet. */
 export function reportItems(raw: string | null, now: Date): InboxItem[] {
   if (!raw) return [];
   let parsed: Partial<StoredReport>;
@@ -168,7 +149,6 @@ export function reportItems(raw: string | null, now: Date): InboxItem[] {
     : [];
 }
 
-/** Every namespace's live report, read for the inbox. A failed list reads as none. */
 export async function readReports(kv: KVNamespace, now: Date): Promise<Map<string, InboxItem[]>> {
   const out = new Map<string, InboxItem[]>();
   try {

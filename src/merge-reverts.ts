@@ -17,11 +17,6 @@ export const AUDIT_ROWS_LIMIT = 5000;
 export const WINDOW_MS = 90 * DAY_MS;
 export const ACTOR = "capsid:merge-safety";
 
-/** The pull requests and commits a merged pull request says it reverts. Pure.
- *  Recognized: GitHub's revert button ("Reverts owner/repo#N" in the body, with a title
- *  `Revert "..."`), "reverts #N" or "revert #N" at the start of the title or of a body line
- *  (same repo only, any letter case), and git's "This reverts commit <sha>" (7 to 40 hex). A mention of
- *  another repo's pull request names none of this repo's. */
 export function revertTargets(
   title: string,
   body: string,
@@ -33,8 +28,6 @@ export function revertTargets(
   for (const m of text.matchAll(/\breverts?\s+([\w.-]+\/[\w.-]+)#(\d+)\b/gi)) {
     if (m[1]!.toLowerCase() === repo.toLowerCase()) prs.add(Number(m[2]));
   }
-  // A bare "revert #N" is a statement only at the start of the title or of a body line
-  // (after a list marker at most): "Don't revert #12 here" is prose and names nothing.
   const lead = /^[ \t]*(?:[-*][ \t]+)?reverts?\s+#(\d+)\b/gim;
   for (const m of `${title ?? ""}\n${body ?? ""}`.matchAll(lead)) prs.add(Number(m[1]));
   for (const m of text.matchAll(/\bThis reverts commit\s+([0-9a-f]{7,40})\b/gi))
@@ -56,8 +49,10 @@ interface AutoMergedRow {
   path_class: string | null;
 }
 
-/** The auto-merged audit row for a pull request, or for a commit by its sha prefix
- *  (merge_sha or head_sha). The same query shape the merge units use. */
+/**
+ * The auto-merged audit row for a pull request, or for a commit by its sha prefix (merge_sha or
+ * head_sha). The same query shape the merge units use.
+ */
 async function autoMergedBy(
   env: Env,
   namespace: string,
@@ -94,7 +89,6 @@ export interface RevertsReport {
   recorded: string[];
 }
 
-/** A repository's most recently updated closed pull requests. Throws when GitHub refuses. */
 async function readClosedPrs(env: Env, owner: string, repo: string): Promise<ClosedPr[]> {
   const resp = await ghFetch(
     env,
@@ -107,15 +101,12 @@ async function readClosedPrs(env: Env, owner: string, repo: string): Promise<Clo
   return (await resp.json()) as ClosedPr[];
 }
 
-/** One namespace's revert pass: the recently merged pull requests that revert an
- *  auto-merged one, each recorded once. Returns what it recorded. */
 export async function recordReverts(env: Env, namespace: string, now: Date): Promise<string[]> {
   const { owner, repo } = await resolveRepo(env, namespace);
   const full = `${owner}/${repo}`;
   const recorded: string[] = [];
   for (const closed of await readClosedPrs(env, owner, repo)) {
     if (!closed.merged_at) continue;
-    // A revert older than the evidence window answers nothing the meter still reads.
     if (now.getTime() - Date.parse(closed.merged_at) > WINDOW_MS) continue;
     const targets = revertTargets(closed.title ?? "", closed.body ?? "", full);
     const reverted = new Map<number, AutoMergedRow>();
@@ -128,8 +119,6 @@ export async function recordReverts(env: Env, namespace: string, now: Date): Pro
       if (row) reverted.set(row.pr, row);
     }
     for (const row of reverted.values()) {
-      // A pull request does not revert itself, and one revert is recorded once per
-      // reverted pull request however many ticks see it.
       if (row.pr === closed.number) continue;
       const seen = await env.DB.prepare(
         `SELECT 1 AS found FROM audit_log WHERE action = 'auto-merge-reverted' AND namespace = ?1 AND json_extract(params, '$.repo') = ?2
@@ -155,15 +144,12 @@ export async function recordReverts(env: Env, namespace: string, now: Date): Pro
   return recorded;
 }
 
-// A job's merged pull request that a later merge reverted, in any repo a recent outcome
-// names, auto-merged or not. The model routing learns from it (src/model-learning.ts): a
-// merge that had to be undone is not work that held. Recorded once per (job, pull
-// request, revert) as a `job-pr-reverted` audit row.
+// A job's merged pull request that a later merge reverted, in any repo a recent outcome names,
+// auto-merged or not. Recorded once per (job, pull request, revert) as a `job-pr-reverted` audit
+// row.
 const OUTCOME_REPOS_MAX = 30;
 const SHA_LOOKUPS_MAX = 20;
 
-/** The revert pass over the repos of the last 90 days' merged outcome pull requests.
- *  Returns what it recorded; a GitHub failure for one repo is logged and the rest go on. */
 export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[]> {
   const since = toSqlTime(now.getTime() - WINDOW_MS);
   const { results } = await env.DB.prepare(
@@ -188,9 +174,6 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
       { job_id: row.job_id, namespace: row.namespace },
     ]);
   }
-  // Only repos a namespace still maps: a job's pull request in a repo that was renamed or
-  // retired (capsid-mcp, dustinedwards-mcp, renovate-config) has no installation to read it
-  // with, so each pass paid a slow "GitHub refused an installation token" for it.
   const mapped = new Set<string>();
   const { results: mappings } = await env.DB.prepare(
     "SELECT namespace, repos FROM namespaces",
@@ -212,8 +195,6 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
         if (!closed.merged_at || now.getTime() - Date.parse(closed.merged_at) > WINDOW_MS) continue;
         const targets = revertTargets(closed.title ?? "", closed.body ?? "", full);
         const numbers = new Set(targets.prs);
-        // git's "This reverts commit <sha>" names a commit: GitHub says which pull request
-        // brought it in.
         for (const sha of targets.shas) {
           if (shaLookups++ >= SHA_LOOKUPS_MAX) break;
           const pulls = await ghFetch(
@@ -263,10 +244,11 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
   return recorded;
 }
 
-/** The revert pass over every namespace the signed merge policy covers, and over the
- *  repos of recent job outcomes, at most once in 30 minutes (a KV stamp, like the
- *  watcher's). A policy that does not load, or a GitHub failure for one namespace, is
- *  logged and the rest go on. */
+/**
+ * The revert pass over every namespace the signed merge policy covers, and over the repos of
+ * recent job outcomes, at most once in 30 minutes (a KV stamp, like the watcher's). A policy that
+ * does not load, or a GitHub failure for one namespace, is logged and the rest go on.
+ */
 export async function revertsTick(
   env: Env,
   now: Date,

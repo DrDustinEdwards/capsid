@@ -31,10 +31,6 @@ import { JOBS_DEFINITION } from "./jobs-input";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
-// The caller-facing body checks (src/job-body-check.ts): post refuses an unfilled placeholder
-// and a claim read as false (src/job-fact-check.ts) here, edit inside editJob once the caller
-// is known to be the seat, and both warn when a body lacks the five headed parts or states a
-// claim that could not be checked.
 function withWarnings(
   result: JobResult,
   body: string | undefined,
@@ -52,8 +48,8 @@ function withWarnings(
   return warnings.length > 0 ? { ...result, warnings } : result;
 }
 
-// A refusal is an error to the client (isError true), so a client that keys on
-// isError does not read it as success. The body is the same JSON either way.
+// A refusal is an error to the client (isError true), so a client keying on isError does not read
+// it as success.
 function reply(result: JobResult) {
   return result.ok ? ok(result) : { ...ok(result), isError: true };
 }
@@ -61,9 +57,7 @@ function reply(result: JobResult) {
 export function defineJobOperations(server: McpServer, ctx: ToolCtx): void {
   const { env, agent } = ctx;
 
-  // The work queue's one tool, a ruled exception to the tool surface rule (CLAUDE.md).
-  // Its actions share one tool because they are one subsystem
-  // with one row shape, and a caller that has the tool has the whole lifecycle.
+  // A ruled exception to the tool surface rule (CLAUDE.md): one subsystem with one row shape.
   ctx.ops.define("jobs", JOBS_DEFINITION, async (args) => {
     const now = new Date();
     try {
@@ -71,9 +65,7 @@ export function defineJobOperations(server: McpServer, ctx: ToolCtx): void {
         return fail(`stale is for action list only; ${args.action} does not take it.`);
       }
       if (args.action === "list") {
-        // The read action needs the read grant. The registrar names no grant for
-        // an "action" tool, so it is checked here, and a read the caller may not
-        // make is refused for its own reason rather than by a neighboring check.
+        // The registrar names no grant for an "action" tool, so the read grant is checked here.
         const listRefusal = ctx.scope({
           tool: JOBS_TOOL,
           action: "list",
@@ -81,9 +73,8 @@ export function defineJobOperations(server: McpServer, ctx: ToolCtx): void {
           namespace: args.namespace,
         });
         if (listRefusal) return fail(listRefusal);
-        // The stale view (src/stale-jobs.ts). Its own view of the queue, so it does not
-        // combine with another view, a status filter or one id. Narrowed to the namespace
-        // the caller named; a caller scoped to one namespace must name it (the registrar).
+        // The stale view is its own view of the queue: it does not combine with another view, a
+        // status filter or one id.
         if (args.stale === true) {
           if (args.view !== undefined || args.status !== undefined || args.id !== undefined) {
             return fail(
@@ -101,8 +92,7 @@ export function defineJobOperations(server: McpServer, ctx: ToolCtx): void {
         }
         if (args.view === "plan")
           return ok(await readOvernightPlan(env, { namespace: args.namespace }, now));
-        // Outcomes across every namespace, as a rate per kind and model: a caller scoped to
-        // one namespace has no business reading the whole account's record.
+        // Account-wide record: a caller scoped to one namespace has no business reading it.
         if (args.view === "models") {
           const wide = ctx.scope({
             tool: JOBS_TOOL,
@@ -123,9 +113,8 @@ export function defineJobOperations(server: McpServer, ctx: ToolCtx): void {
             await readOvernightDigest(env, { namespace: args.namespace, since: since.since }, now),
           );
         }
-        // The body only for ONE named job and a caller that could claim it anyway.
-        // Asked through ctx.scope, the one shape a handler may use for a grant that
-        // depends on the action.
+        // The body only for ONE named job and a caller that could claim it anyway (ctx.scope, for a
+        // grant that depends on the action).
         const withBody =
           Boolean(args.id) &&
           ctx.scope({
@@ -145,9 +134,8 @@ export function defineJobOperations(server: McpServer, ctx: ToolCtx): void {
           listed.versions = await jobVersions(env.DB, args.id);
         return ok(listed);
       }
-      // Every other action changes the queue, so it needs the write grant, checked
-      // here with the action so the tools axis can narrow it (a watcher scoped to
-      // `capsid_work_jobs.post` may post and may not claim).
+      // Every other action changes the queue: write grant, checked with the action so the tools
+      // axis can narrow it (a watcher scoped to `capsid_work_jobs.post` may post, not claim).
       const refusal = ctx.scope({
         tool: JOBS_TOOL,
         action: args.action,
@@ -196,8 +184,7 @@ export function defineJobOperations(server: McpServer, ctx: ToolCtx): void {
               result_ref: args.result_ref,
               evidence: parsedEvidence,
               claim: args.claim,
-              // As received, so job_claims.raw keeps the evidence the driver sent and
-              // not parseEvidence's reading of it.
+              // As received, so job_claims.raw keeps the evidence the driver sent.
               raw: {
                 evidence: args.evidence,
                 claim: args.claim,

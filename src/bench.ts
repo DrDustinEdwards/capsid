@@ -15,22 +15,9 @@ import {
 } from "./bench-requests";
 import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
 
-// THE METHODS PAPER'S PAIRED COMPARISON, the Worker's half
-// (capsid/research/design-paired-comparison.md, section 2; migrations/0047_bench.sql).
-//
-// The capsid-bench repo runs one task per GitHub Actions job per arm and talks to Capsid
-// through endpoints signed like the improve scorer's (its own key, BENCH_SECRET, the same
-// timestamp window, the replay cache under its own scope), not under /ops/:
-//
-//   /bench/tasks  register a task and its hidden test counts, once
-//   /bench/draw   record the registration and append the drawn task order
-//   /bench/start  open a run, behind the off switch and the concurrency cap
-//   /bench/repro  the harness's receipt for a treatment run's reproduction test
-//   /bench/score  close it: the Worker computes resolved and the false success claim
-//
-// ONE CLAIM RULE FOR EVERY ARM. Each arm's claim is the claim file its run wrote with the
-// bench's claim tool, read by capsid-bench's one parser and reported as claimed_done
-// (protocol section 3). The treatment's Capsid job status is not the claim.
+// The capsid-bench repo runs one task per GitHub Actions job per arm and talks to Capsid through
+// endpoints signed like the improve scorer's (its own key, BENCH_SECRET, the same timestamp
+// window, the replay cache under its own scope), not under /ops/:
 
 export const BENCH_TASKS_PATH = "/bench/tasks";
 export const BENCH_DRAW_PATH = "/bench/draw";
@@ -38,8 +25,8 @@ export const BENCH_START_PATH = "/bench/start";
 export const BENCH_SCORE_PATH = "/bench/score";
 export const BENCH_REPRO_PATH = "/bench/repro";
 
-// The off switch: off unless it reads exactly "on". Absent, any other value or a read
-// that fails is off, so a run never starts by default or by outage.
+// The off switch: off unless it reads exactly "on". Absent, any other value or a read that fails
+// is off, so a run never starts by default or by outage.
 export const BENCH_ENABLED_KEY = "bench:enabled";
 // At most this many runs at once, so a pilot never starves Dustin's own subscription use.
 export const BENCH_MAX_RUNNING = 4;
@@ -75,8 +62,8 @@ export async function handleBenchTasks(request: Request, env: Env): Promise<Resp
     .all<{ task_id: string }>();
   if (inserted.results.length === 1)
     return Response.json({ ok: true, task_id: t.task_id, registered: true });
-  // Registered before. The same registration again is a no-op, so the loader can be
-  // rerun; a different one is refused, because the registered list is the one scored.
+  // Registered before. The same registration again is a no-op, so the loader can be rerun; a
+  // different one is refused, because the registered list is the one scored.
   const existing = await env.DB.prepare(
     "SELECT source, split, repo, issue_created_at, fail_to_pass_count, pass_to_pass_count FROM bench_tasks WHERE task_id = ?1",
   )
@@ -91,11 +78,9 @@ export async function handleBenchTasks(request: Request, env: Env): Promise<Resp
   );
 }
 
-// THE DRAW (the methods paper's protocol, section 4). The first call records the
-// registration; every call must carry that same registration. tasks are the draw from
-// position `from` on: positions already recorded must hold the same tasks, and the rest
-// are appended in order, so a batch can be sent again and the draw only grows. A drawn
-// task must be registered in the full split. One batch, so a refused task appends none.
+// tasks are the draw from position `from` on: positions already recorded must hold the same tasks,
+// and the rest are appended in order, so a batch can be sent again and the draw only grows. One
+// batch, so a refused task appends none.
 export async function handleBenchDraw(request: Request, env: Env): Promise<Response> {
   const front = await signedBody(request, env, "BENCH_DRAW_REJECTED", parseDrawRequest);
   if (!front.ok) return front.response;
@@ -177,12 +162,6 @@ export async function handleBenchDraw(request: Request, env: Env): Promise<Respo
   return Response.json({ ok: true, added: fresh.length, size: count + fresh.length });
 }
 
-// THE REGISTRATION LOCK, for a model arm. A full-split task starts only once the
-// registration is recorded and the task is on the draw. A pilot or excluded task starts
-// only before it: the pilot checks feasibility and may change the budgets, and excluded
-// (pre-cutoff) tasks are where the template is tuned (protocol section 2), so both
-// precede the hash. Neither is sealed or analyzed.
-// The planted arms call no model and are not locked.
 async function drawRefusal(db: D1Database, taskId: string, split: string): Promise<string | null> {
   const registered = await db
     .prepare("SELECT 1 AS one FROM bench_registration WHERE id = 1")
@@ -242,10 +221,6 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
   if (MODEL_ARMS.includes(arm)) {
     const locked = await drawRefusal(env.DB, task_id, task.split);
     if (locked) return textResponse(locked, 409);
-    // A stale running row is closed as unjudged before its rerun can open, so its job can
-    // no longer post a late score: /bench/score refuses a row that is not running.
-    // A treatment row's job is closed with it (finishBenchRun); one that moved in between is
-    // left running, and the slot refusal below says so.
     const { results: staleRuns } = await env.DB.prepare(
       "SELECT id FROM bench_runs WHERE task_id = ?1 AND arm = ?2 AND status = 'running' AND started_at <= ?3",
     )
@@ -278,13 +253,11 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
     if (order) return textResponse(order, 409);
     prior = results.length;
   }
-  // A treatment run's own key (src/bench-run-key.ts), returned once and stored only as
-  // its hash on the row it opens.
   const runKey = arm === "treatment" ? newRunKey() : null;
   const runKeyHash = runKey ? await sha256Hex(runKey) : null;
-  // One statement, so two starts racing for the last running slot cannot both take it,
-  // and a model start counted against the rows read above fails if another start landed
-  // since. The planted arms call no model and have no per-task slots.
+  // One statement, so two starts racing for the last running slot cannot both take it, and a model
+  // start counted against the rows read above fails if another start landed since. The planted arms
+  // call no model and have no per-task slots.
   const opened = await env.DB.prepare(
     `INSERT INTO bench_runs (id, task_id, arm, gh_run, status, started_at, run_key_hash)
      SELECT ?1, ?2, ?3, ?4, 'running', ?5, ?9

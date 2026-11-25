@@ -4,21 +4,7 @@ import { registrableDomain } from "./domain-expiry";
 import { DAY_MS } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// TLS CERTIFICATE EXPIRY, beside the domain registration check
-// (src/domain-expiry.ts). A Worker cannot see the certificate a TLS peer presents, so the
-// date comes from where the edge certificate lives: the zone's certificate packs in the
-// Cloudflare API (GET /zones?name=<domain>, then GET /zones/{id}/ssl/certificate_packs).
-// A host's expiry is the latest expires_on among the certificates of the active packs that
-// cover it (the host itself, or a one-label wildcard over it): while a renewed certificate
-// is being issued beside the old one, the old date would alert for nothing.
-//
-// The watcher pass reads it (src/watcher-gather.ts) and keeps it in KV; the five-minute push
-// (src/push.ts) sends each host once at 21 days and once at 3, keyed by the date, so a
-// renewal that moves the date clears it and a new near date alerts again. Hosts on Vercel
-// or a hosting suffix are not on a Cloudflare zone of ours and are left out.
-//
-// CF_OPS_TOKEN needs Zone / SSL and Certificates / Read (and the Zone / Zone / Read it holds)
-// for this read; without it the read fails, is logged, and the stored dates are kept.
+// TLS CERTIFICATE EXPIRY, beside the domain registration check (src/domain-expiry.ts).
 
 export const TLS_EXPIRY_KEY = "tls:expiry:v1";
 const EARLY_DAYS = 21;
@@ -111,8 +97,8 @@ export async function readTlsExpiry(
   return out;
 }
 
-/** The alerts the stored dates stand behind now: 21 days out and 3 days out, each once per
- *  certificate date. */
+// The alerts the stored dates stand behind now: 21 days out and 3 days out, each once per
+// certificate date.
 export function tlsAlerts(
   read: TlsExpiry | null,
   now: Date,

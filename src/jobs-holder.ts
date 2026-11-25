@@ -31,8 +31,8 @@ import { ciRefusal } from "./complete-ci";
 import { type BreakerExemption } from "./fail-exemption";
 import { parsePrUrl } from "@dustinedwards/site-runtime/github";
 
-// complete, fail and block share a shape: a keyed UPDATE that fires only for the claimed job
-// this caller holds, so a job the seat released cannot be completed out from under its new owner.
+// complete, fail and block share a shape: a keyed UPDATE that fires only for the claimed job this
+// caller holds, so a job the seat released cannot be completed out from under its new owner.
 function holderRefusal(
   action: string,
   id: string,
@@ -51,8 +51,8 @@ function holderRefusal(
   return null;
 }
 
-// The seat completing a blocked job it does not hold. Null when the job is blocked and
-// held by someone else; otherwise what the job is and what to do instead.
+// The seat completing a blocked job it does not hold. Null when the job is blocked and held by
+// someone else; otherwise what the job is and what to do instead.
 function seatCloseRefusal(
   action: string,
   id: string,
@@ -111,20 +111,16 @@ export async function holderTransition(
     status: JobStatus;
     result_summary?: string | null;
     result_ref?: string | null;
-    // Only block bumps the gate counter. Bound as a number, not interpolated, so the statement
-    // stays one static string that test/jobs.test.ts and the query-plan test can read.
+    // Only block bumps the gate counter. Bound as a number, not interpolated, so the statement stays
+    // one static string that test/jobs.test.ts and the query-plan test can read.
     bumpBlocked?: boolean;
-    // A holder's fail the breaker does not count, and why (src/fail-exemption.ts).
     breakerExempt?: BreakerExemption | null;
     evidence?: JobEvidence;
     touches?: (job: JobRow) => D1PreparedStatement[];
     said?: Said;
-    // The seat completing a BLOCKED job another credential holds (completeAsSeat): the UPDATE
-    // leaves claimed_by alone, so the outcome row credits the driver that did the work.
+    // The seat completing a BLOCKED job another credential holds (completeAsSeat): the UPDATE leaves
+    // claimed_by alone, so the outcome row credits the driver that did the work.
     seatCloses?: boolean;
-    // The seat recording the outcome of work on a QUEUED, unheld job (recordAsSeat): the UPDATE
-    // credits the recorder as claimed_by. recordVerb is "record" for the seat, or
-    // "complete-unclaimed" for a session completing its own work (src/jobs-seat.ts).
     records?: boolean;
     recordVerb?: "record" | "complete-unclaimed";
     overlaps?: OverlapReport | null;
@@ -139,16 +135,16 @@ export async function holderTransition(
       : holderRefusal(action, id, actor, read);
   if (notHeld) return notHeld;
   if (!read) return refuse(action, `no job ${id}.`);
-  // What the row must be for this transition to apply, and who holds it. For a holder's
-  // own transition that is the claimed row it holds, as it always was.
+  // What the row must be for this transition to apply, and who holds it. For a holder's own
+  // transition that is the claimed row it holds, as it always was.
   const fromStatus = patch.records ? "queued" : patch.seatCloses ? "blocked" : "claimed";
   const verb = patch.records
     ? (patch.recordVerb ?? "record")
     : patch.seatCloses
       ? "admin-complete"
       : action;
-  // The row as the UPDATE will leave it, computed from the read so the mirror and outcome can
-  // be built first; the guard at the head of the batch keeps the read true.
+  // The row as the UPDATE will leave it, computed from the read so the mirror and outcome can be
+  // built first; the guard at the head of the batch keeps the read true.
   const job: JobRow = {
     ...read,
     ...(patch.records ? { claimed_by: actor } : {}),
@@ -159,20 +155,11 @@ export async function holderTransition(
     blocked_count: read.blocked_count + (patch.bumpBlocked ? 1 : 0),
   };
 
-  // The transition and every record of it (mirror, audit, outcome, pull request and
-  // attribution rows) are one batch. The first statement aborts the whole batch unless the row
-  // is still claimed by this caller at the updated_at just read, so all of it commits or none,
-  // and a throw cannot leave a finished job with no record.
-  //
-  // The outcome row is written on terminal transitions only, once per job (the primary key
-  // enforces it). A failed job gets one too: recording only successes would make every agent
-  // look equally good.
-  //
-  // Verification runs before the batch and cannot fail the transition: verifyEvidence reports
-  // its own errors as notes, so an unreachable GitHub costs the verified flags, not the close.
+  // Verification runs before the batch and cannot fail the transition: verifyEvidence reports its
+  // own errors as notes, so an unreachable GitHub costs the verified flags, not the close.
   let outcome: { row: JobOutcomeRow; notes: string[] } | undefined;
-  // The summary is signed as it is written, so the command a blocked job shows a person
-  // can be told apart from one changed afterwards (src/job-signing.ts).
+  // The summary is signed as it is written, so the command a blocked job shows a person can be told
+  // apart from one changed afterwards (src/job-signing.ts).
   const summarySig = patch.result_summary
     ? await signJobText(env.IMPROVE_SCORE_SECRET, "summary", id, { summary: patch.result_summary })
     : null;
@@ -206,9 +193,9 @@ export async function holderTransition(
     }),
   ];
   if (patch.touches) statements.push(...patch.touches(job));
-  // The claim row is built here, BEFORE verifyEvidence runs, from the arguments as
-  // sent, so nothing GitHub says can reach it (src/job-claims.ts). It rides in this
-  // batch, so a transition the guard aborts leaves no claim behind either.
+  // The claim row is built here, BEFORE verifyEvidence runs, from the arguments as sent, so nothing
+  // GitHub says can reach it (src/job-claims.ts). It rides in this batch, so a transition the guard
+  // aborts leaves no claim behind either.
   const claimed =
     patch.said && (action === "complete" || action === "fail" || action === "block")
       ? claimRow({
@@ -226,8 +213,6 @@ export async function holderTransition(
   if (claimed) statements.push(claimStatement(env.DB, claimed));
   if (job.status === "done" || job.status === "failed") {
     const verdict = await verifyEvidence(env, job.namespace, patch.evidence, job.result_ref);
-    // One evaluation per worker check, the claim and GitHub's value side by side,
-    // after the claim row so its claim_id subquery finds it.
     if (claimed) {
       statements.push(
         ...evaluationStatements(
@@ -239,8 +224,8 @@ export async function holderTransition(
     const row = outcomeFrom(job, verdict, now, claimed?.model_id ?? null);
     outcome = { row, notes: verdict.notes };
     statements.push(outcomeStatement(env.DB, row));
-    // One row per pull request the evidence named, so the outcome's counts can be traced and
-    // the merge state corrected later.
+    // One row per pull request the evidence named, so the outcome's counts can be traced and the merge
+    // state corrected later.
     statements.push(
       ...outcomePrStatements(
         env.DB,
@@ -278,9 +263,9 @@ export async function holderTransition(
   };
 }
 
-// Binds a claimed job to the pull request a gate read, in result_ref, so a later call
-// naming another pull request is still answered for this one. Returns the row as bound,
-// or the refusal when the caller does not hold the job or the row moved.
+// Binds a claimed job to the pull request a gate read, in result_ref, so a later call naming
+// another pull request is still answered for this one. Returns the row as bound, or the refusal
+// when the caller does not hold the job or the row moved.
 async function bindPullRequest(
   env: Env,
   agent: Agent,
@@ -327,8 +312,6 @@ export async function completeJob(
   return completeWith(env, agent, now, id, args, false);
 }
 
-// The seat completing a blocked job (src/jobs-seat.ts adminCompleteJob checks who may).
-// The same checks and records as a holder's complete; only the row it applies to differs.
 export async function completeAsSeat(
   env: Env,
   agent: Agent,
@@ -339,8 +322,8 @@ export async function completeAsSeat(
   return completeWith(env, agent, now, id, args, true);
 }
 
-// The seat recording the outcome of a queued job that was worked without a claim. The
-// same checks, verification and records as a complete.
+// The seat recording the outcome of a queued job that was worked without a claim. The same checks,
+// verification and records as a complete.
 export async function recordAsSeat(
   env: Env,
   agent: Agent,
@@ -379,13 +362,13 @@ async function completeWith(
       "complete needs a result_summary. A done job with no summary is a job the seat has to reconstruct from the diff.",
     );
   }
-  // Refused before anything else runs, so a claim that cannot be recorded whole
-  // leaves no row of any kind.
+  // Refused before anything else runs, so a claim that cannot be recorded whole leaves no row of any
+  // kind.
   const claim = parseClaim(args.claim);
   if ("error" in claim) return refuse("complete", claim.error);
-  // Checked before the write, because the outcome row this call produces cannot be
-  // corrected afterwards: a result_ref and evidence swallowed into the summary would
-  // leave a row that records nothing.
+  // Checked before the write, because the outcome row this call produces cannot be corrected
+  // afterwards: a result_ref and evidence swallowed into the summary would leave a row that records
+  // nothing.
   const swallowed = swallowedParamTag(args.result_summary);
   if (swallowed) return refuse("complete", swallowedTagRefusal("result_summary", swallowed));
   const completeRaw: ClaimRaw = args.raw ?? {
@@ -395,10 +378,9 @@ async function completeWith(
     result_ref: args.result_ref,
   };
   const held = await readJob(env.DB, id);
-  // The CI gate (src/complete-ci.ts): every pull request this complete names, and the one
-  // the job is bound to, must show green CI. A refused holder's job is bound to the pull
-  // request that was not green, so naming a different one next time does not escape it.
-  // The seat's close writes nothing before it is allowed.
+  // The CI gate (src/complete-ci.ts): every pull request this complete names, and the one the job is
+  // bound to, must show green CI. A refused holder's job is bound to the pull request that was not
+  // green, so naming a different one next time does not escape it.
   if (held) {
     const bound = parsePrUrl(held.result_ref) ? [held.result_ref!.trim()] : [];
     const ci = await ciRefusal(
@@ -423,8 +405,8 @@ async function completeWith(
       return refuse("complete", `${id} was not completed: ${ci.why}`);
     }
   }
-  // Overlap warning (Track A D1): the pull requests this complete names, against every other
-  // open one. The line rides in the summary the seat reads; the check cannot fail the call.
+  // Overlap warning (Track A D1): the pull requests this complete names, against every other open
+  // one. The line rides in the summary the seat reads; the check cannot fail the call.
   const overlaps = held
     ? await checkOverlaps(
         env,
@@ -449,8 +431,8 @@ ${overlap}`
       : seatCloses
         ? {
             seatCloses: true,
-            // The seat ending a blocked job's wait, in the same batch as the audit row. The job
-            // row it is built from still names the driver, so detail.held_by is who did the work.
+            // The seat ending a blocked job's wait, in the same batch as the audit row. The job row it is
+            // built from still names the driver, so detail.held_by is who did the work.
             touches: (job: JobRow) => [
               touchStatement(env.DB, {
                 job_id: job.id,

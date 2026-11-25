@@ -11,12 +11,6 @@ import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
 import "./config-form.css";
 
-// ADD, CHANGE OR DELETE A PROJECT (the Portal audit's new map, 2026-11-06): the namespace_add,
-// namespace_edit and namespace_remove controls, which share their rules and audit rows with
-// capsid_admin_manage_namespaces (src/namespace-admin.ts, src/namespace-delete.ts). A project is
-// its namespace and the repos the repo tools resolve through, exactly one labeled primary. Every
-// change previews first in the confirm dialog, which shows what it will do or why it is refused.
-
 type RepoDraft = { repo: string; label: string };
 
 const draftRow = (repo = "", label = ""): RepoDraft => ({ repo, label });

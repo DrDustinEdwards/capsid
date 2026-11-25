@@ -1,27 +1,19 @@
 import { toHex } from "@dustinedwards/site-runtime/encoding";
 
-// The vocabulary of a scoped credential, in one module so the table
-// (migrations/0008_agents.sql), the tool (src/tools/agents.ts) and the enforcement
-// point (src/scope.ts) cannot disagree about it: a list spelled twice drifts, and the
-// copy nobody looks at ends up checking five flags out of six. Free of Worker and MCP
-// imports so the scope logic is unit-testable under node.
-
-// Descriptive, not authorizing. What an agent may do lives in its scopes and
-// nowhere else, so a kind cannot quietly become a second permission system.
+// One module for the credential vocabulary so the table, tool (src/tools/agents.ts) and enforcement
+// point (src/scope.ts) cannot disagree. Free of Worker and MCP imports so it is unit-testable under node.
+// A kind is descriptive, not authorizing: what an agent may do lives in its scopes alone.
 export const AGENT_KINDS = ["session", "driver", "seat", "cron"] as const;
 export type AgentKind = (typeof AGENT_KINDS)[number];
 
 export const AGENT_GRANTS = ["read", "write"] as const;
 export type AgentGrant = (typeof AGENT_GRANTS)[number];
 
-// Each flag names an action whose consequence leaves this Worker, so the write grant
-// alone is not enough for any of them. The reasons are FLAG_REASON in src/scope.ts.
+// Each flag names an action whose consequence leaves this Worker, so a write grant alone is not enough (FLAG_REASON, src/scope.ts).
 export const SCOPE_FLAGS = ["can_merge", "can_touch_protected"] as const;
 export type ScopeFlag = (typeof SCOPE_FLAGS)[number];
 
-// Flags that gated only tools since removed (capsid_change_repo, capsid_open_pr and
-// capsid_run_ci). Stored agent rows and queued jobs may still name
-// them, so every reader skips them rather than refusing the row.
+// Flags that gated only since-removed tools; stored rows and queued jobs may still name them, so readers skip them.
 export const RETIRED_FLAGS: readonly string[] = [
   "can_direct_write",
   "can_dispatch",
@@ -30,8 +22,7 @@ export const RETIRED_FLAGS: readonly string[] = [
   "can_comment_pr",
 ];
 
-// A list of names, or "*" for every name. "*" inside a list is not a wildcard, so a
-// typo in a mint command cannot grant everything.
+// "*" inside a list is not a wildcard, so a typo in a mint command cannot grant everything.
 export type ScopeList = "*" | string[];
 
 export interface AgentScopes {
@@ -52,10 +43,8 @@ export interface AgentRow {
   created_at: string;
   revoked_at: string | null;
   last_seen: string | null;
-  // 1 from the mint until a person clicks Activate in the Portal (migrations/0065); the key
-  // resolves only at 0. Optional because a test fake may leave it out.
+  // 1 from the mint until Activate in the Portal (0065); the key resolves only at 0. Optional for test fakes.
   pending?: number;
-  // Set when the watcher pass archives a revoked agent (migrations/0066).
   archived_at?: string | null;
 }
 
@@ -64,21 +53,16 @@ export function isAgentKind(value: unknown): value is AgentKind {
 }
 
 export function noFlags(): Record<ScopeFlag, boolean> {
-  // Built fresh each time, so a flag set on one agent cannot leak to another.
   const flags = {} as Record<ScopeFlag, boolean>;
   for (const flag of SCOPE_FLAGS) flags[flag] = false;
   return flags;
 }
 
-// Nothing allowed: what parseScopes falls back to on a corrupt row.
 function emptyScopes(): AgentScopes {
   return { namespaces: [], repos: [], tools: [], grants: [], flags: noFlags() };
 }
 
-// The default for a new agent: read, on the namespaces it was named for, and no
-// flags. Tools and repos are unrestricted because the grant already limits them (a
-// read grant cannot reach a write tool, and a repo read is a read); the axes that
-// must be narrowed at mint time are the ones the mint command asks for.
+// Read on the named namespaces, no flags. Tools and repos stay open because the grant already limits them.
 export function defaultScopes(namespaces: string[]): AgentScopes {
   return {
     namespaces: [...namespaces],
@@ -95,9 +79,8 @@ function parseList(value: unknown): ScopeList {
   return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
 }
 
-// Fails closed: a scopes column that is null, empty, truncated, an array, a bare
-// string or an object with none of the keys resolves to emptyScopes(). A permissive
-// parse of a corrupt row looks like a working one until the row is corrupt.
+// Fails closed: a null, empty, truncated or wrongly shaped scopes column resolves to emptyScopes(),
+// since a permissive parse of a corrupt row looks like a working one.
 export function parseScopes(json: string | null | undefined): AgentScopes {
   if (!json) return emptyScopes();
   let raw: unknown;
@@ -114,9 +97,7 @@ export function parseScopes(json: string | null | undefined): AgentScopes {
       ) as AgentGrant[])
     : [];
   const flags = noFlags();
-  // Only the flags this system has, and only the boolean true, so a hand-written
-  // scopes blob cannot add an axis the enforcement point does not know. Any other key
-  // (a RETIRED_FLAGS entry on an older row) is ignored, so the row still loads.
+  // Only known flags and only boolean true, so a hand-written blob cannot add an axis; retired keys are ignored.
   const rawFlags =
     typeof record.flags === "object" && record.flags !== null
       ? (record.flags as Record<string, unknown>)
@@ -135,20 +116,13 @@ export function serializeScopes(scopes: AgentScopes): string {
   return JSON.stringify(scopes);
 }
 
-// The one list comparison. "*" is the only wildcard and it is the whole value, never
-// an entry.
+// "*" is the only wildcard and only as the whole value, never an entry.
 export function allowsScope(list: ScopeList, value: string): boolean {
   return list === "*" ? true : list.includes(value);
 }
 
-// The same comparison for a tool whose action decides what it does (jobs: "may post a job" and
-// "may claim one" are different authorities). An entry may be qualified, `jobs.post`:
-//   - "*" allows everything.
-//   - A list naming at least one action of this tool is narrowed to the actions it names; anything
-//     else of that tool is refused.
-//   - A bare tool name with no qualified sibling means the whole tool.
-//   - The narrowing reaches only the tool it names.
-// Kept beside allowsScope so the rule is one pure function the tests can drive without a server.
+// Like allowsScope for a tool whose action decides what it does (jobs: post vs claim). An entry may be qualified,
+// `jobs.post`: a list naming any action of this tool narrows it to those; a bare name with no qualified sibling is the whole tool.
 export function allowsToolAction(
   list: ScopeList,
   tool: string,
@@ -159,13 +133,8 @@ export function allowsToolAction(
   const prefix = `${tool}.`;
   const qualified = list.some((entry) => entry.startsWith(prefix));
   if (!qualified) return true;
-  // An unknown action on a narrowed tool is refused, not read as the whole tool:
-  // otherwise an agent minted ["capsid_work_jobs", "capsid_work_jobs.list"] could change
-  // the queue through a call path that names no action.
-  //
-  // It stays opt-in: a list with no qualified sibling for this tool is untouched.
-  // Opting in means the call path has to say what it is doing, and a path that cannot
-  // is refused.
+  // An unknown action on a narrowed tool is refused, not read as the whole tool: otherwise a path naming no action
+  // could change the queue. Opt-in: a list with no qualified sibling for this tool is untouched.
   if (action === undefined) return false;
   return list.includes(`${prefix}${action}`);
 }
@@ -175,28 +144,21 @@ export function describeScope(list: ScopeList): string {
   return list.length === 0 ? "(none)" : list.join(", ");
 }
 
-// agent_<12 hex>. See the migration for why it is not a sequence.
 export function mintAgentId(): string {
   return `agent_${toHex(crypto.getRandomValues(new Uint8Array(6)))}`;
 }
 
-// 32 bytes of entropy behind a greppable prefix, so a key pasted into a file, a log
-// or a commit is findable by searching for one string. Returned ONCE by the mint
-// action and stored nowhere: what the table holds is its sha256.
+// 32 bytes behind a greppable prefix so a leaked key is findable by one search. Returned once; only its sha256 is stored.
 export function mintAgentKey(): string {
   return `capsid_agent_${toHex(crypto.getRandomValues(new Uint8Array(32)))}`;
 }
 
-// The audit identity, in the vocabulary audit_log.actor and jobs.claimed_by already
-// speak (`github:<login>`, `opkey:<fingerprint>`). The name is UNIQUE in the table,
-// so this string identifies exactly one agent row.
+// The audit identity, in the vocabulary audit_log.actor and jobs.claimed_by speak; the name is UNIQUE.
 export function agentActor(name: string): string {
   return `agent:${name}`;
 }
 
-// The driver bootstrap instruction. capsid_admin_manage_namespaces action register returns the mint command
-// rather than minting, so no credential crosses the tool boundary.
-// test/register-namespace-mint.test.ts asserts the script it names can parse it.
+// Register returns the mint command rather than minting, so no credential crosses the tool boundary.
 function driverAgentName(namespace: string): string {
   return `${namespace}-driver`;
 }
@@ -210,8 +172,7 @@ export function driverMintInstruction(namespace: string): string {
     `Mint its driver agent as the admin: capsid_admin_manage_agents action mint with name ${driverAgentName(namespace)}, kind driver, ` +
     `namespaces ["${namespace}"] and grants read and write; its repos come from this mapping. ` +
     `The key is returned once: save it to ${driverKeyPath(namespace)} at mode 0600. ` +
-    // Cannot import TOOL_GRANTS (src/scope.ts imports this module), so
-    // test/audit-2026-09-16.test.ts holds the sentence and the table together.
+    // Cannot import TOOL_GRANTS (src/scope.ts imports this module); test/audit-2026-09-16.test.ts keeps them together.
     `capsid_admin_manage_namespaces action register does not mint it: minting is admin only, and capsid_admin_manage_namespaces action register is itself admin only.`
   );
 }

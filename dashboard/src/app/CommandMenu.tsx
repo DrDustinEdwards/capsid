@@ -89,9 +89,7 @@ function commands(
   return out;
 }
 
-// Capsomer's command menu with its list built from the feed: App loads this module on the
-// first Ctrl K, so neither the menu nor its list builder is in the initial bundle. App binds
-// the keys (Ctrl K, Cmd K and "/") itself, since this module is not loaded until then.
+// Loaded on the first Ctrl K, so App binds the keys itself.
 export function CommandPalette({
   open,
   onClose,

@@ -9,11 +9,8 @@ import { Status } from "capsomer/react/status";
 import { Panel } from "capsomer/react/panel";
 import { NoSnapshot } from "./shared";
 
-// Chart 11, each default branch by day for 14 days, from GET /portal/api/trends. Lazy, so
-// Enarratio loads only when the chart is drawn.
 const CiHistory = trendChart("CiHistory");
 
-// CI's default-branch table, a section of Health (design-portal-evaluation.md section 2).
 export function DefaultBranches() {
   const { feed, now } = useApp();
   const snap = feed.snapshot;
@@ -36,7 +33,6 @@ export function DefaultBranches() {
                 {snap.ci.map((c) => {
                   const st = ciState(c);
                   return (
-                    // The whole row opens the run (the UX audit's m5: "run" was a 20 by 16 px target).
                     <tr key={c.namespace} className={c.latest?.url ? "click" : undefined}>
                       <td>
                         <b>{c.namespace}</b>

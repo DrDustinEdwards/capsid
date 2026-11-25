@@ -1,8 +1,5 @@
-// The named roles: credentials asked for by name rather than one per namespace. The admin
-// mints one with capsid_admin_manage_agents action mint, passing the role's fields as
-// written here (docs/auth.md, "Roles"). Tests hold the Worker's own identities to them
-// (test/watcher.test.ts, test/live-gate-mcp.test.ts) and each role to one capability
-// (test/roles.test.ts).
+// Named roles: credentials asked for by name rather than one per namespace. The admin mints one with capsid_admin_manage_agents action mint, passing the fields as written here (docs/auth.md, "Roles").
+// Tests hold the Worker's own identities (test/watcher.test.ts, test/live-gate-mcp.test.ts) and each role to one capability (test/roles.test.ts).
 
 export interface Role {
   name: string;
@@ -32,12 +29,9 @@ export const ROLES: Role[] = [
     kind: "cron",
     namespaces: ["*"],
     grants: ["read", "write"],
-    // Same shape, same reason: posting a job is a write, and `capsid_work_jobs.post` is
-    // what stops that write from also being claim, complete, fail, block and resume.
+    // Same shape: posting a job is a write, and `capsid_work_jobs.post` stops it also being claim, complete, fail, block and resume.
     tools: ["capsid_work_jobs", "capsid_work_jobs.post"],
-    // NO REPOS, matching watcherAgent() in src/watcher.ts, so the minted credential
-    // and the identity the Worker uses are the same authority. The tools axis already
-    // refuses every repo tool.
+    // No repos, matching watcherAgent() in src/watcher.ts, so the minted credential and the Worker's identity are the same authority.
     repos: [],
     what: "reads health, status and CI, and posts a job when it finds something wrong. It cannot claim or finish one, and it cannot fix anything.",
   },
@@ -56,10 +50,7 @@ export const ROLES: Role[] = [
     name: "live-probe",
     kind: "cron",
     namespaces: ["capsid"],
-    // The live gate's MCP call (scripts/mcp-probe-lib.mjs, gate 8): one read of
-    // capsid/conventions.md after every deploy. Read grant, capsid_read_doc, no repos and no
-    // flags, so a leaked key reads capsid documents and does nothing else. Its key is the
-    // CAPSID_LIVE_PROBE_KEY repo secret (docs/rollback.md).
+    // The live gate's MCP call (scripts/mcp-probe-lib.mjs, gate 8): read grant, capsid_read_doc, no repos or flags, so a leaked key reads capsid documents and nothing else. Key: the CAPSID_LIVE_PROBE_KEY repo secret (docs/rollback.md).
     repos: [],
     grants: ["read"],
     tools: ["capsid_read_doc"],
@@ -69,11 +60,7 @@ export const ROLES: Role[] = [
     name: "live-check",
     kind: "cron",
     namespaces: ["capsid"],
-    // devkit's daily AI and MCP check (site-runtime-ai-audit, area 11): tools/list, the
-    // conformance server scenarios and a rate-limit burst through /ops/mcp. The same
-    // shape as live-probe, so a leaked key reads capsid documents and nothing else, and a
-    // key of its own, so the burst's minute of 429s never lands on a deploy's live gate.
-    // Its key is devkit's MCP_TEST_GRANT_MCP_DUSTINEDWARDS_INFO repo secret.
+    // devkit's daily AI and MCP check (site-runtime-ai-audit): same shape as live-probe, with a key of its own so the burst's minute of 429s never lands on a deploy's live gate. Key: devkit's MCP_TEST_GRANT_MCP_DUSTINEDWARDS_INFO repo secret.
     repos: [],
     grants: ["read"],
     tools: ["capsid_read_doc"],
@@ -84,8 +71,7 @@ export const ROLES: Role[] = [
     kind: "driver",
     namespaces: ["dustinedwards"],
     grants: ["read", "write"],
-    // No flags and no repos: the mint derives the repos axis from the live namespace
-    // mapping, as for any driver (src/agents-admin.ts).
+    // No flags and no repos: the mint derives the repos axis from the live namespace mapping (src/agents-admin.ts).
     what: "Grok Build's driver for dustinedwards: claims and works jobs there, the same scopes as dustinedwards-driver, and never merges.",
   },
 ];

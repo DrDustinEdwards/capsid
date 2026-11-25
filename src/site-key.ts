@@ -6,21 +6,8 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { base64url } from "@dustinedwards/site-runtime/encoding";
 import { callSignal } from "./call-signal";
 
-// SET A SITE KEY (create a site key and set it on both sides, never shown), served only as
-// the site_key_rotate control, from a click in the Portal (src/controls-base.ts PORTAL_ONLY). The site key is the site API's key
-// (DrDustinEdwards/site-api): the site's Worker holds it as CARREL_SITE_KEY, and Carrel
-// holds the same value as SITE_<NAMESPACE>_KEY to call that site. This mints a new one
-// and sets it as a secret on both Workers through the Cloudflare API.
-//
-// THE VALUE IS NEVER SHOWN: not returned, not logged, not in the audit row, not in an
-// error. It exists in this invocation's memory and in the two secrets, and nowhere else.
-//
-// The token is CF_SECRETS_TOKEN, apart from the watcher's read token because it can
-// write: Workers Scripts Edit on the account. Unset, nothing is minted.
-//
-// ORDER. The site first, then Carrel. When the site takes the new key and Carrel does
-// not, Carrel's calls to the site are refused until the two match; the answer says so
-// and that calling again mints a fresh key and sets both. Nothing is retried silently.
+// SET A SITE KEY (create a site key and set it on both sides, never shown), served only as the
+// site_key_rotate control, from a click in the Portal (src/controls-base.ts PORTAL_ONLY).
 
 export const CARREL_SCRIPT = "carrel-desk";
 export const SITE_SECRET = "CARREL_SITE_KEY";
@@ -84,9 +71,9 @@ async function putSecret(
   };
 }
 
-/** Where a new key would go, or why none can be minted: the token and account it is set
- *  with, and the site's Worker from its ops_sites row. Reads only, so the site_key_rotate
- *  control's preview (src/controls-plan.ts) refuses exactly what this refuses. */
+// Where a new key would go, or why none can be minted: the token and account it is set with, and
+// the site's Worker from its ops_sites row. Reads only, so the site_key_rotate control's preview
+// (src/controls-plan.ts) refuses exactly what this refuses.
 export async function siteKeyTarget(
   env: Env,
   namespace: string,

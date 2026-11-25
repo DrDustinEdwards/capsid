@@ -18,11 +18,6 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { MINUTE_MS } from "./time";
 import { callSignal } from "./call-signal";
 
-// The watcher's pass, kept (capsid/research/design-ops-console.md, PR 1 of the Watch
-// Floor build). Every check's outcome, the Amazon backup copy's report and each repo's
-// latest CI run are kept in this one KV value, so the dashboard does not assemble the same
-// facts from about a hundred reads per load.
-
 export const OPS_SNAPSHOT_KEY = "ops:snapshot";
 
 // Uptime is a ring of half-hour slots aligned to the clock, 7 days long. A slot holds
@@ -52,9 +47,9 @@ export type {
 export const ringSlot = (at: Date): number =>
   Math.floor(at.getTime() / (RING_SLOT_MINUTES * MINUTE_MS));
 
-/** Adds this pass's result to a site's ring. Slots no pass reached become '-'. Two
- *  passes in one slot (a Refresh run on demand) keep the worse result, so a failure is
- *  never overwritten by a later success in the same half hour. */
+// Adds this pass's result to a site's ring. Slots no pass reached become '-'. Two passes in one
+// slot (a Refresh run on demand) keep the worse result, so a failure is never overwritten by a
+// later success in the same half hour.
 export function advanceRing(
   prev: { ring: string; ring_slot: number } | undefined,
   slot: number,
@@ -88,8 +83,8 @@ export interface RingReading {
   mark: string | null;
 }
 
-/** One site's ring value, by slot counted back from the newest (0) or by the time the
- *  slot covers. A refusal is returned as a string, never thrown, for the tool to relay. */
+// One site's ring value, by slot counted back from the newest (0) or by the time the slot covers. A
+// refusal is returned as a string, never thrown, for the tool to relay.
 export function ringReading(
   site: Pick<SiteSnapshot, "namespace" | "ring" | "ring_slot">,
   pick: { slot: number } | { at: Date },
@@ -170,10 +165,8 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
 
 const is2xx = (status: number | null): boolean => status !== null && status >= 200 && status < 300;
 
-/** One site. The health route when it has one, and the root as well when that route
- *  fails, so a broken health route on a site that is up reads as degraded, not down. The
- *  body is read whatever the code (site-runtime ./health-read): fail is read as a failed route,
- *  and warn, `ok: false` or a backup warning under a 2xx is degraded, with the reason. */
+// One site. The health route when it has one, and the root as well when that route fails, so a
+// broken health route on a site that is up reads as degraded, not down.
 export async function probeSite(
   site: OpsSite,
   fetchImpl: FetchLike,
@@ -221,10 +214,9 @@ export async function probeSite(
       error: root.error,
     };
   }
-  // The home page is read on every pass, beside the health route: a health
-  // route can pass while the page visitors load fails. An API-only host answers 404 at its
-  // root, so only no answer or a 5xx counts against it. A caller that reads a page itself
-  // (src/site-check.ts) passes home: false, and the root is then read only on a failure.
+  // The home page is read on every pass, beside the health route: a health route can pass while the
+  // page visitors load fails. An API-only host answers 404 at its root, so only no answer or a 5xx
+  // counts against it.
   const home = opts.home !== false;
   const healthRead = reach(fetchImpl, healthUrl(site.origin, site.healthPath), true);
   const [health, early] = await Promise.all([
@@ -294,9 +286,9 @@ export interface SnapshotInput {
   expiry?: ExpirySnapshot;
 }
 
-/** The snapshot for this pass, carrying each site's ring forward from `prev`. A site
- *  not probed this pass keeps its last probe and gets a '-' slot, so the ring says a
- *  pass happened without an answer for it. */
+// The snapshot for this pass, carrying each site's ring forward from `prev`. A site not probed this
+// pass keeps its last probe and gets a '-' slot, so the ring says a pass happened without an answer
+// for it.
 export function buildSnapshot(prev: OpsSnapshot | null, input: SnapshotInput): OpsSnapshot {
   const slot = ringSlot(input.now);
   const prevSites = new Map((prev?.sites ?? []).map((s) => [s.namespace, s]));
@@ -350,9 +342,9 @@ export function buildSnapshot(prev: OpsSnapshot | null, input: SnapshotInput): O
   };
 }
 
-/** The last snapshot, for its rings. A value that does not parse is logged and treated
- *  as absent: the next write replaces it, and the rings restart, which the dashboard
- *  shows as missing history rather than as uptime. */
+// The last snapshot, for its rings. A value that does not parse is logged and treated as absent:
+// the next write replaces it, and the rings restart, which the dashboard shows as missing history
+// rather than as uptime.
 export async function readSnapshot(env: Pick<Env, "APP_KV">): Promise<OpsSnapshot | null> {
   const raw = await env.APP_KV.get(OPS_SNAPSHOT_KEY);
   if (raw === null) return null;

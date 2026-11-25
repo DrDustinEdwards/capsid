@@ -6,21 +6,13 @@ import { readSiteConfig, sitesFrom } from "./ops-sites";
 import type { SystemModel } from "./system-model";
 
 // The model's drift check, the daily half (design capsid/research/design-system-explorer.md,
-// section 1; docs/public-data.md). system/model.json is written by hand, so it falls
-// behind what Capsid knows: a repo mapped to a namespace or installed for the App that
-// the model never names, a repo the model names that GitHub no longer lists, a watched
-// site whose host is no model system's domain. Each is one line in the daily maintenance
-// list. The check lists and never edits: the model changes by pull request. Every repo,
-// private ones included, belongs in the model unless its `left_off` list names it.
+// section 1; The check lists and never edits: the model changes by pull request.
 
 const MAX_ITEMS = 50;
 
 export interface DriftFacts {
-  /** Every repo a namespace maps, with its namespace. */
   mapped: Array<{ namespace: string; repo: string }>;
-  /** Every repo the App can see, or null when the listing could not be read. */
   installed: InstalledRepo[] | null;
-  /** Each watched site's host, by namespace. */
   sites: Array<{ namespace: string; host: string }>;
 }
 
@@ -95,7 +87,6 @@ export function modelDrift(
   return { items, read: facts.mapped.length + (facts.installed?.length ?? 0) + facts.sites.length };
 }
 
-/** Reads the facts and runs the check, for the daily maintenance pass. */
 export async function gatherModelDriftItems(
   env: Env,
   model: SystemModel,
@@ -120,8 +111,6 @@ export async function gatherModelDriftItems(
       });
   }
 
-  // A failed listing becomes a model-not-checked line in the list (modelDrift), and the
-  // rest of the check still runs.
   let installed: InstalledRepo[] | null = null;
   try {
     installed = (await listRepos(env)).repos;

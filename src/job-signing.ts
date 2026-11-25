@@ -2,20 +2,13 @@ import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { deriveTaskKey } from "./signed-docs";
 
-// Signed resume notes and block commands. A job body is signed at post and verified at claim, but
-// what a job carries after that was plain text: the approval a resume hands the driver, and the
-// command a block asks a person to run. Both now carry an HMAC under the job body's key, bound to
-// the job id and the kind of text, so a note cannot be moved to another job nor a summary pass as
-// a note.
-//
-// Text written before this carries no signature and is reported "legacy-unsigned", never
-// verified: re-signing it now would put today's key on whatever it holds today, which a
-// signature must not vouch for.
+// Text written before this carries no signature and is reported "legacy-unsigned", never verified:
+// re-signing it now would put today's key on whatever it holds today, which a signature must not
+// vouch for.
 
 export type JobTextKind = "resume-note" | "summary";
 
 export type SignatureCheck =
-  // The signature matches the text and the job.
   | "verified"
   // Written before signing existed, or by a writer that does not sign: shown, labeled.
   | "legacy-unsigned"

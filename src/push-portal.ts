@@ -34,14 +34,14 @@ async function listDevices(env: Env, now: Date): Promise<PortalPush> {
   };
 }
 
-/** GET /portal/api/push: the VAPID public key and the devices with alerts on. Never an
- *  endpoint: it is a URL anyone could send to. */
+// GET /portal/api/push: the VAPID public key and the devices with alerts on. Never an endpoint: it
+// is a URL anyone could send to.
 export const handlePortalPushGet = behindGate(async (_request, env, now) => {
   return json(await listDevices(env, now));
 });
 
-/** POST /portal/api/push: { op: "on", subscription, label } | { op: "off", id } | { op: "test" }.
- *  Behind the actions' checks: the session, same-origin, the body cap and CSRF. */
+// POST /portal/api/push: { op: "on", subscription, label } | { op: "off", id } | { op: "test" }.
+// Behind the actions' checks: the session, same-origin, the body cap and CSRF.
 export async function handlePortalPushPost(
   request: Request,
   env: Env,

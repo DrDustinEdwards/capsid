@@ -6,18 +6,8 @@ import type { SiteProbe } from "./ops-types/sites";
 import { DAY_MS, utcDay } from "./time";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
-// THE FIVE-MINUTE PULSE The watcher probes the sites half-hourly
-// for the Portal's rings and findings; this tells Dustin when a site goes
-// down. On every tick the pulse probes each site's health route as the watcher does
-// (src/ops-snapshot.ts probeSite, the root only when that route fails) and keeps, per
-// site, how many probes in a row were down. Its alerts go out through src/push.ts, which
-// records each key it sends, so each fires once:
-//   down       on the second down probe in a row, once per outage;
-//   back up    when a site called down answers again, once, kept a day so a tick with
-//              no device does not lose it;
-//   degraded   once per UTC day per failing check while the health route admits a
-//              problem, so a check that starts failing later the same day (a cron, the
-//              backup) still pushes after an earlier warning on that site has.
+// THE FIVE-MINUTE PULSE The watcher probes the sites half-hourly for the Portal's rings and
+// findings; this tells Dustin when a site goes down.
 
 export const SITE_PULSE_KEY = "site-pulse:state";
 const DOWN_AFTER = 2;
@@ -71,9 +61,9 @@ export function nextPulse(prev: PulseSite | undefined, probe: SiteProbe, now: Da
   };
 }
 
-/** The failing checks a degraded reason names: health-format joins them with "; ", and a
- *  part such as "backup: last successful backup was 38h ago" is keyed by its name only, so
- *  an age that grows each probe is still one check. */
+// The failing checks a degraded reason names: health-format joins them with "; ", and a part such
+// as "backup: last successful backup was 38h ago" is keyed by its name only, so an age that grows
+// each probe is still one check.
 function degradedChecks(reason: string): string[] {
   const names = reason
     .split("; ")
@@ -82,8 +72,8 @@ function degradedChecks(reason: string): string[] {
   return names.length ? [...new Set(names)] : ["health"];
 }
 
-/** The alerts the pulse stands behind now. A key names its outage or its day, so the
- *  sent record in src/push.ts turns these into once per outage and once a day. */
+// The alerts the pulse stands behind now. A key names its outage or its day, so the sent record in
+// src/push.ts turns these into once per outage and once a day.
 export function pulseAlerts(state: PulseState, now: Date): SiteAlert[] {
   const out: SiteAlert[] = [];
   const day = utcDay(now);
@@ -137,8 +127,8 @@ export async function readPulse(env: Pick<Env, "APP_KV">): Promise<PulseState> {
   return raw ? (JSON.parse(raw) as PulseState) : {};
 }
 
-/** One pass: every configured site probed, the state written back. A site no longer
- *  configured drops out. Reports a run only when a site was called down or came back. */
+// One pass: every configured site probed, the state written back. A site no longer configured drops
+// out. Reports a run only when a site was called down or came back.
 export async function sitePulseTick(
   env: Env,
   now: Date,

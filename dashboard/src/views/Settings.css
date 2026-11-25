@@ -1,5 +1,3 @@
-/* Settings (Settings.tsx), loaded with the route rather than with the shell: this browser's preference rows, and the
-   lazy Automation section's rows, which load with the route as its segmented control does. */
 .prefrow {
   display: flex;
   align-items: center;

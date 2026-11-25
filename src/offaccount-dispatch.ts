@@ -3,14 +3,9 @@ import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import { utcDay } from "./time";
 
-// Starts capsid-backups' nightly copy (offaccount.yml) from this Worker's tick instead of
-// waiting on GitHub's schedule. GitHub documents that a scheduled workflow can be delayed
-// under load, and this one has started hours late or not at all, which left every site's
-// Amazon copy flagged late. A workflow_dispatch starts at once. The schedule stays as the second chance: both runs copy
-// the same newest dumps, so the later one changes nothing.
-//
-// Needs the GitHub App's Actions: Write on capsid-backups (docs/bootstrap.md). A refusal is a
-// recorded run, not a throw, so the ledger shows a permission that was lowered.
+// Starts capsid-backups' nightly copy (offaccount.yml) from this Worker's tick instead of waiting
+// on GitHub's schedule. GitHub documents that a scheduled workflow can be delayed under load, and
+// this one has started hours late or not at all, which left every site's Amazon copy flagged late.
 
 const OWNER = "DrDustinEdwards";
 const REPO = "capsid-backups";
@@ -64,9 +59,8 @@ const PROBE_KEY = "offaccount-dispatch:probe";
 const PROBE_RETRY_KEY = "offaccount-dispatch:probe-retry";
 
 // Once per UTC day, before the copy is due: does the App still hold Actions: Write on
-// capsid-backups? site-runtime's canDispatch asks for a branch that does not exist: 422 means
-// yes and starts nothing, 403 or 404 means no. The permission is otherwise exercised only on a late day, so lowering it would show up
-// exactly when the copy was already late. A refusal is a refused run, which /health shows.
+// capsid-backups? site-runtime's canDispatch asks for a branch that does not exist: 422 means yes
+// and starts nothing, 403 or 404 means no.
 async function probeOncePerDay(
   env: Env,
   day: string,

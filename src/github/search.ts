@@ -3,10 +3,8 @@ import { DEFAULT_SCAN_RESULTS, MAX_SCAN_CAP, DEFAULT_SCAN_FILES } from "../limit
 import { ghFetch, resolveRepo, getDefaultBranch } from "./client";
 import { fromBase64Text } from "@dustinedwards/site-runtime/encoding";
 
-// search_code is a server-side tree walk, not the REST search API. GET /search/code
-// returns HTTP 200 with total_count 0 for private repos under a GitHub App
-// installation token, even for terms read_repo_file confirms are present: the code
-// search index does not serve App-token requests on private repos.
+// search_code walks the tree: GET /search/code returns 200 with total_count 0 for private repos
+// under an App installation token.
 const SEARCH_EXCLUDE_DIRS = ["node_modules/", ".git/", "dist/"];
 const SEARCH_EXCLUDE_FILES = new Set([
   "package-lock.json",
@@ -53,8 +51,6 @@ export const SEARCH_TREE_LIMIT = 5000; // refuse to scan a tree bigger than this
 
 type TreeEntry = { path: string; type: string; sha: string; size?: number };
 
-// The files a search reads: every blob under pathPrefix in the tree at ref, minus the
-// excluded directories, files and extensions and anything over the blob limit.
 async function searchCandidates(
   env: Env,
   target: { owner: string; repo: string; full: string },
@@ -62,8 +58,6 @@ async function searchCandidates(
   pathPrefix: string,
 ): Promise<TreeEntry[]> {
   const { owner, repo, full } = target;
-  // GitHub resolves a branch, tag, or sha for the tree sha here. recursive=1
-  // returns the whole tree in one call.
   const treeResp = await ghFetch(
     env,
     owner,
@@ -98,17 +92,14 @@ async function searchCandidates(
 
 interface BlobScan {
   items: Array<{ path: string; line: number; text: string }>;
-  // Blobs that returned a survivable error. Reported so a zero-result scan cannot
-  // pass for one that read everything it counted.
+  // Blobs that returned a survivable error, so a zero-result scan cannot pass for one that read
+  // everything.
   unreadable: string[];
   filesScanned: number;
-  // The index of the first candidate not searched.
   index: number;
   stoppedAtFileCap: boolean;
 }
 
-// Reads candidates from `start`, one blob at a time, until the file cap or the result
-// cap is reached, and collects the matching lines.
 async function scanBlobs(
   env: Env,
   target: { owner: string; repo: string },
@@ -126,8 +117,6 @@ async function scanBlobs(
   let stoppedAtFileCap = false;
   for (; index < candidates.length; index++) {
     if (filesScanned >= maxFiles) {
-      // Cap reached before candidates[index] was scanned, so it is the first
-      // unsearched file and a caller can resume from here.
       stoppedAtFileCap = true;
       break;
     }
@@ -135,14 +124,8 @@ async function scanBlobs(
     const c = candidates[index];
     const blob = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/blobs/${c.sha}`);
     if (!blob.ok) {
-      // A blob this scan could not read is not a blob with no match. Skipping it
-      // silently turns an exhausted rate limit into a confident "0 results".
-      //
-      // Quota and auth failures abort the whole scan: 401 and 403 cover token expiry,
-      // revoked installation access, and GitHub's primary and secondary rate limits,
-      // and 429 is the explicit rate-limit status. Once the limit is hit every later
-      // fetch fails the same way. Anything else (a 404 on a raced deletion, a 5xx on
-      // one blob) is survivable, so it is counted and reported.
+      // A blob that could not be read is not a blob with no match: 401, 403 and 429 abort the scan
+      // (the limit fails every later fetch); other errors are counted and reported.
       if (blob.status === 401 || blob.status === 403 || blob.status === 429) {
         throw new Error(
           `search_code aborted at ${filesScanned} of ${candidates.length} candidate files: GitHub returned ${blob.status} fetching ${c.path}. ` +
@@ -163,8 +146,6 @@ async function scanBlobs(
     } catch {
       continue; // binary that slipped past the extension filter
     }
-    // Match line by line, then let text and its lines fall out of scope, so only one
-    // blob is held in memory at a time.
     const lines = text.split("\n");
     for (let i = 0; i < lines.length && items.length < maxResults; i++) {
       if (lines[i].toLowerCase().includes(needle)) {
@@ -199,11 +180,8 @@ export async function searchCode(
   }
   const target = await resolveRepo(env, namespace, opts.repoSelector);
   const ref = opts.ref || (await getDefaultBranch(env, target.owner, target.repo));
-  // Capped server-side, the same shape ci_status uses for its limit. Each scanned
-  // file costs one blob fetch against the App installation's hourly quota, which every
-  // later repo call shares. The tree-size refusal does not cover this: the cost is per
-  // file fetched, not per candidate listed. Over the cap it clamps rather than
-  // refusing, because the result reports truncation and carries a next_start.
+  // Clamped, not refused: each scanned file costs one blob fetch against the App's hourly quota,
+  // and the result carries truncation and next_start.
   const maxResults = Math.min(
     opts.maxResults && opts.maxResults > 0 ? opts.maxResults : DEFAULT_SCAN_RESULTS,
     MAX_SCAN_CAP,
@@ -255,14 +233,12 @@ export async function searchCode(
     items,
   };
 
-  // Surfaced rather than swallowed: "0 results over 200 files, 12 of which were
-  // unreadable" is a different claim from "0 results over 200 files".
+  // Unreadable files are reported: "0 results, 12 unreadable" differs from "0 results".
   if (unreadable.length > 0) {
     result.unreadable_files = unreadable.length;
     result.unreadable_sample = unreadable.slice(0, 10);
   }
 
-  // A boolean alone is not actionable: say WHY it stopped and what to do next.
   if (stoppedAtFileCap && remaining > 0) {
     result.truncated = true;
     result.next_start = index;

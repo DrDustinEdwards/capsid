@@ -1,22 +1,9 @@
 #!/usr/bin/env node
-// verify-live: exercises capsid's OAuth consent surface against a deployed worker.
-// Read-only. Stops at the Access 302 and never drives Access.
-//
-// Usage: node scripts/verify-live.mjs [origin]
-//        npm run verify:live
-//
-// tsc and node --test never touch a live surface; this does.
-//
-// Two hard requirements. Violating either makes this gate pass against a fully broken
-// server:
-//
-//   1. A FORM, NEVER A REDIRECT. site-runtime's loginHandler renders consent on every
-//      GET /authorize, and gate 3 asserts the consent FORM renders. A 302 at gate 3
-//      means something skipped consent and the run is VOID. The probe client is a fixed
-//      metadata document (scripts/cimd-probe-lib.mjs), never a registered one.
-//
-//   2. POLL, NEVER SINGLE-FETCH, on header assertions. The first post-deploy read can
-//      return the previous version's headers.
+// verify-live: exercises capsid's OAuth consent surface against a deployed worker. Read-only; stops at the Access 302 and never drives Access.
+// Usage: node scripts/verify-live.mjs [origin]  (npm run verify:live)
+// Two requirements, or the gate passes against a broken server:
+// 1. A form, never a redirect: gate 3 asserts the consent form renders, so a 302 there means consent was skipped and the run is VOID. The probe client is a fixed metadata document (scripts/cimd-probe-lib.mjs), never a registered one.
+// 2. Poll, never single-fetch, on header assertions: the first post-deploy read can return the previous version's headers.
 
 import { checkSecurityHeaders, failures } from "@dustinedwards/site-runtime/check";
 import { CANARY_CLIENT, OAUTH_KV } from "./bindings.mjs";
@@ -33,16 +20,14 @@ import { probeMcp } from "./mcp-probe-lib.mjs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 const ORIGIN = (process.argv[2] ?? "https://mcp.dustinedwards.info").replace(/\/$/, "");
-// Overridable because CI's sha gate waits on a rollout that has only just started and
-// needs a longer budget than an interactive run.
+// Overridable because CI's sha gate waits on a rollout that has only just started and needs a longer budget.
 const POLL_ATTEMPTS = Number(process.env.VERIFY_POLL_ATTEMPTS ?? 10);
 const POLL_INTERVAL_MS = Number(process.env.VERIFY_POLL_INTERVAL_MS ?? 3000);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// A GATE THAT GOT NO ANSWER HAS NOT REFUSED ANYTHING. A thrown fetch is retried; a gate
-// whose requests all throw is recorded as COULD NOT RUN, and the script exits 3 instead
-// of 1 when nothing actually failed. The live gate rolls back on exit 1 only.
+// A gate that got no answer has not refused anything: a thrown fetch is retried, and a gate whose requests all throw is COULD NOT RUN.
+// The script then exits 3 rather than 1 when nothing failed; the live gate rolls back on exit 1 only.
 const FETCH_TRIES = Number(process.env.VERIFY_FETCH_TRIES ?? 3);
 const FETCH_TIMEOUT_MS = Number(process.env.VERIFY_FETCH_TIMEOUT_MS ?? 20000);
 const EXIT_REFUSED = 1;
@@ -54,16 +39,11 @@ class NoAnswer extends Error {
   }
 }
 
-// During devkit worker-deploy's gradual rollout the new version serves a share of traffic, and
-// the live gate names it in WORKERS_VERSION_OVERRIDE. Every request to the Worker carries it as
-// Cloudflare-Workers-Version-Overrides, so each gate judges the new version, not whichever one the
-// split picks (Cloudflare Docs, "Version overrides").
+// During devkit worker-deploy's gradual rollout WORKERS_VERSION_OVERRIDE names the new version; every request carries it as Cloudflare-Workers-Version-Overrides so each gate judges it, not whichever one the split picks.
 const VERSION_OVERRIDE = process.env.WORKERS_VERSION_OVERRIDE ?? "";
 
-// One request, body read included, since a reset can also land mid-body. Retries a
-// throw `tries` times and then throws NoAnswer. A response of any status is an answer
-// and is returned as is. Gates that poll one URL pass tries=1, because the poll loop is
-// their retry.
+// One request, body read included (a reset can land mid-body). Retries a throw `tries` times, then throws NoAnswer; a response of any status is an answer.
+// Gates that poll one URL pass tries=1, because the poll loop is their retry.
 async function request(url, init = {}, tries = FETCH_TRIES) {
   const headers = VERSION_OVERRIDE
     ? { ...init.headers, "Cloudflare-Workers-Version-Overrides": VERSION_OVERRIDE }
@@ -94,7 +74,7 @@ function parseJson(text) {
   }
 }
 
-// Rethrows anything that is not a NoAnswer, so a bug in this script still crashes.
+// Rethrows anything but NoAnswer so a bug here still crashes.
 function noAnswer(err) {
   if (err instanceof NoAnswer) return err;
   throw err;
@@ -109,16 +89,9 @@ function record(gate, passed, detail) {
   console.log(`${tag}  ${gate}\n      ${detail}`);
 }
 
-// Gate 1: liveness and deploy provenance. /health returns the git sha stamped at deploy
-// time; EXPECT_SHA asserts it.
-//
-// The same response shows the store is bound and the FTS index is intact: a Worker
-// deployed against a stale wrangler.jsonc still answers /health, and the other gates
-// never touch D1. /health's FTS probe is a MATCH pinned to one document, because
-// COUNT(*) and integrity-check both pass on an emptied external-content index.
-// /health is site-runtime's family shape: pass or warn is up (a warn is a stale backup or a
-// quiet task, which gate 1c and the Portal report), fail is a 503. "ok" is the shape before
-// 2026-10-31, which a rollback to an older version still serves.
+// Gate 1: liveness and deploy provenance. /health returns the git sha stamped at deploy; EXPECT_SHA asserts it.
+// The same response shows the store is bound and the FTS index intact (a Worker on a stale wrangler.jsonc still answers /health). The FTS probe is a MATCH pinned to one document, because COUNT(*) and integrity-check pass on an emptied external-content index.
+// pass or warn is up (a warn is a stale backup or quiet task, which gate 1c and the Portal report), fail is a 503. "ok" is the shape before 2026-10-31, which a rollback still serves.
 function isUp(status) {
   return status === "pass" || status === "warn" || status === "ok";
 }
@@ -140,8 +113,7 @@ async function gateHealth() {
       continue;
     }
     data = parseJson(resp.text);
-    // Keep polling through every not-yet-converged state, including a response that is
-    // not JSON: immediately after a deploy the previous version may still be serving.
+    // Keep polling through any not-yet-converged state, including a non-JSON response: the previous version may still be serving.
     const storeOk = data?.store?.d1 === "ok" && data?.store?.fts === "ok";
     const converged =
       resp.status === 200 && isUp(data?.status) && (!expected || data.sha === expected) && storeOk;
@@ -168,17 +140,11 @@ async function gateHealth() {
   record("1 health + provenance", passed, detail);
 }
 
-// The probe client for gates 3 to 5. Overridable only so test/verify-live-no-answer.test.ts
-// can serve the document from its stub; CI never sets it.
+// Overridable only so test/verify-live-no-answer.test.ts can serve the document from its stub.
 const PROBE_CLIENT = process.env.VERIFY_PROBE_CLIENT_ID ?? probeClientId(ORIGIN);
 
-// Gate 2: CIMD, and tightened DCR refusing an unlisted redirect (scripts/cimd-probe-lib.mjs
-// says what is checked).
-// Returns the probe client id when gates 3 to 5 can use it, or null.
-//
-// The probe document is served by the Worker under test (src/oauth-client-docs.ts). No
-// answer at all is could-not-run, as for every gate; an answer that is not a 200, or a
-// document that is wrong, is this deploy's fault and a fail.
+// Gate 2: CIMD, and tightened DCR refusing an unlisted redirect (scripts/cimd-probe-lib.mjs). Returns the probe client id for gates 3 to 5, or null.
+// The Worker under test serves the probe document: no answer is could-not-run; a non-200 or a wrong document is this deploy's fault.
 async function gateCimdAndDcr() {
   let metadata;
   let register;
@@ -210,9 +176,7 @@ async function gateCimdAndDcr() {
     record("2 CIMD, DCR allowlisted", false, `register=${register.status}: ${refused}`);
     return null;
   }
-  // Polled, like gates 1 and 6: the Worker under test serves the document, and the first
-  // reads after a deploy can still reach the previous version. On 2026-10-10 the deploy
-  // of dbd5e21 failed here on a single read, one second after gate 1 saw the new sha.
+  // Polled like gates 1 and 6: the first reads after a deploy can reach the previous version (2026-10-10, dbd5e21 failed on a single read one second after gate 1 saw the new sha).
   let doc;
   let attempt = 0;
   for (attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
@@ -250,26 +214,17 @@ async function gateCimdAndDcr() {
   return bad === null ? PROBE_CLIENT : null;
 }
 
-// Gate 2b: the canary client record is still there (scripts/bindings.mjs,
-// CANARY_CLIENT). The KV REST API's status separates the cases:
-//
-//   200        the record is there                    PASS
-//   404        the record is GONE                     FAIL, and it is data loss
-//   anything   the store could not be read at all     FAIL, and it is NOT data loss
-//
-// The gate label is written out at every record() call rather than held in a variable.
-// test/counts.test.ts counts DISTINCT literal labels to check the gate total, so a label
-// behind a variable is a gate the count cannot see.
-//
-// The decision lives in ./canary-lib.mjs so it can be tested; this function is the
-// wiring, plus the no-credentials case.
+// Gate 2b: the canary client record is still there (scripts/bindings.mjs, CANARY_CLIENT). The KV REST status separates the cases:
+//   200 the record is there: PASS
+//   404 the record is gone: FAIL, data loss
+//   anything else, the store could not be read: FAIL, not data loss
+// Write the gate label out at every record() call: test/counts.test.ts counts distinct literal labels, so a label behind a variable is a gate the count cannot see.
 async function gateCanary() {
   const account = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
   const key = `client:${CANARY_CLIENT.id}`;
 
-  // No credentials: assert nothing and SAY so, rather than passing quietly or failing an
-  // interactive run that was never going to have a token.
+  // No credentials: assert nothing and say so, rather than failing an interactive run that never had a token.
   if (!account || !token) {
     record(
       "2b canary client record",
@@ -279,7 +234,6 @@ async function gateCanary() {
     return;
   }
 
-  // Retries a thrown fetch like request() does, but hands checkCanary the Response.
   const retryingFetch = async (url, init) => {
     let last;
     for (let i = 1; i <= FETCH_TRIES; i++) {
@@ -299,9 +253,7 @@ async function gateCanary() {
     auth: { Authorization: `Bearer ${token}` },
   });
   const { passed, detail } = canaryReport(result, CANARY_CLIENT.id, OAUTH_KV.name);
-  // UNREACHABLE means KV could not be read, and TTL-UNVERIFIED means its key list could
-  // not be. Neither says anything about this deploy, so they are could-not-run and do
-  // not roll it back.
+  // UNREACHABLE and TTL-UNVERIFIED say nothing about this deploy: could-not-run, no rollback.
   const unread = result.outcome === "unreachable" || result.outcome === "ttl-unverified";
   record("2b canary client record", unread ? COULD_NOT_RUN : passed, detail);
 }
@@ -318,8 +270,7 @@ function authorizeUrl(clientId) {
   return u.href;
 }
 
-// Gate 1c: backup freshness from /health's backup.last_ok, asserted on scheduled runs
-// only. The rules live in scripts/freshness-lib.mjs.
+// Gate 1c: backup freshness from /health's backup.last_ok, on scheduled runs only (scripts/freshness-lib.mjs).
 async function gateBackupFreshness() {
   const assertFresh = process.env.ASSERT_BACKUP_FRESH === "1";
   let data = null;
@@ -341,8 +292,7 @@ async function gateBackupFreshness() {
   record("1c backup freshness", verdict.passed, verdict.detail);
 }
 
-// Gate 3: the consent FORM renders. A 302 here means the fast path was taken and
-// the whole run is void, so that is reported as VOID rather than a plain fail.
+// Gate 3: the consent form renders. A 302 means the fast path was taken and the run is VOID, not a plain fail.
 async function gateConsentForm(clientId) {
   let resp;
   try {
@@ -376,8 +326,7 @@ async function gateConsentForm(clientId) {
   return passed ? { handle, cookies } : null;
 }
 
-// Gate 4: the consent CSP cannot block the form's redirect chain. Polls, because
-// a single fetch can read the pre-deploy header and pass falsely.
+// Gate 4: the consent CSP cannot block the form's redirect chain. Polls: one fetch can read the pre-deploy header.
 async function gateCsp(clientId) {
   let csp = null;
   let attempt = 0;
@@ -401,9 +350,7 @@ async function gateCsp(clientId) {
     );
     return;
   }
-  // The consent form's redirect chain terminates at whatever redirect_uri a client's
-  // metadata document names, so no static form-action allowlist can be correct. Absent is required;
-  // present is a fail regardless of value.
+  // The redirect chain ends at whatever redirect_uri a client's metadata names, so no static form-action allowlist can be correct: absent is required, present fails.
   const passed = !csp || !/form-action/i.test(csp);
   record(
     "4 consent CSP permits the chain",
@@ -414,19 +361,9 @@ async function gateCsp(clientId) {
   );
 }
 
-// Gate 6: security headers, graded by site-runtime's shared check against the MCP host's
-// registry entry (site-runtime ./sites), the same grading as the site-runtime-security bin.
-//
-// Only a live request proves every response reaches the header layer. workers-oauth-provider generates /token and both .well-known
-// documents itself, outside src/, which is why those are listed.
-//
-// Two more checks ride the same loop:
-//
-//   - The consent page and the authorization-server metadata must carry no-store.
-//   - The CSP report sink must answer 204 to a synthetic report: a browser posts a report
-//     once and never retries, so a broken sink is otherwise invisible.
-//
-// Polls, because a single fetch after a deploy reads the previous version.
+// Gate 6: security headers, graded by site-runtime's shared check against the MCP host's registry entry (site-runtime ./sites), as the site-runtime-security bin does.
+// Only a live request proves every response reaches the header layer; workers-oauth-provider generates /token and both .well-known documents outside src/, so they are listed.
+// Also in the loop: the consent page and authorization-server metadata must carry no-store, and the CSP report sink must answer 204 to a synthetic report (a browser posts once and never retries). Polls: a single fetch after a deploy reads the previous version.
 async function gateSecurityHeaders(clientId) {
   const consent = authorizeUrl(clientId);
   const report = JSON.stringify({
@@ -470,17 +407,13 @@ async function gateSecurityHeaders(clientId) {
         init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
       },
     ],
-    // The MCP host serves the machine surface only (src/mcp-host.ts): the Portal is not
-    // here, on its own host (gate 7). A 302 here is the Portal answering on the wrong
-    // host, and a 200 is the app served to anyone.
+    // The MCP host serves the machine surface only (src/mcp-host.ts): a 302 here is the Portal on the wrong host, a 200 is the app served to anyone.
     [
       "/portal/ not on this host",
       "other",
       { url: `${ORIGIN}/portal/`, init: { redirect: "manual" }, status: 404 },
     ],
-    // The Portal moved from /console with no redirects (capsid/research/
-    // design-portal-unify.md): each old address is the Worker's plain 404. A 302 here is
-    // a redirect somebody added, and a 200 is the old page back.
+    // The Portal moved from /console with no redirects: each old address is the Worker's plain 404. A 302 is an added redirect, a 200 the old page back.
     [
       "/console gone",
       "other",
@@ -570,9 +503,7 @@ async function gateSecurityHeaders(clientId) {
   );
 }
 
-// Gate 5: approving the form redirects to the Access for SaaS sign-in
-// (scripts/access-redirect-lib.mjs says exactly what is checked). This is where the run
-// stops. It never follows the 302 and never touches Access.
+// Gate 5: approving the form redirects to the Access for SaaS sign-in (scripts/access-redirect-lib.mjs). The run stops here: it never follows the 302.
 async function gateAccessRedirect(clientId, form) {
   // Read only: the probe asks for no write grant, so the box stays unticked.
   const body = new URLSearchParams({ handle: form.handle, decision: "approve" });
@@ -605,10 +536,8 @@ async function gateAccessRedirect(clientId, form) {
   );
 }
 
-// Gate 7: the Portal on its own host (src/portal-host.ts). With no session, its root and
-// any other path on it (here /mcp, which must not reach the MCP endpoint) answer with a
-// redirect to the Access sign-in, whichever of the Worker's login or Access at the edge
-// sends it; never the app, never a 401 from /mcp. Not followed.
+// Gate 7: the Portal on its own host (src/portal-host.ts). Without a session its root and any other path (here /mcp, which must not reach the MCP endpoint)
+// redirect to the Access sign-in, from the Worker's login or Access at the edge; never the app, never a 401 from /mcp. Not followed.
 const PORTAL_ORIGIN = (process.env.PORTAL_ORIGIN ?? "https://portal.dustinedwards.info").replace(
   /\/$/,
   "",
@@ -647,15 +576,8 @@ async function gatePortalHost() {
   );
 }
 
-// Gate 8: a real MCP call through /ops/mcp, in both protocol eras, with the live-probe
-// agent's read-only key (scripts/mcp-probe-lib.mjs says what is sent and checked). The
-// only gate that reaches the tools, so the only one that sees a deploy whose sign-in
-// works and whose connection does not. A refusal exits 1, and ci.yml rolls the deploy
-// back. Polls, like gate 6, because the first reads after a deploy can still reach the
-// previous version.
-//
-// No key: the gate asserts nothing and says so, as gate 2b does without its token. CI
-// passes CAPSID_LIVE_PROBE_KEY from the repo secret the seat sets (docs/rollback.md).
+// Gate 8: a real MCP call through /ops/mcp in both protocol eras, with the live-probe agent's read-only key (scripts/mcp-probe-lib.mjs). The only gate that reaches the tools, so the only one that sees a deploy whose sign-in works and whose connection does not.
+// A refusal exits 1 and ci.yml rolls the deploy back. Polls, like gate 6. No key: assert nothing and say so, as gate 2b does without its token (CI passes CAPSID_LIVE_PROBE_KEY, docs/rollback.md).
 async function gateMcpCall() {
   const key = process.env.CAPSID_LIVE_PROBE_KEY;
   if (!key) {

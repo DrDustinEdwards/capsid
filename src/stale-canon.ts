@@ -8,30 +8,8 @@ import type { Finding } from "./watcher-detect";
 import { DAY_MS, timeMs } from "./time";
 import { mapLimit } from "./map-limit";
 
-// STALE CANON AFTER A MERGE (Capsid improvement list, item 23: Foxhound's ROUTES.md and
-// DESIGN.md still said the admin reused the app shell after a pull request changed it).
-// Each watcher pass:
-//
-//   1. lists each mapped namespace's newest closed pull requests (its primary repo, one
-//      read each) and reads the changed files of up to MAX_PR_READS_PER_PASS that merged
-//      into the default branch and are not yet remembered. What each one removed, renamed
-//      and modified is kept in APP_KV under STALE_CANON_KEY for RETAIN_DAYS.
-//   2. matches the remembered merges against each namespace's canon documents
-//      (staleCanonDoc below) and its typed edges, and raises one digest finding per
-//      document and pull request:
-//        - a document that cites, in its body or by an edge to `<namespace>/<path>`, a
-//          file the pull request deleted or renamed (and no later merge brought back);
-//        - a document with an edge to a file the pull request modified.
-//   A document written after the merge is not flagged: its writer had the chance to read
-//   the change. So the finding clears when the document is next written, when the
-//   citation or edge goes away, or when the merge leaves the window.
-//
-// Nothing here writes a document. The finding is the whole act.
-//
-// Out of scope for this version: a document that describes the old behavior in words
-// without naming a path (Foxhound's own case), edges from another namespace's documents,
-// and a namespace's repos other than its primary. Those need a reader of meaning, not of
-// paths.
+// STALE CANON AFTER A MERGE (Capsid improvement list, item 23: Foxhound's ROUTES.md and DESIGN.md
+// still said the admin reused the app shell after a pull request changed it).
 
 const STALE_CANON_KEY = "stale-canon:merges";
 const RETAIN_DAYS = 30;
@@ -106,10 +84,9 @@ export function changeFromFiles(
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Whether `body` names `path` as a whole path: "src/a.ts" in "see src/a.ts." but not in
- *  "src/a.tsx", "src/a.ts.bak" or "lib/src/a.ts". A path with neither a slash nor a dot
- *  ("Makefile") is an ordinary word in prose and is never matched by body; an edge to it
- *  still counts. Pure. */
+// Whether `body` names `path` as a whole path: "src/a.ts" in "see src/a.ts." but not in
+// "src/a.tsx", "src/a.ts.bak" or "lib/src/a.ts". A path with neither a slash nor a dot ("Makefile")
+// is an ordinary word in prose and is never matched by body; an edge to it still counts. Pure.
 export function citesPath(body: string, path: string): boolean {
   if (!path.includes("/") && !path.includes(".")) return false;
   return new RegExp(`(?<![\\w./-])${escapeRe(path)}(?![\\w/-]|\\.\\w)`).test(body);
@@ -135,8 +112,8 @@ export interface CanonDoc {
   body: string | null;
 }
 
-/** Whether a document is one this check holds to the code: a canon path or a canon type,
- *  not a dated record, not retired. Pure. */
+// Whether a document is one this check holds to the code: a canon path or a canon type, not a dated
+// record, not retired. Pure.
 export function staleCanonDoc(
   namespace: string,
   doc: Pick<CanonDoc, "path" | "type" | "status">,
@@ -169,8 +146,8 @@ export interface StaleFlag {
   partial: string | null;
 }
 
-/** The documents each remembered merge leaves stale, per the rules at the top of this
- *  file. One flag per document and pull request, naming every path it cites. Pure. */
+// The documents each remembered merge leaves stale, per the rules at the top of this file. One flag
+// per document and pull request, naming every path it cites. Pure.
 export function staleCanonFlags(
   namespace: string,
   merges: readonly MergedChange[],
@@ -318,8 +295,8 @@ export interface ListedPull {
   base?: { ref?: string; repo?: { default_branch?: string } };
 }
 
-/** The listed pull requests that merged into the default branch inside the window and
- *  are not remembered yet, oldest first. Pure. */
+// The listed pull requests that merged into the default branch inside the window and are not
+// remembered yet, oldest first. Pure.
 export function newMerges(
   listed: readonly ListedPull[],
   known: ReadonlySet<number>,
@@ -332,10 +309,10 @@ export function newMerges(
     .sort((a, b) => timeMs(a.merged_at!) - timeMs(b.merged_at!));
 }
 
-/** The namespaces this pass reads, from a list read with one row past the cap, and the
- *  memory with every namespace no longer mapped forgotten. Past the cap the list is not
- *  the whole mapping, so a namespace missing from it may still be mapped: nothing is
- *  forgotten then, and the pass is not complete. Mutates `memory`. */
+// The namespaces this pass reads, from a list read with one row past the cap, and the memory with
+// every namespace no longer mapped forgotten. Past the cap the list is not the whole mapping, so a
+// namespace missing from it may still be mapped: nothing is forgotten then, and the pass is not
+// complete.
 export function namespacesThisPass(
   rows: readonly string[],
   memory: MergeMemory,

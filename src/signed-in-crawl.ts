@@ -10,16 +10,8 @@ import type { Env } from "./env";
 import { portalSessionCookie } from "./portal-auth";
 import { HOUR_MS } from "./time";
 
-// THE SIGNED-IN CRAWL (completeness area 2). devkit's live check has no session, so it grades only the Portal's
-// sign-in redirect. This grades the pages behind it with site-runtime's shared crawl (./signed-in-crawl) against the
-// `capsid-portal` registry entry, and publishes the result at SIGNED_IN_REPORT_PATH on the MCP host, where devkit's
-// scoreboard reads it as the reported check "signed-in-security" (devkit live/areas.json). Carrel Desk grades itself
-// the same way and publishes its own report on carrel-mcp (devkit's `site_reports`).
-//
-// The Portal is this Worker. Its sign-in is Capsid's own cookie, minted after Access for SaaS, so no Access service
-// token can pass it. The crawl asks this Worker's own fetch handler in-process, with a Portal session minted for
-// ADMIN_EMAIL that lives for one request and never leaves the isolate. GET only, plus R4's two refused POSTs, which the
-// action gate answers with 415 before it reads a body, a CSRF pair or a session's rights.
+// THE SIGNED-IN CRAWL (completeness area 2). devkit's live check has no session, so it grades only
+// the Portal's sign-in redirect.
 
 const SIGNED_IN_REPORT_KEY = "reports:signed-in-security";
 // Hourly; devkit reads it once a day and refuses one older than 180 minutes.

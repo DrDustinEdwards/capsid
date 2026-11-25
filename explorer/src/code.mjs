@@ -1,11 +1,6 @@
-// The code level (capsid/research/design-system-explorer.md, section 5; slice 9 of its build
-// order): a public system's modules by folder, each with its worst CRAP and its mutation score,
-// its import cycles as text, and each module's functions over its numbered source at the commit
-// the map measured. Pure, as pages.mjs is: build.mjs reads the code document and the source and
-// passes them in.
-//
-// Every status is Capsomer's: a glyph whose shape carries it, a word, and the tone's color
-// (components/status). A number nobody measured is "No data" with its reason, never a zero.
+// The code level (capsid/research/design-system-explorer.md, section 5): a public system's modules by folder, each with its worst CRAP and mutation score, its import cycles as text,
+// and each module's functions over its numbered source at the commit the map measured. Pure, as pages.mjs is: build.mjs reads the code document and the source and passes them in.
+// Every status is Capsomer's (components/status): a glyph, a word and the tone's color. A number nobody measured is "No data" with its reason, never a zero.
 import { graphSvg } from "capsomer/behavior/graph";
 import { glyphHtml, statusHtml } from "capsomer/behavior/status";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
@@ -30,8 +25,7 @@ const SCORE_WATCH = 60;
 const WORD = { crit: "Critical", warn: "Watch", ok: "Ok" };
 
 /**
- * Capsomer's status: glyph, word, then the number. No data says why, in two words and a
- * screen-reader reason, as Capsomer writes it for a table cell.
+ * Capsomer's status: glyph, word, then the number. No data says why, with a screen-reader reason, as Capsomer writes it for a table cell.
  * @param {"crit" | "warn" | "ok" | "nodata"} tone @param {string} value @param {string} [reason]
  */
 function status(tone, value, reason) {
@@ -149,11 +143,8 @@ const blobUrl = (map, path, line, end) =>
   `${repoUrl(map.repo)}/blob/${map.sha}/${escapePath(path)}${line ? `#L${line}${end && end !== line ? `-L${end}` : ""}` : ""}`;
 
 /**
- * The code maps of public systems, checked against the model: a map for a system the model does
- * not have as public stops the build, as a flow touching a private part does (design section 2,
- * rule 2), so the explorer can never draw a private system's code. Two systems that share a repo
- * (a site and its admin connector) get its pages once, under the system named after the repo, or
- * else the first to list it, so no page is served twice under two addresses.
+ * The code maps of public systems, checked against the model: a map for a system the model does not have as public stops the build (design section 2, rule 2),
+ * so the explorer can never draw a private system's code. Two systems sharing a repo (a site and its admin connector) get its pages once, under the system named after the repo or else the first to list it, so no page is served at two addresses.
  * @param {any} model @param {any} code
  * @returns {Map<string, any[]>} system id to its maps
  */

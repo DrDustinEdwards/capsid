@@ -1,43 +1,20 @@
-// EVERY SQL STATEMENT IN src/, EXTRACTED FROM THE SOURCE.
-//
-// A walk rather than a list, because a hand-maintained catalog misses the next query
-// somebody adds.
-//
-// WHAT IT CAN AND CANNOT SEE. It reads the argument of every `.prepare(...)` call, which
-// covers a plain string and a template literal. A template literal with a `${...}` hole
-// is kept with the hole replaced by a placeholder that is valid SQL in that position
-// where one can be guessed, and SKIPPED otherwise; the skipped ones are returned too, so
-// a caller can assert how many were skipped. Nothing here parses TypeScript: this is a
-// regex over source text.
+// Every SQL statement in src/, extracted from the source by a walk, because a hand-maintained catalog misses the next query.
+// It reads the argument of every `.prepare(...)` call (a regex over source text, not a TypeScript parse). A template literal with a `${...}` hole keeps the hole replaced by a placeholder valid SQL where one can be guessed (table name, placeholder list, column list) and is skipped otherwise;
+// skipped ones are returned so a caller can assert how many, and a plan check cannot quietly cover only some statements.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// A `${...}` hole inside a prepared statement is one of three things in this codebase,
-// and each has a substitution that keeps the statement parseable so SQLite can plan it:
-//
-//   a table name        (backup.ts dumps `SELECT * FROM ${table}`)
-//   a placeholder list  (`?1, ?2, ...` built from an array length)
-//   a column list       (a projection built from a set of field names)
-//
-// Anything else is skipped rather than guessed at, and reported rather than dropped, so
-// a plan check cannot quietly cover only some of the statements.
-//
-// NOT GLOBAL. A global regex keeps lastIndex across .test() calls, so the next
-// statement's test would start mid-string and could miss its hole.
+// Not global: a global regex keeps lastIndex across .test() calls, so the next statement's test would start mid-string and could miss its hole.
 const HOLE = /\$\{[^}]*\}/;
 
 function substitute(sql: string): { ok: boolean; sql: string } {
   if (!HOLE.test(sql)) return { ok: true, sql };
   // A hole immediately after FROM or INTO or JOIN is a table name.
   let out = sql.replace(/\b(FROM|INTO|JOIN|UPDATE)\s+\$\{[^}]*\}/gi, "$1 documents");
-  // A hole standing where the whole WHERE clause goes is an optional filter list,
-  // built from however many arguments the caller supplied. Substituted with a
-  // tautology so the statement plans rather than being skipped: the plan check is for
-  // the table and the ORDER BY, and an optional filter can only narrow the scan.
+  // A hole where a whole WHERE clause goes is an optional filter list; a tautology stands in so the statement plans (an optional filter only narrows the scan).
   out = out.replace(/\$\{clause\}|\$\{where[A-Za-z]*\}/g, "WHERE 1 = 1");
-  // A hole right after a `?` is a bound-parameter INDEX, computed from how many
-  // arguments were pushed. Any index plans the same, so ?1 stands in.
+  // A hole after a `?` is a bound-parameter index; any index plans the same.
   out = out.replace(/\?\$\{[^}]*\}/g, "?1");
   // A hole inside a VALUES or IN list is a placeholder list.
   out = out.replace(/\(\s*\$\{[^}]*\}\s*\)/g, "(?1)");
@@ -48,10 +25,8 @@ function substitute(sql: string): { ok: boolean; sql: string } {
 }
 
 /**
- * RECURSIVE, because src/ has subdirectories. query-plans.test.ts checks that every
- * file calling `.prepare(` yielded a statement. Names are returned relative to srcDir
- * with forward slashes, so a top-level file keeps its basename (backup.ts, which the
- * ALLOW list keys on) and a nested one is addressable as github/client.ts.
+ * Recursive, because src/ has subdirectories. Names are relative to srcDir with forward slashes, so a top-level file keeps its basename
+ * (backup.ts, which the ALLOW list keys on) and a nested one reads github/client.ts.
  */
 function tsFilesUnder(root: string): string[] {
   const out: string[] = [];
@@ -69,9 +44,7 @@ function tsFilesUnder(root: string): string[] {
   return out.sort();
 }
 
-// An index signature as well as the two fields, because these cross into miniflare as a
-// JSON binding and miniflare requires an index-signature-bearing shape. Both readers
-// narrow to file and sql.
+// An index signature too: these cross into miniflare as a JSON binding, which requires one. Both readers narrow to file and sql.
 export interface ExtractedStatement {
   [key: string]: string;
   file: string;
@@ -86,10 +59,7 @@ export function extractStatements(srcDir: string): {
   const skipped: ExtractedStatement[] = [];
   for (const name of tsFilesUnder(srcDir)) {
     const text = readFileSync(join(srcDir, name), "utf8");
-    // `.prepare(` followed by a string or template literal, up to its closing
-    // quote. Both quote styles and backticks, and a leading newline for the
-    // multi-line form this codebase mostly uses. Line comments between `.prepare(`
-    // and the string are skipped, since several statements carry one there.
+    // `.prepare(` followed by a string or template literal up to its closing quote, in any quote style; line comments between `.prepare(` and the string are skipped (several statements carry one).
     const calls = text.matchAll(
       /\.prepare\(\s*(?:\/\/[^\n]*\n\s*)*(`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
     );
@@ -102,9 +72,7 @@ export function extractStatements(srcDir: string): {
       if (substituted.ok) statements.push({ file: name, sql: substituted.sql });
       else skipped.push({ file: name, sql: collapsed });
     }
-    // `.prepare(<expression>)`: the SQL is chosen at run time, so there is no literal
-    // to extract. Counted as skipped rather than left out, so a caller asserting how
-    // much was skipped sees it.
+    // `.prepare(<expression>)`: the SQL is chosen at run time, so there is no literal. Counted as skipped so a caller asserting the skipped count sees it.
     for (const call of text.matchAll(/\.prepare\(\s*(?:\/\/[^\n]*\n\s*)*([^\s`"'/][^\n]*)/g)) {
       skipped.push({ file: name, sql: `(expression) ${call[1].trim()}` });
     }

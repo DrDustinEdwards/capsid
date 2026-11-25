@@ -12,28 +12,16 @@ import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The daily maintenance pass's branch rules. A merged branch is one capsid_close_pr action
-// delete_branch with merged:true would prune (its latest pull request merged and its tip is the
-// commit that PR merged from). The same plan is read here, so the default branch, a branch with
-// an open pull request and one with commits after its merge are refused as the tool refuses them.
-//
-// Deleting is destructive, so the auto-prune ships off (conventions 2.3). Off, merged branches
-// are listed with a count. On, at most PRUNE_CAP per repo per run are deleted, each re-read just
-// before and audit-logged with the sha it pointed at so it can be put back. Every other branch
-// with no open pull request whose last commit is older than STALE_DAYS is listed with its age. A
-// keep list in APP_KV (empty default) names branches never pruned and never listed.
-//
-// With the switch on, a branch with no open pull request and no commit for ORPHAN_DAYS is
-// deleted too, in the same cap with the same audit row. Only when every list was read in full,
-// and never the default, a protected or keep-listed branch, or a screenshot branch an open pull
-// request still shows (src/github/prune.ts, shotsInUse).
+// On, at most PRUNE_CAP per repo per run are deleted, each re-read just before and audit-logged
+// with the sha it pointed at so it can be put back. A keep list in APP_KV (empty default) names
+// branches never pruned and never listed.
 
-/** The switch the seat sets to "on" to let the pass delete merged branches. Anything else,
- *  or no key, is off. A KV key rather than a control: a control would add to a served
- *  tool's surface (CLAUDE.md, Tool surface). */
+/**
+ * The switch the seat sets to "on" to let the pass delete merged branches. Anything else, or no
+ * key, is off. A KV key rather than a control: a control would add to a served tool's surface
+ * (CLAUDE.md, Tool surface).
+ */
 export const PRUNE_SWITCH_KEY = "maintenance:prune-merged";
-/** The keep list: a JSON object of namespace to branch names, e.g.
- *  {"sample": ["review/one"]}. No key is an empty list. */
 export const BRANCH_KEEP_KEY = "maintenance:branch-keep";
 
 export const PRUNE_CAP = 25;
@@ -51,13 +39,16 @@ interface BranchSettings {
 }
 
 export interface BranchReaders {
-  /** The prune rule's plan for the namespace's repo, with the keep list applied. Throws
-   *  when a list could not be read. */
+  /**
+   * The prune rule's plan for the namespace's repo, with the keep list applied. Throws when a list
+   * could not be read.
+   */
   plan(namespace: string, keep: string[]): Promise<PrunePlan>;
-  /** When the commit was made. Throws when it could not be read. */
   committedAt(plan: PrunePlan, sha: string): Promise<string>;
-  /** Delete up to `cap` of the plan's candidates, each tip re-read first, calling
-   *  `onDeleted` after each delete and before the next. */
+  /**
+   * Delete up to `cap` of the plan's candidates, each tip re-read first, calling `onDeleted` after
+   * each delete and before the next.
+   */
   prune(
     plan: PrunePlan,
     cap: number,
@@ -65,8 +56,10 @@ export interface BranchReaders {
   ): Promise<{ deleted: PruneCandidate[]; skipped: PruneKept[]; remaining: number }>;
 }
 
-/** The switch and the keep list. A keep list that is not a JSON object of string arrays
- *  throws, so the pass says the branches were not checked rather than prune without it. */
+/**
+ * The switch and the keep list. A keep list that is not a JSON object of string arrays throws, so
+ * the pass says the branches were not checked rather than prune without it.
+ */
 async function readBranchSettings(kv: KVNamespace): Promise<BranchSettings> {
   const [switchRaw, keepRaw] = await Promise.all([
     kv.get(PRUNE_SWITCH_KEY),
@@ -88,8 +81,6 @@ async function readBranchSettings(kv: KVNamespace): Promise<BranchSettings> {
 
 const days = (ms: number): number => Math.floor(ms / DAY_MS);
 
-/** The branch rules over every namespace in `namespaces`, and how many branches each read,
- *  so "nothing listed" can be told from "nothing read". */
 export async function gatherBranchItems(
   env: Env,
   namespaces: readonly string[],
@@ -120,9 +111,9 @@ export async function gatherBranchItems(
     let prunedHere = 0;
 
     if (settings.prune) {
-      // One audit row per deleted branch, written before the next delete, with the sha it
-      // pointed at: the deletion is put back by pushing that sha to the branch name
-      // (snapshot invariant, test/write-invariants.test.ts). A failed audit write stops the deletes and the pass.
+      // One audit row per deleted branch, written before the next delete, with the sha it pointed at:
+      // the deletion is put back by pushing that sha to the branch name (snapshot invariant,
+      // test/write-invariants.test.ts). A failed audit write stops the deletes and the pass.
       const done = await readers.prune(plan, PRUNE_CAP, async (c) => {
         await auditStatement(env.DB, SYSTEM_ACTOR, PRUNE_AUDIT_ACTION, namespace, null, {
           repo: plan.repo,
@@ -174,8 +165,6 @@ export async function gatherBranchItems(
       });
     }
 
-    // Anything else old. A branch with an open pull request is not an orphan, and that is
-    // known only when the open list was read in full.
     if (!plan.openComplete) {
       items.push(
         notChecked(
@@ -282,8 +271,6 @@ function notChecked(namespace: string, problem: string): MaintenanceItem {
   };
 }
 
-/** The readers on GitHub, through the App: delete_branch merged's own plan and delete step
- *  (src/github/prune.ts), and one commit read per orphan branch for its date. */
 export function githubBranchReaders(env: Env): BranchReaders {
   return {
     plan: (namespace, keep) => readPrunePlan(env, namespace, keep),

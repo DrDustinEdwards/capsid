@@ -6,16 +6,7 @@ import { readStepCache, stepsSeen, type StaleStepEntry } from "./manual-steps";
 import { HOUR_MS, DAY_MS } from "./time";
 
 // The stale view (capsid/research/design-stale-jobs.md, D5): `capsid_work_jobs` action list with
-// stale: true. Four rules, each a fact the Worker already holds, so reading the view
-// costs no GitHub reads:
-//   unchanged: a blocked or claimed job whose row has not changed in 3 days;
-//   resumed-not-completed: a job the merge-resume step resumed 24 hours or more ago that
-//     is still blocked, claimed or queued;
-//   prs-settled: a blocked job whose named pull requests are all merged or closed, read
-//     from the cache the merge-resume step writes (src/merge-resume.ts);
-//   steps-seen: a blocked job whose every "check:" line the watcher's last pass saw done,
-//     read from the cache that pass writes (src/manual-steps.ts).
-// Nothing here closes or moves a job; the view only says why a job looks stuck.
+// stale: true.
 
 export const STALE_UNCHANGED_MS = 3 * DAY_MS;
 export const STALE_RESUMED_MS = DAY_MS;
@@ -66,8 +57,8 @@ function isEntry(value: unknown): value is StalePrEntry {
   );
 }
 
-/** The cache as stored, keeping only entries of the right shape. null (never written) is
- *  an empty cache; anything else that is not an object is reported as unreadable. */
+// The cache as stored, keeping only entries of the right shape. null (never written) is an empty
+// cache; anything else that is not an object is reported as unreadable.
 export function parseStaleCache(raw: unknown): { cache: StalePrCache; problem: string | null } {
   if (raw === null || raw === undefined) return { cache: {}, problem: null };
   if (typeof raw !== "object" || Array.isArray(raw))
@@ -87,8 +78,8 @@ export function parseStaleCache(raw: unknown): { cache: StalePrCache; problem: s
   };
 }
 
-/** The stored cache. A value that is not JSON is reported, not thrown, so the view
- *  still serves the two rules that do not need it. */
+// The stored cache. A value that is not JSON is reported, not thrown, so the view still serves the
+// two rules that do not need it.
 export async function readStaleCache(
   kv: KVNamespace,
 ): Promise<{ cache: StalePrCache; problem: string | null }> {
@@ -103,8 +94,7 @@ export async function readStaleCache(
   return parseStaleCache(raw);
 }
 
-/** The next cache: this tick's reads replace each job's entry, and only jobs still
- *  blocked keep one. */
+/** The next cache: this tick's reads replace each job's entry, and only jobs still blocked keep one. */
 export function nextStaleCache(
   prior: StalePrCache,
   reads: StalePrCache,
@@ -117,21 +107,17 @@ export function nextStaleCache(
   return next;
 }
 
-/** Rule C's test on one cache entry: nothing open, nothing unread, and at least one
- *  pull request merged or closed. */
+// Rule C's test on one cache entry: nothing open, nothing unread, and at least one pull request
+// merged or closed.
 export function prsSettled(entry: StalePrEntry | undefined): boolean {
   return (
     entry !== undefined && entry.open === 0 && entry.unread === 0 && entry.merged + entry.closed > 0
   );
 }
 
-/**
- * Why one job is stale, or null. Pure, so the rules are tested without a database.
- * The first rule that holds wins, the most actionable first: settled pull requests, then
- * manual steps seen, then an auto-resume nobody finished, then a row nobody touched. A
- * cache entry read before the job last changed says nothing about the job as it is now,
- * so it is ignored.
- */
+// Why one job is stale, or null. Pure, so the rules are tested without a database. The first rule
+// that holds wins, the most actionable first: settled pull requests, then manual steps seen, then
+// an auto-resume nobody finished, then a row nobody touched.
 export function classifyStale(
   job: { status: string; updated_at: string; auto_resumed_at: string | null },
   entry: StalePrEntry | undefined,
@@ -180,11 +166,9 @@ export interface StaleJobsResult {
   note?: string;
 }
 
-/**
- * The stale view. The caller's namespace scope is checked before this runs, as for
- * every capsid_work_jobs action list (src/tools/jobs.ts); a caller scoped to one namespace must name it
- * (the registrar's namespaceRefusal), and an omitted namespace means every namespace.
- */
+// The stale view. The caller's namespace scope is checked before this runs, as for every
+// capsid_work_jobs action list (src/tools/jobs.ts); a caller scoped to one namespace must name it
+// (the registrar's namespaceRefusal), and an omitted namespace means every namespace. /
 export async function staleJobs(
   env: Env,
   now: Date,
@@ -198,10 +182,8 @@ export async function staleJobs(
   ];
   const unchangedBefore = new Date(now.getTime() - STALE_UNCHANGED_MS).toISOString();
   const resumedBefore = new Date(now.getTime() - STALE_RESUMED_MS).toISOString();
-  // The SQL narrows to the candidates; classifyStale decides, so the rules live in one
-  // place. ISO strings with milliseconds compare in time order. The namespace is bound as
-  // NULL for "every namespace" rather than spliced in, so the statement has no hole and
-  // test-integration/query-plans.test.ts plans it as written.
+  // The SQL narrows to the candidates; classifyStale decides, so the rules live in one place. ISO
+  // strings with milliseconds compare in time order.
   const { results } = await env.DB.prepare(
     `SELECT j.id, j.namespace, j.title, j.status, j.updated_at,
             (SELECT MAX(t.at) FROM job_touches t WHERE t.job_id = j.id AND t.actor = ?1 AND t.kind = 'resume') AS auto_resumed_at

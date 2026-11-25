@@ -4,17 +4,9 @@ import type { Agent } from "./agents";
 import { HOUR_MS } from "./time";
 import { toHex } from "@dustinedwards/site-runtime/encoding";
 
-// THE RUN KEY (the methods paper's protocol, section 4, "The run key"). Each treatment run gets its own Capsid key, minted by /bench/start for
-// that run id and held by no other run. The harness posts the run's one job with its
-// own driver key, which the agent never holds. The run key's only successful calls are
-// claim, and list by id, of that one job (src/scope.ts benchRunRefusal). It stops
-// working when the run closes, or once the run is past the stale window.
-//
 // Only the key's sha256 is stored, on the run's own row (bench_runs.run_key_hash,
 // migrations/0050), so the key's life is the row's: no agents row, nothing to revoke.
 
-// A running row older than this no longer holds a slot (src/bench.ts), and its key no
-// longer resolves.
 export const BENCH_STALE_MS = 3 * HOUR_MS;
 export const BENCH_NAMESPACE = "bench";
 
@@ -22,14 +14,13 @@ export function newRunKey(): string {
   return `capsid_run_${toHex(crypto.getRandomValues(new Uint8Array(32)))}`;
 }
 
-// The job a run works: the one job in the bench namespace titled as the harness titles
-// it, `bench <task_id> <run_id>` (capsid-bench scripts/post-job.mjs). Null unless there
-// is exactly one, so a run whose job is missing or doubled can work nothing.
+// The job a run works: the one job in the bench namespace titled as the harness titles it, `bench
+// <task_id> <run_id>` (capsid-bench scripts/post-job.mjs). Null unless there is exactly one, so a
+// run whose job is missing or doubled can work nothing.
 export function runJobTitle(taskId: string, runId: string): string {
   return `bench ${taskId} ${runId}`;
 }
 
-/** The caller a run key resolves to, or null when no running treatment run holds it. */
 export async function runKeyAgent(db: D1Database, hash: string, now: Date): Promise<Agent | null> {
   const row = await db
     .prepare(
@@ -62,13 +53,9 @@ export async function runKeyAgent(db: D1Database, hash: string, now: Date): Prom
   };
 }
 
-// THE REPRODUCTION RECEIPT (the methods paper's protocol, section 2, "Prove it before
-// done"). At the phase break the harness runs the test the agent named on the base with
-// only that file applied, then on the agent's diff, and posts what it saw to
-// /bench/repro (src/bench.ts). It is kept as one audit row per run, written once, and a
-// run key's complete is accepted only when it says the test failed on the base and
-// passed on the diff (src/jobs-seat.ts completeAsCaller). The agent's own labels count
-// for nothing.
+// THE REPRODUCTION RECEIPT (the methods paper's protocol, section 2, "Prove it before done"). It
+// is kept as one audit row per run, written once, and a run key's complete is accepted only when
+// it says the test failed on the base and passed on the diff (src/jobs-seat.ts completeAsCaller).
 export const BENCH_REPRO_ACTION = "bench-repro";
 
 export interface ReproReceipt {
@@ -76,7 +63,6 @@ export interface ReproReceipt {
   reason: string;
 }
 
-/** The harness's receipt for a run, or null when none was posted. */
 export async function readReproReceipt(
   db: D1Database,
   runId: string,

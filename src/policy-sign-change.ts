@@ -7,7 +7,9 @@ import { auditStatement } from "./store-guards";
 import { AUTO_MERGE_POLICY_PATH, loadMergePolicy } from "./auto-merge-policy";
 import { parseMergePolicy } from "./auto-merge-policy-parse";
 
-// sign_policy_change (docs/design/design-merge-pipeline.md section 7): promoting a merge unit to auto, or removing one, writes the next version of the auto-merge policy and signs it in one admin control. It widens autonomy, so the perform needs the new version number typed as confirm. It edits only the version line and one line of the `## Auto units` section, and the new body must load as the old one did, or nothing is written.
+// sign_policy_change (docs/design/design-merge-pipeline.md section 7): promoting a merge unit to
+// auto, or removing one, writes the next version of the auto-merge policy and signs it in one admin
+// control. It widens autonomy, so the perform needs the new version number typed as confirm.
 
 type PolicyChange = "promote" | "demote";
 

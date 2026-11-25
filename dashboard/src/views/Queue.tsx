@@ -23,14 +23,9 @@ import { ReadAgain } from "capsomer/react/read-state";
 import { FilterEmpty, JobRow, NsChips, PageHead, QueueRows, useNsFilter } from "./shared";
 import { Tonight } from "./Overnight";
 
-// Chart 3, whether the queue is growing or draining, from GET /portal/api/trends. Lazy, so
-// Enarratio's area chart stays out of the initial bundle.
 const QueueChart = trendChart("QueueChart");
-// The "By project" panel's stacked bars, from the same module.
 const ProjectChart = trendChart("ProjectChart");
 
-// What each stale rule is called in a row, the most actionable first, as the Worker
-// orders them (src/stale-jobs.ts).
 const STALE_RULE: Record<StaleRule, string> = {
   "prs-settled": "Pull requests settled",
   "steps-seen": "Manual steps seen",
@@ -40,19 +35,13 @@ const STALE_RULE: Record<StaleRule, string> = {
 
 type StaleLoad = Load<PortalStale>;
 
-// The stale view (capsid/research/design-stale-jobs.md): GET /portal/api/stale, the same
-// rows `capsid_work_jobs` list with stale: true returns. Read when the Queue opens and again with
-// each feed, so a resume or a close performed from the drawer drops its row.
 function useStale(): { load: StaleLoad; reread: () => void } {
   const load = useAnswer([LIVE, "stale"], fetchStale);
   return { load, reread: load.reread };
 }
 
-// The panel. A row opens the job's drawer, which holds the controls (Resume, Close as
-// shipped and the rest); nothing here changes a job.
 function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
   const { now } = useApp();
-  // The Queue's namespace chips narrow these rows too.
   const [ns] = useNsFilter();
   const data = load.data;
   const rows = data ? data.rows.filter((j) => ns === "all" || j.namespace === ns) : [];
@@ -109,10 +98,6 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
   );
 }
 
-// The claim checks (the claims ledger: what each agent said beside what the Worker verified),
-// Jobs' second tab since the Portal audit's new map (2026-11-06; it was Agents' Checks tab),
-// loaded when the tab opens. The tab is in the address (?tab=checks), so it can be reloaded or
-// shared with its filters.
 const Claims = lazy(() => import("./Claims").then((m) => ({ default: m.Claims })));
 
 export function Queue() {
@@ -142,9 +127,7 @@ function JobsTab() {
       (!q || `${j.title} ${j.id} ${j.waits_on ?? ""} ${j.command ?? ""}`.toLowerCase().includes(q)),
   );
   const nss = [...new Set(all.map((j) => j.namespace))];
-  // Stale jobs show in one place: the panel (Dustin, 2026-10-09, folding the list's old
-  // "Stale, blocked over 7 days" group into it). The list leaves out every job the panel
-  // holds; until the panel has read, or when its read fails, the list shows every job.
+  // The list leaves out every job the panel holds; until the panel has read, or its read fails, the list shows every job.
   const stale = useStale();
   const inPanel = new Set(stale.load.data?.rows.map((r) => r.id) ?? []);
   return (
@@ -197,7 +180,6 @@ function JobsTab() {
         </Panel>
         <Tonight />
       </div>
-      {/* The chart goes last: the lists are what a person comes for (the UX audit's m6). */}
       <ChartSlot>
         <QueueChart />
       </ChartSlot>

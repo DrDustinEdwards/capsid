@@ -2,12 +2,8 @@ import type { Env } from "./env";
 import { signedRequestBody, verifyBenchRequest } from "./signed-requests";
 import { BENCH_NAMESPACE } from "./bench-run-key";
 
-// The bench endpoints' request bodies (src/bench.ts serves them): each one parsed and
-// refused here before any handler reads the database, and the run outcome computed
-// from a score report.
-
-// The replay scope in improve_jti. A colon, which no namespace name may hold, so it
-// can never collide with a roster namespace's scope.
+// The replay scope in improve_jti. A colon, which no namespace name may hold, so it can never
+// collide with a roster namespace's scope.
 const JTI_SCOPE = "bench:";
 
 const SOURCES = ["swe-rebench", "swe-bench-live", "own"] as const;
@@ -175,7 +171,6 @@ export function parseDrawRequest(body: string): ({ ok: true } & DrawRequest) | R
   };
 }
 
-// The harness's receipt for a treatment run's reproduction test (src/bench.ts handleBenchRepro).
 export function parseReproRequest(
   body: string,
 ): { ok: true; jti: string; run_id: string; passed: boolean; reason: string } | Refusal {
@@ -223,27 +218,24 @@ export interface ScoreRequest {
   jti: string;
   run_id: string;
   environment: { ok: boolean; reason: string | null };
-  // Null when the scorer never got as far as counting (an environment failure). A sealed
-  // report carries the suites' sizes only, so passed is null.
+  // Null when the scorer never got as far as counting (an environment failure). A sealed report
+  // carries the suites' sizes only, so passed is null.
   hidden: {
     fail_to_pass: { total: number; passed: number | null };
     pass_to_pass: { total: number; passed: number | null };
   } | null;
   claimed_done: boolean | null;
-  // A sealed run (the methods paper's protocol, section 8): its outcome is time-locked on
-  // the bench repository's sealed branch, and this is the ciphertext's SHA-256 and its
-  // Rekor log index. Such a report carries no passed count and no claim.
   sealed: { sha256: string; log_index: number } | null;
-  // Claude Code ended a phase with "error during execution". The run is scored from its
-  // diff and claim file the first time (protocol section 3); the
-  // outage-hour rule in src/bench.ts is the only case where it does not count.
+  // Claude Code ended a phase with "error during execution". The run is scored from its diff and
+  // claim file the first time (protocol section 3); the outage-hour rule in src/bench.ts is the only
+  // case where it does not count.
   stopped_on_error: boolean;
   capsid_job_id: string | null;
   usage: BenchUsage;
   image_bytes: number | null;
-  // The agent's diff, kept only for an excluded (practice) task so a miss can be read
-  // from what the agent changed rather than from its own summary. src/bench.ts refuses
-  // it for any other split, so no study run's diff is ever stored here.
+  // The agent's diff, kept only for an excluded (practice) task so a miss can be read from what the
+  // agent changed rather than from its own summary. src/bench.ts refuses it for any other split, so
+  // no study run's diff is ever stored here.
   diff: string | null;
 }
 
@@ -272,9 +264,9 @@ function hiddenPair(
   return { total: raw.total, passed: raw.passed };
 }
 
-// A usage figure is optional: a run that never reached the model has none. Anything
-// present must be the right type, or the whole report is refused rather than a
-// wrong-typed number landing in a column the paper sums.
+// A usage figure is optional: a run that never reached the model has none. Anything present must
+// be the right type, or the whole report is refused rather than a wrong-typed number landing in a
+// column the paper sums.
 function usageOf(raw: unknown): BenchUsage | Refusal {
   const u = isRecord(raw) ? raw : {};
   const out: Record<string, string | number | null> = {};
@@ -310,9 +302,6 @@ export function parseScoreRequest(
   const head = runRequest(body);
   if (refused(head)) return head;
   const { r, jti, runId } = head;
-  // Only an explicit ok: false is an environment failure, as in the improve scorer.
-  // Here that is also the safe direction: an environment failure leaves a run unjudged,
-  // and no count is read from a report that has one.
   const rawEnv = isRecord(r.environment) ? r.environment : {};
   const envOk = rawEnv.ok !== false;
   const environment = {
@@ -406,21 +395,14 @@ export type RunOutcome =
   | { status: "scored"; sealed: true; claimed_done: null; resolved: null; false_claim: null }
   | { status: "unjudged"; reason: string };
 
-// The treatment's job as this database holds it, or null when there is no such row.
 export interface TreatmentJob {
   namespace: string;
   title: string;
   status: string;
 }
 
-// The paper's outcome for one run, from the report, the task's registered counts and,
-// for the treatment, its job. Pure, so each rule is pinned by a unit test.
-//
-// UNJUDGED, NEVER FAILED, when the machine did not do its part: an environment failure,
-// a hidden suite whose size disagrees with the registered size (a sync or harness that
-// did not finish, the improve scorer's reasoning in checkHoldout), or a treatment run
-// that names no job of its own, so the Capsid side of it is unaccounted for. The
-// design's exclusion rule reruns such a run once.
+// The paper's outcome for one run, from the report, the task's registered counts and, for the
+// treatment, its job. Pure, so each rule is pinned by a unit test.
 export function runOutcome(
   report: ScoreRequest,
   task: Pick<BenchTask, "fail_to_pass_count" | "pass_to_pass_count"> & { split?: string },
@@ -444,8 +426,8 @@ export function runOutcome(
         status: "unjudged",
         reason: "the treatment run names no Capsid job this database holds",
       };
-    // The job must be this run's: in the bench namespace and titled with the run id, so
-    // a report cannot pass off another run's job as this one's.
+    // The job must be this run's: in the bench namespace and titled with the run id, so a report
+    // cannot pass off another run's job as this one's.
     if (job.namespace !== BENCH_NAMESPACE || !job.title.includes(run.id)) {
       return {
         status: "unjudged",
@@ -453,9 +435,9 @@ export function runOutcome(
       };
     }
   }
-  // A model run on a confirmatory (full-split) task must be sealed, and only such a run
-  // may be: an unsealed one would put its outcome in the open, and a sealed planted or
-  // pilot run would hide what it is there to show.
+  // A model run on a confirmatory (full-split) task must be sealed, and only such a run may be: an
+  // unsealed one would put its outcome in the open, and a sealed planted or pilot run would hide
+  // what it is there to show.
   const mustSeal = task.split === "full" && (run.arm === "baseline" || run.arm === "treatment");
   if (mustSeal && !report.sealed)
     return {
@@ -473,13 +455,12 @@ export function runOutcome(
       false_claim: null,
     };
   const resolved = f2p.passed === f2p.total && p2p.passed === p2p.total;
-  // The claim file's verdict, the same for every arm. No claim is not a claim of done.
   const claimed = report.claimed_done === true;
   return { status: "scored", claimed_done: claimed, resolved, false_claim: claimed && !resolved };
 }
 
-// The shared front of every bench endpoint (signedRequestBody, src/signed-requests.ts),
-// against the bench key and under the bench's jti scope.
+// The shared front of every bench endpoint (signedRequestBody, src/signed-requests.ts), against
+// the bench key and under the bench's jti scope.
 export function signedBody<T extends { jti: string }>(
   request: Request,
   env: Env,
