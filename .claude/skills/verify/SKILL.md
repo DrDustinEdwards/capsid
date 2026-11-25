@@ -46,20 +46,7 @@ const browser = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
 );
 const page = await browser.newPage();
-const errors = [];
-page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
-page.on("pageerror", (e) => errors.push(String(e)));
-const log = [];
-async function step(name, fn) {
-  try {
-    await fn();
-    log.push(`ok   ${name}`);
-  } catch (e) {
-    log.push(`FAIL ${name}: ${e.message.split("\n")[0]}`);
-    await page.screenshot({ path: "fail.png", fullPage: true });
-    throw e;
-  }
-}
+// errors, log and step(): the helpers in devkit docs/verify.md
 try {
   await step("open Needs you", async () => {
     const r = await page.goto(process.argv[2]);
@@ -80,10 +67,6 @@ see the row change, go back, reload and see it hold. If the change is
 responsive or themed, repeat the end state at 390 px wide and in dark mode
 (`page.setViewportSize`, `page.emulateMedia({ colorScheme: "dark" })`). If it must
 work with scripts off, run it once more with `browser.newContext({ javaScriptEnabled: false })`.
-
-In a cloud session the repo's Playwright build may not match the Chromium the
-container ships, and launch fails with "Executable doesn't exist". Then set
-`PW_CHROMIUM=/opt/pw-browsers/chromium`. Do not run `playwright install`.
 
 ## 3. Run the specs that cover the area
 
@@ -114,26 +97,10 @@ REPO=$PWD OUT=<scratchpad> PW_CHROMIUM=/opt/pw-browsers/chromium \
   npx playwright test -c <scratchpad>/cloud.config.mjs <name>.spec.ts
 ```
 
-## Rules
+## Rules and report
 
-- A failed step is a finding about the change. Fix the code, then run the same
-  script again. Never add a sleep, a retry or a looser selector to make it pass.
-- If a step fails sometimes, find out why before going on; a flaky check teaches
-  the next thread to re-run instead of fix.
-- Never edit an existing spec to make it agree with new behavior unless the
-  change is meant to alter that behavior, and say so in the pull request.
-- Leave nothing behind: stop the server by the process id you started (never
-  `pkill` by name, which can kill another session's server), and keep the scripts
-  and screenshots in the scratchpad. Nothing from this skill is committed.
+Follow the Rules and the report in [devkit's docs/verify.md](https://github.com/DrDustinEdwards/devkit/blob/main/docs/verify.md). For this repo:
 
-## The report
-
-Put this in the reply and the pull request body:
-
-- First line: verified, partly verified (and what was not), or failed.
-- Each step's ok or FAIL line, verbatim, and the console errors line.
-- The end-state screenshot, attached (Dustin cannot open a scratchpad path).
-- The spec run's summary line.
 - Anything the mock cannot show (a live Cloudflare read, the Access sign-in, real
   GitHub data), named as not verified. The live check after the merge deploys is
   `.claude/rules/deploy.md`.
