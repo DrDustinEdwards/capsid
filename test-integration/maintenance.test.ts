@@ -259,7 +259,7 @@ describe("rule documents", () => {
       ["capsid", "conventions-sample.md", "Use the `register_namespace` tool."],
       ["sample", "core.md", "Ask `capsid_find_docs` action `namespaces`."],
       ["capsid", "research/old-design.md", "manage_pr ".repeat(3000)],
-      ["sample", "archive/decisions-vol-1.md", "x".repeat(RULE_DOC_CAP_BYTES + 1)],
+      ["sample", "archive/decisions-old.md", "x".repeat(RULE_DOC_CAP_BYTES + 1)],
     ];
     for (const [ns, path, body] of planted) {
       await env.DB.prepare(
