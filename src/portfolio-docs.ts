@@ -64,10 +64,7 @@ export function isPortfolioTool(tool: string, action: string | undefined): boole
 
 /** The allowlist as a reader sees it, for a refusal and for brief. */
 export function describePortfolioDocs(): string[] {
-  return [
-    ...PORTFOLIO_DOCS.documents,
-    ...PORTFOLIO_DOCS.folders.map((f) => `${f}<name>.md`),
-  ];
+  return [...PORTFOLIO_DOCS.documents, ...PORTFOLIO_DOCS.folders.map((f) => `${f}<name>.md`)];
 }
 
 export interface PortfolioRow {

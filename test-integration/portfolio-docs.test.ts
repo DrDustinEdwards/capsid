@@ -42,11 +42,7 @@ const ok = async (name: string, args: Record<string, unknown>) => {
   return JSON.parse(result.content[0].text);
 };
 
-const ALLOWED = [
-  "conventions.md",
-  "core.md",
-  "rulings/remove-improve-loop-2026-10-19.md",
-];
+const ALLOWED = ["conventions.md", "core.md", "rulings/remove-improve-loop-2026-10-19.md"];
 const DENIED = [
   "decisions.md",
   "policy/gates.md",
