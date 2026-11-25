@@ -63,6 +63,7 @@ for (const d of DRAWERS) {
       .click();
     const drawer = page.locator("dialog.drawer[open]");
     await expect(drawer).toBeVisible();
+    // The drawer slides in; measure once it has arrived.
     await expect.poll(() => drawer.evaluate((el) => getComputedStyle(el).transform)).toBe("none");
     expectNoSideways(await measure(page, "dialog.drawer[open]"), `the ${d.type} drawer at 1024`);
     expectNoSideways(await measure(page), `main behind the ${d.type} drawer at 1024`);
