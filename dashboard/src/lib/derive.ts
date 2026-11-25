@@ -122,7 +122,7 @@ export const JOB: Record<OpsJob["status"], { kind: Kind; label: string }> = {
 
 // A claim never expires, so a claimed job nobody has touched for the Worker's stale
 // window (src/stale-jobs.ts, 3 days) is shown as Stalled rather than Running.
-export const STALE_CLAIM_MS = 3 * DAY;
+const STALE_CLAIM_MS = 3 * DAY;
 export function jobBadge(j: OpsJob, now: number): { kind: Kind; label: string } {
   if (j.status === "claimed" && now - parse(j.updated_at) > STALE_CLAIM_MS)
     return { kind: "warn", label: "Stalled" };
@@ -470,7 +470,7 @@ export function attentionList(
 // Priority first (high first), then the newest update first. A job blocked for more than
 // 7 days goes after the rest. all is the two in that order.
 
-export const STALE_BLOCKED_MS = 7 * DAY;
+const STALE_BLOCKED_MS = 7 * DAY;
 
 export function blockedOrder(
   jobs: OpsJob[],
@@ -489,8 +489,8 @@ export function blockedOrder(
 // restore drill). worst is the oldest of the sites' newest copies.
 export const OFFACCOUNT_LATE = 30 * HOUR;
 export const OFFACCOUNT_STALE = 36 * HOUR;
-export const OFFACCOUNT_REPORT_STALE = 13 * HOUR;
-export const OFFACCOUNT_DRILL_STALE = 35 * DAY;
+const OFFACCOUNT_REPORT_STALE = 13 * HOUR;
+const OFFACCOUNT_DRILL_STALE = 35 * DAY;
 
 export function offaccountState(o: NonNullable<OpsSnapshot["offaccount"]>, now: number) {
   const missing = o.sites.filter((s) => !s.newest).map((s) => s.site);

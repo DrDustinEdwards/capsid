@@ -1,53 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { SUPERSEDE_ACTOR, SUPERSEDE_MAX, supersedePass } from "../src/supersede.ts";
 import { fakeEnv } from "./fakes.ts";
+import { d1, migratedDb } from "./sqlite-d1.ts";
 
 // The pass runs against the real migrations in Node's SQLite, so the snapshot, the
 // status change and the audit row are what D1 would hold.
 
-const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
-
-function d1(db: DatabaseSync): D1Database {
-  const statement = (sql: string, params: unknown[] = []) => {
-    const s = db.prepare(sql);
-    const args = params as Array<string | number | null>;
-    return {
-      bind: (...next: unknown[]) => statement(sql, next),
-      first: async () => (s.get(...args) as Record<string, unknown> | undefined) ?? null,
-      all: async () => ({ results: s.all(...args).map((r) => ({ ...r })) }),
-      run: async () => ({ meta: { changes: Number(s.run(...args).changes) } }),
-      exec: () =>
-        /\bRETURNING\b|^\s*SELECT/i.test(sql)
-          ? { results: s.all(...args) }
-          : (s.run(...args), { results: [] }),
-    };
-  };
-  return {
-    prepare: (sql: string) => statement(sql),
-    batch: async (list: Array<{ exec: () => unknown }>) => {
-      db.exec("BEGIN");
-      try {
-        const out = list.map((st) => st.exec());
-        db.exec("COMMIT");
-        return out;
-      } catch (err) {
-        db.exec("ROLLBACK");
-        throw err;
-      }
-    },
-  } as unknown as D1Database;
-}
-
 function fresh(): { raw: DatabaseSync; env: never } {
-  const raw = new DatabaseSync(":memory:");
-  for (const name of readdirSync(MIGRATIONS)
-    .filter((f) => f.endsWith(".sql"))
-    .sort())
-    raw.exec(readFileSync(join(MIGRATIONS, name), "utf8"));
+  const raw = migratedDb();
   return { raw, env: fakeEnv({ DB: d1(raw) }) };
 }
 

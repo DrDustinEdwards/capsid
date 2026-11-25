@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { MAX_REPORT_BYTES } from "../src/signed-requests";
 import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_REPORT_PATH, OFFACCOUNT_SITES } from "../src/offaccount";
 import { env } from "cloudflare:test";
+import { hmacHex } from "./bench-fixture";
 
 // The backup credential endpoint end to end, against a real D1 and a real KV.
 // /backup/credential is a write path not behind OAuth. The key is derived from a root
@@ -14,18 +15,6 @@ import { env } from "cloudflare:test";
 // config binds, so a signature that verifies is not verifying against a stub.
 
 const ROOT = "integration-root-secret-not-a-real-one";
-
-async function hmacHex(key: string, message: string): Promise<string> {
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
-  return [...new Uint8Array(signature)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 // The derivation, spelled the way scripts/derive-backup-key.mjs spells it. A key
 // derivation is a contract with other repos, so a changed context string fails here.

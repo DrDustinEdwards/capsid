@@ -1,4 +1,4 @@
-import { env, SELF } from "cloudflare:test";
+import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { BENCH_ENABLED_KEY } from "../src/bench";
@@ -8,6 +8,7 @@ import { runJobTitle } from "../src/bench-run-key";
 import { grantAgent, resolveAgent, type Agent } from "../src/agents";
 import { postJob } from "../src/jobs";
 import { buildServer } from "../src/server";
+import { post } from "./bench-fixture";
 
 // THE RUN KEY'S RECORDED NEGATIVE TEST (the methods paper's protocol, section 4, "The run
 // key"): a treatment run's own key can claim its one job, read it by id, and complete it
@@ -17,35 +18,6 @@ import { buildServer } from "../src/server";
 //
 // Against a real D1, through resolveAgent and the served tools, so it is the key as the
 // agent would hold it, not a hand-built caller.
-
-async function hmacHex(key: string, message: string): Promise<string> {
-  const k = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function post(path: string, body: Record<string, unknown>) {
-  const text = JSON.stringify({ jti: crypto.randomUUID(), ...body });
-  const ts = new Date().toISOString().replace(/\.\d+Z$/, "Z");
-  return SELF.fetch(`https://capsid.test${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Bench-Timestamp": ts,
-      "X-Bench-Signature": await hmacHex(
-        "integration-bench-secret-not-a-real-one",
-        `${ts}.${text}`,
-      ),
-    },
-    body: text,
-  });
-}
 
 const POSTER = grantAgent("write", "github:sample");
 const jobsEnv = () => env as unknown as Parameters<typeof postJob>[0];

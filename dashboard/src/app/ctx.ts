@@ -83,7 +83,7 @@ export type ViewId = (typeof VIEWS)[number]["id"];
 export type ViewDef = (typeof VIEWS)[number];
 export type DrawerType = "job" | "agent" | "audit";
 
-export function isView(v: string | undefined): v is ViewId {
+function isView(v: string | undefined): v is ViewId {
   return VIEWS.some((x) => x.id === v);
 }
 

@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import {
   HYBRID_MONTHLY_CAP,
@@ -12,34 +10,16 @@ import {
   hybridSearch,
 } from "../src/doc-index.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
+import { d1, migratedDb } from "./sqlite-d1.ts";
 
 // AI Search reads the meaning index's rows from D1 itself, so these run the real
 // migrations (the FTS triggers included) in Node's SQLite, and AI Search is an in-memory
 // fake that records what it was asked.
 
-const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
 const DAY1 = new Date("2026-10-15T12:00:00Z");
 
-function d1(db: DatabaseSync): D1Database {
-  const statement = (sql: string, params: unknown[] = []) => {
-    const s = db.prepare(sql);
-    const args = params as Array<string | number | null>;
-    return {
-      bind: (...next: unknown[]) => statement(sql, next),
-      first: async () => (s.get(...args) as Record<string, unknown> | undefined) ?? null,
-      all: async () => ({ results: s.all(...args).map((r) => ({ ...r })) }),
-      run: async () => ({ meta: { changes: Number(s.run(...args).changes) } }),
-    };
-  };
-  return { prepare: (sql: string) => statement(sql) } as unknown as D1Database;
-}
-
 function fresh(): { raw: DatabaseSync; db: D1Database } {
-  const raw = new DatabaseSync(":memory:");
-  for (const name of readdirSync(MIGRATIONS)
-    .filter((f) => f.endsWith(".sql"))
-    .sort())
-    raw.exec(readFileSync(join(MIGRATIONS, name), "utf8"));
+  const raw = migratedDb();
   return { raw, db: d1(raw) };
 }
 
