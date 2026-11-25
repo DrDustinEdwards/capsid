@@ -1,6 +1,5 @@
-// The front page: what Capsid is beside one claim checked against GitHub that the reader can change; what it remembers (a search and a session start over an example store); the panel, every tool as a circuit lit by the grants a caller holds;
-// one job's life as a guided tour with the drawing pinned beside the chapters; then everything it holds as the manual's contents. Pure, as pages.mjs is.
-// Every number is from the public numbers or the model, and every sentence stating how Capsid works is the model's own flow text.
+// Pure, as pages.mjs is. Every number is from the public numbers or the model, and every sentence stating how
+// Capsid works is the model's own flow text.
 
 import { graph, thing, website } from "@drdustinedwards/site-helpers/schema";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
@@ -27,7 +26,7 @@ import { toolPath } from "./tools.mjs";
 
 const DESCRIPTION =
   "Capsid is an open-source MCP server for AI coding agents. It gives them a shared memory, limits what each one can do, and checks their finished work against GitHub.";
-/** The front page's JSON-LD: this site, and the code it is about. A function, because pages.mjs imports this module. */
+// A function, because pages.mjs imports this module.
 const siteData = (
   AUTHOR = { "@type": "Person", "@id": `${SITE}/#person`, name: "Dustin Edwards", url: SITE },
 ) =>
@@ -52,15 +51,14 @@ const siteData = (
     }),
   ]);
 
-/** The week each bar of a weekly series ends on, labeled as the numbers page does. @param {any} stats */
+/** @param {any} stats */
 export function weekLabels(stats) {
   return weekEnds(stats).map((d) =>
     d.toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }),
   );
 }
 
-/** The last day of each of those weeks, oldest first: the x of the line and area charts, which read dates.
- * @param {any} stats @returns {Date[]} */
+/** @param {any} stats @returns {Date[]} */
 export function weekEnds(stats) {
   const end = Date.parse(`${stats.as_of}T00:00:00Z`) - 86_400_000;
   return stats.jobs.completed_by_week.map(
@@ -69,11 +67,8 @@ export function weekEnds(stats) {
   );
 }
 
-/**
- * The reading Capsid keeps for each moment of a job's life, by the step's own name (the words
- * before its colon in the model). A step with no reading of its own carries none.
- * @param {any} stats @returns {Record<string, [string, string][]>}
- */
+// A step with no reading of its own carries none.
+/** @param {any} stats @returns {Record<string, [string, string][]>} */
 function readingsByStep(stats) {
   const { jobs: j, verification: v, gates: g } = stats;
   return {
@@ -100,14 +95,13 @@ function readingsByStep(stats) {
   };
 }
 
-/** The grants a caller can hold, as the panel's breakers. */
 const BREAKERS = [
   ["read", "Read", "Read notes, repos and the job queue"],
   ["write", "Write", "Edit notes, branches and pull requests"],
   ["admin", "Admin", "Create agents and change settings"],
 ];
 
-/** The breaker each tool hangs under: the grant it cannot work without beyond read (src/scope.ts, needFor). */
+/** The grant a tool cannot work without beyond read (src/scope.ts, needFor). */
 const FEEDS = {
   read: "read",
   action: "write",
@@ -116,10 +110,7 @@ const FEEDS = {
   admin: "admin",
 };
 
-/**
- * The checks the Worker runs on a claim (src/job-claims.ts, WORKER_EVALUATIONS), as the hero's
- * example job: what GitHub reads for it, and the claim's words. ci_green is a yes or a no.
- */
+// The checks the Worker runs on a claim (src/job-claims.ts, WORKER_EVALUATIONS); ci_green is a yes or a no.
 /** @type {[string, string, number][]} */
 const CHECKS = [
   ["pr_merged", "Pull requests merged", 2],
@@ -128,10 +119,7 @@ const CHECKS = [
   ["ci_green", "CI passed", 1],
 ];
 
-/**
- * The first screen: what Capsid is, the two ways on, and one claim checked, which the reader can change to see Capsid catch it. The example's numbers are an example; the figure under it is this instance's own.
- * @param {any} stats
- */
+/** @param {any} stats */
 function hero(stats) {
   const v = stats.verification;
   const [kind, , read] = CHECKS[0];
@@ -178,13 +166,9 @@ ${words}
 </div>`;
 }
 
-/**
- * The knowledge base's example store: three questions, and the documents each finds. A row
- * matches by keyword, by meaning or both; canon is the current conventions, core or decisions,
- * which rank first (src/doc-index.ts, isCanon). Fake data, in the namespace "sample", as the
- * public repo's fixtures are (CLAUDE.md, public repo rule).
- * @type {{ q: string, retired: number, rows: [string, string, boolean, boolean, boolean][] }[]}
- */
+// canon is the current conventions, core or decisions, which rank first (src/doc-index.ts, isCanon). Fake data, in
+// the namespace "sample", as the public repo's fixtures are (CLAUDE.md, public repo rule).
+/** @type {{ q: string, retired: number, rows: [string, string, boolean, boolean, boolean][] }[]} */
 const SEARCHES = [
   {
     q: "How does an agent prove a job is done?",
@@ -218,7 +202,6 @@ const SEARCHES = [
   },
 ];
 
-/** What Start a session hands over (src/tools/docs-read.ts, brief), for the example store: name, path, kilobytes. */
 const BRIEF = [
   ["Rules for every project", "capsid/conventions.md", 6],
   ["Project overview", "sample/core.md", 9],
@@ -227,13 +210,7 @@ const BRIEF = [
   ["Last 3 session notes", "sample/sessions/", 6],
 ];
 
-/**
- * The knowledge base: what Capsid remembers, as two things a reader can do with the example
- * store. Ask it a question by keyword alone or by keyword and meaning; start a session, write a
- * note, and start again to find the note there. The figure under them is this instance's own.
- * Each links to its flow once the model has it.
- * @param {any} model @param {any} stats
- */
+/** @param {any} model @param {any} stats */
 function knowledge(model, stats) {
   const more = (/** @type {string} */ id, /** @type {string} */ words) =>
     flowsOf(model).some((f) => f.id === id)
@@ -276,11 +253,7 @@ ${more("session-start", "How a session starts")}
 </section>`;
 }
 
-/**
- * The panel: every tool Capsid serves as a circuit, each lit when the grants switched on reach
- * it. It opens as a read-only agent sees it. Full width, so the whole board is in view.
- * @param {any[]} tools
- */
+/** @param {any[]} tools */
 function board(tools) {
   const held = { read: true, write: false, admin: false };
   const circuit = (/** @type {any} */ t) => {
@@ -304,7 +277,6 @@ function board(tools) {
 </section>`;
 }
 
-/** The tour: a chapter a step, the drawing pinned beside them. */
 function tour(/** @type {any} */ model, /** @type {any} */ stats) {
   const core = model.systems.find((/** @type {any} */ s) => s.ring === "core");
   const flows = flowsOf(model).filter(
@@ -338,7 +310,6 @@ ${kept.length ? `<dl class="readings readings-small">${kept.map(([value, label])
 </section>`;
 }
 
-/** What one Worker holds, as the manual's index sets it: each section by number and name, a dotted leader to what it holds. */
 function holds(
   /** @type {any} */ model,
   /** @type {any} */ stats,
@@ -365,10 +336,7 @@ function holds(
 </section>`;
 }
 
-/**
- * @param {any} model @param {any} stats @param {any[]} tools the served tools (src/surface.mjs)
- * @param {any} codeIndex totals over the code maps (code.mjs, codeTotals), or null
- */
+/** @param {any} model @param {any} stats @param {any[]} tools @param {any} codeIndex */
 export function homePage(model, stats, tools, codeIndex) {
   const body = [
     hero(stats),

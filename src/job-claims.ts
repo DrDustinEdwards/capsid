@@ -3,22 +3,13 @@ import type { EvidenceVerdict, JobEvidence } from "./job-outcomes";
 import { bounded } from "./limits";
 import type { JobClaimRow as StoredClaimRow } from "./ops-types/claims";
 
-// WHAT THE AGENT SAID, kept apart from what the Worker verified (migrations/0023).
-//
-// job_outcomes stores GitHub's number in place of the driver's wherever GitHub could answer,
-// overwriting the driver's own account. This module records that account first, in
-// job_claims, from the arguments exactly as they arrived, then one job_evaluations row per
-// check with the claim and the verified value side by side. Both are written in the
-// transition's own batch (holderTransition, src/jobs-holder.ts).
-//
-// NULL IS NOT FALSE, on 0011's reasoning: a field the agent did not state is NULL,
-// never 0 and never false. "Nobody said" and "said none" are different facts.
+// What the agent said, kept apart from what the Worker verified (migrations/0023): job_outcomes
+// overwrites the driver's number with GitHub's, so the claim is recorded first, as it arrived.
+// NULL is not false: an unstated field is NULL, never 0 or false.
 
 const CLAIM_TESTS_RESULTS = ["pass", "fail", "partial", "not_run"] as const;
 const CLAIM_DEPLOY_STATES = ["none", "pending", "deployed", "verified", "failed"] as const;
 
-// Bounds on what one claim may carry. A claim is stored whole, so each list and each
-// string is bounded where it arrives rather than truncated where it is written.
 export const MAX_CLAIM_PRS = 10;
 const MAX_CLAIM_URL = 512;
 const MAX_CLAIM_FILES = 500;
@@ -27,12 +18,10 @@ const MAX_CLAIM_VERSION = 128;
 
 const count = z.number().int().nonnegative();
 const version = bounded(MAX_CLAIM_VERSION);
-// A usage figure the agent read off its own session. zod's number() already refuses NaN and
-// Infinity (the claim test pins it), so neither can reach SUM().
+// zod's number() refuses NaN and Infinity, so neither can reach SUM().
 const usageAmount = z.number().nonnegative();
 
-// Strict at every level: an unknown key is refused, never dropped, since a dropped key is a
-// claim the record does not have.
+// Strict: a dropped unknown key would be a claim the record does not have.
 export const claimSchema = z
   .object({
     prs_opened: z
@@ -95,9 +84,7 @@ export const claimSchema = z
 
 export type JobClaim = z.infer<typeof claimSchema>;
 
-// A claim arrives as an object or as a JSON string, for the reason evidence does
-// (parseEvidence, src/job-outcomes.ts). Unlike evidence, a field that does not fit is
-// refused rather than dropped, because the claim is the record.
+// A field that does not fit is refused, not dropped: the claim is the record.
 export type ClaimInput = JobClaim | string | undefined;
 
 export function parseClaim(input: unknown): { claim: JobClaim | undefined } | { error: string } {
@@ -105,7 +92,6 @@ export function parseClaim(input: unknown): { claim: JobClaim | undefined } | { 
   let value: unknown = input;
   if (typeof input === "string") {
     const text = input.trim();
-    // Blank is nothing sent, as for evidence.
     if (text.length === 0) return { claim: undefined };
     try {
       value = JSON.parse(text);
@@ -131,8 +117,6 @@ export function parseClaim(input: unknown): { claim: JobClaim | undefined } | { 
   return { claim: parsed.data };
 }
 
-// The claim-bearing arguments exactly as sent. Recorded whole in job_claims.raw so the
-// structured columns can always be checked against what was actually said.
 export interface ClaimRaw {
   evidence?: unknown;
   claim?: unknown;
@@ -142,9 +126,8 @@ export interface ClaimRaw {
   command?: string;
 }
 
-// evidence and claim may have arrived as JSON strings; raw keeps the parsed value, so
-// the column is one JSON document rather than JSON with JSON inside it. A string that
-// does not parse was refused before this runs, so it is kept as sent, not dropped.
+// raw keeps the parsed value of evidence and claim, so the column is one JSON document. A string
+// that does not parse was refused before this runs, so it is kept as sent.
 function parsedValue(value: unknown): unknown {
   if (typeof value !== "string") return value;
   const text = value.trim();
@@ -157,8 +140,6 @@ function parsedValue(value: unknown): unknown {
 }
 
 export function rawJson(raw: ClaimRaw): string {
-  // JSON.stringify omits a key whose value is undefined, which is the rule: a key the
-  // caller did not send is absent, not null.
   return JSON.stringify({
     evidence: parsedValue(raw.evidence),
     claim: parsedValue(raw.claim),
@@ -169,9 +150,6 @@ export function rawJson(raw: ClaimRaw): string {
   });
 }
 
-// The row as inserted (the stored row, src/ops-types/claims.ts, before D1 gives it an id) with
-// the facts read off the claim for this call only. They are not columns: raw holds the claim
-// whole, and the evaluations store the counts they were checked against.
 export type JobClaimRow = Omit<StoredClaimRow, "id"> & {
   prs_opened_urls: string | null;
   prs_merged_urls: string | null;
@@ -186,11 +164,6 @@ type ClaimAction = JobClaimRow["action"];
 const listColumn = (list: readonly string[] | undefined): string | null =>
   list === undefined ? null : JSON.stringify([...list]);
 
-/**
- * The job_claims row for one complete, fail or block call. Pure, built from the arguments
- * before verifyEvidence runs so nothing GitHub says can reach it. An empty list is stated
- * ("said none") and stored as [] and 0; an absent one is NULL.
- */
 export function claimRow(input: {
   job_id: string;
   action: ClaimAction;
@@ -223,8 +196,7 @@ export function claimRow(input: {
   };
 }
 
-// Append-only: migrations/0023's triggers refuse UPDATE and DELETE, so this INSERT is
-// the only statement that ever touches the table from code.
+// Append-only: migrations/0023's triggers refuse UPDATE and DELETE.
 export function claimStatement(db: D1Database, row: JobClaimRow): D1PreparedStatement {
   return db
     .prepare(
@@ -242,9 +214,7 @@ export function claimStatement(db: D1Database, row: JobClaimRow): D1PreparedStat
     );
 }
 
-// EVALUATIONS. The worker's own checks, named for OpenTelemetry's
-// gen_ai.evaluation.result event. hidden_tests and scope_respected are in the table's
-// vocabulary for a later evaluator (a model, a human); the worker writes none of them.
+// hidden_tests and scope_respected are reserved for a later evaluator; the worker writes none.
 const WORKER_EVALUATIONS = [
   "pr_merged",
   "prs_opened",
@@ -271,7 +241,6 @@ export interface JobEvaluationRow {
   recorded_at: string;
 }
 
-/** Computed once, at write time, from the two values the row stores. */
 export function agreementOf(claimed: number | null, verified: number | null): Agreement {
   if (claimed === null) return "unclaimed";
   if (verified === null) return "unchecked";
@@ -281,7 +250,6 @@ export function agreementOf(claimed: number | null, verified: number | null): Ag
 export const workerEvaluatorId = (buildSha: string | null | undefined) =>
   `capsid@${buildSha ?? "unknown"}`;
 
-// The column holds a JSON array the row builder wrote, or NULL.
 function urlsOf(column: string | null): string[] | null {
   if (column === null) return null;
   const parsed = JSON.parse(column) as unknown;
@@ -291,12 +259,8 @@ function urlsOf(column: string | null): string[] | null {
 const json = (value: number | null): string | null =>
   value === null ? null : JSON.stringify(value);
 
-/**
- * One row per worker check, from the claim row and what verifyEvidence read off GitHub. Pure.
- * A value the Worker could not read is NULL with label unknown, and an unstated claim is NULL
- * with agreement unclaimed: neither is ever a 0 or a false. Only the PRs in evidence.prs (and
- * a result_ref that is one) are read, so a URL the claim names beyond them is unchecked.
- */
+// A value the Worker could not read is NULL/unknown and an unstated claim NULL/unclaimed, never 0 or
+// false. Only the PRs in evidence.prs are read, so a URL the claim names beyond them is unchecked.
 export function evaluationRows(
   claim: JobClaimRow,
   verdict: Pick<EvidenceVerdict, "github">,
@@ -324,13 +288,10 @@ export function evaluationRows(
     recorded_at: ctx.now.toISOString(),
   });
   const unread = (urls: string[]) => urls.filter((u) => !read(u)).length;
-  // A count passes when GitHub's number does not contradict the driver's.
   const countLabel = (claimed: number | null, verified: number | null): ScoreLabel =>
     agreementOf(claimed, verified) === "disagree" ? "fail" : "pass";
 
-  // pr_merged: the pull requests the claim says are merged, else the ones evidence
-  // named. Verified is how many of them GitHub reads as merged, known only when every
-  // one was read.
+  // Verified is known only when every PR was read.
   const mergedClaim = urlsOf(claim.prs_merged_urls);
   const mergedSet = mergedClaim ?? urlsOf(claim.prs_opened_urls) ?? [];
   const mergedMissing = unread(mergedSet);
@@ -348,8 +309,6 @@ export function evaluationRows(
         : null,
   );
 
-  // prs_opened: every pull request the claim names exists on GitHub. Verified is the
-  // count, known only when every one was read.
   const openedSet = urlsOf(claim.prs_opened_urls) ?? [];
   const openedMissing = unread(openedSet);
   const openedVerified = openedSet.length > 0 && openedMissing === 0 ? openedSet.length : null;
@@ -365,8 +324,6 @@ export function evaluationRows(
         : null,
   );
 
-  // commits and files_changed: GitHub's sum over every named pull request, known only
-  // when every one was read, against the driver's number as sent.
   const sums =
     "GitHub's sum is known only when every pull request in evidence.prs and result_ref was read";
   const commitsVerified = verdict.github?.commits ?? null;
@@ -386,7 +343,7 @@ export function evaluationRows(
     filesVerified === null ? sums : null,
   );
 
-  // ci_green: no claim field says anything about CI, so the claim is NULL (unclaimed).
+  // No claim field says anything about CI, so the claim is NULL.
   const ciVerified = verdict.github?.ci_green ?? null;
   const ci = row(
     "ci_green",
@@ -401,8 +358,7 @@ export function evaluationRows(
   return [prMerged, prsOpened, commits, files, ci];
 }
 
-// claim_id is the claim row this batch inserted. Its id is not known before the batch
-// runs, and the batch is one transaction, so the newest claim for the job is that row.
+// The batch is one transaction, so the newest claim for the job is the row it inserted.
 export function evaluationStatements(
   db: D1Database,
   rows: readonly JobEvaluationRow[],

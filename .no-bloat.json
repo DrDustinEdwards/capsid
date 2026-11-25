@@ -12,13 +12,13 @@
     }
   ],
   "baseline": {
-    "measured_at": "c0a6dd40",
+    "measured_at": "78d8be9",
     "knip (Worker)": {},
     "knip (dashboard)": {},
     "jscpd": {
       "clones": 124,
       "lines": 1032,
-      "percentage": 0.7,
+      "percentage": 0.71,
       "unread": 4
     },
     "shared copies": {
@@ -33,11 +33,11 @@
       "dashboard/src/lib/derive.ts": 513,
       "dashboard/src/views/SiteTraffic.tsx": 605,
       "dashboard/src/views/TrendCharts.tsx": 830,
-      "explorer/src/explorer.css": 1711,
-      "explorer/src/explorer.js": 561,
-      "explorer/src/pages.mjs": 892,
-      "scripts/verify-live.mjs": 688,
-      "src/ops-cloudflare.ts": 595,
+      "explorer/src/explorer.css": 1639,
+      "explorer/src/explorer.js": 528,
+      "explorer/src/pages.mjs": 816,
+      "scripts/verify-live.mjs": 671,
+      "src/ops-cloudflare.ts": 565,
       "test/fakes.ts": 1458
     },
     "tests": {
@@ -45,9 +45,9 @@
       "cases": 2014
     },
     "comments": {
-      "lines": 9791,
+      "lines": 8965,
       "code": 126932,
-      "percentage": 7.17
+      "percentage": 6.6
     }
   }
 }

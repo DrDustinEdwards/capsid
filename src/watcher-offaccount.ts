@@ -3,20 +3,14 @@ import type { OffaccountSiteReport } from "./offaccount";
 import { HOUR_MS } from "./time";
 import { finding, type Finding } from "./watcher-detect";
 
-// The Amazon copy's window (Dustin, 2026-10-10), and it is
-// not BACKUP_STALE_HOURS.
-//
-// BACKUP_STALE_HOURS is the local dump, measured from a key this Worker writes itself.
-// This measures the newest complete copy in the Amazon bucket, which this Worker only
-// hears about from capsid-backups' watch.yml. That repo's schedules can change without
-// this one hearing, so one constant standing for both would go wrong silently.
-//
-// 36 hours is the daily cadence plus slack. Capsid dumps at 09:00 UTC and offaccount.yml
-// copies at 11:23 UTC, so just before a copy the newest one is already about 24 hours
-// older than the next dump. A tighter window would fire every morning.
+// Not BACKUP_STALE_HOURS: that is the local dump, from a key this Worker writes itself. This is the
+// Amazon copy, which this Worker only hears about from capsid-backups' watch.yml, whose schedules can
+// change unheard, so one shared constant would go wrong silently.
+// 36 hours is the daily cadence plus slack: dumps at 09:00 UTC, copies at 11:23 UTC, so just before a
+// copy the newest is about 24 hours older than the next dump. A tighter window would fire every morning.
 export const OFFACCOUNT_STALE_HOURS = 36;
 
-// The warning before that (Dustin, 2026-10-10): a copy a few hours late shows on the Portal's attention list and posts no job.
+// A copy a few hours late shows on the Portal's attention list and posts no job.
 export const OFFACCOUNT_LATE_HOURS = 30;
 
 // Item 6 again: a copy under a quarter of, or over double, the median of the site's recent
@@ -25,8 +19,8 @@ const OFFACCOUNT_SIZE_LOW = 0.25;
 const OFFACCOUNT_SIZE_HIGH = 2;
 const OFFACCOUNT_SIZE_MIN_HISTORY = 3;
 
-// Item 6: the restore drill runs monthly (the 3rd); a month plus slack without a passing
-// drill means nobody has proved the copies restore.
+// The restore drill runs monthly (the 3rd); a month plus slack without a pass means nobody has
+// proved the copies restore.
 export const OFFACCOUNT_DRILL_STALE_DAYS = 35;
 
 // watch.yml reports every 6 hours. Two missed reports plus GitHub's cron delay is a
@@ -36,10 +30,8 @@ export const OFFACCOUNT_REPORT_STALE_HOURS = 13;
 // The repo is never named in this module: it is resolved from the capsid namespace's
 // mapping, which is the authorization boundary.
 export const BACKUPS_REPO_LABEL = "backups";
-// The Amazon copy. Measure the copy, not the attempt: a run can be green and copy nothing,
-// and the git mirror can be dead while every credential request succeeds. watch.yml lists the bucket with a list-only role and reports, per site, the
-// run id of the newest copy under daily/<site>/ that carries _complete.json. The run id is
-// the dump's own timestamp, so the age here is the age of the data, not of the copy.
+// Measure the copy, not the attempt: a run can be green and copy nothing. watch.yml reports the run id
+// of the newest copy carrying _complete.json, the dump's own timestamp, so the age is the data's.
 
 // `2026-09-12T09-00-11-132Z` as d1-dump writes it. Anchored, so a stray name yields null
 // rather than looking like a fresh backup.
@@ -53,10 +45,8 @@ export function parseDumpStamp(name: string): Date | null {
   return Number.isNaN(at.getTime()) ? null : at;
 }
 
-// What watch.yml last reported (POST /backup/offaccount-report), as stored in APP_KV.
 export interface OffaccountReport {
   received_at: string;
-  // Every site in OFFACCOUNT_SOURCES (src/offaccount.ts parseOffaccountReport).
   sites: Record<string, OffaccountSiteReport>;
 }
 
@@ -69,9 +59,6 @@ export interface WorkflowRun {
   url?: string;
 }
 
-/** One finding per site whose copy is missing or past the window, and one for a report
- *  that stopped arriving. The copy workflow's last run goes in as evidence: it says why,
- *  the copy's age says whether. */
 export function offaccountFindings(
   namespace: string,
   sites: readonly string[],
@@ -110,13 +97,9 @@ export function offaccountFindings(
   const run = copyRun
     ? `last copy run: ${copyRun.created_at ?? "unknown"} concluded ${copyRun.conclusion ?? "none"}${copyRun.url ? ` (${copyRun.url})` : ""}`
     : "no completed offaccount run was returned for the backups repo";
-  // A copy run that finished after the report was written is not in the report yet, so
-  // the report's ages are a copy cycle behind. A run that started before the report but
-  // finished after it counts too: watch.yml lists the bucket while the copy is still
-  // uploading. watch.yml reports every 6 hours and GitHub's schedule can run
-  // it late; the 36 hour window leaves only about an hour and a half over that. The age
-  // is judged once the next report lands, and a report that never lands is its own
-  // finding above.
+  // A copy run that finished after the report was written (or started before it) is not in it yet, so
+  // its ages are a cycle behind. The 36 hour window leaves only about an hour and a half over a late
+  // report: the age is judged once the next report lands, and one that never lands is its own finding.
   const copyAfterReport =
     copyRun?.conclusion === "success" &&
     Date.parse(copyRun.updated_at ?? copyRun.created_at ?? "") > Date.parse(report.received_at);
@@ -137,7 +120,6 @@ export function offaccountFindings(
     }
     const hours = (now.getTime() - at.getTime()) / HOUR_MS;
     if (copyAfterReport) {
-      // Waiting for the report that shows the new copy.
     } else if (hours >= OFFACCOUNT_STALE_HOURS) {
       out.push(
         finding(namespace, `offaccount-stale-${site}`, `the Amazon copy of ${site} is stale`, [
@@ -153,7 +135,6 @@ export function offaccountFindings(
         ]),
       );
     }
-    // The newest copy against the median of the ones before it.
     const before = line.recent_bytes.slice(1);
     if (line.bytes !== null && before.length >= OFFACCOUNT_SIZE_MIN_HISTORY) {
       const mid = median(before) as number;
@@ -176,10 +157,8 @@ export function offaccountFindings(
   return out;
 }
 
-/** Every D1 database a Worker binds has an Amazon copy: the nightly resources model
- *  (src/system-resources.ts) against the databases OFFACCOUNT_SOURCES dumps. A database
- *  bound only as a Workers preview (binding "X (preview)") holds test data, and one no
- *  Worker binds is a leftover; neither is anyone's data, so both are left out. */
+// A database bound only as a Workers preview holds test data, and one no Worker binds is a leftover;
+// both are left out.
 export function offaccountCoverageFindings(
   namespace: string,
   covered: readonly string[],
@@ -205,8 +184,6 @@ export function offaccountCoverageFindings(
     );
 }
 
-/** The newest successful run of capsid-backups' drill.yml, which restores every site's
- *  newest Amazon copy and passes only when all of them do. */
 export function offaccountDrillFindings(
   namespace: string,
   drillRuns: WorkflowRun[],

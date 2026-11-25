@@ -1,12 +1,7 @@
-// The explorer's one script. Every page is complete without it: the maps are cards and lists, every step is a page, every tool and module has an address, and the tables
-// are plain tables. This makes them move: Capsomer's system map,
-// its tabs, Enarratio's chart tooltips, the flow players, the front page's panel and tour, the filters
-// and sorting, and search.
+// Every page is complete without this script; it only makes them move.
 import { controller } from "capsomer/behavior/system-map";
 import { enhance as enhanceTabs } from "capsomer/behavior/tabs";
-// Every chart in Capsomer's frame: drawn again at its column's width where the server wrote a spec, and enhanced.
 import "capsomer/behavior/chart-enhance";
-// Play, Pause and Play again over a flow's steps: stops at the end, on a hidden tab and when the person moves.
 import { stepPlayer } from "capsomer/behavior/step-player";
 import { enhance as enhanceHeader } from "capsomer/behavior/site-header";
 import { enhance as enhanceTheme, toggleTheme } from "capsomer/behavior/theme-switch";
@@ -43,11 +38,7 @@ for (const root of document.querySelectorAll("[data-cap='system-map']")) {
   }
 }
 
-/**
- * The front page's player: the map plays its flow in place, with no address of its own, so
- * stepping never adds to the browser's history. The tour's chapter nearest the middle of the
- * screen is the step shown, and its parts' names light with the drawing.
- */
+// The map plays its flow in place with no address of its own, so stepping never adds to the browser's history.
 function player(map, root, host) {
   const flow = host.dataset.flow;
   const total = Number(host.dataset.steps);
@@ -85,13 +76,8 @@ function player(map, root, host) {
   for (const c of chapters) seen.observe(c);
 }
 
-/**
- * A step page with script: the map plays the flow at the page's step, and Back, Next, the step
- * list, number keys, Play and the map's own controls step it without a reload. Each step's text
- * and parts come from that step's own prerendered page, so the HTML stays the one source; the
- * address follows, so a step can be linked and the browser's Back works. While Play runs, the
- * address is replaced rather than pushed, so Back leaves the flow instead of stepping through it.
- */
+// Each step's text and parts come from that step's own prerendered page, so the HTML stays the one source. While Play
+// runs the address is replaced rather than pushed, so Back leaves the flow instead of stepping through it.
 function flowPage(map, root, host) {
   const flow = host.dataset.flow;
   const total = Number(host.dataset.steps);
@@ -118,13 +104,11 @@ function flowPage(map, root, host) {
       return;
     }
     if (mine !== ticket) return;
-    // Focus on a link that is about to be replaced moves to its twin, or to the other one.
     const rel = document.activeElement?.closest?.("[data-swap]")
       ? document.activeElement.getAttribute("rel")
       : null;
     const button = document.querySelector("[data-swap='step'] [data-autoplay]");
     for (const fresh of doc.querySelectorAll("[data-swap]")) {
-      // The Play button lives on across steps, so its state and listener stay.
       const twin = fresh.querySelector("[data-autoplay]");
       if (button && twin) twin.replaceWith(button);
       document
@@ -132,7 +116,6 @@ function flowPage(map, root, host) {
         ?.replaceWith(document.adoptNode(fresh));
     }
     document.title = doc.title;
-    // The trail names the step too, so it moves with it.
     const crumbs = doc.querySelector(".crumbs");
     if (crumbs) document.querySelector(".crumbs")?.replaceWith(document.adoptNode(crumbs));
     host.dataset.step = String(n);
@@ -152,7 +135,6 @@ function flowPage(map, root, host) {
   });
 
   map.playFlow(flow, current);
-  // Whatever stepped (a link, a key, the map's own Back and Next), the map says so here.
   root.addEventListener("cap:system-map-flow", (e) => {
     if (e.detail.id === flow) void show(e.detail.step, true);
   });
@@ -183,8 +165,7 @@ function flowPage(map, root, host) {
 
 enhanceTabs();
 
-// The front page's panel: each breaker switches a grant, and every circuit lights by the rule
-// the build drew it with (src/rules.mjs, reaches), which is src/scope.ts's needFor.
+// Every circuit lights by the rule the build drew it with (src/rules.mjs reaches, src/scope.ts needFor).
 for (const panel of document.querySelectorAll("[data-board]")) {
   const breakers = panel;
   const count = panel.querySelector("[data-board-count]");
@@ -214,10 +195,7 @@ for (const panel of document.querySelectorAll("[data-board]")) {
   }
 }
 
-// The front page's claim: the reader changes what the agent says, or lets it lie at random, and
-// the check plays out: the claim goes to GitHub, GitHub's reading comes back, and the record
-// is stamped. What it keeps is the rule the build wrote it with (src/rules.mjs, verdict), which
-// is src/job-claims.ts's evaluationRows.
+// It keeps the rule the build wrote it with (src/rules.mjs verdict, src/job-claims.ts evaluationRows).
 for (const desk of document.querySelectorAll("[data-desk]")) {
   const said = desk.querySelector("[data-desk-said]");
   const read = desk.querySelector("[data-desk-read]");
@@ -280,7 +258,6 @@ for (const desk of document.querySelectorAll("[data-desk]")) {
       void check(false);
     });
   }
-  // A lie at random: any of the checks, a claim that is never what GitHub reads.
   desk.querySelector("[data-desk-fool]").addEventListener("click", () => {
     pick(kinds[Math.floor(Math.random() * kinds.length)]);
     if (kind === "ci_green") claim = 1 - truth;
@@ -292,8 +269,7 @@ for (const desk of document.querySelectorAll("[data-desk]")) {
   });
 }
 
-// The front page's search: the question and the mode are the box's own state; the stylesheet
-// shows each row by how it matched (src/home.mjs, knowledge).
+// The stylesheet shows each row by how it matched (src/home.mjs, knowledge).
 for (const box of document.querySelectorAll("[data-kb-search]")) {
   const asks = [...box.querySelectorAll("[data-ask]")];
   const modes = [...box.querySelectorAll("[data-mode-set]")];
@@ -312,8 +288,6 @@ for (const box of document.querySelectorAll("[data-kb-search]")) {
   }
 }
 
-// The front page's session start: the brief arrives a document at a time; a note written
-// in one session is there when the next one starts.
 for (const box of document.querySelectorAll("[data-session]")) {
   const start = box.querySelector("[data-start]");
   const write = box.querySelector("[data-write]");
@@ -327,7 +301,6 @@ for (const box of document.querySelectorAll("[data-session]")) {
   let run = 0;
   box.dataset.ready = "";
   for (const li of items) li.hidden = true;
-  // The meter redraws its bar when its value changes (Capsomer's meter behavior).
   const setBudget = (kb) => {
     budget.setAttribute("aria-valuenow", String(kb));
     budget.setAttribute("aria-valuetext", `${kb} KB of the 40 KB limit`);
@@ -365,7 +338,6 @@ for (const box of document.querySelectorAll("[data-session]")) {
   });
 }
 
-// Filters: a text field and chips over the items of the page they sit on.
 for (const bar of document.querySelectorAll("[data-filter]")) {
   bar.hidden = false;
   const items = [...document.querySelectorAll("[data-item]")];
@@ -399,7 +371,6 @@ for (const bar of document.querySelectorAll("[data-filter]")) {
   apply();
 }
 
-// Sortable tables: each column heading becomes a button; numbers sort by their data-sort value.
 for (const table of document.querySelectorAll("table[data-sortable]")) {
   const heads = [...table.querySelectorAll("thead th")];
   const body = table.tBodies[0];
@@ -431,7 +402,6 @@ for (const table of document.querySelectorAll("table[data-sortable]")) {
   });
 }
 
-// "t" switches the theme ("/" opens the header's search: Capsomer's).
 document.addEventListener("keydown", (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
   if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
@@ -449,8 +419,7 @@ const KIND_RANK = {
   Function: 7,
 };
 
-// Search: the index is read once, from the explorer itself, and matched as you type, on the
-// search page and in the header's field.
+// The index is read once, from the explorer itself.
 let index = null;
 const entriesOf = () =>
   (index ??= fetch("/assets/search.json")
@@ -461,7 +430,6 @@ const entriesOf = () =>
       throw e;
     }));
 
-/** Every entry holding every word of the query, best first. */
 function rank(entries, query) {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return [];
@@ -483,7 +451,7 @@ if (field) {
   const out = document.querySelector("[data-search-results]");
   const count = document.querySelector("[data-search-count]");
   let entries = null;
-  /** One result as DOM, so no markup string is involved. */
+  // One result as DOM, so no markup string is involved.
   const item = ([kind, name, detail, href]) => {
     const li = document.createElement("li");
     const a = document.createElement("a");
@@ -536,7 +504,6 @@ if (field) {
   field.focus();
 }
 
-// Each section's parts rise into place once, as it first comes into view.
 if (!reduced.matches && "IntersectionObserver" in window) {
   const parts = document.querySelectorAll(
     "main.wide > section:not(.board) > *, main.wide .poster > li",

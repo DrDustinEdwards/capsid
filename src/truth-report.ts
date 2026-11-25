@@ -2,7 +2,6 @@ import { parseSqlTime } from "@dustinedwards/site-runtime/time";
 import { ruleDocCap, ruleDocProblem, staleSummary, type RuleDocProblem } from "./rule-docs";
 import { DAY_MS, utcDay } from "./time";
 interface TruthFinding {
-  // What was checked, and what did not pass.
   check: string;
   subject: string;
   detail: string;
@@ -25,8 +24,7 @@ export interface TruthReport {
     archived: number;
   };
   checks: TruthCheck[];
-  // Good standing over subjects, across every check that had a subject to judge.
-  // Null when nothing was checkable, which is not the same as 100 percent.
+  // Null when nothing was checkable, which is not 100 percent.
   integrity: number | null;
   findings: TruthFinding[];
 }
@@ -50,8 +48,6 @@ export interface ReportEdge {
   target_missing?: number;
 }
 
-// The shape src/counts.ts returns, mirrored so this module stays a pure function
-// over plain data.
 interface ReportCountClaim {
   path: string;
   noun: string;
@@ -67,25 +63,18 @@ export interface TruthInput {
   edges: ReportEdge[];
   danglingEdges: ReportEdge[];
   countClaims: ReportCountClaim[];
-  // Repo paths on the default branch. Undefined when the repo could not be read,
-  // which makes the drift check unrun rather than clean.
+  // Undefined when the repo could not be read, which makes the drift check unrun rather than clean.
   repoPaths?: Set<string>;
 }
 
-// A published decision older than this is worth re-reading. A prompt, not a defect.
 export const STALE_DECISION_DAYS = 180;
 
-// Consolidate when a namespace holds more than five unconsolidated documents. Capsid's own threshold.
 export const UNCONSOLIDATED_CADENCE = 5;
 
-// Matches a repo path in prose: at least one slash, a file extension, and no spaces.
-// `capsid/conventions.md` matches too and is excluded below, because a Capsid document path is not
-// a repo path.
+// `capsid/conventions.md` matches too and is excluded below: a Capsid document path is not a repo path.
 const REPO_PATH =
   /(?<![A-Za-z0-9_./-])(\.?(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z][A-Za-z0-9]{0,4})\b/g;
 
-// Namespace prefixes that mean "a Capsid document", not "a file in the repo".
-// A path starting with one of these is a store address and is skipped.
 const NAMESPACE_PREFIXES = [
   "capsid/",
   "germomics/",
@@ -99,13 +88,10 @@ const NAMESPACE_PREFIXES = [
   "recova/",
 ];
 
-// The stored report's path prefix.
 export const REPORTS_PREFIX = "reports/";
 
-// Prefixes that are not subjects of the report. `archive/` is consumed history. `reports/` holds
-// earlier reports: `report` stores its result as an ordinary document, and the next run would read
-// it back, so every finding it wrote becomes a finding it finds and integrity ratchets down on
-// every run.
+// `reports/` holds earlier reports; reading them back would turn each finding into one it finds, and
+// integrity would ratchet down every run.
 const UNSCANNED_PREFIXES = ["archive/", REPORTS_PREFIX];
 
 export function isUnscanned(path: string): boolean {
@@ -123,14 +109,11 @@ function parseStamp(value: string): Date | null {
   return ms === null ? null : new Date(ms);
 }
 
-// A document is "standing" if it is part of the canon rather than raw material.
-// archive/ is consumed history and is not held to any of this.
 const isArchived = (doc: ReportDoc) => doc.path.startsWith("archive/");
 
 export function buildTruthReport(input: TruthInput): TruthReport {
   const { namespace, now, docs } = input;
-  // `archived` is counted on its own, not as "everything not standing", so the
-  // reports/ exclusion does not inflate it.
+  // `archived` is counted on its own so the reports/ exclusion does not inflate it.
   const standing = docs.filter((d) => !isUnscanned(d.path));
   const archived = docs.filter(isArchived).length;
 
@@ -142,9 +125,7 @@ export function buildTruthReport(input: TruthInput): TruthReport {
 
   const checks: TruthCheck[] = [];
 
-  // 1. Contradictions: the count claim, prose asserting a number the artifact
-  //    disagrees with (src/counts.ts). A claim in an excluded document is dropped
-  //    here as well as by the caller.
+  // Contradictions (src/counts.ts); a claim in an excluded document is dropped here too.
   const countClaims = input.countClaims.filter((claim) => !isUnscanned(claim.path));
   checks.push({
     check: "contradictions",
@@ -156,8 +137,6 @@ export function buildTruthReport(input: TruthInput): TruthReport {
       detail: `states ${claim.states} ${claim.noun}; the artifact says ${claim.authoritative}. In: ${claim.quote}`,
     })),
   });
-  // Every claim returned is a mismatch, so the population is the standing documents:
-  // what fraction carry a wrong claim.
   const contradicting = new Set(countClaims.map((c) => c.path));
   checks[0] = {
     check: "contradictions",
@@ -167,9 +146,7 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     findings: checks[0].findings,
   };
 
-  // 2. Stale decisions: published and untouched in half a year. A state claim is
-  //    re-verified before it is acted on, and a reader cannot apply that rule to a
-  //    document whose age they cannot see.
+  // Stale decisions: a reader cannot apply the re-verify rule to a document whose age they cannot see.
   const decisions = standing.filter(
     (d) => d.type === "decision" && (d.status ?? "published") === "published",
   );
@@ -188,8 +165,7 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     })),
   });
 
-  // 3. Unbound specs: no typed edge in either direction, so a reader cannot find
-  //    from the store whether the work happened.
+  // Unbound specs: no typed edge, so the store cannot say whether the work happened.
   const specs = standing.filter(
     (d) => d.type === "spec" || d.type === "protocol" || d.type === "procedural",
   );
@@ -210,7 +186,6 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     })),
   });
 
-  // 4. Broken links, from gather, counted against the whole edge population.
   const namespaceEdges = input.edges.filter(
     (e) => e.from_ns === namespace || e.to_ns === namespace,
   );
@@ -227,12 +202,13 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     })),
   });
 
-  // 5. Doc-vs-code drift: a repo path named in canon that is no longer in the repo. The repo is
-  // gated and the store is not, so the store is where a path rots.
+  // Doc-vs-code drift: the repo is gated and the store is not, so the store is where a path rots.
   if (input.repoPaths) {
-    // A candidate counts only when its first segment is a top-level entry of this namespace's mapped repo, which separates `src/gone.ts` from `apps/web/...` in another portfolio repo (not drift here).
+    // Counts only when its first segment is a top-level entry of this namespace's mapped repo, which
+    // separates `src/gone.ts` from another repo's `apps/web/...`.
     const repoRoots = new Set([...input.repoPaths].map((p) => p.split("/")[0]));
-    // A document path in this namespace is a store address, whatever it looks like. The prefix list cannot reach these: the Worker writes `jobs/<id>.md` itself, and `improve/` is both a store prefix and a real directory. Every document counts, excluded ones included.
+    // A document path in this namespace is a store address, whatever it looks like (the prefix list
+    // cannot reach `jobs/<id>.md`, and `improve/` is also a real directory). Excluded documents count.
     const documentPaths = new Set(docs.map((d) => d.path));
     const cited = new Map<string, Set<string>>();
     for (const doc of standing) {
@@ -272,8 +248,7 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     });
   }
 
-  // 6. Unconsolidated: a backlog, not a defect. At or under the cadence it is not a
-  //    finding and does not lower integrity, so integrity always traces to a finding.
+  // A backlog, not a defect: at or under the cadence it does not lower integrity.
   const unconsolidated = standing.filter((d) => d.type === "episodic" || d.type === "source");
   const overCadence = unconsolidated.length > UNCONSOLIDATED_CADENCE;
   checks.push({
@@ -291,9 +266,7 @@ export function buildTruthReport(input: TruthInput): TruthReport {
       : [],
   });
 
-  // 7 and 8. The rule documents (src/rule-docs.ts): each under its cap, and naming only
-  //    tools and actions the Worker serves. The subjects are the rule documents in this
-  //    namespace, so a namespace with none has nothing judged here.
+  // Rule documents (src/rule-docs.ts): a namespace with none has nothing judged here.
   const ruleDocs = standing.filter((d) => ruleDocCap(namespace, d.path) !== null);
   const problems = ruleDocs
     .map((d) => ruleDocProblem(namespace, d.path, d.body ?? ""))
@@ -349,7 +322,7 @@ export function renderTruthReport(report: TruthReport): string {
   const lines: string[] = [];
   lines.push(`# Truth report - ${report.namespace} - ${report.generated.slice(0, 10)}`);
   lines.push("");
-  // Not measured is not zero: `integrity` is null when no check had a subject, and "0%" would read as the worst state. INTEGRITY_LINE does not match the words, so integrityOf returns null and capsid_read_status action status reports no report, as for a missing document.
+  // integrity is null when no check had a subject: "0%" would read as the worst state, and INTEGRITY_LINE does not match the words, so status reports no report.
   lines.push(`integrity: ${report.integrity === null ? "not measured" : `${report.integrity}%`}`);
   lines.push("");
   lines.push(
@@ -400,7 +373,6 @@ export function renderTruthReport(report: TruthReport): string {
   return lines.join("\n");
 }
 
-// One document per namespace per day; a second run the same day overwrites.
 export function reportPath(date: Date): string {
   return `${REPORTS_PREFIX}lint-${utcDay(date)}.md`;
 }

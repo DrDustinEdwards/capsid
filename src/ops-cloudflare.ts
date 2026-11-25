@@ -6,10 +6,6 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 import { callSignal } from "./call-signal";
 
-// The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns
-// (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never per
-// dashboard request.
-
 export const CF_API = "https://api.cloudflare.com/client/v4";
 export const CF_GRAPHQL = `${CF_API}/graphql`;
 const CF_TIMEOUT_MS = 10_000;
@@ -20,16 +16,13 @@ const ERROR_HOURS = 24;
 // that cannot break out of a string literal is sent.
 const SCRIPT_NAME = /^[A-Za-z0-9_-]{1,63}$/;
 
-// The scriptName Cloudflare's analytics gives a row it cannot name.
-
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export type CfCredentials =
   | { ok: true; token: string; account: string }
   | { ok: false; reason: string };
 
-// The token and the account it reads. The account is CF_ACCOUNT_ID, or R2_ACCOUNT_ID where that is
-// unset: R2 lives in the same Cloudflare account. The reason names exactly what is unset.
+// The account is CF_ACCOUNT_ID, or R2_ACCOUNT_ID where unset: R2 is in the same account.
 export function cloudflareCredentials(
   env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
 ): CfCredentials {
@@ -44,8 +37,6 @@ export function cloudflareCredentials(
 
 const hostOf = (origin: string): string => new URL(origin).hostname.toLowerCase();
 
-// A failed Cloudflare read, carrying the HTTP status so a caller can say what a 403 means for its
-// endpoint (the permission the token lacks).
 export class CfReadError extends Error {
   readonly status: number;
   constructor(message: string, status: number) {
@@ -57,8 +48,7 @@ export class CfReadError extends Error {
 
 type CfEnvelope = { success?: unknown; errors?: unknown; result?: unknown; result_info?: unknown };
 
-// The Cloudflare REST envelope. `success` false or a non-2xx is a failed read, with
-// Cloudflare's own messages as the reason. The token is never part of a reason.
+// A non-2xx or success:false is a failed read; the token is never part of a reason.
 export async function cfGet(
   fetchImpl: FetchLike,
   token: string,
@@ -68,7 +58,6 @@ export async function cfGet(
   return (await cfEnvelope(fetchImpl, token, url, what)).result;
 }
 
-/** A POST that only reads (a D1 query of sqlite_master), through the same envelope. */
 export async function cfPostRead(
   fetchImpl: FetchLike,
   token: string,
@@ -112,9 +101,6 @@ async function cfEnvelope(
 // A list read stops here rather than returning part of a list as if it were the whole.
 export const CF_MAX_PAGES = 20;
 
-// Every item of a paged Cloudflare list, following result_info.total_pages. `url` carries no page
-// or per_page; both are set here. A list with more than CF_MAX_PAGES pages fails with the count,
-// never a truncated answer.
 export async function cfGetAll(
   fetchImpl: FetchLike,
   token: string,
@@ -131,7 +117,6 @@ export async function cfGetAll(
     if (!Array.isArray(body.result)) throw new Error(`${what} returned no result array`);
     out.push(...body.result);
     const pages = (body.result_info as { total_pages?: unknown } | null | undefined)?.total_pages;
-    // No result_info, or no total_pages, is a list Cloudflare does not page: one page.
     const total = typeof pages === "number" && Number.isFinite(pages) ? pages : 1;
     if (page >= total) return out;
     if (page >= CF_MAX_PAGES)
@@ -164,8 +149,6 @@ function messagesOf(errors: unknown): string {
 
 const reasonOf = (err: unknown): string => errorMessage(err).slice(0, 300);
 
-// GET /accounts/{id}/workers/domains: every Workers custom domain on the account, as hostname to
-// the script (`service`) it serves.
 async function readCustomDomains(
   fetchImpl: FetchLike,
   token: string,
@@ -189,8 +172,6 @@ async function readCustomDomains(
 
 export const WEB_ANALYTICS_PERMISSION = "Account / Account Settings / Read";
 
-// GET /accounts/{id}/rum/site_info/list: every Web Analytics site in the account. A 403 is turned
-// into the permission the token lacks.
 export async function readWebAnalyticsSites(
   fetchImpl: FetchLike,
   token: string,
@@ -240,8 +221,7 @@ interface RawDeploy {
 
 const str = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);
 
-// One deployment as the dashboard shows it. version_id is the version serving the largest
-// percentage of traffic.
+// version_id is the version serving the largest percentage of traffic.
 function toCfDeploy(raw: RawDeploy): CfDeploy {
   let version_id: string | null = null;
   let best = -1;
@@ -268,9 +248,7 @@ function toCfDeploy(raw: RawDeploy): CfDeploy {
   };
 }
 
-// GET /accounts/{id}/workers/scripts/{script}/deployments. Cloudflare lists the newest first ("the
-// first deployment in the list is the latest deployment actively serving traffic"); sorted again on
-// created_on so the order does not rest on that.
+// Sorted on created_on so the order does not rest on Cloudflare listing the newest first.
 async function readDeploys(
   fetchImpl: FetchLike,
   token: string,
@@ -288,8 +266,7 @@ async function readDeploys(
     .slice(0, DEPLOYS_KEPT);
 }
 
-// The 24 complete hours before `now`, oldest first. The last is the most recent complete hour, the
-// one the error-rate finding reads.
+// The last is the most recent complete hour, which the error-rate finding reads.
 export function errorWindow(now: Date): { start: Date; end: Date; hours: string[] } {
   const end = new Date(Math.floor(now.getTime() / HOUR_MS) * HOUR_MS);
   const start = new Date(end.getTime() - ERROR_HOURS * HOUR_MS);
@@ -318,12 +295,10 @@ function errorsQuery(scripts: string[]): string {
 }`;
 }
 
-// The name Cloudflare gives invocations it does not attribute to a script.
 const UNATTRIBUTED_SCRIPT = "__unknown__";
 
-// ONE GraphQL Analytics query for every script, hourly, over errorWindow. A script with no row in
-// an hour had no invocations then, which is a real zero from a query that succeeded. A query that
-// failed throws, and the caller records no data with the reason, never zeros.
+// A script with no row in an hour had no invocations (a real zero); a failed query throws and the
+// caller records no data with the reason, never zeros.
 async function readErrors(
   fetchImpl: FetchLike,
   token: string,
@@ -394,14 +369,13 @@ async function readErrors(
         "the analytics query returned a row without scriptName, datetimeHour, requests, errors and cpuTimeUs",
       );
     }
-    // Cloudflare answered a row named "__unknown__" for 2026-10-31 15:00 although the filter names
-    // only our scripts; failing on it left every site's error and CPU checks blind for hours.
+    // Cloudflare answered a row named "__unknown__" though the filter names only our scripts; failing
+    // on it blinded every site's error and CPU checks for hours.
     if (script === UNATTRIBUTED_SCRIPT) continue;
     const at = Date.parse(hourRaw);
     const i = Number.isNaN(at) ? undefined : index.get(new Date(at).toISOString());
     const buckets = out.get(script);
-    // A row outside the window or for a script not asked for means the filter is not
-    // what this code believes, so the whole read fails rather than being half right.
+    // A row outside the window or for an unasked script means the filter is not what this code believes.
     if (i === undefined || !buckets)
       throw new Error(
         `the analytics query returned a row outside the asked window or scripts (${script} ${hourRaw})`,
@@ -414,15 +388,13 @@ async function readErrors(
 }
 
 export interface CloudflareRead {
-  // Every site's Cloudflare state, keyed by namespace.
   bySite: Record<string, SiteCloudflare>;
   // True only when the token is set and every read this pass needed succeeded, so a
   // finding the "cloudflare" check owns clears only on a full read.
   ran: boolean;
 }
 
-// Every mapped site's Cloudflare state for this pass. Each failed read is logged and recorded on
-// the sites it affects with its reason; nothing is reported as zero.
+// Each failed read is logged and recorded on the sites it affects; nothing is reported as zero.
 export async function readCloudflare(
   env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
   sites: readonly OpsSite[],
@@ -527,11 +499,11 @@ export async function readCloudflare(
   return { bySite, ran };
 }
 
-// THE SECRET-PRESENCE READ (shared with the credentials inventory): which secrets a Worker has, by NAME. Cloudflare's secrets list has no way to return a value, so none can reach Capsid. Read on the watcher's pass only; the Portal shows what the last pass stored (src/secret-presence.ts).
+// Secret names only: Cloudflare's secrets list cannot return a value, so none reaches Capsid. Read on
+// the watcher's pass only (src/secret-presence.ts).
 const SECRETS_PERMISSION = "Account / Workers Scripts / Read";
 
-// The `name` of every row of a Cloudflare list, nothing else: whatever else a row carries is
-// dropped here, unread. A 403 names the permission the token lacks.
+// Only each row's `name`; anything else is dropped unread.
 async function readNames(
   fetchImpl: FetchLike,
   token: string,
@@ -556,8 +528,6 @@ async function readNames(
     .filter((n): n is string => typeof n === "string" && n.length > 0);
 }
 
-// GET /accounts/{id}/workers/scripts/{script}/secrets: the names. A 403 names the permission the
-// token lacks.
 export async function readSecretNames(
   fetchImpl: FetchLike,
   token: string,
@@ -575,10 +545,10 @@ export async function readSecretNames(
   );
 }
 
-// The Access applications' names, for a blocked job's "check: access app <name>" line (src/manual-steps.ts). Names only: an Access for SaaS app carries a client secret beside its settings (src/ops-cloudflare-config.ts), and nothing but the name is copied out.
+// Names only: an Access for SaaS app carries a client secret beside its settings
+// (src/ops-cloudflare-config.ts), and only the name is copied out.
 const ACCESS_PERMISSION = "Account / Access: Apps and Policies / Read";
 
-/** GET /accounts/{id}/access/apps: the names. A 403 names the permission the token lacks. */
 export async function readAccessAppNames(
   fetchImpl: FetchLike,
   token: string,

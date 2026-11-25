@@ -8,40 +8,29 @@ import type { Finding } from "./watcher-detect";
 import { DAY_MS, timeMs } from "./time";
 import { mapLimit } from "./map-limit";
 
-// STALE CANON AFTER A MERGE (Capsid improvement list, item 23: Foxhound's ROUTES.md and DESIGN.md
-// still said the admin reused the app shell after a pull request changed it).
-
 const STALE_CANON_KEY = "stale-canon:merges";
 const RETAIN_DAYS = 30;
 const RETAIN_MS = RETAIN_DAYS * DAY_MS;
-// Reads per pass: one pull request list per namespace (at most MAX_NAMESPACES), the
-// files of at most MAX_PR_READS_PER_PASS pull requests, and two D1 reads per namespace
-// with a remembered merge. A burst of merges is caught up over the next passes.
+// Reads per pass are bounded (MAX_NAMESPACES, MAX_PR_READS_PER_PASS); a burst of merges is caught up
+// over the next passes.
 export const MAX_NAMESPACES = 20;
 const MAX_PR_READS_PER_PASS = 5;
-// How many GitHub reads of one pass run together (src/map-limit.ts).
 const READ_CONCURRENCY = 6;
 const PULLS_LISTED = 20;
-// Paths kept per list per pull request. A larger change is kept cut, and says so.
 export const MAX_PATHS_PER_PR = 300;
 const MAX_DOCS_PER_NAMESPACE = 200;
 const MAX_EDGES_PER_NAMESPACE = 2000;
-// Findings per pass. Sorted first, so the same ones are shown pass after pass.
+// Sorted first, so the same ones are shown pass after pass.
 export const MAX_FLAGS = 40;
 const CITED_SHOWN = 6;
 
-// What a merge did to the repo's files, as remembered.
 export interface MergedChange {
   number: number;
   url: string;
   merged_at: string;
-  // Deleted (to: null) or renamed away (to: the new path).
   removed: Array<{ path: string; to: string | null }>;
-  // Modified in place.
   changed: string[];
-  // Added, or the new name of a rename: a later merge that brings a path back.
   added: string[];
-  // Why the lists are not the whole pull request, or null.
   partial: string | null;
 }
 
@@ -52,7 +41,6 @@ interface NamespaceMerges {
 
 export type MergeMemory = Record<string, NamespaceMerges>;
 
-/** What one pull request's file rows remove, rename, modify and add. Pure. */
 export function changeFromFiles(
   rows: readonly PrFileRow[],
 ): Pick<MergedChange, "removed" | "changed" | "added" | "partial"> {
@@ -84,15 +72,13 @@ export function changeFromFiles(
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// Whether `body` names `path` as a whole path: "src/a.ts" in "see src/a.ts." but not in
-// "src/a.tsx", "src/a.ts.bak" or "lib/src/a.ts". A path with neither a slash nor a dot ("Makefile")
-// is an ordinary word in prose and is never matched by body; an edge to it still counts. Pure.
+// A path with neither a slash nor a dot ("Makefile") is an ordinary word in prose and is never
+// matched by body; an edge to it still counts.
 export function citesPath(body: string, path: string): boolean {
   if (!path.includes("/") && !path.includes(".")) return false;
   return new RegExp(`(?<![\\w./-])${escapeRe(path)}(?![\\w/-]|\\.\\w)`).test(body);
 }
 
-// The types that say how an app works, beside the canon paths (src/canon.ts).
 const CANON_TYPES: ReadonlySet<string> = new Set([
   "core",
   "spec",
@@ -112,8 +98,6 @@ export interface CanonDoc {
   body: string | null;
 }
 
-// Whether a document is one this check holds to the code: a canon path or a canon type, not a dated
-// record, not retired. Pure.
 export function staleCanonDoc(
   namespace: string,
   doc: Pick<CanonDoc, "path" | "type" | "status">,
@@ -146,8 +130,6 @@ export interface StaleFlag {
   partial: string | null;
 }
 
-// The documents each remembered merge leaves stale, per the rules at the top of this file. One flag
-// per document and pull request, naming every path it cites. Pure.
 export function staleCanonFlags(
   namespace: string,
   merges: readonly MergedChange[],
@@ -162,7 +144,6 @@ export function staleCanonFlags(
   ordered.forEach((pr, i) => {
     const merged = timeMs(pr.merged_at);
     if (Number.isNaN(merged)) return;
-    // A path a later merge added back, or modified, exists again.
     const later = new Set(ordered.slice(i + 1).flatMap((p) => [...p.added, ...p.changed]));
     for (const doc of docs) {
       if (!staleCanonDoc(namespace, doc)) continue;
@@ -209,7 +190,6 @@ function tag(text: string): string {
 
 const STALE_CANON_PREFIX = "stale-canon-";
 
-/** One fingerprint per document and pull request: stable while both stand. */
 export function staleCanonFingerprint(flag: Pick<StaleFlag, "namespace" | "doc" | "pr">): string {
   return `${STALE_CANON_PREFIX}${flag.namespace}-${flag.pr}-${tag(flag.doc)}`;
 }
@@ -217,7 +197,6 @@ export function staleCanonFingerprint(flag: Pick<StaleFlag, "namespace" | "doc" 
 const describe = (c: Cited): string =>
   `${c.path} (${c.how === "renamed" ? `renamed to ${c.to}` : c.how}; cited by ${c.via === "edge" ? "a typed edge" : "path in the body"})`;
 
-/** The flags as watcher findings, sorted and capped at MAX_FLAGS. Pure. */
 export function staleCanonFindings(flags: readonly StaleFlag[]): Finding[] {
   const sorted = [...flags].sort(
     (a, b) => a.namespace.localeCompare(b.namespace) || b.pr - a.pr || a.doc.localeCompare(b.doc),
@@ -258,9 +237,6 @@ export function staleCanonFindings(flags: readonly StaleFlag[]): Finding[] {
   });
 }
 
-// The memory, and the merges still to read.
-
-/** The stored memory, or null with the reason when it does not parse. Absent is empty. */
 export function parseMemory(raw: string | null): { memory: MergeMemory } | { problem: string } {
   if (raw === null) return { memory: {} };
   try {
@@ -278,7 +254,6 @@ export function parseMemory(raw: string | null): { memory: MergeMemory } | { pro
   }
 }
 
-/** The memory without the merges older than RETAIN_DAYS. Pure. */
 export function pruneMemory(memory: MergeMemory, now: Date): MergeMemory {
   const out: MergeMemory = {};
   for (const [ns, entry] of Object.entries(memory)) {
@@ -295,8 +270,6 @@ export interface ListedPull {
   base?: { ref?: string; repo?: { default_branch?: string } };
 }
 
-// The listed pull requests that merged into the default branch inside the window and are not
-// remembered yet, oldest first. Pure.
 export function newMerges(
   listed: readonly ListedPull[],
   known: ReadonlySet<number>,
@@ -325,8 +298,6 @@ export function namespacesThisPass(
   }
   return { listed, capped };
 }
-
-// The pass.
 
 export interface StaleCanonRead {
   findings: Finding[];
@@ -358,8 +329,6 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
     .bind(MAX_NAMESPACES + 1)
     .all<{ namespace: string }>();
 
-  // Every namespace's new merges, then the oldest MAX_PR_READS_PER_PASS of them read.
-  // A namespace no longer mapped is forgotten, unless the list hit MAX_NAMESPACES.
   const { listed, capped } = namespacesThisPass(
     (mapped ?? []).map((m) => m.namespace),
     memory,
@@ -367,8 +336,6 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
   if (capped) complete = false;
   const pending: Array<{ namespace: string; owner: string; repo: string; pull: ListedPull }> = [];
   const unread: string[] = [];
-  // Each namespace's list is its own GitHub read, so they run together; the memory entries
-  // are per namespace, and pending is filled in the listed order after.
   const lists = await mapLimit(listed, READ_CONCURRENCY, async (namespace) => {
     try {
       const { owner, repo, full } = await resolveRepo(env, namespace);
@@ -428,7 +395,6 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
 
   const flags: StaleFlag[] = [];
   for (const [namespace, entry] of Object.entries(kept)) {
-    // The candidates in SQL; staleCanonDoc decides.
     const [docs, edges] = await env.DB.batch([
       env.DB.prepare(
         `SELECT path, type, status, updated_at, body FROM documents

@@ -3,14 +3,12 @@ import type { PrFacts } from "./auto-merge-policy-evaluate";
 import { parseMergePolicy, type MergePolicy } from "./auto-merge-policy-parse";
 import { readSignedPolicy } from "./signed-docs";
 
-// What the Worker may merge without a human, and where that list lives: the document
-// capsid/policy/auto-merge.md, signed like a task document, because it decides whether this Worker
+// The document capsid/policy/auto-merge.md, signed like a task document, decides whether this Worker
 // may write to a default branch that deploys on push. An unsigned or edited policy merges nothing.
 export const AUTO_MERGE_POLICY_PATH = "policy/auto-merge.md";
 
-// Every check, in the order evaluated, each refusing on its own. The three path checks run first:
-// they are the never list. pr_author_allowed refuses an author login not on the signed document's
-// allowlist, so changing who may author an unattended merge is a signed act.
+// The three path checks run first (the never list). Changing who may author an unattended merge is a
+// signed act (pr_author_allowed).
 export const POLICY_CHECKS = [
   "paths_not_refused",
   "paths_not_money",
@@ -28,25 +26,18 @@ export const POLICY_CHECKS = [
 
 export type PolicyCheck = (typeof POLICY_CHECKS)[number];
 
-// The most changed lines (additions plus deletions, as GitHub counts them) a pull request may
-// carry and still merge with no human. Over it, the merge class is approve: one tap, reason "over
-// the size cap". A big diff is where a review earns its time.
+// Over it, the merge class is approve (one tap, "over the size cap"): a big diff is where a review earns its time.
 export const AUTO_MERGE_SIZE_CAP = 1000;
 
-/**
- * Whether a pull request's changed lines are over the size cap. Uncounted is not over it; the
- * policy refuses an uncounted pull request on its own.
- */
+// Uncounted is not over it; the policy refuses an uncounted pull request on its own.
 export const overSizeCap = (facts: Pick<PrFacts, "changedLines">): boolean =>
   facts.changedLines !== null && facts.changedLines > AUTO_MERGE_SIZE_CAP;
 
-/** The reason a pull request over the cap carries, in the merge class and the decline. */
 export const sizeCapReason = (facts: Pick<PrFacts, "changedLines">): string =>
   `over the size cap: ${facts.changedLines} changed lines, more than ${AUTO_MERGE_SIZE_CAP}`;
 
-// The paths auto-merge refuses. Tests, src/, docs, CLAUDE.md and .claude/ merge on green; these do
-// not, because each changes what judges a change or what ships beside it. Matched
-// case-insensitively against the repo-relative path; the document lists each source.
+// Tests, src/, docs, CLAUDE.md and .claude/ merge on green; these change what judges a change or what
+// ships beside it.
 export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> = [
   { pattern: /^src\/gate-policy\.ts$/i, why: "the gate policy source" },
   {
@@ -55,9 +46,8 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   },
   { pattern: /^src\/policy-sign(-[a-z]+)*\.ts$/i, why: "the policy signer" },
   { pattern: /^src\/protected-paths\.ts$/i, why: "the protected path list" },
-  // The sources the checks read their answers from, not only the ones that run them. Each is a
-  // two-step route otherwise: a green driver PR weakens the source and merges on its own, and the
-  // next PR passes the check it weakened.
+  // The sources the checks read their answers from, not only the ones that run them: otherwise a
+  // green driver PR weakens the source and the next PR passes the check it weakened.
   {
     pattern: /^src\/scope(-[a-z]+)*\.ts$/i,
     why: "isMoneyPath, which is the whole of the paths_not_money check",
@@ -115,9 +105,7 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   { pattern: /(^|\/)\.husky\//i, why: "a git hook CI may run" },
   { pattern: /(^|\/)\.gitmodules$/i, why: "submodules the checkout would fetch and run" },
   // pr_recorded_for_job trusts result_ref and job_outcome_prs because only the job's holder writes
-  // them. These two sources are what writes them, so a green PR that loosened either could record
-  // any PR against any job. The job transitions are src/jobs.ts and the jobs-* modules it
-  // re-exports.
+  // them; these sources write them, so a green PR that loosened either could record any PR against any job.
   {
     pattern: /^src\/jobs(-[a-z]+)*\.ts$/i,
     why: "the job transitions that write result_ref, which pr_recorded_for_job reads",
@@ -137,9 +125,7 @@ export function refusedPathHits(paths: string[]): Array<{ path: string; why: str
   return hits;
 }
 
-// The paths a namespace's pull requests may touch at all, for a namespace that carries a limit:
-// every changed path must match one pattern. The one list that admits rather than refuses, so it
-// is per namespace: inheriting another's would widen.
+// The one list that admits rather than refuses, so it is per namespace: inheriting another's would widen.
 export const AUTO_MERGE_ALLOWED_PATHS: Record<string, Array<{ pattern: RegExp; why: string }>> = {
   capsid: [
     {
@@ -150,7 +136,6 @@ export const AUTO_MERGE_ALLOWED_PATHS: Record<string, Array<{ pattern: RegExp; w
   ],
 };
 
-/** The allowed-path rule for a namespace, or null when it has no limit. */
 export function allowedPathsFor(namespace: string): Array<{ pattern: RegExp; why: string }> | null {
   return Object.hasOwn(AUTO_MERGE_ALLOWED_PATHS, namespace)
     ? AUTO_MERGE_ALLOWED_PATHS[namespace]
@@ -162,10 +147,8 @@ export const namespacedAllowedPaths = (): string[] =>
     rows.map((r) => `${ns} / ${r.pattern.source}`),
   );
 
-// The CI steps a green PR must have run, per namespace. A repo's suites are steps of one job, so
-// check-run names cannot show they ran: ci_green reads the steps of the newest run of each named
-// workflow on the head sha, and every named step must have concluded success (a skipped step is
-// not a pass).
+// A repo's suites are steps of one job, so check-run names cannot show they ran: ci_green reads the
+// newest run's steps, and a skipped step is not a pass.
 export interface RequiredStep {
   workflow: string;
   job: string;
@@ -183,9 +166,8 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
     "Tests",
     "Integration tests",
   ].map(ciStep("checks")),
-  // Every named step of both jobs of dustinedwards-info's ci.yml, read off main. Install and build
-  // steps are named too, so a reordered workflow that drops one refuses. Command steps carry no
-  // name, so GitHub reports them as "Run <command>".
+  // Install and build steps are named too, so a reordered workflow that drops one refuses. Command
+  // steps carry no name, so GitHub reports them as "Run <command>".
   dustinedwards: [
     ...["Install", "Migrations, stack and content build, local sync", "Lint", "Gates", "Build"].map(
       ciStep("Gates, clean checkout"),
@@ -214,9 +196,8 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
       ciStep("gates"),
     ),
   ],
-  // Every blocking step of Capsomer's `check` job, read off its ci.yml on main. Warn-only steps
-  // (continue-on-error or always()) are left out: a pass proves nothing. The `results` job runs on a
-  // push to main only; the No bloat workflow is warn-only by ruling.
+  // Warn-only steps (continue-on-error or always()) are left out: a pass proves nothing. The `results`
+  // job runs on a push to main only; the No bloat workflow is warn-only by ruling.
   capsomer: [
     "Install",
     "Palette, scales, unit tests, types",
@@ -228,7 +209,6 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
   ].map(ciStep("check")),
 };
 
-/** The steps that namespace's pull requests must have run, or null when none are written down. */
 export function requiredCiFor(namespace: string): RequiredStep[] | null {
   const rows = Object.hasOwn(AUTO_MERGE_REQUIRED_CI, namespace)
     ? AUTO_MERGE_REQUIRED_CI[namespace]
@@ -268,12 +248,7 @@ export async function loadMergePolicy(
   return checkMergePolicyBody(read.body);
 }
 
-/**
- * Every check loadMergePolicy makes of a body once its signature is verified: it parses, and it
- * says no less, and nothing different, than the code enforces. The one place a body is judged
- * loadable, so a body signed from the repo (sign_policy_from_repo) is held to what the loader will
- * hold it to.
- */
+// The one place a body is judged loadable, so a body signed from the repo is held to what the loader will.
 export function checkMergePolicyBody(body: string): { policy: MergePolicy } | { error: string } {
   const parsed = parseMergePolicy(body);
   if ("error" in parsed) return parsed;
@@ -303,9 +278,8 @@ export function checkMergePolicyBody(body: string): { policy: MergePolicy } | { 
     namespacedCiLabels(),
   );
   if (steps) return { error: steps };
-  // A namespace the policy covers with no required CI steps merges nothing. Without this, ci_green's
-  // step check would have nothing to compare and would pass on any run that reported at all, so a
-  // widening here would be quiet rather than fail closed.
+  // Without this, ci_green's step check would have nothing to compare and would pass on any run that
+  // reported at all, so a widening here would be quiet rather than fail closed.
   const uncovered = parsed.policy.namespaces.filter((n) => requiredCiFor(n) === null);
   if (uncovered.length > 0) {
     return {
