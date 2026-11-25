@@ -163,9 +163,9 @@ jobs:
       health-url: https://capsid.dustinedwards.info/health
       verify-command: node "$DEVKIT_DIR/bin/verify-deploy.mjs" https://capsid.dustinedwards.info
       working-directory: explorer
+      install: cd .. && npm ci && npm ci --prefix explorer
       pre-deploy: >-
-        cd .. && npm ci --ignore-scripts &&
-        npm --prefix explorer run build &&
+        cd .. && npm --prefix explorer run build &&
         node explorer/wrangler-config.mjs explorer/dist > explorer/wrangler.json
       sha-var: DEPLOY_SHA
       # Gradual rollout (D4): the new version takes 10% of traffic for 10 minutes before the live gate judges it and it

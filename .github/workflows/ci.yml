@@ -215,8 +215,8 @@ jobs:
       verify-command: >-
         npm ci --ignore-scripts --no-audit --no-fund || exit 3;
         CAPSID_LIVE_PROBE_KEY="$VERIFY_TOKEN" node scripts/verify-live.mjs
+      install: npm ci && npm ci --prefix dashboard
       pre-deploy: >-
-        npm ci --ignore-scripts --prefix dashboard &&
         node scripts/ci-config.mjs &&
         npx devkit-migrations migrations --apply capsid &&
         npm run build:dashboard
