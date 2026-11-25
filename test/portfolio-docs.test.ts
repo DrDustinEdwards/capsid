@@ -8,7 +8,7 @@ import { isPortfolioPath, PORTFOLIO_DOCS } from "../src/portfolio-docs.ts";
 import { fakeD1, fakeEnv, fakeKv, type DocRow } from "./fakes.ts";
 
 // Every namespace driver may READ the portfolio documents in capsid (conventions, the
-// archived decisions volumes, the rulings, capsid's core) and nothing else there.
+// rulings, capsid's core) and nothing else there.
 // Every call goes through a real MCP client, so the registrar's check and the listing
 // handlers' filters are both on the path.
 
@@ -16,8 +16,6 @@ import { fakeD1, fakeEnv, fakeKv, type DocRow } from "./fakes.ts";
 const ALLOWED = [
   "conventions.md",
   "core.md",
-  "archive/decisions-vol-1.md",
-  "archive/decisions-vol-7.md",
   "rulings/remove-improve-loop-2026-10-19.md",
   "rulings/shared-homes-2026-10-06.md",
 ];
@@ -32,11 +30,8 @@ const DENIED = [
   "conventions-capsid.md",
   "conventions-web.md",
   "decisions.md",
-  "decisions-vol-5.md",
   "rulings-secret/plan.md",
   "rulings/deeper/nested.md",
-  "archive/decisions-notes.md",
-  "decisions-vol-x.md",
   "decisions-archive.md",
   "archive/other.md",
   "episodic-2026-10-01.md",
@@ -128,11 +123,10 @@ async function connect(caller: Agent, opts: { ftsRows?: number } = {}) {
 const paths = (r: Result): string[] =>
   (JSON.parse(r.text) as { documents: Array<{ path: string }> }).documents.map((d) => d.path);
 
-test("PORTFOLIO_DOCS is exactly the documents, volumes, folder and tool actions this test names", () => {
+test("PORTFOLIO_DOCS is exactly the documents, folder and tool actions this test names", () => {
   assert.deepEqual(PORTFOLIO_DOCS, {
     namespace: "capsid",
     documents: ["conventions.md", "core.md"],
-    volumes: ["archive/decisions-vol-"],
     folders: ["rulings/"],
     tools: [
       "capsid_read_doc.read",
@@ -163,10 +157,6 @@ test("isPortfolioPath admits the allowed paths and refuses traversal, case, enco
     "./conventions.md",
     "conventions.md ",
     "rulings//remove-improve-loop-2026-10-19.md",
-    "archive/decisions-vol-0.md",
-    "archive/decisions-vol-.md",
-    "archive/decisions-vol-5.md.bak",
-    "archive/archive/decisions-vol-1.md",
     "x/conventions.md",
     "",
   ];
@@ -334,7 +324,6 @@ test("PLANT: capsid_start_session names the rule documents to read first, and no
   assert.deepEqual(out.portfolio_documents.allowlist, [
     "conventions.md",
     "core.md",
-    "archive/decisions-vol-<n>.md",
     "rulings/<name>.md",
   ]);
   await close();

@@ -99,37 +99,6 @@ test("archived documents are exempt", () => {
   assert.deepEqual(claims, []);
 });
 
-// A closed decision volume quotes counts as they stood on the day, so they are stale
-// by construction. This asserts the path exemption, which survives a volume written
-// with the wrong type; the fixture uses a linted type so that without the path guard
-// it flags.
-test("the numbered decision volumes are exempt, by path and not only by type", () => {
-  const stale = String(CAPSID.tools - 5);
-  for (const type of ["reference", "core", "concept"]) {
-    assert.deepEqual(
-      scanCountClaims(
-        [{ path: "decisions-vol-1.md", type, body: `The surface was ${stale} tools then.` }],
-        "capsid",
-      ),
-      [],
-      `decisions-vol-1.md typed ${type} was linted`,
-    );
-  }
-  assert.deepEqual(
-    scanCountClaims(
-      [{ path: "decisions-vol-12.md", type: "reference", body: `${stale} tools.` }],
-      "capsid",
-    ),
-    [],
-  );
-  // The guard is anchored: a document that merely starts the same way is still linted.
-  const near = scanCountClaims(
-    [{ path: "decisions-vol-notes.md", type: "core", body: `${stale} tools.` }],
-    "capsid",
-  );
-  assert.equal(near.length, 1, "decisions-vol-notes.md is not a volume and must still be linted");
-});
-
 test("the 'N of M gates' form is judged on the TOTAL, not the numerator", () => {
   // "6 of 8 gates" states the artifact has 8 gates, which is correct, and that 6
   // passed, which is a run result and none of this lint's business.

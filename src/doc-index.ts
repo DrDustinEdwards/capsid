@@ -36,7 +36,6 @@ export const INDEX_QUERY = `SELECT id, title, substr(body, 1, 63000) AS content,
   coalesce(status, 'published') AS meta_status,
   CASE WHEN path = 'core.md' OR (namespace = 'capsid' AND (
     (path GLOB 'conventions*.md' AND instr(path, '/') = 0)
-    OR path IN ('archive/decisions-vol-4.md', 'archive/decisions-vol-8.md')
     OR substr(path, 1, 8) = 'rulings/')) THEN 1 ELSE 0 END AS meta_canon
 FROM documents`;
 

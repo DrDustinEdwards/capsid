@@ -43,20 +43,16 @@ const ok = async (name: string, args: Record<string, unknown>) => {
 };
 
 const ALLOWED = [
-  "archive/decisions-vol-7.md",
   "conventions.md",
   "core.md",
   "rulings/remove-improve-loop-2026-10-19.md",
 ];
 const DENIED = [
-  "archive/decisions-notes.md",
-  "decisions-vol-5.md",
   "decisions.md",
   "policy/gates.md",
   "research/plan.md",
   "rulings-secret/plan.md",
   "rulings/deeper/nested.md",
-  "decisions-vol-x.md",
 ];
 
 beforeEach(async () => {

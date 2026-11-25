@@ -36,8 +36,8 @@ const CANON_RULES: readonly CanonRule[] = [
   { namespace: "*", pattern: /^core\.md$/, label: "<namespace>/core.md" },
   {
     namespace: "*",
-    pattern: /^(decisions|archive\/decisions(-vol-[1-9][0-9]{0,3})?)\.md$/,
-    label: "<namespace>/decisions.md and its archived volumes",
+    pattern: /^(decisions|archive\/decisions)\.md$/,
+    label: "<namespace>/decisions.md",
   },
 ];
 
