@@ -4,7 +4,7 @@ import { docStatements } from "../src/doc-statements";
 
 // The system document writer (a job's mirror document) snapshots the live row, not the body its caller
 // pre-read. The job claim path waits on GitHub between that read and the batch, so a
-// write landing in the gap must still be snapshotted (hard rule 5).
+// write landing in the gap must still be snapshotted.
 //
 // Here rather than in test/ because the snapshot is an INSERT ... SELECT from the live
 // row, and the node fake does not evaluate that SQL.

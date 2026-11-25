@@ -30,7 +30,7 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 
 /** The switch the seat sets to "on" to let the pass delete merged branches. Anything else,
  *  or no key, is off. A KV key rather than a control: a control would add to a served
- *  tool's surface (CLAUDE.md, tool surface rule). */
+ *  tool's surface (CLAUDE.md, Tool surface). */
 export const PRUNE_SWITCH_KEY = "maintenance:prune-merged";
 /** The keep list: a JSON object of namespace to branch names, e.g.
  *  {"sample": ["review/one"]}. No key is an empty list. */
