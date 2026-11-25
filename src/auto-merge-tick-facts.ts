@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import { PER_PAGE, readCheckRuns, readPrFiles } from "./github/pr-files";
 import { requiredCiFor } from "./auto-merge-policy";
-import { type PrFacts, jobIdFromBody, ciVerdict } from "./auto-merge-policy-evaluate";
+import { type PrFacts, ciVerdict } from "./auto-merge-policy-evaluate";
 
 export interface OpenPr {
   number: number;
@@ -78,28 +78,6 @@ export async function factsForPr(
   pr: OpenPr,
 ): Promise<PrFacts> {
   const body = pr.body ?? "";
-  const jobId = jobIdFromBody(body);
-
-  let jobClaimedBy: string | null = null;
-  let jobStatus: string | null = null;
-  const jobPrUrls: string[] = [];
-  if (jobId) {
-    const job = await env.DB.prepare(
-      "SELECT claimed_by, status, result_ref FROM jobs WHERE id = ?1 AND namespace = ?2",
-    )
-      .bind(jobId, namespace)
-      .first<{ claimed_by: string | null; status: string | null; result_ref: string | null }>();
-    jobClaimedBy = job?.claimed_by ?? null;
-    jobStatus = job?.status ?? null;
-    if (job) {
-      if (job.result_ref) jobPrUrls.push(job.result_ref);
-      const recorded = await env.DB.prepare("SELECT pr_url FROM job_outcome_prs WHERE job_id = ?1")
-        .bind(jobId)
-        .all<{ pr_url: string }>();
-      jobPrUrls.push(...(recorded.results ?? []).map((r) => r.pr_url));
-    }
-  }
-
   const [files, checks] = await Promise.all([
     readPrFiles(env, owner, repo, pr.number),
     readCheckRuns(env, owner, repo, pr.head.sha, CHECKS_MAX_PAGES),
@@ -132,10 +110,6 @@ export async function factsForPr(
     ciStepsProblem: steps.problem,
     headRepo: pr.head.repo?.full_name ?? null,
     prAuthor: pr.user?.login ?? null,
-    jobId,
-    jobClaimedBy,
-    jobStatus,
-    jobPrUrls,
   };
 }
 

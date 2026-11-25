@@ -49,26 +49,8 @@ export async function tickEnv(policyBody: string | null, over: Record<string, un
   };
 }
 
-// The job as a driver leaves it: done, with the PR it opened as its result_ref.
-export async function enabledEnv(
-  opts: {
-    job?: Record<string, unknown>;
-    outcomePrs?: Array<{ job_id: string; pr_url: string }>;
-    policy?: string;
-  } = {},
-) {
+export async function enabledEnv(opts: { policy?: string } = {}) {
   return tickEnv(await signTaskBody(SECRET, opts.policy ?? GOOD_POLICY), {
-    jobs: [
-      {
-        id: "job_4c0ecc28548b",
-        namespace: "capsid",
-        claimed_by: "agent:capsid-driver",
-        status: "done",
-        result_ref: PR_URL,
-        ...opts.job,
-      },
-    ],
-    jobOutcomePrs: opts.outcomePrs ?? [],
     agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
   });
 }

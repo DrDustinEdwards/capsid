@@ -185,8 +185,7 @@ export async function recordAsCaller(
 }
 
 // What a claim would have asked is asked here: required_flags and min_record. At least one named
-// pull request must be on one of the namespace's repos, and its body must name this job id
-// (auto-merge's body_names_job), or any pull request on a mapped repo would close any queued job.
+// pull request must be on one of the namespace's repos, and its body must name this job id, or any pull request on a mapped repo would close any queued job.
 async function completeUnclaimed(
   env: Env,
   agent: Agent,

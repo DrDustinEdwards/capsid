@@ -54,10 +54,6 @@ function greenPr(over: Partial<PrFacts> = {}): PrFacts {
     ciStepsProblem: null,
     headRepo: "DrDustinEdwards/capsid-mcp",
     prAuthor: "DrDustinEdwards",
-    jobId: "job_4c0ecc28548b",
-    jobClaimedBy: "agent:capsid-driver",
-    jobStatus: "done",
-    jobPrUrls: ["https://github.com/DrDustinEdwards/capsid-mcp/pull/23"],
     ...over,
   };
 }
@@ -74,7 +70,6 @@ test("the unmodified green PR merges, and passes every check the code enforces",
 
 test("single-field refusals", () => {
   const cases: Array<[string, Partial<PrFacts>, string, RegExp?]> = [
-    ["no job id", { body: "a tidy little change", jobId: null }, "body_names_job"],
     ["side branch", { baseRef: "release/2026-09" }, "base_is_default_branch"],
     ["failing CI", { ciConclusion: "failure", ciNote: "checks=failure" }, "ci_green"],
     ["nothing reported", { ciConclusion: null, ciNote: "no check run" }, "ci_green"],
@@ -108,54 +103,12 @@ test("single-field refusals", () => {
   assert.equal(evaluate(greenPr({ changedLines: AUTO_MERGE_SIZE_CAP })).merge, true);
 });
 
-// A job-less PR merges only in a promoted unit, and every other check still applies.
-test("a job-less PR merges only in a promoted unit", () => {
-  const over = {
-    body: "from a project thread",
-    jobId: null,
-    jobStatus: null,
-    jobPrUrls: [],
-  };
-  const unit = { unit: "capsid / docs" };
-  const earned = evaluatePolicy(greenPr(over), ALLOWED_AUTHORS, unit);
-  assert.equal(earned.merge, true, why(earned));
-  const red = evaluatePolicy(greenPr({ ...over, ciConclusion: "failure" }), ALLOWED_AUTHORS, unit);
-  assert.equal(failed(red), "ci_green");
-  assert.equal(failed(evaluatePolicy(greenPr(over), ALLOWED_AUTHORS, null)), "body_names_job");
-});
-
 test("head_in_base_repo: a fork's PR never merges, nor one whose fork GitHub no longer reports", () => {
   for (const headRepo of ["someone-else/capsid-mcp", null]) {
     assert.equal(failed(evaluate(greenPr({ headRepo }))), "head_in_base_repo");
   }
   // Owner and repo names are case-insensitive on GitHub.
   assert.equal(evaluate(greenPr({ headRepo: "drdustinedwards/Capsid-MCP" })).merge, true);
-});
-
-test("job_handed_on: a job that has not handed a PR on never merges", () => {
-  for (const jobStatus of ["queued", "claimed", "failed", "superseded", null]) {
-    assert.equal(failed(evaluate(greenPr({ jobStatus }))), "job_handed_on", `${jobStatus}`);
-  }
-  assert.equal(evaluate(greenPr({ jobStatus: "blocked" })).merge, true);
-});
-
-test("pr_recorded_for_job: a PR the job's holder never recorded never merges", () => {
-  const cases: Array<[string, string[]]> = [
-    ["no record at all", []],
-    ["another PR", ["https://github.com/DrDustinEdwards/capsid-mcp/pull/22"]],
-    [
-      "a number that only starts the same",
-      ["https://github.com/DrDustinEdwards/capsid-mcp/pull/234"],
-    ],
-    ["the same number in another repo", ["https://github.com/DrDustinEdwards/foxhound/pull/23"]],
-    ["a document key", ["capsid/notes/done.md"]],
-  ];
-  for (const [label, jobPrUrls] of cases) {
-    assert.equal(failed(evaluate(greenPr({ jobPrUrls }))), "pr_recorded_for_job", label);
-  }
-  // The same URL in another case, or with a trailing slash, is still this PR.
-  const same = ["https://github.com/drdustinedwards/capsid-mcp/pull/23/"];
-  assert.equal(evaluate(greenPr({ jobPrUrls: same })).merge, true);
 });
 
 test("pr_author_allowed: only allowlisted authors proceed, in any letter case; an empty list refuses all", () => {

@@ -30,10 +30,6 @@ function pr(over: Partial<PrFacts> = {}): PrFacts {
     ciStepsProblem: null,
     headRepo: "example-org/sample",
     prAuthor: "DrDustinEdwards",
-    jobId: "job_4c0ecc28548b",
-    jobClaimedBy: "agent:capsid-driver",
-    jobStatus: "done",
-    jobPrUrls: ["https://github.com/example-org/sample/pull/23"],
     ...over,
   };
 }

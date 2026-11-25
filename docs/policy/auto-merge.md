@@ -6,9 +6,15 @@ source. The copy the Worker actually reads is the signed document at
 same key and envelope as a signed job body. An unsigned copy, or one
 edited after signing, merges nothing.
 
-- version: 11
+- version: 12
 - enabled: true
 - namespaces: dustinedwards, carrel, capsomer, capsid
+
+Version 12 removes `body_names_job`, `job_handed_on` and `pr_recorded_for_job`
+(Dustin: the job runner was removed on 2026-11-21 and work comes from project threads, so no
+pull request names a job and each one waited for the seat). Who may open an unattended merge
+is `pr_author_allowed`'s question, and a promoted unit now only widens a namespace's allowed
+paths. Every other check is unchanged.
 
 Version 11 names the signed sources by prefix (`src/scope-*.ts`, `src/jobs-*.ts`, `src/auto-merge-*.ts`, `src/policy-sign-*.ts`, `src/outcome-prs-*.ts`), so splitting one of them by responsibility keeps every part refused. Every check is unchanged.
 
@@ -156,21 +162,9 @@ are the never-list, and the per-namespace limit follows them.
   section has no limit beyond the refused paths.
 - `head_in_base_repo` The PR's head branch is on the same repo as its base. A PR from
   a fork, or one whose fork GitHub no longer reports, is left for the seat.
-- `body_names_job` The PR body carries the id of the job the work came from, so a
-  merged change traces back to a request somebody made, or the PR names no job and its
-  unit is listed under Auto units, which a unit earns from Dustin's recorded approvals.
-  Such a PR passes `job_handed_on` and `pr_recorded_for_job` on the unit too.
 - `pr_author_allowed` The GitHub account that opened the PR is under Allowed PR
   authors below, compared without regard to letter case. A PR from any other account,
   or one GitHub reports no author for, is left for the seat.
-- `job_handed_on` That job is `blocked` or `done`. A queued, claimed, failed or
-  superseded job has not handed a PR on.
-- `pr_recorded_for_job` The job's holder recorded this PR against the job: the job's
-  `result_ref`, or one of its `job_outcome_prs` rows, names this PR's URL in this repo.
-  Both are written by the transition that completes or blocks the job: a holder's
-  complete or block, or a complete without a claim, which names the pull request and
-  credits the caller as the job's holder. Naming a job id in a PR body does not make
-  the PR that job's work.
 - `base_is_default_branch` The PR targets the repo's default branch. A PR onto a
   release or staging branch is somebody's sequencing decision, not this policy's.
 - `size_within_cap` The PR changes at most 1,000 lines, counted as additions plus
@@ -229,8 +223,8 @@ list differs from it in either direction.
 - path `(^|\/)Makefile$` build glue CI executes.
 - path `(^|\/)\.husky\/` a git hook CI may run.
 - path `(^|\/)\.gitmodules$` submodules the checkout would fetch and run.
-- path `^src\/jobs(-[a-z]+)*\.ts$` the job transitions that write result_ref, which pr_recorded_for_job reads.
-- path `^src\/outcome-prs(-[a-z]+)*\.ts$` the writer of job_outcome_prs, which pr_recorded_for_job reads.
+- path `^src\/jobs(-[a-z]+)*\.ts$` the job transitions, which write claims and results.
+- path `^src\/outcome-prs(-[a-z]+)*\.ts$` the writer of job_outcome_prs.
 
 ## Allowed paths
 
