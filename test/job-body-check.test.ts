@@ -10,26 +10,23 @@ import { fakeEnv } from "./fakes.ts";
 
 const FULL = ["GOAL: x", "DO:", "1. y", "OUT OF SCOPE: z", "DONE WHEN: w", "RULES: r"].join("\n");
 
-for (const [name, text] of [
-  ["<ID>", "Work job <ID> now"],
-  ["<id>", "Work job <id> now"],
-  ["<...>", "Run <...> now"],
-  ["{{name}}", "Hello {{name}} there"],
-  ["TODO:", "TODO: fill this"],
-  ["TBD", "The owner is TBD"],
-] as const) {
-  test(`a body with ${name} unfilled is refused, naming it`, () => {
+test("an unfilled placeholder in a body or a title is refused, naming it", () => {
+  for (const [name, text] of [
+    ["<ID>", "Work job <ID> now"],
+    ["<id>", "Work job <id> now"],
+    ["<...>", "Run <...> now"],
+    ["{{name}}", "Hello {{name}} there"],
+    ["TODO:", "TODO: fill this"],
+    ["TBD", "The owner is TBD"],
+  ] as const) {
     const refusal = placeholderRefusal("body", `${FULL}\n${text}`);
     assert.ok(refusal, `${name} was accepted`);
     assert.ok(refusal.includes(name), refusal);
-  });
-}
-
-test("a title is checked too", () => {
+  }
   assert.match(placeholderRefusal("title", "Fix <ID>") ?? "", /title/);
 });
 
-test("a placeholder in a code fence, an external fence or an inline span is accepted", () => {
+test("a placeholder in a fence or an inline span is accepted, one after the fence closes is not, and TBD inside a word is prose", () => {
   const body = [
     FULL,
     "```",
@@ -41,36 +38,26 @@ test("a placeholder in a code fence, an external fence or an inline span is acce
     "Use `<ID>` here.",
   ].join("\n");
   assert.equal(placeholderRefusal("body", body), null);
-});
-
-test("a fence does not hide a placeholder after it closes", () => {
   assert.ok(placeholderRefusal("body", "```\nx\n```\nTBD"));
-});
-
-test("a filled body passes, and words that merely contain TBD or TODO do not trip it", () => {
   assert.equal(placeholderRefusal("body", `${FULL}\nOUTBD and todo: lowercase are prose.`), null);
 });
 
-test("a body missing parts is warned about, naming each", () => {
+test("a body missing parts is warned about, naming each; all five in either heading style draw none; prose is not a heading", () => {
   const warning = missingPartsWarning("GOAL: only this");
   assert.ok(warning);
   for (const part of ["DO", "OUT OF SCOPE", "DONE WHEN", "DECIDED or RULES"])
     assert.ok(warning.includes(part), warning);
   assert.ok(!warning.split(". Posted")[0].includes("GOAL"), warning);
-});
 
-test("a body with all five parts, in either heading style, draws no warning", () => {
   assert.equal(missingPartsWarning(FULL), null);
   assert.equal(
     missingPartsWarning("## GOAL\n## DO\n**OUT OF SCOPE**\n## DONE WHEN\n## DECIDED"),
     null,
   );
-});
 
-test("prose that starts with a part word is not a heading", () => {
-  const warning = missingPartsWarning("DO NOT touch the schema\nGOALS are below\nDONE WHEN-ish");
-  assert.ok(warning);
-  assert.ok(warning.includes("GOAL") && warning.includes("DO,"), warning);
+  const prose = missingPartsWarning("DO NOT touch the schema\nGOALS are below\nDONE WHEN-ish");
+  assert.ok(prose);
+  assert.ok(prose.includes("GOAL") && prose.includes("DO,"), prose);
 });
 
 test("edit refuses a placeholder, but only after the caller is known to be the seat", async () => {

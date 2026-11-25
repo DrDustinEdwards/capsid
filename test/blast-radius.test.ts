@@ -122,7 +122,7 @@ const PLANTS: Array<{
 ];
 
 for (const plant of PLANTS) {
-  test(`PLANT: without ${plant.flag}, a driver is refused ${plant.what}`, async () => {
+  test(`PLANT: ${plant.flag} gates ${plant.what}: refused for a driver without it, not refused for a holder`, async () => {
     await withFetch({}, async (calls) => {
       // The driver is scoped to the namespace the call names, so the refusal is about
       // the flag and not about the namespace.
@@ -140,26 +140,15 @@ for (const plant of PLANTS) {
         `${plant.tool} reached GitHub before refusing, so the refusal describes something that already happened`,
       );
     });
-  });
-
-  test(`PLANT: the same call is NOT refused for a caller holding ${plant.flag}`, async () => {
-    // The call may fail afterwards for its own reasons (the fetch harness has no
-    // routes), so this asserts that the scope refusal text is absent, not success.
+    // The holder may fail afterwards for its own reasons (the fetch harness has no
+    // routes), so this asserts that the scope refusal is absent and GitHub was asked.
     await withFetch({}, async (calls) => {
       const result = await callAs(adminAgentForEmail("admin@example.com"), plant.tool, plant.args);
       const text = result.content[0]?.text ?? "";
       assert.ok(text.length > 0, "the call returned no text, so an absent refusal proves nothing");
-      assert.doesNotMatch(
-        text,
-        /needs the .* flag/,
-        `the admin was refused a flag it holds: ${text}`,
-      );
-      assert.doesNotMatch(text, /unauthorized:/, `the admin was refused: ${text}`);
-      // Past the scope check means GitHub was asked.
-      assert.ok(
-        calls.length > 0,
-        `${plant.tool} never reached GitHub for a caller holding ${plant.flag}: ${text}`,
-      );
+      assert.doesNotMatch(text, /needs the .* flag/, `the holder was refused: ${text}`);
+      assert.doesNotMatch(text, /unauthorized:/, `the holder was refused: ${text}`);
+      assert.ok(calls.length > 0, `${plant.tool} never reached GitHub for a holder: ${text}`);
     });
   });
 }

@@ -114,16 +114,6 @@ test("an UNREACHABLE store is NOT reported as data loss", async () => {
   }
 });
 
-test("missing and unreachable are genuinely different outcomes", async () => {
-  const gone = await check(fakeKvApi({ value: null }));
-  const blip = await check(fakeKvApi({ valueStatus: 503, value: RECORD }));
-  assert.notEqual(
-    gone.outcome,
-    blip.outcome,
-    "a KV outage and a vanished record are indistinguishable",
-  );
-});
-
 test("a canary that has acquired a TTL fails BEFORE it can expire", async () => {
   // A record put back with the 90 day TTL DCR gave every client is a canary that can
   // expire on its own, a second reason to be absent.

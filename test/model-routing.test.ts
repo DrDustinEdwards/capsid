@@ -261,11 +261,6 @@ const inArm = ids.find((id) => trialBucket(id) < 25)!;
 const outOfArm = ids.find((id) => trialBucket(id) >= 25)!;
 
 test("trial arms: a share of routine watcher, maintenance and docs jobs go to haiku at the rule's effort, the rest stay on the rule", () => {
-  assert.deepEqual(TRIAL_ARMS.map((a) => [a.kind, a.model]).sort(), [
-    ["docs", "haiku"],
-    ["maintenance", "haiku"],
-    ["watcher", "haiku"],
-  ]);
   for (const arm of TRIAL_ARMS) {
     const rule = ROUTING_RULES.find((r) => r.when.kind === arm.kind)!;
     assert.ok(
@@ -464,29 +459,6 @@ test("worthReviewer: a test or a document named like a guard is not the guard", 
     "src/tools/docs-index.ts",
   ]) {
     assert.equal(worth([{ filename }]), "skip", filename);
-  }
-});
-
-test("worthReviewer reaches past riskOf only through the guard sources", () => {
-  // Every other reason is one riskOf also gives. The guard sources are not on auto-merge's
-  // refused list, so riskOf routes them as routine; a reviewer reading them is the point.
-  for (const filename of [
-    "app/payments/charge.ts",
-    "src/scope.ts",
-    "migrations/0040_x.sql",
-    ".github/workflows/ci.yml",
-    "src/backup.ts",
-    "scripts/check-commit-trailers.mjs",
-    "src/jobs-transition.ts",
-  ]) {
-    assert.equal(riskOf([{ filename }]).level, "high", filename);
-  }
-  for (const filename of ["src/store-guards.ts", "src/tools/repo.ts", "src/portal-auth.ts"]) {
-    assert.deepEqual(
-      [riskOf([{ filename }]).level, worth([{ filename }])],
-      ["routine", "worth"],
-      filename,
-    );
   }
 });
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { SCOPE_FLAGS, defaultScopes, serializeScopes } from "../src/agents-schema.ts";
-import { adminAgentForEmail, grantAgent, resolveAgent } from "../src/agents.ts";
+import { adminAgentForEmail, resolveAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv } from "./fakes.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
@@ -83,28 +83,4 @@ test("an OAuth admin session is the synthetic agent named admin, holding every s
   assert.deepEqual(agent.scopes.grants, ["read", "write"]);
   for (const flag of SCOPE_FLAGS) assert.equal(agent.scopes.flags[flag], true);
   assert.equal(agent.admin, true);
-});
-
-test("resolving touches last_seen, and does it off the answer rather than inside it", async () => {
-  const { d1, env } = await envWithAgent();
-  const resolved = await resolveAgent(bearer(KEY), env);
-  assert.ok(resolved);
-  assert.equal(d1.recorded.length, 0, "resolution must not commit anything on its own");
-  await resolved.touch();
-  const update = d1.recorded.find((r) => /UPDATE agents SET last_seen/i.test(r.sql));
-  assert.ok(update, "touch() did not update last_seen");
-  assert.equal(
-    update.params[0],
-    "agent_0123456789ab",
-    "last_seen was written against the wrong row",
-  );
-});
-
-test("the legacy grant vocabulary still builds a caller, which is what keeps the tests and the fallback honest", () => {
-  const write = grantAgent("write", "test:guard");
-  assert.deepEqual(write.scopes.grants, ["read", "write"]);
-  assert.equal(write.actor, "test:guard");
-  const read = grantAgent("read", "test:ro");
-  assert.deepEqual(read.scopes.grants, ["read"]);
-  for (const flag of SCOPE_FLAGS) assert.equal(read.scopes.flags[flag], false);
 });

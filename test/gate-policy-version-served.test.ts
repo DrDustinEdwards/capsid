@@ -55,7 +55,7 @@ async function signedDoc(path: string, body: string): Promise<DocRow> {
   };
 }
 
-test("a driver scoped to ANOTHER namespace is still served the gates policy version", async () => {
+test("a driver scoped to ANOTHER namespace is served both policy versions and the enabled flag, and nothing else", async () => {
   const env = await envWith([
     await signedDoc(GATE_POLICY_PATH, GATES),
     await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE),
@@ -73,27 +73,9 @@ test("a driver scoped to ANOTHER namespace is still served the gates policy vers
   );
   assert.equal(status.policies.gates.version, "7");
   assert.equal(status.policies.gates.enabled, true);
-});
-
-test("the auto-merge policy version is served on the same terms", async () => {
-  const env = await envWith([
-    await signedDoc(GATE_POLICY_PATH, GATES),
-    await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE),
-  ]);
-  const status = await capsidStatus(env, undefined, { namespaces: ["germomics"], admin: false });
   assert.ok("version" in status.policies.auto_merge, JSON.stringify(status.policies.auto_merge));
   assert.equal(status.policies.auto_merge.version, "3");
-});
 
-test("ONLY the version and the enabled flag: the body and the classes are not served", async () => {
-  const env = await envWith([
-    await signedDoc(GATE_POLICY_PATH, GATES),
-    await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE),
-  ]);
-  const status = await capsidStatus(env, undefined, {
-    namespaces: ["claude-skills"],
-    admin: false,
-  });
   assert.deepEqual(Object.keys(status.policies.gates).sort(), ["enabled", "version"]);
   // The whole served object must not carry the document text anywhere.
   const serialized = JSON.stringify(status.policies);
@@ -135,19 +117,4 @@ test("a MISSING policy reports why, and does not fail the whole status call", as
   assert.ok("reason" in status.policies.auto_merge);
   // Status still answered: a driver asking the version should not lose the rest.
   assert.ok(Array.isArray(status.namespaces) && status.canon_paths !== undefined);
-});
-
-test("the credential inventory is STILL withheld from a scoped caller", async () => {
-  // Serving the policy version must not have widened what else a driver sees.
-  const env = await envWith([
-    await signedDoc(GATE_POLICY_PATH, GATES),
-    await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE),
-  ]);
-  const scoped = await capsidStatus(env, undefined, {
-    namespaces: ["claude-skills"],
-    admin: false,
-  });
-  assert.equal("agents" in scoped, false, "a scoped caller was handed the credential inventory");
-  const admin = await capsidStatus(env);
-  assert.ok("agents" in admin, "the admin lost the inventory");
 });

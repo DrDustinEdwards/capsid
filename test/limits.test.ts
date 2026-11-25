@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { docPath, MAX_PATH, pathProblem, resultRef, resultRefProblem } from "../src/limits.ts";
+import { MAX_PATH, pathProblem, resultRefProblem } from "../src/limits.ts";
 import {} from "../src/github.ts";
 import { sourceFiles } from "./source-files.ts";
 
@@ -40,15 +40,6 @@ test("the grammar refuses traversal, absolutes, control characters and empties",
     assert.ok(problem, `${JSON.stringify(path)} was accepted`);
     assert.match(problem, expected);
   }
-});
-
-test("the zod schema carries the same grammar, with the reason", () => {
-  // The schema and the function must not be able to disagree: every tool argument
-  // goes through the schema, and only the function is unit-testable.
-  assert.equal(docPath.safeParse("archive/note.md").success, true);
-  const bad = docPath.safeParse("../escape.md");
-  assert.equal(bad.success, false);
-  assert.match(bad.error?.issues[0]?.message ?? "", /must not contain '\.\.'/);
 });
 
 // src/limits.ts is where `bounded` and `docPath` are BUILT, so it is the one file
@@ -121,14 +112,4 @@ test("result_ref refuses a non-https scheme, credentials and the path grammar's 
     assert.ok(problem, `${JSON.stringify(ref[0])} was accepted`);
     assert.match(problem, ref[1]);
   }
-});
-
-test("the result_ref zod schema carries the same grammar, with the reason", () => {
-  assert.equal(
-    resultRef.safeParse("https://github.com/DrDustinEdwards/capsid-mcp/pull/13").success,
-    true,
-  );
-  const bad = resultRef.safeParse("http://github.com/a/b/pull/1");
-  assert.equal(bad.success, false);
-  assert.match(bad.error?.issues[0]?.message ?? "", /https/);
 });

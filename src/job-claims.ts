@@ -245,7 +245,7 @@ export function claimStatement(db: D1Database, row: JobClaimRow): D1PreparedStat
 // EVALUATIONS. The worker's own checks, named for OpenTelemetry's
 // gen_ai.evaluation.result event. hidden_tests and scope_respected are in the table's
 // vocabulary for a later evaluator (a model, a human); the worker writes none of them.
-export const WORKER_EVALUATIONS = [
+const WORKER_EVALUATIONS = [
   "pr_merged",
   "prs_opened",
   "commits",

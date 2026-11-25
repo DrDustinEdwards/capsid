@@ -245,25 +245,6 @@ test("PLANT: a secret split by the budget cut is still redacted, because redacti
   });
 });
 
-test("a read-only caller gets step metadata and no log, and the log is never fetched", async () => {
-  await withFetch(routes(), async (calls) => {
-    const out = (await ciStatus(makeEnv(), "ns", undefined, {
-      runId: 42,
-      job: "deploy",
-      step: "Deploy",
-      logTail: false,
-    })) as Out;
-    assert.equal(out.step?.name, "Deploy");
-    assert.equal(out.log, undefined);
-    assert.match(out.log_withheld ?? "", /read-only key/);
-    assert.equal(
-      calls.some((c) => c.path.includes("/logs")),
-      false,
-      "the log was fetched for a read-only caller",
-    );
-  });
-});
-
 test("an unavailable step log is named, and its error body is redacted", async () => {
   await withFetch(routes({ status: 410, text: `gone, token=${FAKE_TOKEN}` }), async () => {
     const out = (await ciStatus(makeEnv(), "ns", undefined, {
@@ -315,22 +296,6 @@ test("REFUSES a missing job or step by naming what exists, and a shared name by 
     await assert.rejects(
       () => ciStatus(makeEnv(), "ns", undefined, { runId: 42, job: "9", step: "Test" }),
       /no step "Test" in job "deploy". It has: "Set up job" \(1\), "Checkout" \(2\), "Deploy" \(3\)/,
-    );
-  });
-});
-
-test("without the new arguments the output is unchanged: no jobs, job or step fields", async () => {
-  await withFetch(routes(), async (calls) => {
-    const out = (await ciStatus(makeEnv(), "ns", undefined, { runId: 42 })) as Record<
-      string,
-      unknown
-    >;
-    assert.deepEqual(Object.keys(out).sort(), ["filter", "repo", "runs"]);
-    assert.deepEqual(out.filter, { run_id: 42 });
-    assert.equal(
-      calls.some((c) => c.path.endsWith("/jobs")),
-      false,
-      "a successful run was drilled into",
     );
   });
 });

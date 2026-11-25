@@ -73,31 +73,22 @@ async function list(agent: Agent, args: Record<string, unknown>) {
   };
 }
 
-test("PLANT: a read-grant caller listing a namespace gets no job body", async () => {
-  const { out } = await list(caller(["read"]), {});
-  assert.equal(out.jobs.length, 1);
-  assert.equal(
-    "body" in out.jobs[0],
-    false,
-    "capsid_work_jobs list handed a read-only caller the signed prompt",
-  );
-  assert.equal(out.jobs[0].id, JOB.id);
-  assert.equal(out.jobs[0].title, JOB.title);
-});
-
-test("a write-grant caller listing a whole namespace gets no body either", async () => {
-  const { out } = await list(caller(["read", "write"]), {});
-  assert.equal("body" in out.jobs[0], false);
-});
-
-test("naming one job by id returns its body to a write-grant caller", async () => {
-  const { out } = await list(caller(["read", "write"]), { id: JOB.id });
-  assert.equal(out.jobs.length, 1);
-  assert.equal(out.jobs[0].body, BODY);
-});
-
-test("naming one job by id does not return its body to a read-only caller", async () => {
-  const { out } = await list(caller(["read"]), { id: JOB.id });
-  assert.equal(out.jobs.length, 1);
-  assert.equal("body" in out.jobs[0], false);
+test("PLANT: a list returns a job's body only when one job is named by id and the caller holds write", async () => {
+  const cases: Array<[AgentGrant[], Record<string, unknown>, boolean]> = [
+    [["read"], {}, false],
+    [["read", "write"], {}, false],
+    [["read"], { id: JOB.id }, false],
+    [["read", "write"], { id: JOB.id }, true],
+  ];
+  for (const [grants, args, hasBody] of cases) {
+    const { out } = await list(caller(grants), args);
+    assert.equal(out.jobs.length, 1);
+    assert.equal(out.jobs[0].id, JOB.id);
+    assert.equal(
+      "body" in out.jobs[0],
+      hasBody,
+      `grants ${grants.join("+")} with ${JSON.stringify(args)}: body ${hasBody ? "withheld" : "handed over"}`,
+    );
+    if (hasBody) assert.equal(out.jobs[0].body, BODY);
+  }
 });

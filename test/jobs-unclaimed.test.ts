@@ -5,7 +5,8 @@ import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { beginJob, completeAsCaller, listJobs } from "../src/jobs.ts";
 import { opsJobFrom, type JobFeedRow } from "../src/ops-live.ts";
 import { signTaskBody } from "../src/signed-docs.ts";
-import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
+import { fakeKv, withFetch } from "./fakes.ts";
+import { queuedJobStore } from "./queued-job-store.ts";
 
 // The pull request is the claim (job_e68de044f8a4; Dustin, 2026-10-10, plan step 2).
 // A cloud session signs in as the admin login, which may hold one claim, so it works a
@@ -37,34 +38,11 @@ function job(over: Record<string, unknown> = {}) {
   };
 }
 
-// The row-backed fake D1, with the one rewrite test/jobs-record.test.ts makes: the
-// transition's summary_sig CASE, which test/fake-sql.ts does not model, becomes the branch
-// SQLite takes for a non-null result_summary.
 function store(jobs: Array<Record<string, unknown>>) {
-  const d1 = fakeD1({
-    namespaces: [
-      { namespace: "sample", repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) },
-    ],
-    jobs,
+  return queuedJobStore(jobs, {
+    APP_KV: fakeKv({ seedToken: true }).kv,
+    IMPROVE_SCORE_SECRET: SECRET,
   });
-  const inner = d1.db;
-  const db = {
-    prepare: (sql: string) => inner.prepare(sql),
-    batch: (statements: Array<{ sql: string; params: unknown[] }>) =>
-      inner.batch(
-        statements.map((s) => ({
-          ...s,
-          sql: s.sql.replace(
-            /summary_sig = CASE WHEN \?3 IS NULL THEN summary_sig ELSE \?8 END/,
-            "summary_sig = ?8",
-          ),
-        })) as unknown as D1PreparedStatement[],
-      ),
-  } as unknown as D1Database;
-  return {
-    d1,
-    env: fakeEnv({ DB: db, APP_KV: fakeKv({ seedToken: true }).kv, IMPROVE_SCORE_SECRET: SECRET }),
-  };
 }
 
 // A driver with read and write on the namespace and no seat flag.
@@ -121,6 +99,9 @@ test("a cloud session completes a queued job it never claimed by naming its pull
     audit.some((a) => /"status":"done"/.test(String(a.params))),
     "no audit row records the close",
   );
+  const actions = audit.map((a) => a.action);
+  assert.ok(actions.includes("job-complete-unclaimed"), JSON.stringify(actions));
+  assert.ok(!actions.includes("job-record"), JSON.stringify(actions));
 });
 
 test("a driver with write and no seat flag completes a queued job the same way", async () => {
@@ -211,14 +192,6 @@ test("PLANT: what a claim asks of the caller is asked without one: required_flag
   assert.deepEqual(record.d1.recorded, []);
 });
 
-test("the close is audited as complete-unclaimed, not as the seat's record", async () => {
-  const { d1, env } = store([job()]);
-  await offline(() => completeAsCaller(env, CLOUD, NOW, ID, withPr));
-  const actions = (d1.rows.audit_log as Array<Record<string, unknown>>).map((a) => a.action);
-  assert.ok(actions.includes("job-complete-unclaimed"), JSON.stringify(actions));
-  assert.ok(!actions.includes("job-record"), JSON.stringify(actions));
-});
-
 test("a claimed job is still its holder's: another caller cannot complete it without a claim", async () => {
   const { d1, env } = store([job({ status: "claimed", claimed_by: "agent:sample-driver" })]);
   const r = await offline(() =>
@@ -231,7 +204,7 @@ test("a claimed job is still its holder's: another caller cannot complete it wit
 
 // the started label
 
-test("begin marks a queued job started, and a second session reading it is told who and when", async () => {
+test("begin marks a queued job started, a second session is told who and when, and the mirror and Portal Queue show it", async () => {
   const { d1, env } = store([job()]);
   const r = await beginJob(env, CLOUD, NOW, ID);
   assert.equal(r.ok, true, r.refusal);
@@ -261,11 +234,8 @@ test("begin marks a queued job started, and a second session reading it is told 
   assert.equal(second.started?.by, CLOUD.actor);
   assert.equal(d1.rows.jobs[0].started_by, CLOUD.actor, "the second begin took the label");
   assert.equal(d1.recorded.length, writes, "the second begin wrote");
-});
 
-test("the mirror document and the Portal Queue show who started the job", async () => {
-  const { d1, env } = store([job()]);
-  await beginJob(env, CLOUD, NOW, ID);
+  // The mirror document and the Portal Queue show who started it.
   const doc = d1.rows.documents.find((d) => d.path === `jobs/${ID}.md`);
   assert.match(
     String(doc?.body),

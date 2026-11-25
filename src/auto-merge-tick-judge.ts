@@ -46,7 +46,7 @@ export function declineParams(
   };
 }
 
-export function mergeParams(
+function mergeParams(
   policyVersion: string,
   facts: PrFacts,
   passed: PolicyCheck[],

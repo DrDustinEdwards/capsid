@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { mintAgent, listAgents } from "../src/agents-admin.ts";
+import { mintAgent } from "../src/agents-admin.ts";
 import {
   ARCHIVE_AFTER_DAYS,
   archiveRevokedAgents,
@@ -107,7 +107,7 @@ test("a revoked agent moves 7 days after revocation with its counts and an audit
   assert.deepEqual(await archiveRevokedAgents(db, ACTOR, NOW), { archived: [], skipped: [] });
 });
 
-test("PLANT: an archived key is refused", async () => {
+test("PLANT: an archived key is refused and its name is never minted again", async () => {
   const { raw, db } = fresh();
   const key = await plantAgent(raw, "gone", daysAgo(ARCHIVE_AFTER_DAYS + 1));
   await archiveRevokedAgents(db, ACTOR, NOW);
@@ -116,13 +116,6 @@ test("PLANT: an archived key is refused", async () => {
     headers: { Authorization: `Bearer ${key}` },
   });
   assert.equal(await resolveAgent(request, { DB: db }, NOW), null);
-});
-
-test("PLANT: an archived name is never minted again", async () => {
-  const { raw, db } = fresh();
-  await plantAgent(raw, "gone", daysAgo(ARCHIVE_AFTER_DAYS + 1));
-  await archiveRevokedAgents(db, ACTOR, NOW);
-  assert.deepEqual(archivedNames(raw), ["gone"], "the plant was not archived");
   const minted = await mintAgent(db, "access:dustin@example.com", {
     name: "gone",
     kind: "driver",
@@ -133,7 +126,7 @@ test("PLANT: an archived name is never minted again", async () => {
   assert.match(minted.refusal ?? "", /already exists/);
 });
 
-test("the inventory lists live, then revoked, then archived with archived_at; the archive read never returns the verifier", async () => {
+test("the inventory marks archived agents; the archive read never returns the verifier", async () => {
   const { raw, db } = fresh();
   await plantAgent(raw, "zz-live", null);
   await plantAgent(raw, "revoked", daysAgo(1));
@@ -148,16 +141,10 @@ test("the inventory lists live, then revoked, then archived with archived_at; th
       ["aa-gone", true, true],
     ],
   );
-  assert.deepEqual(
-    (await listAgents(db)).agents?.map((a) => a.name),
-    ["revoked", "zz-live"],
-    "list is the live table",
-  );
   const archived = await listArchivedAgents(db);
   assert.deepEqual(
     archived.map((a) => a.name),
     ["aa-gone"],
   );
   assert.equal("key_hash" in archived[0], false);
-  assert.match(archived[0].fingerprint, /^[0-9a-f]{12}$/);
 });

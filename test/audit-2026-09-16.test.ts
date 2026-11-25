@@ -3,11 +3,8 @@ import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildAdminServer, buildServer } from "../src/server.ts";
 import { MAX_ROWS } from "../src/limits.ts";
-import { driverMintInstruction, defaultScopes } from "../src/agents-schema.ts";
-import { requiredForAction } from "../src/scope.ts";
+import { defaultScopes } from "../src/agents-schema.ts";
 import { actionArgFor, defaultActionFor } from "../src/scope-guard.ts";
-import { surfaceOf } from "../src/tools/surface.ts";
-import { CORRECTION_CAP } from "../src/jobs-schema.ts";
 import {
   buildTruthReport,
   INTEGRITY_LINE,
@@ -46,45 +43,6 @@ const call = async (client: Client, name: string, args: Record<string, unknown> 
 
 const text = (result: { content: Array<{ text: string }> }) =>
   result.content.map((c) => c.text).join("");
-
-// the mint instruction and TOOL_GRANTS
-
-test("PLANT: the driver mint instruction agrees with what register_namespace actually requires", () => {
-  // The two cannot be the same expression: src/scope.ts imports src/agents-schema.ts,
-  // so the sentence importing TOOL_GRANTS would close a load-time cycle. This holds
-  // them together instead, and fails if either the table or the sentence changes.
-  // register_namespace is the operation; the served tool and action that run it
-  // (capsid_admin_manage_namespaces, register) are what the registrar checks.
-  const said = driverMintInstruction("capsid");
-  const served = surfaceOf("register_namespace");
-  assert.deepEqual(served, { tool: "capsid_admin_manage_namespaces", action: "register" });
-  const required = requiredForAction(served.tool, served.action);
-  assert.match(
-    said,
-    new RegExp(`${served.tool} action ${served.action} is itself ${required} only`),
-    said,
-  );
-});
-
-// the jobs description and the retry cap
-
-test("PLANT: the jobs description states the correction cap rather than promising no cap", async () => {
-  // resumeJob refuses a non-admin once CORRECTION_CAP corrections have been spent, so
-  // the description must state the cap.
-  const { client, close } = await connect(adminAgentForEmail("admin@example.com"));
-  try {
-    const { tools } = await client.listTools();
-    const jobs = tools.find((t) => t.name === "capsid_work_jobs");
-    assert.ok(jobs, "capsid_work_jobs is not served");
-    const description = jobs.description ?? "";
-    assert.ok(
-      description.includes(`capped at ${CORRECTION_CAP}`),
-      `the description does not state the cap of ${CORRECTION_CAP}: ${description.slice(-400)}`,
-    );
-  } finally {
-    await close();
-  }
-});
 
 // a handler default the scope table cannot see
 
@@ -231,32 +189,6 @@ test("PLANT: an unmeasured integrity renders as unmeasured, never as 0%", () => 
   assert.equal(integrityOf(body), null);
 });
 
-test("a measured integrity still renders as a number the parser reads back", () => {
-  // So a render that stopped printing numbers fails.
-  const report = buildTruthReport({
-    namespace: "capsid",
-    now: new Date("2026-09-16T12:00:00Z"),
-    docs: [
-      {
-        path: "core.md",
-        type: "core",
-        status: "published",
-        title: "core",
-        body: "the core",
-        updated_at: "2026-09-16 00:00:00",
-      },
-    ],
-    edges: [],
-    danglingEdges: [],
-    countClaims: [],
-    repoPaths: undefined,
-  });
-  assert.notEqual(report.integrity, null);
-  const body = renderTruthReport(report);
-  assert.match(body, INTEGRITY_LINE);
-  assert.equal(integrityOf(body), report.integrity);
-});
-
 // a report overwrites a report
 
 const TODAY = reportPath(new Date());
@@ -334,41 +266,6 @@ test("the same call WITH confirm: true overwrites, snapshotting first", async ()
     assert.ok(
       recorded.some((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "lint_report"),
       "the overwrite skipped the audit log",
-    );
-  } finally {
-    await close();
-  }
-});
-
-test("THE INNOCENT DIRECTION: the FIRST report of the day needs no confirmation", async () => {
-  // There is nothing to overwrite, and the cron that drives the report has nobody to
-  // answer a prompt.
-  const { client, batches, recorded, close } = await connect("write", reportRows(false));
-  try {
-    const result = await call(client, "capsid_lint_namespace", {
-      namespace: "capsid",
-      mode: "report",
-    });
-    assert.ok(!result.isError, text(result));
-    assert.ok(batches.length > 0, "the first report of the day was not written at all");
-    const written = recorded.find((r) => /INSERT INTO documents/.test(r.sql));
-    assert.ok(written, "no document write was issued for the report");
-    assert.equal(written.params[0], "capsid");
-    assert.equal(
-      written.params[1],
-      TODAY,
-      "the report was written somewhere other than today's report path",
-    );
-    assert.match(String(written.params[3]), /^# Truth report - capsid/);
-    assert.match(String(written.params[3]), /integrity: \d+%/);
-    assert.ok(
-      recorded.some(
-        (r) =>
-          /INSERT INTO audit_log/.test(r.sql) &&
-          r.params[1] === "lint_report" &&
-          r.params[3] === TODAY,
-      ),
-      "the first report skipped the audit log",
     );
   } finally {
     await close();

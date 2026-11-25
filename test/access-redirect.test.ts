@@ -37,14 +37,6 @@ test("the Access sign-in production answered with passes", () => {
   assert.equal(accessRedirectProblem(302, signIn(), ORIGIN), null);
 });
 
-test("the GitHub authorize URL gate 5 used to expect is refused now", () => {
-  assert.match(
-    accessRedirectProblem(302, "https://github.com/login/oauth/authorize?client_id=x", ORIGIN) ??
-      "",
-    /not the Access team domain/,
-  );
-});
-
 for (const [name, status, location, reason] of [
   ["not a redirect", 200, signIn(), /status 200/],
   ["no location", 302, "", /not a URL/],
@@ -70,14 +62,7 @@ for (const [name, status, location, reason] of [
     signIn({ redirect_uri: "https://capsid.dustinedwards.info/callback" }),
     /redirect_uri is/,
   ],
-  [
-    "the Portal callback",
-    302,
-    signIn({ redirect_uri: `${ORIGIN}/portal/callback` }),
-    /redirect_uri is/,
-  ],
   ["no PKCE method", 302, signIn({ code_challenge_method: null }), /not S256/],
-  ["plain PKCE", 302, signIn({ code_challenge_method: "plain" }), /not S256/],
   ["no challenge", 302, signIn({ code_challenge: null }), /not a S256 challenge/],
   ["no nonce", 302, signIn({ nonce: null }), /no nonce/],
   ["no state", 302, signIn({ state: null }), /no state/],

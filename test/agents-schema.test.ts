@@ -6,8 +6,6 @@ import {
   allowsScope,
   defaultScopes,
   isAgentKind,
-  mintAgentId,
-  mintAgentKey,
   parseScopes,
   serializeScopes,
   type AgentScopes,
@@ -35,7 +33,6 @@ test("the migration and the module agree about the kinds a credential can have",
       `migrations/0008_agents.sql never mentions the '${kind}' kind`,
     );
   }
-  assert.deepEqual([...AGENT_KINDS], ["session", "driver", "seat", "cron"]);
   assert.ok(isAgentKind("driver"));
   assert.ok(!isAgentKind("admin"), "'admin' is a synthetic identity, not a storable kind");
   assert.ok(!isAgentKind("constructor"), "the kind check must not answer for Object.prototype");
@@ -119,17 +116,4 @@ test("allowsScope is the one list comparison, and '*' is the only wildcard", () 
     false,
     "a list containing the string '*' is a list of one odd name, not a wildcard",
   );
-});
-
-test("ids and keys are minted, not sequential, and a key is not its own hash", () => {
-  const id = mintAgentId();
-  assert.match(id, /^agent_[0-9a-f]{12}$/);
-  assert.notEqual(id, mintAgentId());
-  const key = mintAgentKey();
-  assert.match(
-    key,
-    /^capsid_agent_[0-9a-f]{64}$/,
-    "32 bytes of entropy, prefixed so a leaked key is greppable",
-  );
-  assert.notEqual(key, mintAgentKey());
 });

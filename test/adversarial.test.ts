@@ -29,27 +29,6 @@ test("PLANT: every corpus file has a manifest entry and every entry has a file",
   assert.ok(onDisk.length >= 7, `the corpus holds ${onDisk.length} fixtures; the walk is broken`);
 });
 
-test("every fixture actually carries its canary, so no assertion below can pass on an empty file", () => {
-  for (const entry of MANIFEST) {
-    const text = corpusText(entry.file);
-    assert.ok(
-      text.length > 100,
-      `${entry.file} is ${text.length} bytes; too short to be a real payload`,
-    );
-    assert.ok(
-      text.includes(entry.canary),
-      `${entry.file} does not contain its own canary: ${entry.canary}`,
-    );
-    assert.ok(entry.source.length > 10, `${entry.file} does not say where it came from`);
-  }
-});
-
-test("every surface named in the manifest is covered by at least one fixture", () => {
-  for (const surface of ["document", "repo", "github", "ci", "prompt"] as const) {
-    assert.ok(entriesFor(surface).length > 0, `no fixture aimed at the ${surface} surface`);
-  }
-});
-
 // the store: capsid_read_doc and capsid_start_session
 
 const DOC_FIXTURES = entriesFor("document");

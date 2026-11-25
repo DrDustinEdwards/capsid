@@ -33,9 +33,9 @@ const LIVE_CHECKS_PATH = "policy/live-checks.md";
 
 // Bounds, so one document cannot turn a pass into a flood of subrequests. The tick
 // already makes GitHub and Cloudflare reads in the same invocation.
-export const MAX_PAGE_RULES = 20;
-export const MAX_SHA_RULES = 6;
-export const MAX_ANALYTICS_RULES = 20;
+const MAX_PAGE_RULES = 20;
+const MAX_SHA_RULES = 6;
+const MAX_ANALYTICS_RULES = 20;
 export const MAX_PAGE_BYTES = 1_048_576;
 const PAGE_TIMEOUT_MS = 10_000;
 const PATH_PATTERN = /^\/[A-Za-z0-9._~/%-]{0,199}$/;

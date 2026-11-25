@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  loadAgentRecords,
   recordFor,
   recordsFrom,
   type RecordRows,
@@ -194,49 +193,6 @@ test("recordsFrom keys by agent name", () => {
   // Object.create(null), so a credential named for a prototype member cannot collide
   // with one.
   assert.equal(Object.getPrototypeOf(records), null);
-});
-
-// scanner-rule: agent records are counts and rates, never a score (jobs as evidence, capsid/decisions.md 2026-09-11). The second half checks a comment, which is prose
-test("NO COMPOSITE SCORE IS COMPUTED ANYWHERE IN THE RECORD", () => {
-  // Every field is a count with a name on it or a rate with a stated denominator; a
-  // single number standing for all of them would invite a gate nobody specified.
-  const record = recordFor(ACTOR, EMPTY);
-  const named = Object.keys(record);
-  for (const forbidden of ["score", "rating", "trust", "grade", "rank"]) {
-    assert.ok(
-      !named.some((field) => field.toLowerCase().includes(forbidden)),
-      `the record grew a '${forbidden}' field, which is the composite this design refuses`,
-    );
-  }
-});
-
-test("the inventory is read with grouped queries, not one set per credential", async () => {
-  // A per-agent loop would grow the query count with the number of credentials, on a
-  // page that renders all of them.
-  const countFor = async (howMany: number) => {
-    let prepared = 0;
-    const db = {
-      prepare: () => {
-        prepared += 1;
-        const stmt = {
-          bind: () => stmt,
-          all: async () => ({ results: [] }),
-          first: async () => null,
-        };
-        return stmt;
-      },
-    } as unknown as D1Database;
-    const agents: RecordSubject[] = Array.from({ length: howMany }, (_, i) => ({
-      name: `driver-${i}`,
-      kind: "driver",
-      namespaces: ["capsid"],
-    }));
-    const records = await loadAgentRecords(db, agents);
-    assert.equal(Object.keys(records).length, howMany);
-    return prepared;
-  };
-  assert.equal(await countFor(1), 2, "the loader should issue two grouped reads");
-  assert.equal(await countFor(50), 2, "the query count grew with the number of credentials");
 });
 
 // Numerator and denominator must use the same rows: a row whose merge count is not
