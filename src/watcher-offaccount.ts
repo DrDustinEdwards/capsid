@@ -3,7 +3,7 @@ import type { OffaccountSiteReport } from "./offaccount";
 import { HOUR_MS } from "./time";
 import { finding, type Finding } from "./watcher-detect";
 
-// The Amazon copy's window (capsid/rulings/backups-offaccount-2026-10-10.md), and it is
+// The Amazon copy's window (Dustin, 2026-10-10), and it is
 // not BACKUP_STALE_HOURS.
 //
 // BACKUP_STALE_HOURS is the local dump, measured from a key this Worker writes itself.
@@ -16,8 +16,7 @@ import { finding, type Finding } from "./watcher-detect";
 // older than the next dump. A tighter window would fire every morning.
 export const OFFACCOUNT_STALE_HOURS = 36;
 
-// The ruling's warning before that (capsid/rulings/backups-offaccount-2026-10-10.md item
-// 6): a copy a few hours late shows on the Portal's attention list and posts no job.
+// The warning before that (Dustin, 2026-10-10): a copy a few hours late shows on the Portal's attention list and posts no job.
 export const OFFACCOUNT_LATE_HOURS = 30;
 
 // Item 6 again: a copy under a quarter of, or over double, the median of the site's recent

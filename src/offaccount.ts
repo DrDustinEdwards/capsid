@@ -1,5 +1,5 @@
 // The sites whose d1-dump runs the private capsid-backups repo copies off the Cloudflare
-// account (capsid/rulings/backups-offaccount-2026-10-10.md). /backup/credential mints a
+// account (Dustin, 2026-10-10). /backup/credential mints a
 // read credential only for a bucket named here, so the bucket comes from this pinned
 // table and never from the request or from an editable row such as ops_sites.
 //

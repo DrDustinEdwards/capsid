@@ -5,9 +5,7 @@ description: Use before committing or opening a pull request that changes what t
 
 # Verify a Portal change
 
-Tests prove what someone thought to test. This skill proves the change itself: run
-the real Portal, use the changed flow as Dustin would, and look at the result. Do
-it before every commit that touches `dashboard/`, `src/portal-*.ts` or
+Do it before every commit that touches `dashboard/`, `src/portal-*.ts` or
 `src/dashboard-csp.ts`, and before the pull request.
 
 ## 1. Boot the build the browser tests use
@@ -21,11 +19,9 @@ npm run build
 node --import ../test/resolve-ts.mjs dev/serve.ts 4174   # run in the background
 ```
 
-`dev/serve.ts` serves `build/worker/portal.js`, the module the Worker bundles, with
-the Worker's own CSP and a fresh nonce on every page, and `dev/mock-api.ts` in
-place of `/portal/api/*` (fake data: sites under example.com, namespaces
-`sample*`). A script or style the live Portal would refuse fails here too. Wait
-until `curl -s -o /dev/null -w '%{http_code}' http://localhost:4174/` prints 200.
+`dev/serve.ts` serves the Worker's build with its CSP and `dev/mock-api.ts` in
+place of `/portal/api/*` (fake data). Wait until
+`curl -s -o /dev/null -w '%{http_code}' http://localhost:4174/` prints 200.
 
 For the empty and failure states, start it with `WF_MOCK=signed-out`,
 `no-snapshot`, `no-token` or `no-sites` (dashboard/README.md). `npm run dev`
@@ -75,11 +71,8 @@ try {
 }
 ```
 
-Drive the whole flow, not just the page load: open the dialog, submit the form,
-see the row change, go back, reload and see it hold. If the change is
-responsive or themed, repeat the end state at 390 px wide and in dark mode
-(`page.setViewportSize`, `page.emulateMedia({ colorScheme: "dark" })`). If it must
-work with scripts off, run it once more with `browser.newContext({ javaScriptEnabled: false })`.
+Drive the whole flow (act, see the result, reload and see it hold); repeat the end
+state at 390 px and dark when the change is responsive or themed.
 
 In a cloud session the repo's Playwright build may not match the Chromium the
 container ships, and launch fails with "Executable doesn't exist". Then set
@@ -116,24 +109,16 @@ REPO=$PWD OUT=<scratchpad> PW_CHROMIUM=/opt/pw-browsers/chromium \
 
 ## Rules
 
-- A failed step is a finding about the change. Fix the code, then run the same
-  script again. Never add a sleep, a retry or a looser selector to make it pass.
-- If a step fails sometimes, find out why before going on; a flaky check teaches
-  the next thread to re-run instead of fix.
-- Never edit an existing spec to make it agree with new behavior unless the
-  change is meant to alter that behavior, and say so in the pull request.
-- Leave nothing behind: stop the server by the process id you started (never
-  `pkill` by name, which can kill another session's server), and keep the scripts
-  and screenshots in the scratchpad. Nothing from this skill is committed.
+A failed step is a finding about the change: fix the code and rerun the same
+script; no sleeps, no looser selectors. Stop the server by the process id you
+started, never `pkill` by name.
 
 ## The report
 
 Put this in the reply and the pull request body:
 
 - First line: verified, partly verified (and what was not), or failed.
-- Each step's ok or FAIL line, verbatim, and the console errors line.
-- The end-state screenshot, attached (Dustin cannot open a scratchpad path).
-- The spec run's summary line.
-- Anything the mock cannot show (a live Cloudflare read, the Access sign-in, real
-  GitHub data), named as not verified. The live check after the merge deploys is
-  `.claude/rules/deploy.md`.
+- Each step's ok or FAIL line, the console errors line, the end-state screenshot
+  attached, and the spec run's summary line.
+- Not verified: a live Cloudflare read, the Access sign-in, real GitHub data. The
+  live check after the merge deploys is `.claude/rules/deploy.md`.
