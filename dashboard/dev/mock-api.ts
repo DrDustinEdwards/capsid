@@ -1437,8 +1437,9 @@ function plan(
           400,
           `${unit} is not promoted to auto in version ${from}, so there is nothing to remove.`,
         );
-      const typed = need(params, "confirm", "The version to sign");
-      if (typed !== to)
+      // As the Worker: the preview takes no version, and one typed is checked; the perform needs it.
+      const typed = (params.confirm ?? "").trim();
+      if (typed && typed !== to)
         throw new Refusal(
           400,
           `${typed} is not the policy's next version. Type ${to} to sign it. Nothing was signed.`,
@@ -1459,14 +1460,18 @@ function plan(
             ? `${unit} is added under ## Auto units.`
             : `${unit} is removed from ## Auto units: its pull requests wait for an approval again.`,
         ],
-        apply: (st) => void (st.policy = { version: to, units }),
+        apply: (st) => {
+          if (!typed)
+            throw new Refusal(400, `Type ${to} as confirm to sign it. Nothing was signed.`);
+          st.policy = { version: to, units };
+        },
       };
     }
     // The mock's repo says version 8 against the stored 7, so the typed version is checked
     // as the Worker checks it and a perform writes nothing.
     case "sign_policy_from_repo": {
-      const typed = need(params, "confirm", "The version to sign");
-      if (typed !== "8")
+      const typed = (params.confirm ?? "").trim();
+      if (typed && typed !== "8")
         throw new Refusal(
           400,
           `${typed} is not the version in docs/policy/auto-merge.md, which says 8. Type 8 to sign it. Nothing was signed.`,
@@ -1480,8 +1485,11 @@ function plan(
           "Lines changed: 1 removed, 1 added.",
           "- - version: 7",
           "+ - version: 8",
+          "Type 8 as confirm to sign it.",
         ],
-        apply: () => {},
+        apply: () => {
+          if (!typed) throw new Refusal(400, "Type 8 as confirm to sign it. Nothing was signed.");
+        },
       };
     }
     case "unit_resume": {

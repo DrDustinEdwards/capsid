@@ -14,7 +14,7 @@ import { Disclosure } from "capsomer/react/disclosure";
 import { Field } from "capsomer/react/field";
 import "capsomer/disclosure.css";
 import "capsomer/field.css";
-import { performAction, previewAction } from "../lib/api";
+import { performAction, previewAction, runAction } from "../lib/api";
 import { type Answer } from "capsomer/react/data";
 import { ago } from "../lib/format";
 import { parse, utc } from "capsomer/behavior/time";
@@ -92,10 +92,21 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   const [note, setNote] = useState("");
   const typesConfirm = TYPED_CONFIRM.has(req.action);
   const [typedVersion, setTypedVersion] = useState("");
+  // The preview opens without the version, so it can name it; the press that signs previews again with the typed version bound into the token, then performs.
+  const shownParams = useRef<Record<string, string>>({});
+  const signedVersion = useRef("");
   const step = useTwoStep({
-    preview: (params: Record<string, string>) =>
-      previewAction(csrf, { action: req.action, params }),
-    perform: (shown: PortalPreview) => performAction(csrf, shown.token),
+    preview: (params: Record<string, string>) => {
+      shownParams.current = params;
+      return previewAction(csrf, { action: req.action, params });
+    },
+    perform: (shown: PortalPreview) =>
+      typesConfirm
+        ? runAction(csrf, {
+            action: req.action,
+            params: { ...shownParams.current, confirm: signedVersion.current },
+          })
+        : performAction(csrf, shown.token),
     onDone: (r: PortalPerformed) => finish(r),
     onSignedOut: () => finish("signed-out"),
   });
@@ -117,23 +128,23 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
     const typedNote = takesNote
       ? (noteRef.current?.value ?? (note || req.params.note || "")).trim()
       : "";
-    const version = typesConfirm ? (confirmRef.current?.value ?? typedVersion).trim() : "";
-    if (typesConfirm && !version) {
-      setError({
-        text: "Type the version number of the policy to be signed, then preview. The preview names it if you do not know it.",
-        expired: false,
-        field: true,
-      });
-      confirmRef.current?.focus();
-      return;
-    }
     const params = {
       ...req.params,
       ...(needsReason ? { reason: typed } : {}),
       ...(typedNote ? { note: typedNote } : {}),
-      ...(typesConfirm ? { confirm: version } : {}),
     };
     await step.runPreview(params);
+  };
+
+  const runSign = () => {
+    const version = (confirmRef.current?.value ?? typedVersion).trim();
+    if (!version) {
+      setError({ text: "Type the version shown above.", expired: false, field: true });
+      confirmRef.current?.focus();
+      return;
+    }
+    signedVersion.current = version;
+    void runPerform();
   };
 
   // Read from the field too, so a value the browser filled in without an input event counts.
@@ -143,13 +154,14 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
     // Once, even under StrictMode's double effect.
     if (!started.current) {
       started.current = true;
-      if (!askReason && !typesConfirm) void runPreview("");
+      if (!askReason) void runPreview("");
     }
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount (the started ref guards StrictMode): the dialog asks for its preview as it opens
   }, []);
 
   useEffect(() => {
-    if (preview) (ONE_WAY.has(req.action) ? cancelRef : doIt).current?.focus();
+    if (preview)
+      (typesConfirm ? confirmRef : ONE_WAY.has(req.action) ? cancelRef : doIt).current?.focus();
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- refocus when the preview arrives; a changed action does not move focus
   }, [preview]);
 
@@ -163,12 +175,12 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
         ref={doIt}
         variant={destructive ? "danger" : "primary"}
         pending={pending === "perform"}
-        onClick={() => void runPerform()}
+        onClick={() => (typesConfirm ? runSign() : void runPerform())}
       >
         {label}
       </Button>
     );
-  } else if (askReason || typesConfirm || (error && !error.field)) {
+  } else if (askReason || (error && !error.field)) {
     primary = (
       // Preview never depends on the form's submit event; it is held only while a request is in flight.
       <Button
@@ -204,40 +216,6 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
               {given}
             </p>
           </div>
-        )}
-        {typesConfirm && !askReason && !preview && (
-          <form
-            className="cap-stack"
-            data-gap="4"
-            noValidate
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!busy) void runPreview("");
-            }}
-          >
-            <Field
-              label="Version to sign"
-              required
-              help={
-                req.confirmHelp ??
-                "The version number in the policy file. It decides what merges with no human, so it is typed, not clicked."
-              }
-              error={fieldError}
-              announce
-            >
-              <input
-                ref={confirmRef}
-                className="cap-input"
-                type="text"
-                inputMode="numeric"
-                autoComplete="off"
-                autoFocus
-                value={typedVersion}
-                readOnly={busy}
-                onChange={(e) => setTypedVersion(e.target.value)}
-              />
-            </Field>
-          </form>
         )}
         {askReason && !preview && (
           <form
@@ -323,6 +301,39 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
               </p>
             </div>
           </Disclosure>
+        )}
+        {typesConfirm && preview && (
+          <form
+            className="cap-stack"
+            data-gap="4"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!busy) runSign();
+            }}
+          >
+            <Field
+              label="Version to sign"
+              required
+              help={
+                req.confirmHelp ??
+                "The version named above. It decides what merges with no human, so it is typed, not clicked."
+              }
+              error={fieldError}
+              announce
+            >
+              <input
+                ref={confirmRef}
+                className="cap-input"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={typedVersion}
+                readOnly={busy}
+                onChange={(e) => setTypedVersion(e.target.value)}
+              />
+            </Field>
+          </form>
         )}
         {error && !error.field && (
           <Alert
