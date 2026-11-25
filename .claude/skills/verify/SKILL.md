@@ -42,20 +42,7 @@ const browser = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
 );
 const page = await browser.newPage();
-const errors = [];
-page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
-page.on("pageerror", (e) => errors.push(String(e)));
-const log = [];
-async function step(name, fn) {
-  try {
-    await fn();
-    log.push(`ok   ${name}`);
-  } catch (e) {
-    log.push(`FAIL ${name}: ${e.message.split("\n")[0]}`);
-    await page.screenshot({ path: "fail.png", fullPage: true });
-    throw e;
-  }
-}
+// errors, log and step(): the helpers in devkit docs/verify.md
 try {
   await step("open Needs you", async () => {
     const r = await page.goto(process.argv[2]);
@@ -73,10 +60,6 @@ try {
 
 Drive the whole flow (act, see the result, reload and see it hold); repeat the end
 state at 390 px and dark when the change is responsive or themed.
-
-In a cloud session the repo's Playwright build may not match the Chromium the
-container ships, and launch fails with "Executable doesn't exist". Then set
-`PW_CHROMIUM=/opt/pw-browsers/chromium`. Do not run `playwright install`.
 
 ## 3. Run the specs that cover the area
 
@@ -107,18 +90,10 @@ REPO=$PWD OUT=<scratchpad> PW_CHROMIUM=/opt/pw-browsers/chromium \
   npx playwright test -c <scratchpad>/cloud.config.mjs <name>.spec.ts
 ```
 
-## Rules
+## Rules and report
 
-A failed step is a finding about the change: fix the code and rerun the same
-script; no sleeps, no looser selectors. Stop the server by the process id you
-started, never `pkill` by name.
+Follow the Rules and the report in [devkit's docs/verify.md](https://github.com/DrDustinEdwards/devkit/blob/main/docs/verify.md). For this repo:
 
-## The report
-
-Put this in the reply and the pull request body:
-
-- First line: verified, partly verified (and what was not), or failed.
-- Each step's ok or FAIL line, the console errors line, the end-state screenshot
-  attached, and the spec run's summary line.
-- Not verified: a live Cloudflare read, the Access sign-in, real GitHub data. The
-  live check after the merge deploys is `.claude/rules/deploy.md`.
+- Anything the mock cannot show (a live Cloudflare read, the Access sign-in, real
+  GitHub data), named as not verified. The live check after the merge deploys is
+  `.claude/rules/deploy.md`.
