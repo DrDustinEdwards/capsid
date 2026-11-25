@@ -5,11 +5,11 @@ name: Explorer
 # (capsid/rulings/system-explorer-2026-10-10.md, answers 4 and 8).
 #
 # A pull request that touches the explorer, or Capsid's src/ its build loads, is checked from
-# the fixtures: typecheck, the build tests and the browser spec. On master, daily and by hand,
-# the deploy job builds from the live documents and deploys only when the build differs from
-# what capsid.dustinedwards.info serves (build.json's content hash): a new day's numbers or new
-# explorer code. A day the public build did not run deploys nothing. The deploy is devkit's shared
-# worker-deploy: live gate on /health, rollback on a refusal.
+# the fixtures: typecheck, the build tests and the browser spec. A push to master and a run by hand
+# always deploy, so /health names the commit that is live; the daily run deploys only when the
+# build differs from what capsid.dustinedwards.info serves (build.json's content hash), and a day
+# the public build did not run deploys nothing. The deploy is devkit's shared worker-deploy: live
+# gate on /health, rollback on a refusal.
 
 on:
   pull_request:
@@ -93,8 +93,10 @@ jobs:
   # secret, and capsid.dustinedwards.info). That is a switch, not a guard on the secrets: with it
   # on, a missing or wrong token fails the deploy loudly, as ci.yml's deploy does.
   #
-  # This job builds from the live documents and says whether the build differs from what is live;
-  # the deploy below ships it only then.
+  # This job builds from the live documents and says whether to deploy. A push or a run by hand always
+  # does: a dependency bump can leave every byte the same, and a skip then left /health naming an
+  # older commit than master's, so nothing live showed the bump had shipped. The daily run, which
+  # only brings new numbers, deploys only when the build differs from what is live.
   compare:
     name: explorer compare
     needs: checks
@@ -131,6 +133,8 @@ jobs:
 
       - name: Compare with what is live
         id: compare
+        env:
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
           built=$(node -p 'require("./explorer/dist/build.json").content')
@@ -138,7 +142,9 @@ jobs:
           # with a hash counts as different.
           live=$(curl -fsS --max-time 20 https://capsid.dustinedwards.info/build.json | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).content' 2>/dev/null || echo none)
           echo "built $built, live $live"
-          if [ "$built" = "$live" ]; then
+          if [ "$EVENT" != "schedule" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          elif [ "$built" = "$live" ]; then
             echo "::notice::the explorer is already serving this build; nothing to deploy"
             echo "deploy=false" >> "$GITHUB_OUTPUT"
           else
