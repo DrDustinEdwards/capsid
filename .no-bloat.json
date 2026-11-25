@@ -12,7 +12,7 @@
     }
   ],
   "baseline": {
-    "measured_at": "ae31a03",
+    "measured_at": "c8aa50c",
     "knip (Worker)": {},
     "knip (dashboard)": {},
     "jscpd": {
@@ -29,7 +29,7 @@
     "size": {
       "dashboard/dev/mock-api.ts": 3177,
       "dashboard/src/app/App.tsx": 646,
-      "dashboard/src/app/ConfirmDialog.tsx": 519,
+      "dashboard/src/app/ConfirmDialog.tsx": 517,
       "dashboard/src/lib/derive.ts": 513,
       "dashboard/src/views/SiteTraffic.tsx": 605,
       "dashboard/src/views/TrendCharts.tsx": 830,
@@ -42,11 +42,11 @@
     },
     "tests": {
       "files": 273,
-      "cases": 2011
+      "cases": 2012
     },
     "comments": {
       "lines": 7159,
-      "code": 126725,
+      "code": 126762,
       "percentage": 5.35
     }
   }
