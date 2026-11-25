@@ -97,7 +97,11 @@ function supersedingEdgeRefusal(ctx: ToolCtx, namespace: string, edges: LinkEdge
     if (edge.type !== "supersedes" && edge.type !== "replaces") continue;
     const target = `${edge.to_ns}/${edge.to_path}`;
     if (edge.to_ns !== namespace) {
-      const refusal = ctx.scope({ ...toolSurfaceOf("write"), grant: "write", namespace: edge.to_ns });
+      const refusal = ctx.scope({
+        ...toolSurfaceOf("write"),
+        grant: "write",
+        namespace: edge.to_ns,
+      });
       if (refusal)
         return `a ${edge.type} edge to ${target} marks it superseded, so it needs the write grant on ${edge.to_ns}: ${refusal} Nothing was written.`;
     }

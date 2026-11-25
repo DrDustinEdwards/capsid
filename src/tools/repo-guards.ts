@@ -14,7 +14,10 @@ export function repoGuards(ctx: ToolCtx) {
   // redirect every driver scoped to the old repo. One D1 read per repo call.
   const scopedRepo = async (op: string, namespace: string, selector: string | undefined) => {
     const resolved = await resolveRepo(env, namespace, selector);
-    return { resolved, refusal: ctx.scope({ ...toolSurfaceOf(op), namespace, repo: resolved.full }) };
+    return {
+      resolved,
+      refusal: ctx.scope({ ...toolSurfaceOf(op), namespace, repo: resolved.full }),
+    };
   };
 
   const guardedRead = async (

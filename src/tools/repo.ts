@@ -468,7 +468,10 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
             },
             repo,
           ),
-        { repo, surface: toolSurfaceOf("tag_release", undefined, publish_release ? "release" : "tag") },
+        {
+          repo,
+          surface: toolSurfaceOf("tag_release", undefined, publish_release ? "release" : "tag"),
+        },
       ),
   );
 }
