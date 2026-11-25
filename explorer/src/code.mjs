@@ -1,17 +1,14 @@
-// The code level (capsid/research/design-system-explorer.md, section 5): a public system's modules by folder, each with its worst CRAP and mutation score, its import cycles as text,
-// and each module's functions over its numbered source at the commit the map measured. Pure, as pages.mjs is: build.mjs reads the code document and the source and passes them in.
-// Every status is Capsomer's (components/status): a glyph, a word and the tone's color. A number nobody measured is "No data" with its reason, never a zero.
+// Pure, as pages.mjs is: build.mjs reads the code document and the source and passes them in.
+// A number nobody measured is "No data" with its reason, never a zero.
 import { graphSvg } from "capsomer/behavior/graph";
 import { glyphHtml, statusHtml } from "capsomer/behavior/status";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { layout, pageHead, readingBox, scroller, systemPath } from "./pages.mjs";
 
-/** The most modules a folder's drawing shows. */
 const MAX_DRAWN = 40;
 
 /** @param {string} id */
 export const codePath = (id) => `/s/${id}/code/`;
-/** A repo path as GitHub's URLs take it, each segment escaped. */
 export const escapePath = (/** @type {string} */ path) =>
   path.split("/").map(encodeURIComponent).join("/");
 
@@ -24,10 +21,8 @@ const SCORE_WATCH = 60;
 
 const WORD = { crit: "Critical", warn: "Watch", ok: "Ok" };
 
-/**
- * Capsomer's status: glyph, word, then the number. No data says why, with a screen-reader reason, as Capsomer writes it for a table cell.
- * @param {"crit" | "warn" | "ok" | "nodata"} tone @param {string} value @param {string} [reason]
- */
+// No data says why, with a screen-reader reason, as Capsomer writes it for a table cell.
+/** @param {"crit" | "warn" | "ok" | "nodata"} tone @param {string} value @param {string} [reason] */
 function status(tone, value, reason) {
   if (tone === "nodata")
     return statusHtml("nodata", "No data", { brief: true, reason: reason ?? "" });
@@ -52,10 +47,7 @@ export function scoreStatus(score, reason) {
   return score === null ? status("nodata", "", reason) : status(scoreTone(score), `${score}%`);
 }
 
-/**
- * A box's status lines in the drawing: its worst CRAP, and its mutation score once mutation has
- * run on the repo. @param {any} map @param {any[]} mods the modules the box stands for
- */
+/** @param {any} map @param {any[]} mods */
 function boxLines(map, mods) {
   const fns = mods.flatMap((m) => m.functions);
   const worst = worstCrap({ functions: fns });
@@ -80,7 +72,7 @@ function boxLines(map, mods) {
   return lines;
 }
 
-/** Why a number is missing, from what the map says ran. @param {any} map */
+/** @param {any} map */
 const reasons = (map) => ({
   fnCrap: "no coverage report in this map",
   score: map.tools.mutation
@@ -89,10 +81,11 @@ const reasons = (map) => ({
   stale: "changed since the last mutation run",
 });
 
-/** Why a module or function has no mutation score: stale beats no mutants. @param {any} r @param {any[]} fns */
+// Stale beats no mutants.
+/** @param {any} r @param {any[]} fns */
 const scoreReason = (r, fns) => (fns.some((f) => f.stale) ? r.stale : r.score);
 
-/** The largest of a module's function CRAPs, or null when none was measured. @param {any} m */
+/** @param {any} m */
 const worstCrap = (m) =>
   m.functions.reduce(
     (/** @type {number | null} */ w, /** @type {any} */ f) =>
@@ -100,7 +93,7 @@ const worstCrap = (m) =>
     null,
   );
 
-/** A module's mutation score over all its functions' mutants, or null. @param {any} m */
+/** @param {any} m */
 function moduleScore(m) {
   const measured = m.functions.filter(
     (/** @type {any} */ f) => f.mutants !== null && f.mutants > 0 && f.score !== null,
@@ -117,10 +110,7 @@ function moduleScore(m) {
   return Math.round((detected / mutants) * 1000) / 10;
 }
 
-/**
- * When the mutation scores are from an older commit than the map, say so, and how many
- * functions changed since and so show none. @param {any} map @param {any[]} fns
- */
+/** @param {any} map @param {any[]} fns */
 function mutationNote(map, fns) {
   if (!map.mutated) return "";
   const stale = fns.filter((f) => f.stale).length;
@@ -136,18 +126,15 @@ const folderOf = (path) => (path.includes("/") ? path.slice(0, path.lastIndexOf(
 /** @param {string} path */
 const baseName = (path) => path.slice(path.lastIndexOf("/") + 1);
 
-/** A repo's GitHub address from its "owner/name". @param {string} repo */
+/** @param {string} repo */
 const repoUrl = (repo) => `https://github.com/${repo}`;
 /** @param {any} map @param {string} path @param {number} [line] @param {number} [end] */
 const blobUrl = (map, path, line, end) =>
   `${repoUrl(map.repo)}/blob/${map.sha}/${escapePath(path)}${line ? `#L${line}${end && end !== line ? `-L${end}` : ""}` : ""}`;
 
-/**
- * The code maps of public systems, checked against the model: a map for a system the model does not have as public stops the build (design section 2, rule 2),
- * so the explorer can never draw a private system's code. Two systems sharing a repo (a site and its admin connector) get its pages once, under the system named after the repo or else the first to list it, so no page is served at two addresses.
- * @param {any} model @param {any} code
- * @returns {Map<string, any[]>} system id to its maps
- */
+// A map for a system the model does not have as public stops the build (design section 2, rule 2), so the explorer
+// can never draw a private system's code. Systems sharing a repo get its pages once, so no page has two addresses.
+/** @param {any} model @param {any} code @returns {Map<string, any[]>} */
 export function codeBySystem(model, code) {
   const systems = new Map(model.systems.map((/** @type {any} */ s) => [s.id, s]));
   const maps = code?.maps ?? [];
@@ -175,7 +162,7 @@ export function codeBySystem(model, code) {
   return out;
 }
 
-/** The one-line summary a system page links with. @param {any[]} maps */
+/** @param {any[]} maps */
 export function codeSummary(maps) {
   const modules = maps.reduce((n, m) => n + m.modules.length, 0);
   const functions = maps.reduce(
@@ -190,7 +177,7 @@ export function codeSummary(maps) {
   return `${modules} modules and ${functions} functions, measured ${maps[0].date}`;
 }
 
-/** @param {any} s the system @param {any[]} maps @param {string} asOf */
+/** @param {any} s @param {any[]} maps @param {string} asOf */
 export function codePage(s, maps, asOf) {
   const sections = maps.map((map) => {
     const r = reasons(map);
@@ -208,8 +195,6 @@ export function codePage(s, maps, asOf) {
       `${id("f")}-${escapeHtml(folder.replace(/[^A-Za-z0-9]+/g, "-"))}`;
     const folderName = (/** @type {string} */ folder) =>
       folder === "." ? "The top folder" : `${folder}/`;
-    // Folders first when there are several: a box per folder, a wire where any module imports
-    // across, each box leading to its folder's own drawing and table below.
     const folderGraph =
       folders.size > 1
         ? graphSvg({
@@ -230,8 +215,7 @@ export function codePage(s, maps, asOf) {
             ),
           })
         : "";
-    // The modules of one folder and the imports among them. Past MAX_DRAWN boxes a drawing is
-    // a smear no one can read, so a folder that large has its table alone.
+    // Past MAX_DRAWN boxes a drawing is a smear no one can read, so such a folder has its table alone.
     /** @param {string} folder @param {any[]} mods */
     const moduleGraph = (folder, mods) =>
       mods.length > 1 && mods.length <= MAX_DRAWN
@@ -294,11 +278,7 @@ ${sections.join("\n")}`;
   });
 }
 
-/**
- * Every code page: one per public system with a map.
- * @param {any} model @param {Map<string, any[]>} bySystem @param {string} asOf
- * @returns {Array<[string, string]>}
- */
+/** @param {any} model @param {Map<string, any[]>} bySystem @param {string} asOf @returns {Array<[string, string]>} */
 export function codePages(model, bySystem, asOf) {
   return [...bySystem].map(([id, maps]) => [
     codePath(id),
@@ -310,7 +290,7 @@ export function codePages(model, bySystem, asOf) {
   ]);
 }
 
-/** Every public repo's map with the system its pages sit under. @param {any} model @param {Map<string, any[]>} bySystem */
+/** @param {any} model @param {Map<string, any[]>} bySystem */
 function reposOf(model, bySystem) {
   return [...bySystem].flatMap(([id, maps]) =>
     maps.map((map) => ({
@@ -321,10 +301,8 @@ function reposOf(model, bySystem) {
   );
 }
 
-/**
- * The system whose code pages hold another system's repo, when the two share it, or undefined.
- * @param {any} model @param {Map<string, any[]>} bySystem @param {string} id
- */
+// Named after the repo, or else the first to list it.
+/** @param {any} model @param {Map<string, any[]>} bySystem @param {string} id */
 export function codeHome(model, bySystem, id) {
   const repos = (model.systems.find((/** @type {any} */ s) => s.id === id)?.repos ?? []).map(
     (/** @type {string} */ r) => r.replace(/^https:\/\/github\.com\//, ""),
@@ -345,11 +323,8 @@ const functionsOf = (map) =>
     })),
   );
 
-/**
- * Totals over every public repo's code map, for the front page and the code overview, or null
- * when there are no maps.
- * @param {any} model @param {Map<string, any[]>} bySystem
- */
+// Null when there are no maps.
+/** @param {any} model @param {Map<string, any[]>} bySystem */
 export function codeTotals(model, bySystem) {
   const repos = reposOf(model, bySystem);
   if (!repos.length) return null;
@@ -376,11 +351,11 @@ export function codeTotals(model, bySystem) {
   };
 }
 
-/** A function's row in a table of the riskiest, linked to its lines on GitHub. @param {any} f @param {boolean} [repo] */
+/** @param {any} f @param {boolean} [repo] */
 const riskRow = (f, repo = false) =>
   `<tr><th scope="row"><a href="${f.href}"><code>${escapeHtml(f.name)}</code></a></th>${repo ? `<td>${escapeHtml(f.repo.split("/")[1])}</td>` : ""}<td>${escapeHtml(f.path)}</td><td data-sort="${f.cc}">${f.cc}</td><td data-sort="${f.coverage ?? -1}">${f.coverage === null ? "" : `${Math.round(f.coverage * 100)}%`}</td><td data-sort="${f.crap ?? -1}">${crapStatus(f.crap, "no coverage report in this map")}</td></tr>`;
 
-/** A system page's five riskiest functions, by CRAP. @param {string} id @param {any[]} maps */
+/** @param {string} id @param {any[]} maps */
 export function riskiest(id, maps) {
   const fns = maps
     .flatMap(functionsOf)
@@ -393,11 +368,7 @@ ${scroller("risk", `<table class="cap-table code-table"><caption>The five functi
 <p><a class="arrow" href="${codePath(id)}">Every module</a></p></section>`;
 }
 
-/**
- * The code overview: every public repo with its size and health, then the riskiest functions
- * and the weakest-tested modules across all of them, each table sortable.
- * @param {any} model @param {Map<string, any[]>} bySystem @param {any} totals @param {string} asOf
- */
+/** @param {any} model @param {Map<string, any[]>} bySystem @param {any} totals @param {string} asOf */
 export function codeIndexPage(model, bySystem, totals, asOf) {
   const repos = reposOf(model, bySystem);
   const head = pageHead(

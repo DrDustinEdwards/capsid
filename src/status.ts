@@ -17,60 +17,30 @@ import { externalFence } from "./provenance";
 import { readMaintenance, type MaintenanceItem } from "./maintenance";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Capsid's status as a driver and the Portal read it (capsid_read_status action status, GET
-// /portal/api/namespaces): per namespace the queue, the breaker, what waits on the seat and the
-// maintenance list, and across them the signed policies, the overnight switch, the merge safety
-// meter and, for the admin, the credential inventory.
 
 interface NamespaceStatus {
   namespace: string;
-  // The queue's circuit breaker (src/job-breaker.ts): open when the namespace's drivers
-  // failed the threshold of jobs in 24 hours, until the seat or Dustin resets it.
   breaker: BreakerState;
-  // The latest `capsid_lint_namespace` report document under reports/. null means no report was ever
-  // run here, which is not an integrity of zero.
+  // null means no report was ever run, which is not an integrity of zero.
   latest_report: { path: string; integrity: number | null; generated: string } | null;
-  // Counts for the open states and today's moves, plus the blocked jobs themselves with
-  // the command each waits on, because a count alone tells nobody what to run.
   jobs: JobsSummary;
-  // Pull requests the auto-merge policy declined, each with the refusing check. The
-  // tick rewrites the whole list, so it needs no expiry. Empty when the policy is off.
+  // The tick rewrites the whole list, so it needs no expiry.
   awaiting_seat: AwaitingSeat[];
-  // The daily maintenance pass's list for this namespace (src/maintenance.ts): stale or
-  // mislabelled jobs, what was resumed for the seat, green driver pull requests waiting,
-  // pull requests red for days, and merged or old branches. Empty before the first pass.
   maintenance: MaintenanceItem[];
-  // Open pull requests that pass read in this namespace, so an empty pull request list can
-  // be told from one that read nothing. null when the pass did not read them (never ran,
-  // not a roster namespace, or the read failed and a prs-not-checked item says why).
+  // null when the pass did not read them, so an empty list can be told from nothing read.
   maintenance_prs_read: number | null;
-  // Branches that pass read in this namespace, the same way: null when it read none.
   maintenance_branches_read: number | null;
-  // What needs Dustin in this namespace's app (src/inbox.ts): blocked jobs and questions,
-  // pull requests auto-merge declined, a failing CI run, a site that is down. The same
-  // answer GET /ops/inbox serves the admin shell, narrowed to this namespace.
   needs_dustin: InboxApp;
 }
 
 export interface StatusReport {
-  // The canon documents and rulings an agent key may not change (src/canon.ts),
-  // so a driver knows before it writes.
   canon_paths: ReturnType<typeof servedCanonPaths>;
-  // The version a driver passes as approved_by_policy, served here because a namespace-scoped
-  // driver cannot read the capsid namespace. Only the version and whether it is on, never the body.
+  // Served here because a namespace-scoped driver cannot read the capsid namespace.
   policies: PolicyVersions;
-  // The overnight run's switch and, when it runs on the subscription, the recorded
-  // decision (src/overnight.ts). The scheduler reads this before it starts a session.
   overnight: OvernightState;
-  // The auto-merge safety meter and shutoff (src/merge-safety.ts): the last seven days per
-  // namespace and whether auto-merge is paused there, from the report the tick keeps, so
-  // asking costs one KV read. Null before the tick's first pass. A scoped caller sees its
-  // own namespaces' rows only.
   merge_safety: OpsMergeSafety | null;
-  // The credential inventory. Revoked rows are included and say so, so "revoked" and
-  // "never existed" look different. Never the key or the stored verifier, and only the
-  // flags an agent holds. Absent, not empty, for a scoped caller: an empty list would
-  // read as "no agents exist".
+  // Revoked rows are included so "revoked" and "never existed" differ. Absent, not empty, for a scoped
+  // caller: an empty list would read as "no agents exist".
   agents?: AgentSummary[];
   namespaces: NamespaceStatus[];
 }
@@ -83,19 +53,13 @@ export interface AgentSummary {
   flags: string[];
   last_seen: string | null;
   revoked_at: string | null;
-  // Minted and not yet activated in the Portal (migrations/0065): its key resolves nothing.
   pending: boolean;
-  // When the watcher pass archived it (src/agents-archive.ts), or null for a live or
-  // revoked row. An archived agent is always revoked.
   archived_at: string | null;
-  // What this credential has done, from job_outcomes. Counts and rates, never a
-  // composite score (src/agent-record.ts says why).
   record: AgentRecord;
 }
 
-// Exported for the Watch Floor feed (src/ops-feed.ts), which lists the same inventory with the same
-// records rather than a second reading of the agents table. The archive is read newest move first
-// and bounded: the archive grows as revoked agents move out of the live table.
+// Exported for the Watch Floor feed (src/ops-feed.ts), which lists the same inventory. The archive
+// grows as revoked agents move out of the live table, so it is read bounded.
 const SUMMARY_ARCHIVE_LIMIT = 50;
 
 export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
@@ -115,7 +79,6 @@ export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
       pending: number | null;
       archived_at: string | null;
     }>();
-  // Live first, then revoked, then archived; by name within each.
   const rank = (r: { revoked_at: string | null; archived_at: string | null }) =>
     r.archived_at ? 2 : r.revoked_at ? 1 : 0;
   const rows = [...(results ?? [])].sort(
@@ -135,12 +98,10 @@ export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
       archived_at: row.archived_at,
     };
   });
-  // Three grouped reads for the whole inventory, not three per credential.
   const records = await loadAgentRecords(db, inventory);
   return inventory.map((agent) => ({ ...agent, record: records[agent.name] }));
 }
 
-/** One signed policy as a driver needs it: which version, and whether it is on. */
 type ServedPolicy = { version: string; enabled: boolean } | { reason: string };
 
 interface PolicyVersions {
@@ -149,9 +110,7 @@ interface PolicyVersions {
 }
 
 async function servedPolicies(env: Env): Promise<PolicyVersions> {
-  // Each load verifies the stored document's signature and checks it describes no less
-  // than the code enforces. A throw is reported, not raised: a driver asking what
-  // version is current should not have status fail because a policy is being re-signed.
+  // A throw is reported, not raised: a policy being re-signed should not fail status.
   const one = async (
     load: () => Promise<{ policy: { version: string; enabled: boolean } } | { error: string }>,
   ): Promise<ServedPolicy> => {
@@ -172,9 +131,7 @@ async function servedPolicies(env: Env): Promise<PolicyVersions> {
   };
 }
 
-// An item an app reported about itself is the app's words, and an agent reads
-// capsid_read_status action status, so its title is relayed inside an external fence (src/provenance.ts,
-// OWASP item 1; capsid/research/design-inbox-report.md, "Trust").
+// An app's own words, relayed inside an external fence (src/provenance.ts, OWASP item 1).
 function fenceReported(app: InboxApp): InboxApp {
   return {
     ...app,
@@ -189,10 +146,8 @@ function fenceReported(app: InboxApp): InboxApp {
 export async function capsidStatus(
   env: Env,
   only?: string,
-  // The caller's namespaces and whether it is the admin, supplied by the tool from the
-  // resolved agent. Omitted means unrestricted (the cron, the Portal). A scoped caller
-  // sees only its own namespaces and no credential inventory, because both map the
-  // boundary it sits behind.
+  // Omitted means unrestricted (the cron, the Portal). A scoped caller sees no credential inventory:
+  // both map the boundary it sits behind.
   scope?: { namespaces: "*" | string[]; admin: boolean },
 ): Promise<StatusReport> {
   const allowed = scope?.namespaces ?? "*";
@@ -200,8 +155,6 @@ export async function capsidStatus(
   const namespaces = allowed === "*" ? requested : requested.filter((n) => allowed.includes(n));
   const out: NamespaceStatus[] = [];
 
-  // One read for every namespace. An unreadable or malformed key reports an empty set
-  // rather than failing status.
   let awaitingAll: AwaitingSeat[] = [];
   try {
     const raw = await env.APP_KV.get(AWAITING_SEAT_KEY);
@@ -229,8 +182,7 @@ export async function capsidStatus(
     out.push({
       namespace,
       breaker: await breakerState(env, namespace, new Date()),
-      // The filename is ISO-dated, so ORDER BY path gives the newest date. updated_at
-      // would give the most recently rewritten report instead.
+      // ORDER BY path gives the newest ISO date; updated_at would give the latest rewrite.
       latest_report: report
         ? {
             path: `${namespace}/${report.path}`,

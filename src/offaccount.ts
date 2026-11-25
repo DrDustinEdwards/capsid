@@ -1,14 +1,8 @@
-// The sites whose d1-dump runs the private capsid-backups repo copies off the Cloudflare
-// account (Dustin, 2026-10-10). /backup/credential mints a
-// read credential only for a bucket named here, so the bucket comes from this pinned
-// table and never from the request or from an editable row such as ops_sites.
-//
-// Each site dumps into its own bucket under d1-dump's prefix, BACKUP_DUMP_PREFIX in
-// src/signed-requests.ts. txasm dumps into its books bucket rather than a backups one.
-//
-// database is the D1 database the site's dump covers. The watcher compares these with every
-// D1 database a Worker binds (the nightly resources model), so a database with no Amazon
-// copy is a finding (the ruling's "flag any site with no Amazon copy").
+// /backup/credential mints a read credential only for a bucket named here: the bucket comes from this
+// pinned table, never from the request or an editable row such as ops_sites.
+// Each site dumps into its own bucket under d1-dump's prefix (BACKUP_DUMP_PREFIX in
+// src/signed-requests.ts); txasm dumps into its books bucket.
+// The watcher compares `database` with every D1 database a Worker binds, so one with no Amazon copy is a finding.
 export const OFFACCOUNT_SOURCES = {
   capsid: { bucket: "capsid-media", database: "capsid" },
   germomics: { bucket: "germomics-backups", database: "germomics" },
@@ -23,10 +17,8 @@ export const OFFACCOUNT_SOURCES = {
 
 export type OffaccountSite = keyof typeof OFFACCOUNT_SOURCES;
 
-// The MCP tool-call logs (site-runtime exportAuditLog, tool-calls/ in a bucket of its own, locked
-// 365 days). The Durable Object that feeds them prunes its rows after 90 days, so days 90 to 365
-// exist only in Cloudflare; capsid-backups copies each bucket to Amazon under files/audit/<name>/,
-// add-only. Pinned like the sites: the name picks a row, the request never names a bucket.
+// The Durable Object that feeds the tool-call logs prunes after 90 days, so days 90 to 365 exist only
+// in Cloudflare; capsid-backups copies each bucket add-only. Pinned like the sites.
 export const OFFACCOUNT_AUDIT_SOURCES = {
   "capsid-mcp": "capsid-mcp-tool-calls",
   "carrel-desk": "carrel-desk-tool-calls",
@@ -44,8 +36,7 @@ export function isOffaccountAudit(name: string): name is OffaccountAudit {
   return Object.hasOwn(OFFACCOUNT_AUDIT_SOURCES, name);
 }
 
-// keeps working.
-// send none, keep working through the cutover.
+// Callers that send no site keep working through the cutover.
 export const OFFACCOUNT_DEFAULT_SITE: OffaccountSite = "capsid";
 
 export const OFFACCOUNT_SITES = Object.keys(OFFACCOUNT_SOURCES) as OffaccountSite[];
@@ -55,9 +46,7 @@ export function isOffaccountSite(site: string): site is OffaccountSite {
   return Object.hasOwn(OFFACCOUNT_SOURCES, site);
 }
 
-/** The Amazon-copied site a row belongs to: its own key, or, for a further host of one (a row keyed
- *  `<site>-<host>`, such as carrel-mcp, whose Worker serves carrel's operator API), the longest site
- *  it starts with. Null for any other row. */
+// A row keyed `<site>-<host>` (such as carrel-mcp) belongs to the longest site it starts with.
 export function offaccountSiteOf(namespace: string): OffaccountSite | null {
   if (isOffaccountSite(namespace)) return namespace;
   const owners = OFFACCOUNT_SITES.filter((s) => namespace.startsWith(s + "-")).sort(
@@ -66,20 +55,13 @@ export function offaccountSiteOf(namespace: string): OffaccountSite | null {
   return owners[0] ?? null;
 }
 
-// The Amazon copy's report capsid-backups' watch.yml lists the
-// Object Lock bucket every 6 hours with a list-only role and POSTs, signed with the backup
-// key, the newest complete run id under daily/<site>/ for every site. The Worker holds no
-// AWS key: the bucket's state reaches it only this way. The watcher reads the stored
-// report (src/watcher-detect.ts offaccountFindings); APP_KV is enough, since a lost report
-// is rewritten by the next run and its absence is itself a finding.
+// The Worker holds no AWS key: the bucket's state reaches it only through watch.yml's signed report.
+// APP_KV is enough: a lost report is rewritten by the next run, and its absence is a finding.
 export const OFFACCOUNT_REPORT_PATH = "/backup/offaccount-report";
 export const OFFACCOUNT_REPORT_KEY = "offaccount:report";
 
 const RUN_ID = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/;
 
-// One site's line of the report: the newest complete daily copy and its size in bytes,
-// the sizes of the recent complete daily copies (newest first, at most 14, the newest
-// included), and the newest complete weekly and monthly copies.
 export interface OffaccountSiteReport {
   newest: string | null;
   bytes: number | null;
@@ -103,9 +85,8 @@ function siteLine(v: unknown): OffaccountSiteReport | null {
   return { newest, bytes, recent_bytes, weekly, monthly };
 }
 
-// A jti and a line for every site. Every site is required, so a report that forgot one
-// cannot read as that site being fine; a site this Worker does not know is refused, so
-// the two lists cannot drift apart silently.
+// Every site is required, so a report that forgot one cannot read as that site being fine; an unknown
+// site is refused, so the two lists cannot drift apart silently.
 export function parseOffaccountReport(
   body: string,
 ):

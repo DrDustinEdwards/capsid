@@ -9,45 +9,20 @@ import { auditStatement } from "./store-guards";
 import { fromBase64Text } from "@dustinedwards/site-runtime/encoding";
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
-// The daily maintenance pass's release-tag rule (Capsid improvement list, item 13). A cloud
-// session cannot push a tag, so a shared package's version bump merged from one sat untagged,
-// and every package repo's bump-consumers workflow (on push: tags: v*) waited with it. Merging
-// the bump is the release decision; this rule makes the tag that follows.
-//
-// For each shared package (shared_packages, migrations/0036; src/shared-code.ts) the version in
-// the repo's root package.json on its default branch is compared with the repo's tags by
-// releaseDecision, the rule the Shared code view uses for "untagged":
-// - a version a tag already names is left alone;
-// - a version newer than every release tag is tagged v<version> at the commit that set it: the
-//   oldest of the newest run of commits (touching package.json) carrying this version, since a
-//   later dependency change that kept the version is not the release. When the run reaches the
-//   end of what was read (COMMITS_READ) and the history is longer, the commit is not known, and
-//   the version is listed rather than tagged at a guess;
-// - a version below the newest release tag is never tagged (it would start bump-consumers on an
-//   older version) and is listed;
-// - a pre-release or missing version is left for a person.
-// A tag made through the App's installation token fires push workflows, so it starts
-// bump-consumers, which opens the apps' bump pull requests.
-//
-// A release is made only when the CHANGELOG has a section for the version (src/github/releases.ts
-// releaseNotes, the rule capsid_close_pr action release applies); otherwise the tag alone, since
-// empty or guessed notes are what that action refuses. A failed release after a made tag is
-// listed, never retried by retagging.
-//
-// On by default, unlike the branch prune: a tag adds and never removes, GitHub refuses a tag that
-// exists, and the decision was the merge. The seat turns it off with RELEASE_TAGS_SWITCH_KEY set
-// to "off"; off, what would be tagged is listed. At most RELEASE_TAG_CAP tags per run. Each tag
-// is audit-logged before the next (snapshot invariant, test/write-invariants.test.ts). A system
-// action of the pass, so it takes no caller's grant; the writes are guardedWrite's for
-// capsid_close_pr action tag and release, through the same helpers.
+// A cloud session cannot push a tag, so a merged shared-package version bump sat untagged and stalled
+// bump-consumers. Merging is the release decision; this rule makes the tag.
+// Tagged at the oldest of the newest run of commits carrying the version; a history cut off by
+// COMMITS_READ, or a version below the newest tag, is listed, never guessed.
+// On by default (a tag only adds; the decision was the merge); the seat's switch "off" lists instead.
+// Each tag is audit-logged before the next (test/write-invariants.test.ts). A system action of the
+// pass, so no caller's grant.
+// A release is made only when the CHANGELOG has a section for the version (releaseNotes); a failed
+// release after a made tag is listed, never retried by retagging.
 
-/** The switch the seat sets to "off" to stop the pass tagging. Anything else, or no key,
- *  is on. A KV key rather than a control, as the prune switch is
- *  (src/maintenance-branches.ts): a control would add to a served tool's surface. */
+// A KV key rather than a control, as the prune switch is: a control would add to a served tool's surface.
 export const RELEASE_TAGS_SWITCH_KEY = "maintenance:release-tags";
 export const RELEASE_TAG_CAP = 3;
 export const RELEASE_TAG_AUDIT_ACTION = "maintenance-release-tag";
-// Commits that touched package.json read per package, newest first.
 export const COMMITS_READ = 20;
 const CHANGELOG_PATH = "CHANGELOG.md";
 const TAGS_PER_PAGE = 100;
@@ -56,39 +31,28 @@ const SYSTEM_ACTOR = "system:maintenance";
 export interface ReleasePackage {
   name: string;
   repo: string;
-  /** The namespace whose repos include the package's repo, for the item and the audit
-   *  row; "capsid", which keeps the configuration, when none does. */
+  // Falls back to "capsid", which keeps the configuration, when no namespace's repos include it.
   namespace: string;
 }
 
 export interface ReleaseReaders {
-  /** The configured shared packages. Throws when the table could not be read. */
   packages(): Promise<ReleasePackage[]>;
-  /** The root package.json's version on the default branch, and that branch. */
   head(repo: string): Promise<{ version: string | null; branch: string }>;
-  /** The repo's tag names (one page). */
   tags(repo: string): Promise<string[]>;
-  /** The commits on `branch` that touched package.json, newest first, at most `limit`;
-   *  complete when fewer came back, so the file's whole history was read. */
+  // Complete when fewer than `limit` came back.
   manifestCommits(
     repo: string,
     branch: string,
     limit: number,
   ): Promise<{ shas: string[]; complete: boolean }>;
-  /** The root package.json's version at a commit. */
   versionAt(repo: string, sha: string): Promise<string | null>;
-  /** CHANGELOG.md at a commit, or null when there is none. */
   changelog(repo: string, sha: string): Promise<string | null>;
   tag(repo: string, tag: string, sha: string): Promise<void>;
-  /** Publish the tag's release; its URL. */
   release(repo: string, tag: string, notes: string): Promise<string>;
 }
 
-/**
- * The commit that set `version`, from the commits that touched package.json, newest first,
- * each with the version it carries: the oldest of the leading run that carries it. Null
- * when the newest does not carry it, or the run reaches the end of an incomplete read.
- */
+// The oldest of the newest run of commits carrying `version`; null when the newest does not, or the
+// run reaches the end of an incomplete read.
 function versionCommit(
   history: ReadonlyArray<{ sha: string; version: string | null }>,
   version: string,
@@ -101,7 +65,6 @@ function versionCommit(
   return complete ? history[i].sha : null;
 }
 
-/** The release-tag rule over every shared package, how many were read, and how many tagged. */
 export async function gatherReleaseItems(
   env: Env,
   readers: ReleaseReaders,
@@ -207,7 +170,7 @@ export async function gatherReleaseItems(
       continue;
     }
     tagged++;
-    // The release, when the CHANGELOG has a section. Its failure is listed: the tag stands.
+    // Its failure is listed: the tag stands.
     const notes = changelog === null ? null : releaseNotes(changelog, tag);
     let release: string | null = null;
     let releaseError: string | null = null;
@@ -218,9 +181,7 @@ export async function gatherReleaseItems(
         releaseError = errorMessage(err);
       }
     }
-    // One audit row per tag, written before the next tag. A failed write stops the rule
-    // and the pass, as the branch prune's does: the next run finds the tag made and
-    // makes no other.
+    // Written before the next tag; a failed write stops the pass, as the branch prune's does.
     await auditStatement(env.DB, SYSTEM_ACTOR, RELEASE_TAG_AUDIT_ACTION, namespace, null, {
       repo,
       package: pkg.name,
@@ -253,8 +214,7 @@ function notChecked(namespace: string, problem: string): MaintenanceItem {
   };
 }
 
-/** The readers on GitHub, through the App: the package's repo by its own name, since a
- *  shared package's repo need not be any namespace's. */
+// By the package's own repo name: a shared package's repo need not be any namespace's.
 export function githubReleaseReaders(env: Env): ReleaseReaders {
   const split = (full: string) => {
     const [owner, name] = full.split("/");

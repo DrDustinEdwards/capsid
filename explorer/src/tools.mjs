@@ -1,6 +1,4 @@
-// The tools Capsid serves over MCP: one page listing them all, filterable by what each may do,
-// and one page per tool with its actions and every argument. Built from the Worker's own
-// registrations (src/surface.mjs), so the catalog cannot drift from what is served. Pure.
+// Built from the Worker's own registrations (src/surface.mjs), so the catalog cannot drift from what is served. Pure.
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { layout, pageHead, scroller } from "./pages.mjs";
 import { NEED } from "./rules.mjs";
@@ -8,17 +6,17 @@ import { NEED } from "./rules.mjs";
 /** @param {string} name */
 export const toolPath = (name) => `/tools/${name}/`;
 
-/** Text from a tool's description, its `code` spans kept as code. @param {string} text */
+/** @param {string} text */
 const prose = (text) => escapeHtml(text).replace(/`([^`]+)`/g, "<code>$1</code>");
 
-/** A description's first sentence, for a card. @param {string} text */
+/** @param {string} text */
 const sentence = (text) =>
   text
     .split("\n\n")[0]
     .match(/^[\s\S]*?[.:](?=\s|$)/)?.[0]
     .replace(/:$/, ".") ?? text.split("\n\n")[0];
 
-/** What a tool may do, in words a reader can filter by. @param {any} t */
+/** @param {any} t */
 export function kindsOf(t) {
   const kinds = [t.hints.readOnlyHint ? "reads" : t.hints.destructiveHint ? "changes" : "adds"];
   if (t.server === "Capsid Admin") kinds.push("admin");
@@ -43,12 +41,9 @@ const pills = (t) =>
     )
     .join("");
 
-/**
- * One paragraph of a description, laid out as it is meant to be read. A run of lines each opened
- * by an action's name ("post: queue a job") is a list, each line beside its name; a long
- * paragraph breaks where a sentence turns to the next action or mode.
- * @param {string} para
- */
+// A run of lines each opened by an action's name ("post: queue a job") is a list; a long paragraph breaks where a
+// sentence turns to the next action or mode.
+/** @param {string} para */
 function said(para) {
   let out = "";
   let list = "";
@@ -112,11 +107,8 @@ ${servers
   });
 }
 
-/**
- * The paragraphs of a tool's description. A composite tool's description holds one paragraph per
- * action, opened by its name in quotes; those go with their action, the rest stay in order.
- * @param {any} t
- */
+// A composite tool's description holds one paragraph per action, opened by its name in quotes; those go with their action.
+/** @param {any} t */
 function split(t) {
   const names = new Set(t.actions.map((/** @type {any} */ a) => a.name));
   /** @type {Map<string, string>} */
@@ -193,7 +185,7 @@ ${actions}
   });
 }
 
-/** Every tools page. @param {any[]} tools @param {string} asOf @returns {Array<[string, string]>} */
+/** @param {any[]} tools @param {string} asOf @returns {Array<[string, string]>} */
 export function toolPages(tools, asOf) {
   if (!tools.length) return [];
   return [
