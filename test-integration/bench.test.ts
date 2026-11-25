@@ -2,7 +2,8 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { BENCH_ENABLED_KEY, BENCH_MAX_RUNNING } from "../src/bench";
 import { BENCH_REPEATS } from "../src/bench-slots";
-import { hmacHex, post } from "./bench-fixture";
+import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { post } from "./bench-fixture";
 
 // The paired comparison's three signed endpoints (src/bench.ts) against a real D1 and
 // KV: the task freeze, the off switch, the running cap's single-statement INSERT, the
@@ -52,7 +53,7 @@ async function score(run_id: string, body: Record<string, unknown>) {
 
 describe("bench endpoints", () => {
   it("refuse a request signed with an improve score key", async () => {
-    const scoreKey = await hmacHex(ROOT, "capsid-improve-score:v1:capsid");
+    const scoreKey = await hmacSha256Hex(ROOT, "capsid-improve-score:v1:capsid");
     const response = await post(
       "/bench/start",
       { task_id: "x", arm: "baseline", gh_run: "1.1" },

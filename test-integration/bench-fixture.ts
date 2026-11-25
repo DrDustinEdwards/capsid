@@ -1,16 +1,5 @@
 import { SELF } from "cloudflare:test";
-
-export async function hmacHex(key: string, message: string): Promise<string> {
-  const k = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 const BENCH_KEY = "integration-bench-secret-not-a-real-one";
 
@@ -23,7 +12,7 @@ export async function post(path: string, body: Record<string, unknown>, key = BE
     headers: {
       "Content-Type": "application/json",
       "X-Bench-Timestamp": ts,
-      "X-Bench-Signature": await hmacHex(key, `${ts}.${text}`),
+      "X-Bench-Signature": await hmacSha256Hex(key, `${ts}.${text}`),
     },
     body: text,
   });
