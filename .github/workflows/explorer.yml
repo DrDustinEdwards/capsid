@@ -164,7 +164,7 @@ jobs:
       verify-command: node "$DEVKIT_DIR/bin/verify-deploy.mjs" https://capsid.dustinedwards.info
       working-directory: explorer
       pre-deploy: >-
-        cd .. && npm ci --ignore-scripts &&
+        (cd .. && node "$GITHUB_WORKSPACE/.devkit/bin/deploy-install.mjs") &&
         npm --prefix explorer run build &&
         node explorer/wrangler-config.mjs explorer/dist > explorer/wrangler.json
       sha-var: DEPLOY_SHA
