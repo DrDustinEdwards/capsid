@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { IMPROVE_OVERRIDE_FLAGS } from "../scope";
-import { surfaceOf } from "./surface";
+import { toolSurfaceOf } from "./surface";
 
 import {
   auditStatement,
@@ -62,7 +62,7 @@ export function policyPathsRefusal(
   const allow = allowImprovePaths === true;
   if (allow) {
     const overrideRefusal = ctx.scope({
-      ...surfaceOf(tool),
+      ...toolSurfaceOf(tool),
       namespace,
       flags: IMPROVE_OVERRIDE_FLAGS,
     });
@@ -97,7 +97,7 @@ function supersedingEdgeRefusal(ctx: ToolCtx, namespace: string, edges: LinkEdge
     if (edge.type !== "supersedes" && edge.type !== "replaces") continue;
     const target = `${edge.to_ns}/${edge.to_path}`;
     if (edge.to_ns !== namespace) {
-      const refusal = ctx.scope({ ...surfaceOf("write"), grant: "write", namespace: edge.to_ns });
+      const refusal = ctx.scope({ ...toolSurfaceOf("write"), grant: "write", namespace: edge.to_ns });
       if (refusal)
         return `a ${edge.type} edge to ${target} marks it superseded, so it needs the write grant on ${edge.to_ns}: ${refusal} Nothing was written.`;
     }

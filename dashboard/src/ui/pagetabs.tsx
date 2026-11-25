@@ -1,5 +1,5 @@
 import { TabLink, TabsNav, type RenderTabLink } from "capsomer/react/tabs";
-import { Link, useSearch } from "../lib/router";
+import { Link, useSearchString } from "../lib/router";
 
 export interface PageTab {
   id: string;
@@ -9,7 +9,7 @@ export interface PageTab {
 const tabLink: RenderTabLink = ({ href, ...props }) => <Link href={href} {...props} />;
 
 export function useTabParam(): string | null {
-  return new URLSearchParams(useSearch()).get("tab");
+  return new URLSearchParams(useSearchString()).get("tab");
 }
 
 export function PageTabs({
@@ -23,7 +23,7 @@ export function PageTabs({
   tabs: ReadonlyArray<PageTab>;
   current: string;
 }) {
-  const search = useSearch();
+  const search = useSearchString();
   const hrefFor = (id: string) => {
     const qs = new URLSearchParams(search);
     if (id === tabs[0]?.id) qs.delete("tab");
