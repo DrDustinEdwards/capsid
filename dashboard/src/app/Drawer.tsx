@@ -41,9 +41,6 @@ function Missing({ what, onClose }: { what: string; onClose: () => void }) {
   );
 }
 
-// One audit row (GET /portal/api/activity?id=), read when the drawer opens: the reason
-// typed with the change, a field-by-field before and after, and the row's other fields
-// by name (src/audit-detail.ts). Never the raw params.
 function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
   const { now } = useApp();
   const load = useAnswer(["activity", "row", id], () => fetchActivity({ id }), {
@@ -270,13 +267,9 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
   );
 }
 
-// The detail panel: Capsomer's Dialog as a side sheet on the right (native showModal, so the page
-// behind is inert and Tab stays inside, audit DECIDE 9). The route drives it: an address
-// /<view>/<type>/<id> opens it, and closing it (Close, Esc, a click on the backdrop) navigates back
-// to /<view>. Focus returns to the row that opened it, or to the view when that row is gone.
+// Native showModal, so the page behind is inert and Tab stays inside (audit DECIDE 9).
 export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => void }) {
   const { feed, open } = useApp();
-  // Keep the last content while the drawer slides out.
   const [shown, setShown] = useState<Ref | null>(route);
   if (route && (shown?.type !== route.type || shown.id !== route.id)) setShown(route);
   const routed = useRef(route != null);
@@ -297,7 +290,6 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
   } else if (ref?.type === "audit") {
     body = <AuditBody key={ref.id} id={ref.id} onClose={onClose} />;
   }
-  // A row inside the drawer (an agent's "Holding now") opens by click or by Enter.
   const openRow = (e: ReactMouseEvent | ReactKeyboardEvent): boolean => {
     const t = e.target as Element;
     const el = t.closest<HTMLElement>("[data-open]");
@@ -308,7 +300,6 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
   return (
     <Dialog
       open={route != null}
-      // Closed by Esc, the backdrop or Back while the address still names it: follow the address.
       onOpenChange={(o) => {
         if (!o && routed.current) onClose();
       }}
@@ -320,8 +311,7 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
         openRow(e);
       }}
       onKeyDown={(e) => {
-        // Enter on a focused row: cancel its default so the new panel's Close button is
-        // not activated by the same key.
+        // Enter on a focused row: cancel its default so the new panel's Close button is not activated by the same key.
         if (e.key === "Enter" && openRow(e)) e.preventDefault();
       }}
     >

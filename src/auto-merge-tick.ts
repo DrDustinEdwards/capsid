@@ -19,12 +19,12 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { isVisual, visualDetails, type VisualPr } from "./visual-pr";
 import { expireStaleApprovals, readOpenApprovals, type OpenApproval } from "./approval-executor";
 
-// The auto-merge tick: read each open pull request's facts from GitHub and D1, judge
-// them with evaluatePolicy (src/auto-merge-policy-evaluate.ts), and merge or record the refusal.
+// The auto-merge tick: read each open pull request's facts from GitHub and D1, judge them with
+// evaluatePolicy (src/auto-merge-policy-evaluate.ts), and merge or record the refusal.
 
-// Where the awaiting-seat set lives. Rewritten whole each tick, so a PR a human merged or
-// closed stops appearing with no expiry mechanism. capsid_read_status reads this key rather
-// than calling GitHub.
+// Where the awaiting-seat set lives. Rewritten whole each tick, so a PR a human merged or closed
+// stops appearing with no expiry mechanism. capsid_read_status reads this key rather than calling
+// GitHub.
 export const AWAITING_SEAT_KEY = "improve:awaiting-seat";
 
 export interface AwaitingSeat {
@@ -34,13 +34,11 @@ export interface AwaitingSeat {
   failed: string;
   why: string;
   at: string;
-  // Report-only (docs/design/design-merge-pipeline.md, PR 2): the class, its path class
-  // and why. Absent on sets written before this field, and null when unclassified.
   class?: MergeClass | null;
   path_class?: PathClass | null;
   class_reasons?: string[];
-  // The head the tick judged (absent on sets written before this field). The Portal's
-  // Approve sends it as the sha Dustin approved, so a later push voids the approval.
+  // The head the tick judged (absent on sets written before this field). The Portal's Approve sends
+  // it as the sha Dustin approved, so a later push voids the approval.
   head_sha?: string;
   visual?: VisualPr;
 }
@@ -52,7 +50,6 @@ export interface AutoMergeReport {
   outcomes: AutoMergeOutcome[];
 }
 
-/** One pass over every open PR on every namespace the policy covers. */
 export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeReport> {
   const loaded = await loadMergePolicy(env);
   if ("error" in loaded)
@@ -69,8 +66,8 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
 
   const outcomes: AutoMergeOutcome[] = [];
 
-  // The merge units a rollback suspended (src/merge-units.ts). A suspension only narrows,
-  // so a list that cannot be read holds every unit back this tick rather than none.
+  // The merge units a rollback suspended (src/merge-units.ts). A suspension only narrows, so a list
+  // that cannot be read holds every unit back this tick rather than none.
   let suspended: Suspended;
   try {
     suspended = new Set((await readSuspended(env.APP_KV)).map((s) => s.unit));
@@ -85,8 +82,8 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     suspended = "all";
   }
 
-  // The namespaces the safety shutoff paused: the same rule, an unreadable value pauses
-  // every namespace this tick.
+  // The namespaces the safety shutoff paused: the same rule, an unreadable value pauses every
+  // namespace this tick.
   let paused: PausedNamespaces;
   try {
     paused = new Map(Object.entries(await readPaused(env.APP_KV)).map(([ns, p]) => [ns, p.reason]));
@@ -106,16 +103,14 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     let repo: string;
     let defaultBranch: string;
     let prs: OpenPr[];
-    // The open approvals on this repo (src/pr-approvals.ts). A failed read (table not migrated)
-    // leaves none, so nothing merges on an approval that could not be read.
     let approvals = new Map<number, OpenApproval>();
-    // A namespace that cannot be read is skipped, not the whole tick: a throw would stop every
-    // later namespace and the awaiting-seat write.
+    // A namespace that cannot be read is skipped, not the whole tick: a throw would stop every later
+    // namespace and the awaiting-seat write.
     try {
       ({ owner, repo } = await resolveRepo(env, namespace));
       defaultBranch = await getDefaultBranch(env, owner, repo);
-      // Every page, so a PR past the first hundred is judged and stays in the seat's
-      // queue. A list that cannot be read whole skips the namespace.
+      // Every page, so a PR past the first hundred is judged and stays in the seat's queue. A list that
+      // cannot be read whole skips the namespace.
       const listedPrs = await listOpenPrs(env, owner, repo);
       if (typeof listedPrs === "string") {
         logEvent(
@@ -150,9 +145,8 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
 
     for (const pr of prs) {
       // A PR whose body names no job is declined before any GitHub read when its namespace has no
-      // promoted unit (the reads share the rate limit). With one, its files are read so the PR can
-      // merge on the unit (policy version 10). A visual or approved PR is judged all the same:
-      // body_names_job leaves it class approve, so his approval merges it on green CI.
+      // promoted unit (the reads share the rate limit). With one, its files are read so the PR can merge
+      // on the unit (policy version 10).
       const visual = isVisual(pr);
       const hasUnit = policy.units.some((u) => u.startsWith(`${namespace} / `));
       if (!jobIdFromBody(pr.body ?? "") && !visual && !approvals.has(pr.number) && !hasUnit) {
@@ -197,9 +191,9 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
         }
         continue;
       }
-      // One PR that throws does not end the tick (a 405, a failed read, a D1 error would abort
-      // every later PR, leave no audit row and skip the awaiting-seat write). It is reported as not
-      // merged with the error.
+      // One PR that throws does not end the tick (a 405, a failed read, a D1 error would abort every
+      // later PR, leave no audit row and skip the awaiting-seat write). It is reported as not merged
+      // with the error.
       const before = outcomes.length;
       try {
         try {
@@ -268,8 +262,6 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     }
   }
 
-  // An approval on a pull request the tick no longer sees (closed or merged by hand) is
-  // expired at 7 days here, since the executor sees only open pull requests.
   try {
     await expireStaleApprovals(env, now);
   } catch (err) {
@@ -282,8 +274,8 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     );
   }
 
-  // The full awaiting-seat set, written whole, and written even when it is empty, so a
-  // tick that cleared the last one leaves no stale entry behind.
+  // The full awaiting-seat set, written whole, and written even when it is empty, so a tick that
+  // cleared the last one leaves no stale entry behind.
   const awaiting: AwaitingSeat[] = outcomes
     .filter((o) => !o.merged)
     .map((o) => ({

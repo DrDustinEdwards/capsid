@@ -6,21 +6,16 @@ import { REPAIR_AUDIT_ACTION } from "./site-repair";
 import { callOperator, tokenSet, toolRefusal, type FetchLike } from "./site-operator";
 import { readStoredSecrets } from "./secret-presence";
 import { clip, readHealth } from "./site-watch";
-// THE CONVERGENCE VIEW per site that opted in, what its own operator
-// API says (sync_status: the repository count against D1, the search index and the Ask
-// index, and any named divergence) beside what its health route says per content type,
-// each failing check with the repair it maps to and whether Capsid may run it, and the
-// site Worker's secrets by name, set or not. The operator API and the health route are read
-// live when the Portal asks: a view a pass old shows a repair that already ran as still
-// needed. The secret names are the watcher's last read (src/secret-presence.ts), because only
-// a site page's own tabs call Cloudflare from the Portal (test/ops-cloudflare.test.ts).
-// Every part fails on its own and says why, so one unreadable part is never shown as zero.
+// THE CONVERGENCE VIEW per site that opted in, what its own operator API says (sync_status: the
+// repository count against D1, the search index and the Ask index, and any named divergence) beside
+// what its health route says per content type, each failing check with the repair it maps to and
+// whether Capsid may run it, and the site Worker's secrets by name, set or not.
 
 const STATUS_FIELDS_MAX = 40;
 const RECENT_REPAIRS = 5;
 
-/** A health body's checks, each with the repair it maps to. Only the fields the view shows
- *  are kept, as text or numbers: the body is the site's, read as data. */
+// A health body's checks, each with the repair it maps to. Only the fields the view shows are kept,
+// as text or numbers: the body is the site's, read as data.
 export function convergenceChecks(body: unknown, operator: SiteOperator): ConvergenceCheck[] {
   const checks = (body as { checks?: unknown } | null)?.checks;
   if (!Array.isArray(checks)) return [];

@@ -7,10 +7,6 @@ import "capsomer/switch-reason.css";
 import { useApplySwitch } from "../ui/applySwitch";
 import { Panel } from "capsomer/react/panel";
 
-// The overnight run, first on Settings (ruled 2026-09-30, DECIDE 5, 6 and 7; the UX audit's M3
-// put it first). Every change is a switch that asks for a reason beside it, moves only when the
-// change has applied, and offers Undo in the app's message.
-
 type RunsOn = "subscription" | "api";
 const RUNS_ON: ReadonlyArray<{ value: RunsOn; label: string }> = [
   { value: "subscription", label: "Subscription" },
@@ -22,15 +18,9 @@ const isRunsOn = (m: string): m is RunsOn => m === "subscription" || m === "api"
 export function Automation() {
   const { feed } = useApp();
   const apply = useApplySwitch();
-  // The overnight run: a switch and a "Runs on" radio group.
-  // Choosing the subscription records Dustin's decision, its date and its reasoning with
-  // the switch (src/overnight.ts); the Worker does the recording, and the note below
-  // shows it. The choice starts at API when off: that is the setting the terms allow
-  // without a decision.
   const night = feed.live.overnight;
   const nightOn = isRunsOn(night.mode);
   const [nightChosen, setNightChosen] = useState<RunsOn>(nightOn ? (night.mode as RunsOn) : "api");
-  // A new mode from the server becomes the choice (adjusted while rendering, not in an effect).
   const [seenMode, setSeenMode] = useState(night.mode);
   if (seenMode !== night.mode) {
     setSeenMode(night.mode);

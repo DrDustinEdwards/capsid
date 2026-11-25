@@ -5,30 +5,22 @@ import { D1_BATCH_STATEMENTS } from "./limits";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { plural } from "@drdustinedwards/site-helpers/text";
-// Deleting a namespace (capsid_admin_manage_namespaces actions delete_preview and delete_perform): the plan, the refusals, the signed confirmation and the one batch. Registered in src/tools/namespaces.ts, admin only (TOOL_GRANTS in src/scope.ts). The namespace_remove control (src/controls.ts) is its second door: it binds the same fingerprint, and its perform is deleteAsPlanned.
-//
-// Two calls, as the Portal's controls are (src/portal-actions.ts). The preview writes nothing and, when nothing refuses, returns a token signed over the namespace, cascade, allow_improve_paths, the plan's counts, the caller's actor and a five-minute expiry. The perform re-reads the plan, requires the token to match exactly, and commits one batch whose first statement aborts it unless the store still is what the plan read.
-//
-// DELETED: every live document (any path not under archive/), each snapshotted to document_versions in the batch and removed by pathMutation(db, ns, path, null), the one path mutation site (test/path-mutation.test.ts); every edge touching one of those documents, recorded whole in the audit row; the ops_sites row, recorded whole in the audit row; and the namespaces row.
-//
-// KEPT, as history: archived documents (archive/...), every document_versions and audit_log row, finished jobs, job_outcomes, job_claims, job_touches, revoked agents that name the namespace, and the nightly backup objects. The read tools still return archived documents by that name; writes refuse there until the namespace is registered again, and a later register of the same name brings them back into scope.
-//
-// ALWAYS REFUSES, whatever cascade says: an open job (queued, claimed, blocked), a live agent whose scopes name the namespace, and a namespace on the roster. cascade reaches documents only. More live documents than one batch can delete (NAMESPACE_DELETE_MAX_DOCUMENTS) is refused, never half deleted.
-//
-// An edge already dangling at this namespace's end touches no deleted document, so pathMutation leaves it, as a document delete would (docs/schema.md, "Links": dangling edges are reported, never repaired).
+// An edge already dangling at this namespace's end touches no deleted document, so pathMutation
+// leaves it, as a document delete would (docs/schema.md, "Links": dangling edges are reported,
+// never repaired).
 
-// The statements every perform batch carries besides the per-document ones: the plan
-// guard, the snapshot, the audit row, the ops_sites delete and the namespaces delete.
+// The statements every perform batch carries besides the per-document ones: the plan guard, the
+// snapshot, the audit row, the ops_sites delete and the namespaces delete.
 const FIXED_STATEMENTS = 5;
-// pathMutation(db, ns, path, null) is two statements: the edges, then the row.
 const STATEMENTS_PER_DOCUMENT = 2;
-/** The most live documents one delete_namespace batch can remove, from D1's batch
- *  ceiling (D1_BATCH_STATEMENTS in src/limits.ts). */
+/**
+ * The most live documents one delete_namespace batch can remove, from D1's batch ceiling
+ * (D1_BATCH_STATEMENTS in src/limits.ts).
+ */
 export const NAMESPACE_DELETE_MAX_DOCUMENTS = Math.floor(
   (D1_BATCH_STATEMENTS - FIXED_STATEMENTS) / STATEMENTS_PER_DOCUMENT,
 );
 
-// How many of each blocker a refusal names. The counts are always whole.
 const NAMED = 20;
 
 export interface PlanCounts {
@@ -53,24 +45,22 @@ export interface DeletePlan {
   on_roster: boolean;
   counts: PlanCounts;
   jobs_by_status: Record<string, number>;
-  // The whole ops_sites row, or null when the namespace has none.
   ops_site: Record<string, unknown> | null;
   ops_site_revision: number | null;
   open_jobs: Array<{ id: string; status: string; title: string }>;
   live_agents: string[];
   policy_paths: string[];
-  // Every live path in path order, at most NAMESPACE_DELETE_MAX_DOCUMENTS + 1 of them:
-  // one more than fits says the namespace is over the cap. The perform deletes exactly
-  // these, and the token binds them, so a document swapped for another refuses.
+  // Every live path in path order, at most NAMESPACE_DELETE_MAX_DOCUMENTS + 1 of them: one more than
+  // fits says the namespace is over the cap. The perform deletes exactly these, and the token binds
+  // them, so a document swapped for another refuses.
   live_paths: string[];
-  // sha256 of JSON.stringify(live_paths), which is what the fingerprint binds.
   live_paths_sha256: string;
 }
 
 export interface DeleteOptions {
   cascade: boolean;
-  // allow_improve_paths keeps its name from the improve loop; it now covers only the
-  // signed policy documents (policyWriteRefusal in src/signed-docs.ts).
+  // allow_improve_paths keeps its name from the improve loop; it now covers only the signed policy
+  // documents (policyWriteRefusal in src/signed-docs.ts).
   allowImprovePaths: boolean;
 }
 
@@ -83,8 +73,10 @@ export function rows<T>(result: D1Result | undefined): T[] {
   return (result?.results ?? []) as T[];
 }
 
-/** Everything that names the namespace, read in one batch so the counts agree with
- *  each other. Writes nothing. */
+/**
+ * Everything that names the namespace, read in one batch so the counts agree with each other.
+ * Writes nothing.
+ */
 export async function readDeletePlan(db: D1Database, namespace: string): Promise<DeletePlan> {
   const open = JSON.stringify(OPEN_JOB_STATUSES);
   const results = await db.batch([
@@ -99,7 +91,6 @@ export async function readDeletePlan(db: D1Database, namespace: string): Promise
       .bind(namespace),
     db.prepare("SELECT COUNT(*) AS n FROM document_versions WHERE namespace = ?1").bind(namespace),
     db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE namespace = ?1").bind(namespace),
-    // The edges pathMutation will remove: those touching a live document.
     db
       .prepare(
         `SELECT COUNT(*) AS n FROM document_links
@@ -120,9 +111,9 @@ export async function readDeletePlan(db: D1Database, namespace: string): Promise
     db.prepare("SELECT COUNT(*) AS n FROM job_outcomes WHERE namespace = ?1").bind(namespace),
     db.prepare("SELECT COUNT(*) AS n FROM job_claims WHERE namespace = ?1").bind(namespace),
     db.prepare("SELECT COUNT(*) AS n FROM job_touches WHERE namespace = ?1").bind(namespace),
-    // The same reading of the scopes column as parseScopes (src/agents-schema.ts): a
-    // row that is not a JSON object with a namespaces array names no namespace. The
-    // nested CASE fixes the evaluation order, so json_type never sees malformed JSON.
+    // The same reading of the scopes column as parseScopes (src/agents-schema.ts): a row that is not a
+    // JSON object with a namespaces array names no namespace. The nested CASE fixes the evaluation
+    // order, so json_type never sees malformed JSON.
     db
       .prepare(
         `SELECT name, revoked_at FROM agents
@@ -133,9 +124,9 @@ export async function readDeletePlan(db: D1Database, namespace: string): Promise
          ORDER BY name`,
       )
       .bind(namespace),
-    // The signed policy documents (policyWriteRefusal in src/signed-docs.ts), matched
-    // case-exactly on the same prefix. Deleting one is a ruling, so it needs
-    // allow_improve_paths as a document delete does.
+    // The signed policy documents (policyWriteRefusal in src/signed-docs.ts), matched case-exactly on
+    // the same prefix. Deleting one is a ruling, so it needs allow_improve_paths as a document delete
+    // does.
     db
       .prepare(
         "SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND substr(path, 1, length(?2)) = ?2",
@@ -203,15 +194,16 @@ export async function readDeletePlan(db: D1Database, namespace: string): Promise
   };
 }
 
-// The first NAMED entries, and how many more the count holds.
 function named(list: string[], total: number): string {
   const shown = list.slice(0, NAMED);
   const rest = total - shown.length;
   return rest > 0 ? `${shown.join(", ")}, and ${rest} more` : shown.join(", ");
 }
 
-/** Why the delete may not happen, or an empty list. Pure. An unregistered namespace
- *  is the only refusal, since nothing else about it matters. */
+/**
+ * Why the delete may not happen, or an empty list. Pure. An unregistered namespace is the only
+ * refusal, since nothing else about it matters.
+ */
 export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] {
   const ns = plan.namespace;
   if (!plan.registered)
@@ -256,10 +248,6 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
   return refusals;
 }
 
-/** The part of the plan a token binds, in one canonical spelling: every count, the
- *  jobs by status, the ops_sites revision and the sha256 of the
- *  live path list (a digest, so fifty 512-character paths do not ride in the token).
- *  Any change between the preview and the perform changes this string. */
 export function planFingerprint(plan: DeletePlan): string {
   const counts: Record<string, number> = {};
   for (const key of Object.keys(plan.counts).sort())
@@ -274,7 +262,6 @@ export function planFingerprint(plan: DeletePlan): string {
   });
 }
 
-/** The keys of two fingerprints that differ, for the refusal. Pure. */
 export function fingerprintDifference(signed: string, current: string): string[] {
   let a: Record<string, unknown>;
   let b: Record<string, unknown>;
@@ -301,8 +288,6 @@ export function fingerprintDifference(signed: string, current: string): string[]
     .map((k) => `${k} ${fa[k] ?? "absent"} -> ${fb[k] ?? "absent"}`);
 }
 
-/** What the delete removes and what it keeps, one line each: the tool's preview and the
- *  namespace_remove control's preview (src/controls-plan.ts) both show it. */
 export function summarize(plan: DeletePlan): { will_delete: string[]; will_keep: string[] } {
   const c = plan.counts;
   return {

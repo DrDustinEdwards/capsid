@@ -34,9 +34,6 @@ import { ruleDocWriteRefusal } from "../rule-docs";
 import { ok, fail, type ToolCtx, requireConfirmation } from "./docs";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// The document tools that change the store: write, restore, delete and move.
-// defineDocOperations in ./docs registers them in the published order.
-
 export async function requireRegisteredNamespace(
   db: D1Database,
   namespace: string,
@@ -53,7 +50,8 @@ export async function requireRegisteredNamespace(
   );
 }
 
-// The policy-document check for write, restore, delete and move. allow_improve_paths is itself scoped: the document-side twin of the repo-side protected-path flag, so it asks for the same one (IMPROVE_OVERRIDE_FLAGS in src/scope.ts). policyWriteRefusal and the job-mirror check then run on every path the call changes. Returns the first refusal, or null.
+// allow_improve_paths is itself scoped: the document-side twin of the repo-side protected-path flag
+// (IMPROVE_OVERRIDE_FLAGS in src/scope.ts).
 export function policyPathsRefusal(
   ctx: ToolCtx,
   tool: "write" | "restore" | "delete" | "move",
@@ -78,10 +76,8 @@ export function policyPathsRefusal(
   return null;
 }
 
-// A document under jobs/ is a job's mirror (jobDocPath in src/jobs-schema.ts): a
-// projection of the jobs row, written only by the jobs code in the same batch as the
-// row. The brief serves it as a task, so one written here could stand in for a signed job
-// that was never posted. No caller and no flag writes one by hand.
+// A jobs/ document is a job's mirror, written only by the jobs code in the row's batch; the brief
+// serves it as a task, so one written by hand could stand in for a signed job never posted.
 function jobMirrorRefusal(
   tool: "write" | "restore" | "delete" | "move",
   namespace: string,
@@ -94,7 +90,8 @@ function jobMirrorRefusal(
   );
 }
 
-// A supersedes or replaces edge makes the daily pass mark its target superseded (src/supersede.ts), so it asks what a write to the target asks: the write grant on its namespace (checkScope) and the seat for a canon document. Other edge types change nothing and may point anywhere.
+// A supersedes or replaces edge makes the daily pass mark its target superseded (src/supersede.ts),
+// so it asks what a write to the target asks.
 function supersedingEdgeRefusal(ctx: ToolCtx, namespace: string, edges: LinkEdge[]): string | null {
   for (const edge of edges) {
     if (edge.type !== "supersedes" && edge.type !== "replaces") continue;
@@ -122,10 +119,8 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       inputSchema: {
         namespace: nsName,
         path: docPath,
-        // title and body are required for mode 'replace' and validated as such below.
-        // They are optional in the schema because append needs no title and patch
-        // needs neither. Requiring them here would force a caller to resupply a title
-        // it is not changing.
+        // Optional in the schema because append and patch need no title; required for 'replace' and
+        // validated below.
         title: bounded(MAX_TITLE).optional(),
         body: bounded(MAX_BODY).optional(),
         mode: z.enum(["replace", "append", "patch", "meta"]).optional(),
@@ -137,8 +132,6 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         confirm: z.boolean().optional(),
         links: bounded(MAX_LINKS_JSON).optional(),
         if_match: bounded(MAX_SHA).optional(),
-        // Opt-in to writing a signed policy document (policy/). Refused without it;
-        // audit-logged with it. See policyWriteRefusal.
         allow_improve_paths: z.boolean().optional(),
       },
     },
@@ -187,7 +180,8 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
           updated_at: string;
         }>();
 
-      // Optimistic concurrency. if_match is the sha256 of the body the caller believes is stored (every write returns it). Without it a lost update leaves no trace. Fail closed: on mismatch nothing is written and the error carries the current sha so the caller can rebase. Opt-in, because requiring it would break append, which is safe by construction.
+      // Optimistic concurrency: on an if_match mismatch nothing is written and the error carries
+      // the current sha. Opt-in, because append is safe by construction.
       const commit = guardedCommit({
         db,
         namespace,
@@ -215,14 +209,13 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       const staleIfMatch = await commit.precheckIfMatch();
       if (staleIfMatch) return fail(staleIfMatch);
 
-      // Normalize wide dashes server-side so no client can store an em dash (see ./normalize). Only the caller's text, before assembly: body for replace and append, replace_with for patch. Normalizing the assembled body would rewrite stored text the caller did not touch (conventions.md forbids it); find is not normalized because it must match the stored bytes.
+      // Normalize only the caller's text before assembly: normalizing the assembled body would
+      // rewrite stored text the caller did not touch (conventions.md); find is not normalized
+      // because it must match stored bytes.
       if (title !== undefined) title = normalizeDashes(title, "title");
       if (body !== undefined) body = normalizeDashes(body, "prose");
       if (replace_with !== undefined) replace_with = normalizeDashes(replace_with, "prose");
 
-      // Body assembly, per mode (./write-modes). Every mode returns the full new body,
-      // so the write path below is the same for all of them and the version snapshot
-      // and audit row apply identically. meta returns the stored body byte-identical.
       const assembled = assembleBody({
         mode: writeMode,
         exists: Boolean(prior),
@@ -246,24 +239,21 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         );
       }
 
-      // The policy-document guard. Refused unless allow_improve_paths was passed.
       const policyRefusal = policyPathsRefusal(ctx, "write", namespace, allow_improve_paths, [
         path,
       ]);
       if (policyRefusal) return fail(policyRefusal);
 
-      // A rule document (src/rule-docs.ts) may not be made worse: over its cap and
-      // larger than before, or naming a tool the Worker does not serve. Checked before
-      // the canon check.
+      // A rule document (src/rule-docs.ts) may not be made worse: over its cap and larger than
+      // before, or naming a tool the Worker does not serve.
       const ruleRefusal = ruleDocWriteRefusal(namespace, path, prior?.body ?? null, body as string);
       if (ruleRefusal) return fail(ruleRefusal);
 
-      // Canon write-protection (src/canon.ts): only the admin and the seat change canon
-      // or a ruling.
       if (canonGuarded(ctx.agent, namespace, path))
         return fail(canonRefusal("write", namespace, path));
 
-      // append and meta are exempt from confirmation: it exists to stop an accidental clobber, and an append destroys nothing. patch and replace mutate existing text and are not exempt. `elicited` is whether a human answered a prompt; it arms the commit-time body guard (why that consent goes stale: requireConfirmation).
+      // append and meta are exempt from confirmation (it stops accidental clobbers; an append
+      // destroys nothing). `elicited` arms the commit-time body guard.
       let elicited = false;
       if (prior && confirm !== true && writeMode !== "append" && writeMode !== "meta") {
         const refusal = await requireConfirmation(server, confirm, {
@@ -274,10 +264,10 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         if (!refusal.ok) return fail(refusal.message);
         elicited = refusal.elicited;
       }
-      // The guard itself is armed by commit.run() below, from this same pre-read.
       const statements: D1PreparedStatement[] = [];
       if (prior) {
-        // Snapshot from the live row, inside the batch: binding the pre-read body would record what this handler read, not what the table held at commit, so a body written in the gap would be overwritten while the snapshot recorded its predecessor.
+        // Snapshot from the live row inside the batch: binding the pre-read body would let a body
+        // written in the gap be overwritten while the snapshot recorded its predecessor.
         statements.push(snapshotLive(db, namespace, path));
       }
       statements.push(
@@ -292,7 +282,8 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
           status ?? null,
         ),
       );
-      // The prior type, status, tags and title go into the audit params whenever a write changes any of them; document_versions snapshots title and body only, and widening it would mean a migration plus a rewrite of every restore path.
+      // document_versions snapshots title and body only; widening it would need a migration and a
+      // rewrite of every restore path.
       const metaChanged =
         title !== undefined || type !== undefined || tags !== undefined || status !== undefined;
       statements.push(
@@ -324,10 +315,8 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
           client,
         ),
       );
-      // links replaces this document's outgoing edges when provided. Left
-      // untouched when omitted, so a routine body edit never drops edges.
-      // The edges replaced are recorded before the DELETE in the same batch, as a delete
-      // records the edges it removes, so the audit row is where they survive.
+      // Omitted links leave edges untouched, so a body edit never drops them; replaced edges are
+      // recorded before the DELETE so the audit row keeps them.
       if (parsedLinks && "edges" in parsedLinks) {
         statements.push(
           db
@@ -352,9 +341,8 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
           );
         }
       }
-      // The warning is computed from a read taken here, not from the pre-read: this
-      // handler may have sat in a 90 second elicitation in between, which is when a
-      // racing write is most likely to have landed. Reading it late costs one SELECT.
+      // Read here, not from the pre-read: a 90 second elicitation in between is when a racing write
+      // is most likely to have landed.
       const atCommit = prior
         ? await db
             .prepare("SELECT updated_at FROM documents WHERE namespace = ?1 AND path = ?2")
@@ -363,18 +351,14 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         : null;
       const committed = await commit.run(elicited, statements);
       if ("refusal" in committed) return fail(committed.refusal);
-      // From the snapshot statement's own result, not from the pre-read: with no guard
-      // armed, a row deleted between the pre-read and the batch is snapshotted by
-      // nothing. The snapshot is statements[0] when present.
+      // From the snapshot statement's own result: with no guard armed, a row deleted after the
+      // pre-read is snapshotted by nothing.
       const snapshotted = Boolean(prior) && snapshotTaken(committed.results[0]);
-      // Warn, do not reject, when an edge points at a document that does not exist.
-      // Rejecting would block asserting an edge before its target is written, and a
-      // silent dangling edge is how they accumulate unnoticed. The lint loop reports
-      // these per namespace; this is the same check when the edge is created.
+      // Warn, do not reject, on a dangling edge: rejecting would block asserting an edge before its
+      // target is written.
       let danglingTargets: string[] = [];
       if (parsedLinks && "edges" in parsedLinks && parsedLinks.edges.length > 0) {
-        // This read runs after the commit, so a failure here must not be reported as a
-        // failed write: the document is stored.
+        // Runs after the commit, so a failure here must not be reported as a failed write.
         try {
           const checks = await db.batch(
             parsedLinks.edges.map((edge) =>
@@ -386,14 +370,10 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
           danglingTargets = parsedLinks.edges
             .filter((_, i) => (checks[i].results?.length ?? 0) === 0)
             .map((edge) => `${edge.to_ns}/${edge.to_path}`);
-        } catch {
-          // A failed dangling-edge read cannot fail a write that already committed.
-        }
+        } catch {}
       }
-      // The read-back: sha256 and byte length of the body now stored, so a caller can
-      // verify the write without fetching the document and comparing it by eye. That
-      // second read would itself be a transcription, with its own chance of error.
-      // Hashes the assembled body, since D1 stores exactly what was bound.
+      // The read-back hash and length let a caller verify the write without a second read, itself a
+      // chance of transcription error.
       const bodySha = await sha256Hex(body);
       const bodyBytes = new TextEncoder().encode(body).length;
 

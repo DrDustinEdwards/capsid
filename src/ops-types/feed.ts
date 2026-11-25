@@ -28,29 +28,16 @@ export interface OpsJob {
   blocked_count: number;
   resumed_count: number;
   gate_required: boolean;
-  // For a blocked job: the reason and the exact command, split out of result_summary
-  // (commandFromSummary). Null otherwise.
   waits_on: string | null;
   command: string | null;
-  // Whether that command is the one the holder's block wrote (src/job-signing.ts):
-  // "mismatch" withholds it (command is null), "legacy-unsigned" is a block from before
-  // signing. Null for a job that is not blocked.
+  // "mismatch" withholds the command (null); "legacy-unsigned" is a block from before signing.
   command_signature: "verified" | "legacy-unsigned" | "mismatch" | "unconfigured" | null;
-  // A blocked job that asks something (capsid_work_jobs action block with question: true), answered by a
-  // resume note, rather than one waiting on a command to be run. Optional so a feed written
-  // before it, and the app's sample data, stay valid.
+  // Optional so a feed written before it, and the app's sample data, stay valid.
   question?: boolean;
-  // A parked job (src/jobs-park.ts): the one line saying when it comes back. Absent for
-  // every other status, and in a feed written before parked jobs were shown.
   parked_reason?: string;
-  // The started label (src/jobs-begin.ts): who began a job worked without a claim, and
-  // when. Absent for a job nobody began, and in a feed written before the label existed.
   started_by?: string;
   started_at?: string;
   result_ref: string | null;
-  // Posted by agent:watcher, with its fingerprint from the title, and how often the
-  // watcher has seen it (seen_count, last_seen) while this is the finding's current
-  // job; both null otherwise (src/watcher-findings.ts).
   finding: { fingerprint: string; seen_count: number | null; last_seen: string | null } | null;
 }
 
@@ -61,10 +48,7 @@ export interface OpsAgent {
   flags: string[];
   last_seen: string | null;
   revoked_at: string | null;
-  // Minted and waiting for Activate on its drawer (activate_agent): its key resolves nothing.
   pending: boolean;
-  // When the watcher pass moved it to the archive (src/agents-archive.ts); null while
-  // its row is in agents. The Agents roster lists rows with neither date set.
   archived_at: string | null;
   jobs_done: number;
   jobs_failed: number;
@@ -91,19 +75,13 @@ export interface OpsAwaitingSeat {
   failed: string;
   why: string;
   at: string;
-  // The merge pipeline's class, report-only (src/merge-class.ts); absent on older sets.
   class?: "auto" | "approve" | "typed" | "seat" | "wait" | null;
   path_class?: string | null;
   class_reasons?: string[];
-  // The head the tick judged; the Portal's Approve sends it as the sha approved.
   head_sha?: string;
-  // A pull request labeled visual (src/visual-pr.ts): its title, the live preview its
-  // description names, and its screenshots, all read from the pull request itself.
   visual?: { title: string; preview: string | null; shots: string[] };
 }
 
-// The overnight run's switch (src/overnight.ts). decision is present only while the mode is
-// subscription: who decided, when, the ruling and its reasoning, and who set the switch.
 interface OpsOvernight {
   mode: "off" | "api" | "subscription";
   decision: {
@@ -117,51 +95,31 @@ interface OpsOvernight {
   } | null;
 }
 
-// Shared code (src/shared-code.ts): GET /portal/api/shared-code.
 export interface SharedCodeApp {
   namespace: string;
   name: string;
-  // The system in system/model.json the repo belongs to, and the repo, for the versions
-  // model (src/system-versions.ts); null for an app read before the model named its repo.
   system: string | null;
   repo: string | null;
-  // The manifest it was read from ("package.json", "dashboard/package.json"), "renovate", or
-  // ".github/workflows" for the reusable workflows a repo calls.
   where: string;
-  // The version the lockfile says is installed, else the tag the spec names; null when
-  // neither says (a branch).
   pinned: string | null;
-  // Release tags newer than the pin, or null when the pin is not a release.
   behind: number | null;
-  // Pinned through a repo's earlier name (GitHub redirects it).
   via_old_name: boolean;
 }
 
 export interface SharedCodePackage {
   name: string;
   repo: string;
-  // git: a GitHub dependency (shared_packages), latest from the repo's tags. npm: a
-  // published package (ops_packages, Enarratio), latest from npm's versions.
   registry: "git" | "npm";
   latest: string | null;
   tags_error: string | null;
-  // The version in the package repo's root package.json on its default branch; null when
-  // it has none or the file was not read (manifest_error says why).
   version: string | null;
-  // True when the tags were read and none names that version: the daily maintenance pass
-  // tags it (src/maintenance-releases.ts). False when it is tagged or this is unknown.
   untagged: boolean;
-  // "private": true in that package.json: never published, so npm is not asked.
   private: boolean;
-  // npm's latest dist-tag, or null with npm_note saying why (not on npm, unread); both
-  // null for a private package.
   npm_latest: string | null;
   npm_note: string | null;
   manifest_error: string | null;
   users: SharedCodeApp[];
-  // Users at least one release behind.
   behind: number;
-  // Known local copies the package replaces; present is null when that app's tree could not be read.
   local_copies: Array<{ namespace: string; path: string; present: boolean | null }>;
   local_left: number;
 }
@@ -174,23 +132,17 @@ export interface SharedCodeView {
   apps_read: number;
   apps_failed: Array<{ namespace: string; system?: string | null; error: string }>;
   packages: SharedCodePackage[];
-  // The repos that run no no-bloat check (src/shared-code.ts noBloatOff). Absent in a view cached before it was read.
   no_bloat_off?: Array<{ namespace: string; repo: string | null; line: string }>;
 }
 
-// The completeness scoreboard (src/completeness.ts): devkit's daily board, every area of the
-// shared code against the package and every live site, filled only from live checks and
-// verifiers' verdicts.
-// "unmeasured": a check could not measure the cell, and its reason says why; never a pass or a failure.
+// "unmeasured": a check could not measure the cell; never a pass or a failure.
 export type CompletenessStatus = "complete" | "partial" | "missing" | "unmeasured" | "n/a";
 
 export interface CompletenessCell {
   status: CompletenessStatus;
   reason: string;
   evidence: string[];
-  // Daily runs in a row its checks passed; null for the package, which has no live check.
   clean_days: number | null;
-  // The first errors of a failing check, with the proof URL first in each detail.
   errors: Array<{ check: string; detail: string }>;
 }
 
@@ -199,31 +151,21 @@ export interface CompletenessArea {
   name: string;
   builder: string;
   verifier: string | null;
-  // The merged pull requests labeled for the area, or why they could not be counted.
   lines: { prs: number; added: number; removed: number } | { error: string } | null;
   cells: Record<string, CompletenessCell>;
 }
 
 export interface CompletenessView {
   read: string;
-  // The newest run on the board, or null when it could not be read (error says why).
   as_of: string | null;
   error: string | null;
   finished: boolean;
-  // True while the lines count public repositories only.
   public_token: boolean;
   sites: Array<{ id: string; name: string; origin: string }>;
   areas: CompletenessArea[];
 }
 
-// What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, capsid_read_status action
-// status's needs_dustin, and the Portal's Needs you page all carry this one shape: Capsomer's
-// inbox feed (attention-list), with Capsid's kinds. An item's `job` is set for a blocked job or a
-// question, so the Portal opens the job's panel when there is no link.
 export type { InboxSeverity } from "capsomer/behavior/attention-list";
-// "proposal": a merge unit promotion, demotion or suspension (src/merge-units.ts).
-// "stale-claim": a claimed job with no audit activity for STALE_CLAIM_MS; "parked-due": a
-// parked job past its due date that the tick could not return (both src/inbox.ts).
 export type InboxKind =
   | "blocked-job"
   | "question"
@@ -238,9 +180,6 @@ export type InboxItem = CapsomerInboxItem<InboxKind>;
 export type InboxApp = CapsomerInboxApp<InboxKind>;
 export type Inbox = CapsomerInbox<InboxKind>;
 
-// One namespace's last seven days of auto-merge, the safety meter (src/merge-safety.ts).
-// approved: merges Dustin approved. bad_auto_7d: rollbacks and reverts of pull requests
-// the tick merged unattended. paused: the shutoff, with when and why, or null.
 export interface OpsMergeSafetyRow {
   namespace: string;
   auto_merged: number;
@@ -258,43 +197,24 @@ export interface OpsMergeSafety {
   namespaces: OpsMergeSafetyRow[];
 }
 
-// units: the merge units ('<namespace>/<path class>') the signed policy promotes to auto.
 type OpsMergePolicy =
   | { loads: true; version: string; enabled: boolean; units: string[] }
   | { loads: false; reason: string };
 
 export interface OpsLive {
   generated: string;
-  // Every open job, and every job that ended in the last 24 hours.
   jobs: OpsJob[];
   agents: OpsAgent[];
-  // Pull requests recorded against jobs in the last 7 days.
   prs: OpsPr[];
   awaiting_seat: OpsAwaitingSeat[];
-  // The auto-merge safety meter the tick's merge-safety step kept, or null before its
-  // first pass. One KV get, no D1 or GitHub read.
   merge_safety: OpsMergeSafety | null;
-  // Whether the signed auto-merge policy loads as the tick loads it (loadMergePolicy), and
-  // if not why, so the Portal's policy panel can say so beside its sign-from-repo button.
   merge_policy: OpsMergePolicy;
   overnight: OpsOvernight;
-  // Every app roster namespace (APP_ROSTER in src/roster.ts), read from code. The
-  // per-namespace detail is GET /portal/api/namespaces, read when the Namespaces view
-  // opens.
   namespaces: Array<{ name: string }>;
-  // The site configuration, every row. With no row that has an origin, the Portal
-  // shows no Sites view and no site items on the Overview.
   sites: OpsSiteConfig[];
-  // The package configuration, every row. With none, the Portal shows no Packages view.
   packages: OpsPackageConfig[];
-  // The D1 store's size, from the jobs read's meta.size_after (null when D1 did not
-  // report it), against the per-database cap (D1_CAP_BYTES in src/ops-live.ts).
   store: { size_bytes: number | null; cap_bytes: number };
-  // What needs Dustin, per app, from the same gatherer GET /ops/inbox answers with
-  // (src/inbox.ts), unrestricted: the Portal is the admin's.
   inbox: Inbox;
-  // The watcher's open findings that post no job (src/watcher-checks.ts, findingClass): class
-  // digest feeds the weekly digest per site, class attention the attention list.
   findings: OpsFinding[];
 }
 
@@ -306,37 +226,26 @@ export interface OpsFinding {
   first_seen: string;
   last_seen: string;
   seen_count: number;
-  // The newest sighting's evidence lines, at most three.
   evidence: string[];
 }
 
-// The run ledger (src/task-runs.ts): each scheduled task's newest runs, and its flag
-// decided when the feed was read. failing: the newest run threw or was refused.
-// quiet: a periodic task with no run in twice its period. never: no run recorded.
 export type OpsTaskRunOutcome = "ok" | "skipped" | "refused" | "threw";
 
 export interface OpsTaskRun {
   started_at: string;
   finished_at: string;
   outcome: OpsTaskRunOutcome;
-  // One line: what the run did, or why it did not.
   reason: string;
 }
 
 export interface OpsTask {
   id: string;
   label: string;
-  // Null for a task whose runs follow the work, which is flagged only when it fails.
   period_ms: number | null;
   flag: "failing" | "quiet" | "never" | null;
-  // Newest first, at most five.
   recent: OpsTaskRun[];
 }
 
-// Each site's uptime over the last 90 UTC days, from the five-minute pulse's daily counts
-// (ops_uptime_daily, migrations/0054), against the 99.9% target. `below` is how many of
-// those days fell under the target. `months` is the same counts by UTC month, oldest
-// first, for the Portal's uptime strip by month.
 export interface OpsUptimeCounts {
   probes: number;
   up: number;
@@ -352,22 +261,14 @@ export interface OpsUptime {
 }
 
 export interface OpsFeed {
-  // Null until the watcher has written its first pass.
   snapshot: OpsSnapshot | null;
-  // Null when the daily counts could not be read; absent from a feed before them.
   uptime?: OpsUptime | null;
   live: OpsLive;
-  // The run ledger, or why it could not be read.
   scheduled: { tasks: OpsTask[]; error: null } | { tasks: null; error: string };
-  // When the next on-demand pass is allowed (POST /portal/api/ops/refresh), or null
-  // when one is allowed now.
   refresh_allowed_at: string | null;
-  // Whether CF_OPS_TOKEN is set, so the app can say why deploy and error columns are
-  // empty.
   cloudflare_configured: boolean;
-  // The double-submit CSRF value: the same value is in the HttpOnly cookie
-  // capsid_portal_csrf, and the app sends it back as X-Capsid-CSRF on every action. A
-  // cross-site page cannot read this body, so it cannot learn the value.
+  // Double-submit CSRF value, also in the HttpOnly capsid_portal_csrf cookie and sent back as
+  // X-Capsid-CSRF. A cross-site page cannot read this body.
   csrf: string;
   // Who is signed in, for the top bar: from the session, never from configuration.
   user: { name: string; initials: string };
@@ -375,8 +276,7 @@ export interface OpsFeed {
 
 type ResourceUser = { script: string; system: string | null; binding: string };
 
-// The secrets and data model (src/system-resources.ts): names, never values. Private: the
-// Portal's Workers tab and capsid_admin_read_ops action resources read it.
+// Names, never values. Private.
 export interface ResourcesDoc {
   version: 1;
   read_at: string;
@@ -393,7 +293,6 @@ export interface ResourcesDoc {
     queues: Array<{ binding: string; queue: string }>;
     services: Array<{ binding: string; service: string }>;
     other: Array<{ binding: string; kind: string }>;
-    // The stores this Worker's Previews bind (preview-only databases and buckets).
     previews: Array<{ binding: string; store: string }>;
   }>;
   databases: Array<{
@@ -404,6 +303,5 @@ export interface ResourcesDoc {
   }>;
   kv_namespaces: Array<{ title: string; used_by: ResourceUser[] }>;
   buckets: Array<{ name: string; used_by: ResourceUser[] }>;
-  // Parts that could not be read, each with the permission that would let it.
   problems: string[];
 }

@@ -1,9 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { visit } from "./views.ts";
 
-// A blocked job's command in the drawer, by what its signature says (src/job-signing.ts).
-// The sample feed has a verified block and one written before blocks were signed.
-
 async function openJob(page: import("@playwright/test").Page, id: string) {
   await visit(page, "queue");
   await page.locator(`main .cap-row-title a[href$="/job/${id}"]`).first().click();

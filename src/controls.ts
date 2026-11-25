@@ -16,18 +16,15 @@ import {
 } from "./controls-base";
 
 // THE CONTROLS' CORE (capsid/research/design-portal-full-controls.md, section 2): what each admin
-// control is, what it will do, the one dispatch to the shared mutators, and the signed confirmation
-// both surfaces use. The Portal's routes (src/portal-actions.ts) and `capsid_admin_run_controls`
-// (src/tools/controls.ts) are its two callers, so a control is implemented once and parity is a
-// property of this file and the controls-*.ts files beside it.
+// control is, what it will do, the one dispatch to the shared mutators, and the signed
+// confirmation both surfaces use.
 
 export const TOKEN_TTL_SECONDS = 5 * 60;
 
-// The controls' confirmation key label (auth.ts confirmKeys): its own, so a namespace delete's token never performs a
-// control. A new label retires every outstanding token.
+// The controls' confirmation key label (auth.ts confirmKeys): its own, so a namespace delete's
+// token never performs a control. A new label retires every outstanding token.
 const CONFIRM_LABEL = "capsid-portal-confirm:v2";
 
-/** What each action is about to do, naming the target, for the confirm step. */
 function describeAction(action: PortalAction, params: ActionParams): string {
   const said = describeOnce(action, params);
   return params.undo === "true" ? `Undo: ${said}` : said;
@@ -114,8 +111,8 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
   }
 }
 
-// The params each action takes. Anything else is refused rather than carried into a
-// token nobody reads.
+// The params each action takes. Anything else is refused rather than carried into a token nobody
+// reads.
 const FIELDS: Record<PortalAction, readonly string[]> = {
   overnight: ["value", "reason", "undo"],
   resume_job: ["id", "reason", "note"],
@@ -161,8 +158,6 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   site_key_rotate: ["namespace"],
 };
 
-/** The action's params from a preview body: only the fields it takes, each a string,
- *  trimmed, blanks dropped. */
 function paramsFrom(
   action: PortalAction,
   raw: unknown,
@@ -186,9 +181,11 @@ function paramsFrom(
   return { ok: true, params };
 }
 
-/** One control: its name, the params it takes, whether it needs a reason, and the two
- *  steps every surface goes through. plan writes nothing. perform calls the one
- *  mutator that exists for the control, then writes the click's audit row. */
+/**
+ * One control: its name, the params it takes, whether it needs a reason, and the two steps every
+ * surface goes through. plan writes nothing. perform calls the one mutator that exists for the
+ * control, then writes the click's audit row.
+ */
 export interface Control {
   name: PortalAction;
   fields: readonly string[];
@@ -223,8 +220,10 @@ export type Previewed =
   | { ok: true; preview: PortalPreview }
   | { ok: false; status: number; refusal: string };
 
-/** The preview step for either surface: validate the name and params, plan from the state
- *  now (a read, never a write), and sign a confirmation for the email. */
+/**
+ * The preview step for either surface: validate the name and params, plan from the state now (a
+ * read, never a write), and sign a confirmation for the email.
+ */
 export async function previewControl(
   env: Env,
   email: string,
@@ -269,12 +268,10 @@ export type Performed =
   | { ok: true; action: PortalAction; result: Extract<ActionResult, { ok: true }> }
   | { ok: false; status: number; refusal: string };
 
-/** The perform step for either surface: the token must verify for the email, and redeemConfirm
- *  spends it (a confirmation is used once, whichever surface took it), then the control runs. A
- *  token is spent even when the control then refuses: the refusal is about state, and the next try
- *  starts from a fresh preview. KV has no compare-and-set, so two performs of one token in the same
- *  instant could both pass the check; every mutator is guarded on the state it moves from, which
- *  stops the second. */
+/**
+ * The perform step for either surface: the token must verify for the email, and redeemConfirm
+ * spends it (a confirmation is used once, whichever surface took it), then the control runs.
+ */
 export async function performControl(
   env: Env,
   email: string,

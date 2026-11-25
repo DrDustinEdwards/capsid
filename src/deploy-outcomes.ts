@@ -4,28 +4,16 @@ import { APP_ROSTER } from "./roster";
 import { externalFence } from "./provenance";
 import type { Finding } from "./watcher-detect";
 
-// THE MEMORY OF A ROLLBACK (docs/design/design-merge-pipeline.md section 6, PR 6). Each watcher
-// pass reads, for every DEPLOY_ROSTER repo, its newest completed default-branch push runs, finds
-// the job named "live gate" (or "<caller job> / live gate" when the gate runs in a called
-// workflow, as for capsid and carrel in devkit's worker-deploy.yml), and records what became of
-// the deploy in deploy_outcomes (migrations/0039). A rollback, or one that did not take effect, is
-// a watcher finding, so it reaches Needs you and the queue.
-//
-// GitHub serves no step summary through its API, so the outcome is read from the job's
-// conclusion, its rollback step's conclusion, and the check-run annotations where the step's
-// ::error:: lines land ("rolled back: was A ... now B", "not rolling back", "the rollback did not
-// take effect"). No CI secret is added: the App already reads CI.
+// GitHub serves no step summary through its API, so the outcome is read from the job's conclusion,
+// its rollback step's conclusion, and the check-run annotations where the step's ::error:: lines
+// land ("rolled back: was A ... No CI secret is added: the App already reads CI.
 
 const LIVE_JOB = "live gate";
 const LIVE_JOB_SUFFIX = ` / ${LIVE_JOB}`;
-// The repos the deploy watcher reads: each by its namespace, and by its repo label where the repo
-// is not the namespace's primary. `key` names the fingerprint, so two repos of one namespace never
-// share a finding. Carrel is not on APP_ROSTER (src/roster.ts). Prelum has no namespace of its
-// own: it is the dustinedwards namespace's "prelum" repo. A run with two live gates (carrel's app
-// and public site) records the one that did not pass, else the first.
+// `key` names the fingerprint, so two repos of one namespace never share a finding.
 // dustinedwards.info deploys from its own Deploy workflow, started by CI's completion
 // (workflow_run) and on a schedule, never by a push, so its runs are read by `workflow`, of any
-// event; its "live gate" job is in that workflow.
+// event;
 export interface DeployRepo {
   key: string;
   namespace: string;
@@ -44,7 +32,6 @@ export const DEPLOY_ROSTER: readonly DeployRepo[] = [
   { key: "prelum", namespace: "dustinedwards", selector: "prelum" },
 ];
 
-/** A live gate job: "live gate", or a called workflow's "<caller job> / live gate". */
 export function isLiveGateJob(name: string): boolean {
   return name === LIVE_JOB || name.endsWith(LIVE_JOB_SUFFIX);
 }
@@ -67,11 +54,11 @@ interface Job {
   steps?: Array<{ name: string; conclusion: string | null; completed_at?: string | null }>;
 }
 
-/** Seconds production served the refused deploy: from the end of the gate's own deploy job
- *  (the ship) to the end of the rollback step that put the last version back (DORA's time to
- *  restore). Null when either time is missing. The deploy job is the gate's sibling: "deploy"
- *  beside capsid's "live gate", "<caller job> / deploy" beside a called worker-deploy's
- *  "<caller job> / live gate", so a run with two deploys (carrel's) pairs each with its own. */
+/**
+ * The deploy job is the gate's sibling: "deploy" beside capsid's "live gate", "<caller job> /
+ * deploy" beside a called worker-deploy's "<caller job> / live gate", so a run with two deploys
+ * (carrel's) pairs each with its own.
+ */
 function restoreSeconds(jobs: readonly Job[], gate: Job): number | null {
   const deployName = `${gate.name.slice(0, gate.name.length - LIVE_JOB.length)}deploy`;
   const ship = jobs.find((j) => j.name === deployName)?.completed_at;
@@ -88,8 +75,6 @@ export interface OutcomeRead {
   detail: string;
 }
 
-/** What a live gate job's conclusion, its rollback step and its annotations say. Null for a
- *  run whose live gate did not run (a run with no deploy). */
 export function outcomeFrom(job: Job | undefined, annotations: string[]): OutcomeRead | null {
   if (
     !job ||
@@ -189,9 +174,6 @@ const mk = (
   evidence,
 });
 
-/** The finding a deploy row raises: a rollback, or one that did not take effect. A verified
- *  deploy, a declined rollback and an unverified gate raise none here (a red CI run is the
- *  ci check's finding). */
 export function deployFindings(
   namespace: string,
   row: DeployRow,
@@ -224,8 +206,6 @@ export function deployFindings(
   return [];
 }
 
-/** Reads one repo's newest completed push runs on its default branch (or, given `workflow`, that workflow's runs of
- *  any event), records each new one whose live gate ran, and returns the newest recorded deploy (or null when none ran). */
 export async function readDeployOutcomes(
   env: Env,
   namespace: string,
@@ -280,7 +260,6 @@ export async function readDeployOutcomes(
       }
       const read = outcomeFrom(job, annotations);
       if (!read) continue;
-      // The pull request the commit came from, when GitHub knows one.
       const pulls = await ghFetch(
         env,
         owner,

@@ -1,10 +1,7 @@
 import type { Env } from "./env";
 import type { ConvergenceSite, SecretPresence } from "./ops-types/views";
 
-// THE SECRET PRESENCE OF A SITE'S WORKER Names, set or not, never a value. The names
-// are read from Cloudflare on the watcher's pass (readSecretNames in src/ops-cloudflare.ts,
-// with CF_OPS_TOKEN; permission Account / Workers Scripts / Read) and kept here in APP_KV,
-// so the Portal shows them without a Portal request ever calling Cloudflare.
+// THE SECRET PRESENCE OF A SITE'S WORKER Names, set or not, never a value.
 
 const KEY_PREFIX = "site-secrets:";
 const KEEP_SECONDS = 7 * 86_400;

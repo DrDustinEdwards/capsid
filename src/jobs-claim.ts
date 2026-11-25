@@ -35,23 +35,24 @@ import {
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
 // The body is signed at post, with the same key and envelope as the signed policy documents
-// (src/signed-docs.ts). The driver refuses a job whose body does not verify, so a row edited
-// by a raw D1 splice cannot steer a session that holds local shell and repo credentials.
-// Unconfigured (no IMPROVE_SCORE_SECRET) is a refusal, not a skip, rather than a queue of
-// unsignable jobs refused one at a time by the driver.
+// (src/signed-docs.ts). The driver refuses a job whose body does not verify, so a row edited by a
+// raw D1 splice cannot steer a session that holds local shell and repo credentials.
 
-/** The open statuses in prose, derived rather than retyped, so a status added to
- *  OPEN_JOB_STATUSES cannot leave the refusal claiming a shorter list than the index
- *  enforces. */
+/**
+ * The open statuses in prose, derived rather than retyped, so a status added to OPEN_JOB_STATUSES
+ * cannot leave the refusal claiming a shorter list than the index enforces.
+ */
 function openMeans(): string {
   const names = [...OPEN_JOB_STATUSES];
   const last = names.pop();
   return names.length ? `${names.join(", ")} or ${last}` : String(last);
 }
 
-/** What a duplicate post collided with. D1's error names only the constraint, so the row is
- *  read back to say which job holds the title and in what state (a blocked holder matters
- *  most: it waits on a human). The lookup only shapes the message, never the rule. */
+/**
+ * What a duplicate post collided with. D1's error names only the constraint, so the row is read
+ * back to say which job holds the title and in what state (a blocked holder matters most: it waits
+ * on a human). The lookup only shapes the message, never the rule.
+ */
 async function duplicateRefusal(env: Env, namespace: string, title: string): Promise<string> {
   const placeholders = OPEN_JOB_STATUSES.map((_, i) => `?${i + 3}`).join(", ");
   const holder = await env.DB.prepare(
@@ -68,9 +69,11 @@ async function duplicateRefusal(env: Env, namespace: string, title: string): Pro
   return `${namespace} already has an open job titled '${title}'${named}. Finish or fail that one first, or post this under a different title. Open means ${openMeans()}.${waiting}`;
 }
 
-/** The body checks and the signature, shared by post and edit so an edited body is
- *  refused for what post refuses and signed exactly as post signs it. Returns the
- *  stored (signed) text, or the problem to refuse with. */
+/**
+ * The body checks and the signature, shared by post and edit so an edited body is refused for what
+ * post refuses and signed exactly as post signs it. Returns the stored (signed) text, or the
+ * problem to refuse with.
+ */
 export async function signedJobBody(
   env: Env,
   body: string,
@@ -91,8 +94,8 @@ export async function signedJobBody(
   // anywhere: the driver runs whatever survived.
   const swallowed = swallowedParamTag(body);
   if (swallowed) return { ok: false, problem: swallowedTagRefusal("body", swallowed) };
-  // An external fence is how relayed text is told from instruction (src/provenance.ts), so
-  // a body whose fence is unlabelled or never closes is refused rather than signed.
+  // An external fence is how relayed text is told from instruction (src/provenance.ts), so a body
+  // whose fence is unlabelled or never closes is refused rather than signed.
   const fenceProblem = externalFenceProblem(body);
   if (fenceProblem)
     return {
@@ -114,7 +117,6 @@ export async function postJob(
     gate_required?: boolean;
     required_scopes?: Partial<RequiredScopes>;
     min_record?: MinRecord;
-    // Optional: when absent Capsid reads it from the title and the poster (src/model-routing.ts).
     kind?: string;
   },
 ): Promise<JobResult> {
@@ -127,9 +129,9 @@ export async function postJob(
     );
   const signedBody = await signedJobBody(env, args.body);
   if (!signedBody.ok) return refuse("post", signedBody.problem);
-  // A registered namespace, as write requires for a document. Otherwise a caller
-  // scoped to * could post into a namespace that does not exist, and the mirror
-  // document would land where write refuses the same path.
+  // A registered namespace, as write requires for a document. Otherwise a caller scoped to * could
+  // post into a namespace that does not exist, and the mirror document would land where write
+  // refuses the same path.
   const registered = await env.DB.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1")
     .bind(args.namespace)
     .first();
@@ -146,8 +148,6 @@ export async function postJob(
       `'${args.kind}' is not a job kind. One of: ${JOB_KINDS.join(", ")}, or leave it out and Capsid reads it from the title.`,
     );
   }
-  // The model is assigned here, by the Worker, from the kind and the risk the job states
-  // about itself. Nobody types it.
   const id = mintJobId();
   const routing = routeJob({
     id,
@@ -173,14 +173,13 @@ export async function postJob(
     result_ref: null,
     result_summary: null,
     gate_required: args.gate_required ? 1 : 0,
-    // NULL when nothing was asked for, rather than an empty requirement object. The
-    // column means "this job needs something unusual", and empty JSON would read as a
-    // requirement nobody can see.
+    // NULL when nothing was asked for, rather than an empty requirement object. The column means "this
+    // job needs something unusual", and empty JSON would read as a requirement nobody can see.
     required_scopes: args.required_scopes?.flags?.length
       ? serializeRequiredScopes(args.required_scopes)
       : null,
-    // A bar of zero is no bar, so it is stored as NULL rather than as a requirement
-    // every agent trivially meets.
+    // A bar of zero is no bar, so it is stored as NULL rather than as a requirement every agent
+    // trivially meets.
     min_record: args.min_record?.prs_merged ? serializeMinRecord(args.min_record) : null,
     blocked_count: 0,
     resumed_count: 0,
@@ -231,8 +230,8 @@ export async function postJob(
     await env.DB.batch(statements);
   } catch (err) {
     const message = errorMessage(err);
-    // The partial unique index over (namespace, title) for open statuses, reported as
-    // what it means rather than as the constraint's own text.
+    // The partial unique index over (namespace, title) for open statuses, reported as what it means
+    // rather than as the constraint's own text.
     if (/UNIQUE/i.test(message)) {
       return refuse("post", await duplicateRefusal(env, args.namespace, title));
     }
@@ -241,8 +240,10 @@ export async function postJob(
   return { ok: true, action: "post", job };
 }
 
-/** What a claim hands the driver about the model (capsid/conventions.md, "Model routing"): the
- *  recommendation, why, and how to follow it. The driver never picks a model itself. */
+/**
+ * What a claim hands the driver about the model (capsid/conventions.md, "Model routing"): the
+ * recommendation, why, and how to follow it. The driver never picks a model itself.
+ */
 function deliveryOf(routing: Routing) {
   return {
     model: routing.model,
@@ -256,9 +257,9 @@ function deliveryOf(routing: Routing) {
   };
 }
 
-// A claim names the caller as the job's holder, with no lease: it never expires, and a
-// caller may hold any number of jobs, on any repo. Every holder action names the job it
-// acts on. A holder that is gone is released by the seat (releaseJob).
+// A claim names the caller as the job's holder, with no lease: it never expires, and a caller may
+// hold any number of jobs, on any repo. Every holder action names the job it acts on. A holder
+// that is gone is released by the seat (releaseJob).
 export async function claimJob(
   env: Env,
   agent: Agent,
@@ -268,9 +269,6 @@ export async function claimJob(
   const actor = agent.actor;
   const badActor = actorShapeRefusal("claim", actor);
   if (badActor) return badActor;
-  // Either a named job or the highest-priority queued one in a namespace. The SELECT
-  // only picks a candidate; the guarded UPDATE below is what claims it, so two drivers
-  // reading the same candidate still resolve to one winner.
   let candidate: JobRow | null = null;
   if (args.id) {
     candidate = await readJob(env.DB, args.id);
@@ -293,18 +291,14 @@ export async function claimJob(
   }
 
   // A namespace whose drivers keep failing stops handing out work until a person looks
-  // (src/job-breaker.ts). Checked before anything else touches the candidate, so an
-  // open breaker leaves the queue exactly as it was.
+  // (src/job-breaker.ts). Checked before anything else touches the candidate, so an open breaker
+  // leaves the queue exactly as it was.
   const breaker = await breakerState(env, candidate.namespace, now);
   if (breaker.open)
     return refuse("claim", `${actor} cannot claim ${candidate.id}: ${breakerRefusal(breaker)}`);
 
-  // What the job needs of the driver is checked before the job is taken: a claim that took it
-  // and then refused would park it on a driver that cannot do it. Run through checkScope, the
-  // function that decides every tool call.
-  //
-  // A requirement that cannot be read fails the job, as a bad signature does below: left
-  // queued, the same row would be refused to every driver in turn and stop the namespace.
+  // A requirement that cannot be read fails the job, as a bad signature does below: left queued, the
+  // same row would be refused to every driver in turn and stop the namespace.
   const corrupt = corruptRequirement(candidate);
   if (corrupt) {
     const reason = `${candidate.id} has a corrupt requirement: ${corrupt}. A requirement that cannot be read is not the same as none, so it was not handed out.`;
@@ -331,8 +325,8 @@ export async function claimJob(
     );
   }
 
-  // What it needs of the driver's history, on the same terms and in the same place:
-  // before the job is taken, so it stays queued for a driver that meets the bar.
+  // What it needs of the driver's history, on the same terms and in the same place: before the job
+  // is taken, so it stays queued for a driver that meets the bar.
   const shortfall = await recordShortfall(env.DB, actor, candidate);
   if (shortfall) {
     return refuse(
@@ -341,13 +335,10 @@ export async function claimJob(
     );
   }
 
-  // The signature is checked before the job is handed over: a body is executable input
-  // arriving as a database row, for a session with local shell and repo credentials. One that
-  // does not verify was edited after `post` signed it, so it is failed here rather than left
-  // to be handed to every driver in turn.
-  //
-  // Unlike a run document (verifyTaskDoc) there is no actor check: a job is posted by a human
-  // seat, and this Worker's signature is what proves it went through `post`.
+  // The signature is checked before the job is handed over: a body is executable input arriving as a
+  // database row, for a session with local shell and repo credentials. One that does not verify was
+  // edited after `post` signed it, so it is failed here rather than left to be handed to every
+  // driver in turn.
   const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, candidate.body, "job body");
   if (!verdict.ok) {
     const marked = await markJobFailed(
@@ -373,9 +364,9 @@ export async function claimJob(
     );
   }
 
-  // The approval a resume handed on is checked the same way, before the job is taken: a note
-  // changed after the resume wrote it is an instruction nobody gave, so the job is
-  // failed rather than handed to a driver with it (src/job-signing.ts).
+  // The approval a resume handed on is checked the same way, before the job is taken: a note changed
+  // after the resume wrote it is an instruction nobody gave, so the job is failed rather than handed
+  // to a driver with it (src/job-signing.ts).
   const claimNotes = await resumeNotes(env, candidate);
   const claimNote = claimNotes.notes[0] ?? null;
   if (claimNote?.signature === "mismatch") {
@@ -403,9 +394,6 @@ export async function claimJob(
     );
   }
 
-  // The model for this job, assigned at post and settled again here: a job posted before
-  // routing existed is routed now, and a job that already carries a pull request is read
-  // on that PR's files, which can only raise the risk (src/model-routing.ts riskOf).
   const required = parseRequiredScopes(candidate.required_scopes);
   const prRisk = await pullRequestRisk(env, candidate.namespace, candidate.result_ref);
   const routing = routeJob({
@@ -429,14 +417,12 @@ export async function claimJob(
     routing_reason: routing.reason,
     status: "claimed",
     claimed_by: holder,
-    // A job the seat released keeps its first claim time, so its duration covers its
-    // whole working life.
     claimed_at: candidate.claimed_at ?? now.toISOString(),
     updated_at: now.toISOString(),
   };
-  // One batch with its records, behind the guard. Two drivers reading the same
-  // candidate still resolve to one winner, because the first commit moves updated_at
-  // and the second batch's guard aborts before its UPDATE runs.
+  // One batch with its records, behind the guard. Two drivers reading the same candidate still
+  // resolve to one winner, because the first commit moves updated_at and the second batch's guard
+  // aborts before its UPDATE runs.
   const won = await guardedTransition(env, candidate, [
     env.DB.prepare(
       `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = COALESCE(claimed_at, ?3), updated_at = ?3,
@@ -461,13 +447,12 @@ export async function claimJob(
     );
   }
   const startedOn = startedNotice(candidate);
-  // A job that went back to the queue after a resume reaches its next driver here, so
-  // the approval has to come with it: the note read and checked above.
+  // A job that went back to the queue after a resume reaches its next driver here, so the approval
+  // has to come with it: the note read and checked above.
   return {
     ok: true,
     action: "claim",
     job: claimed,
-    // A label refuses nothing; the claimant is told who began it.
     ...(startedOn ? { started: startedOn } : {}),
     ...(claimNote ? { resume_note: claimNote } : {}),
     ...(claimNotes.notes.length > 0 ? { resume_notes: claimNotes.notes } : {}),

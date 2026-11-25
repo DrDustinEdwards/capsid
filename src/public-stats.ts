@@ -6,14 +6,8 @@ import { readSnapshot } from "./ops-snapshot";
 import { clearedByWatcher } from "./watcher-findings";
 import { MINUTE_MS, DAY_MS } from "./time";
 
-// The public aggregate numbers (capsid/rulings/system-explorer-2026-10-10.md,
-// section 3 and answer 5; design capsid/research/design-system-explorer.md, section 2;
-// docs/public-data.md). Counts, rates and medians over every namespace, agent and site
-// at once, computed once a UTC day over whole days ending at midnight. Never a title, a
-// body, a name, an email, error text, or a time of day: the only strings are the date
-// and the short sha /health already shows.
-//
-// A rate or median over fewer than FLOOR rows is null, so one job cannot be read off it.
+// The public aggregate numbers (capsid/rulings/system-explorer-2026-10-10.md, section 3 and answer
+// 5; design capsid/research/design-system-explorer.md, section 2; docs/public-data.md).
 
 export const FLOOR = 10;
 

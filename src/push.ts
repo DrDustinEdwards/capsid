@@ -18,37 +18,6 @@ import {
 import { toSqlTime } from "@dustinedwards/site-runtime/time";
 import { HOUR_MS, DAY_MS, utcDay } from "./time";
 
-// PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7). Web Push to the devices the administrator turned on in the
-// Portal's Settings, for exactly eight things:
-//   1. a `typed` pull request (a money path) waiting more than 2 hours;
-//   2. a rollback (deploy_outcomes: rolled_back or rollback_failed);
-//   3. a job at the correction cap (blocked with the retry-cap reason);
-//   4. a question over 4 hours old on a job with priority 70 or more;
-//   5. auto-merge paused for a namespace by the safety shutoff (src/merge-safety.ts);
-//   6. a pull request labeled visual waiting for Dustin to look at it (src/visual-pr.ts),
-//      once per head, so a new push asks again;
-//   7. a site down on two probes in a row, and its return, once each; a site whose health
-//      route reports degraded, once a UTC day per failing check, naming why
-//      (src/site-pulse.ts); a site the watcher found erroring on over 1 percent of its
-//      requests, thrown or returned 5xx, once a UTC day (src/watcher-detect.ts
-//      siteErrorFindings);
-//   8. a TLS certificate within 21 days of expiry, and again within 3 (src/tls-expiry.ts),
-//      and a domain registration within 30 days, and again within 7 (src/domain-expiry.ts).
-// Everything else waits for the digest. With no key or no device on, the same alerts go
-// by email (emailFallback below).
-//
-// No alert carries an Approve button. The button was for `approve`-class pull requests,
-// and no trigger carries one: a typed PR is approved only by typing its number (design
-// section 8), a visual PR is approved after looking at its preview in the Portal, and the
-// other six are not pull requests. So there is no
-// /ops/approve route: a tap opens the Portal, where every answer is given. An alert names
-// the repo, the pull request or job id and the class, never a title.
-//
-// Each item is sent once: what was sent is kept in KV with the time, for 30 days. A typed
-// PR's 2 hours are counted from the first tick that saw it typed, kept there too, since
-// the awaiting-seat set is rewritten whole on every tick. At most MAX_PER_TICK items go
-// out per tick, so turning a device on does not empty a backlog onto it at once.
-
 const STATE_KEY = "push:state";
 const SENT_TTL_MS = 30 * DAY_MS;
 const TYPED_WAIT_MS = 2 * HOUR_MS;
@@ -99,8 +68,7 @@ interface PushState {
   sent: Record<string, string>;
 }
 
-/** What a device receives, decrypted by the Portal's service worker. No actions: a tap
- *  opens the url. */
+/** What a device receives, decrypted by the Portal's service worker. No actions: a tap opens the url. */
 export interface PushPayload {
   title: string;
   body: string;
@@ -116,8 +84,8 @@ async function readState(env: Env): Promise<PushState> {
 
 const hours = (ms: number) => `${Math.floor(ms / HOUR_MS)}h`;
 
-/** The seven triggers, from what the tick, the watcher and the queue already keep. Reads
- *  only; `typedSeen` is updated in place with the typed PRs seen now. */
+// The seven triggers, from what the tick, the watcher and the queue already keep. Reads only;
+// `typedSeen` is updated in place with the typed PRs seen now.
 async function gatherUrgent(
   env: Env,
   now: Date,
@@ -368,16 +336,10 @@ export async function pushTick(
   };
 }
 
-/**
- * THE EMAIL FALLBACK. With no device subscribed an alert reached nobody, so
- * the same urgent items go by email instead, through the path the daily digest already uses
- * (src/digest.ts): the send_email binding EMAIL, from ALERT_FROM to ALERT_EMAIL, and only
- * once Email Routing is on (digestProblem). One mail per tick holds the items due, at most
- * MAX_PER_TICK; each is marked sent in the same record as a push, so it goes out once
- * whichever way it went. A refused mail marks nothing and is tried on the next tick. With
- * the email path off as well, the note says both are off, and the Portal shows it. `why`
- * (no key, or no device on) is carried into every note.
- */
+// THE EMAIL FALLBACK. With no device subscribed an alert reached nobody, so the same urgent items
+// go by email instead, through the path the daily digest already uses (src/digest.ts): the
+// send_email binding EMAIL, from ALERT_FROM to ALERT_EMAIL, and only once Email Routing is on
+// (digestProblem).
 async function emailFallback(env: Env, now: Date, why: string): Promise<PushReport> {
   const off = digestProblem(env);
   if (off) return { ran: false, note: `${why}, and the email fallback is off: ${off}`, sent: [] };

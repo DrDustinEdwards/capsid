@@ -11,7 +11,9 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
-// sign_policy_from_repo: the reviewable source of the auto-merge policy is docs/policy/auto-merge.md on the default branch, and the stored, signed copy is written from it in one admin step. The preview reads the file from GitHub, holds it to checkMergePolicyBody and shows the old and new hash and the differing lines. The perform reads it again, refuses if it is not the text the preview showed, then writes and signs it through commitSigned. The version number typed as confirm is the version in the file. The stored policy in force need not load: this is also the way to replace one that does not.
+// sign_policy_from_repo: the reviewable source of the auto-merge policy is
+// docs/policy/auto-merge.md on the default branch, and the stored, signed copy is written from it
+// in one admin step.
 
 /** The reviewable source, on the capsid repo's default branch. */
 export const REPO_POLICY_PATH = "docs/policy/auto-merge.md";
@@ -35,8 +37,8 @@ export type RepoPolicyPlan =
 
 const SHOWN_LINES = 12;
 
-/** The lines each text has that the other lacks, as a multiset: order is not compared, which
- *  is enough to say how much changed and to show a reader what. */
+// The lines each text has that the other lacks, as a multiset: order is not compared, which is
+// enough to say how much changed and to show a reader what.
 function lineDelta(before: string, after: string): { added: string[]; removed: string[] } {
   const count = (text: string): Map<string, number> => {
     const m = new Map<string, number>();
@@ -71,8 +73,7 @@ function shownLines(label: "added" | "removed", lines: string[]): string[] {
   return [...real.slice(0, SHOWN_LINES).map((l) => `${mark} ${l}`), ...more];
 }
 
-/** What sign_policy_from_repo will write: the repo's file now against the stored policy.
- *  Reads only. */
+/** What sign_policy_from_repo will write: the repo's file now against the stored policy. Reads only. */
 export async function planPolicyFromRepo(env: Env): Promise<RepoPolicyPlan> {
   const refuse = (error: string): RepoPolicyPlan => ({ ok: false, error });
   if (!env.IMPROVE_SCORE_SECRET)
@@ -151,8 +152,8 @@ export async function planPolicyFromRepo(env: Env): Promise<RepoPolicyPlan> {
   };
 }
 
-/** The write: the file read again and checked against the preview's hash, the typed version
- *  checked, then signed through commitSigned. */
+// The write: the file read again and checked against the preview's hash, the typed version checked,
+// then signed through commitSigned.
 export async function performPolicyFromRepo(
   env: Env,
   actor: string,

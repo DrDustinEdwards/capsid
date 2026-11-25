@@ -1,9 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// A site's Sync and repairs tab (GET /api/convergence), against the production build
-// and the dev mock. The journey that must never break: a drifted check's Run opens the
-// site_repair control's preview, which names the operator route and never a token, and the
-// perform settles the drift on the panel's next read.
+// The journey that must never break: a drifted check's Run opens the site_repair preview, which names the operator route and never a token.
 
 test("Run on a drifted check previews the site_repair call, performs it, and the panel reads the check converged", async ({
   page,

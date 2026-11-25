@@ -3,14 +3,10 @@ import { TEST_FILE } from "../model-routing";
 import { readAllPages as readPages } from "@dustinedwards/site-runtime/github";
 import { ghFetch } from "./client";
 
-// The one reader of a pull request's changed files. The auto-merge tick judges them
-// (src/auto-merge-tick.ts) and block and complete compare them across open pull requests
-// (src/job-overlaps.ts); a second reader would disagree about a cap or a rename.
+// The one reader of a pull request's changed files: a second reader would disagree about a cap or a
+// rename.
 
-// Paged GitHub lists are read to the end, and a list not read whole is reported rather
-// than judged. Bounded: GitHub serves at most FILES_LIMIT files for a pull request, and
-// callers pass their own page cap for other lists. The reading is site-runtime's
-// readAllPages (by Link rel="next", the next page asked for by number).
+// A list not read whole is reported rather than judged.
 export const PER_PAGE = 100;
 export const FILES_LIMIT = 3000;
 const FILES_MAX_PAGES = FILES_LIMIT / PER_PAGE;
@@ -30,8 +26,6 @@ export function readAllPages<T>(
   });
 }
 
-// A commit's check runs, read whole (readAllPages), shared by the auto-merge tick, what's
-// next, the maintenance sweep and complete's CI gate (src/complete-ci.ts).
 export interface CheckRunRow {
   name: string;
   status: string;
@@ -56,19 +50,12 @@ export async function readCheckRuns<T extends CheckRunRow = CheckRunRow>(
 }
 
 export interface PrFiles {
-  // A rename is listed under both names, so moving a file counts as touching the old path.
   paths: string[];
-  // Why the list is not the whole of the pull request's files, or null when it is.
   problem: string | null;
-  // Additions plus deletions across the files read, as GitHub counts them, or null when a
-  // file came back without its counts. Auto-merge's size cap reads it
-  // (src/auto-merge-policy.ts), and refuses a null rather than reading it as zero.
+  // Null when a file came back without counts; auto-merge's size cap refuses null rather than
+  // reading zero.
   changedLines: number | null;
-  // The existing tests the pull request changes (existingTestEdits below). Auto-merge
-  // never merges one unattended (src/merge-class.ts).
   testEdits: string[];
-  // The rows as GitHub listed them, with each file's status and a rename's old name. The
-  // stale canon check reads what was removed or renamed (src/stale-canon.ts).
   rows: PrFileRow[];
 }
 
@@ -78,25 +65,20 @@ export interface PrFileRow {
   status?: string;
   additions?: number;
   deletions?: number;
-  // The unified diff of the file, which GitHub leaves out for a binary or very large one.
   patch?: string;
 }
 
-// Where the tests live: capsid's three directories, and anything merge-class names a test
-// (tests/, __tests__/, e2e/, *.test.* and *.spec.*), which is what the other covered repos use.
 const TEST_DIRS = ["test/", "test-integration/", "dashboard/e2e/"];
 export const inTestDir = (path: string | undefined) =>
   path !== undefined && (TEST_DIRS.some((d) => path.startsWith(d)) || TEST_FILE.test(path));
 
-/** The tests a pull request changes that already exist: a test removed or renamed away
- *  (the old path is deleted), or any file there with a deleted line. A file added whole,
- *  or modified with only added lines, is new test code and not an edit. Fails closed: a
- *  file under a test directory with no status, or with no integer deletions, counts as
- *  an edit, since a test cannot be shown untouched. Pure. */
+/**
+ * Fails closed: a test-dir file with no status or no integer deletions counts as an edit, since it
+ * cannot be shown untouched.
+ */
 export function existingTestEdits(files: readonly PrFileRow[]): string[] {
   const edited: string[] = [];
   for (const f of files) {
-    // A rename is a deletion of the old path whichever directory the new one is in.
     const path = inTestDir(f.previous_filename)
       ? f.previous_filename!
       : inTestDir(f.filename)

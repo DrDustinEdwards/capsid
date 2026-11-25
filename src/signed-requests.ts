@@ -49,14 +49,7 @@ export async function readBoundedText(
   return text === null ? { ok: false } : { ok: true, text };
 }
 
-// Claims a request's nonce, or refuses it. The database decides, not the code. A KV
-// get-then-put has nothing atomic between its round trips, so two requests carrying one
-// captured signature both read absent and both proceed, and with the signature valid 30
-// minutes either side, a captured POST could be replayed for an hour. An INSERT against
-// the primary key has no such window: a returned row means this call claimed the nonce.
-// RETURNING, not meta.changes. Fails closed on a database error, because these endpoints
-// mint credentials and record evidence. The table keeps its first name, improve_jti
-// (migrations/0004), from the improve loop that first used it.
+// Claims a request's nonce, or refuses it. The database decides, not the code.
 export async function claimJti(
   db: D1Database,
   scope: string,
@@ -86,11 +79,9 @@ export async function claimJti(
   }
 }
 
-// The backup key: IMPROVE_SCORE_SECRET, the Worker's one root secret, under
-// the backup's own context string, so it differs from the job and policy signing key
-// (src/signed-docs.ts) by construction. The version segment is in the string so a
-// rotation is a one-character change. scripts/derive-backup-key.mjs computes the same
-// value to set the repo secret.
+// The backup key: IMPROVE_SCORE_SECRET, the Worker's one root secret, under the backup's own
+// context string, so it differs from the job and policy signing key (src/signed-docs.ts) by
+// construction.
 export async function deriveBackupCredentialKey(rootSecret: string): Promise<string> {
   return hmacSha256Hex(rootSecret, "capsid-backup-credential:v1");
 }
@@ -322,10 +313,7 @@ export async function verifyBackupCredentialRequest(
   });
 }
 
-// The bench endpoints' check, under the same rules as the backup's, against the bench
-// key. The key is its own Worker secret, BENCH_SECRET, not derived from
-// IMPROVE_SCORE_SECRET: the owner set it up without that root to hand (docs/bench.md),
-// so a captured backup request opens nothing here and rotating it touches nothing else.
+// The bench endpoints' check, under the same rules as the backup's, against the bench key.
 export async function verifyBenchRequest(
   env: Pick<Env, "BENCH_SECRET">,
   signed: { timestamp: string; signature: string; body: string },
@@ -342,10 +330,9 @@ type Verify = (
   now: Date,
 ) => Promise<{ ok: true } | HmacFail>;
 
-// The shared front of every HMAC-signed endpoint (the backup pair in src/routes.ts, the
-// bench's in src/bench.ts): a bounded body, the signature over the endpoint family's own
-// header pair, then the parse, then the jti. The jti is spent only once the body is known
-// good. A bad signature is logged under the endpoint's own event name.
+// The shared front of every HMAC-signed endpoint (the backup pair in src/routes.ts, the bench's in
+// src/bench.ts): a bounded body, the signature over the endpoint family's own header pair, then the
+// parse, then the jti. The jti is spent only once the body is known good.
 export async function signedRequestBody<T extends { jti: string }>(
   request: Request,
   opts: {

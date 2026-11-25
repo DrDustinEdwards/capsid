@@ -10,12 +10,6 @@ import "capsomer/danger-zone.css";
 import "capsomer/select.css";
 import "./config-form.css";
 
-// The site configuration (live.sites, the ops_sites table): one row per namespace. A row
-// with an origin is a site the watcher probes; a row with no origin records that the
-// namespace serves no site. Every change goes through the confirm dialog, which previews
-// it first. The server validates every field; the form only catches the one mistake it
-// can name before sending (an origin left blank on a site).
-
 type Platform = "cloudflare" | "vercel";
 
 interface Draft {
@@ -50,9 +44,6 @@ function draftOf(s: OpsSiteConfig): Draft {
   };
 }
 
-// The params the server takes. A blank field is left out: the server reads an absent
-// field as none, and a row that serves no site takes no origin, health path, platform
-// or script.
 function paramsOf(d: Draft): Record<string, string> {
   const p: Record<string, string> = {};
   const put = (k: string, v: string) => {
@@ -84,7 +75,6 @@ export function SiteForm({
   const set = (patch: Partial<Draft>) => (setD((x) => ({ ...x, ...patch })), setHint(null));
   const adding = editing.kind === "add";
 
-  // Namespaces on the roster with no row yet, offered as suggestions when adding.
   const taken = new Set(feed.live.sites.map((s) => s.namespace));
   const free = feed.live.namespaces.map((n) => n.name).filter((n) => !taken.has(n));
 

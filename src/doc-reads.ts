@@ -1,9 +1,6 @@
 import { SEARCH_ROWS } from "./limits";
 
-// The document reads the docs tool (src/tools/docs-read.ts) and the Portal's Library
-// (src/portal-library.ts) share, so the two cannot disagree about what a search finds,
-// what a document holds or which edges touch it (conventions 1.2, never build the same
-// thing twice).
+// Reads shared by the docs tool and the Portal Library so they cannot disagree on search, content or edges.
 
 export interface DocumentRow {
   id: number;
@@ -34,7 +31,6 @@ export interface DocumentEdges {
   incoming: Array<{ type: string; from_ns: string; from_path: string }>;
 }
 
-/** One document by namespace and path, or null. */
 export async function readDocument(
   db: D1Database,
   namespace: string,
@@ -49,7 +45,6 @@ export async function readDocument(
     .first<DocumentRow>();
 }
 
-/** The typed edges declared on a document and the ones pointing at it. */
 export async function documentEdges(
   db: D1Database,
   namespace: string,
@@ -75,18 +70,13 @@ export async function documentEdges(
 export interface SearchFilter {
   namespace: string | null;
   type: string | null;
-  /** A JSON array of the only paths a row may have, or null for no such limit. */
   allowed: string | null;
-  /** The marks snippet() puts around a matched word. The docs tool's answer uses [ and ];
-   *  the Portal passes marks no document text holds, so a bracket in the text (a Markdown
-   *  link, say) is never read as a match. */
+  // The marks snippet() puts around a match: [ and ] for the docs tool; the Portal passes marks no text holds.
   marks?: { open: string; close: string };
 }
 
-/** Full text search, ranked by bm25, at most SEARCH_ROWS + 1 rows, so a caller can tell
- *  "exactly the limit" from "there are more". Hyphens, quotes and bare AND, OR and NOT
- *  are FTS5 syntax, so a query FTS5 refuses is retried once as a quoted phrase, and plain
- *  text is always a safe input. A second refusal throws. */
+// bm25-ranked, SEARCH_ROWS + 1 rows so a caller can tell "exactly the limit" from "more". FTS5 syntax (hyphens,
+// quotes, bare AND/OR/NOT) is refused once and retried as a quoted phrase; a second refusal throws.
 export async function searchDocuments(
   db: D1Database,
   query: string,

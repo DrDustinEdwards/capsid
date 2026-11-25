@@ -5,10 +5,6 @@ import { Panel } from "capsomer/react/panel";
 import { uptimeStrip, type UptimeSlot } from "enarratio";
 import { markup } from "capsomer/behavior/trusted-html";
 
-// Each site's last 90 UTC days against the 99.9% target, from the five-minute pulse's daily
-// counts (ops_uptime_daily), drawn as Capsomer's uptime strip in its table-cell form with one
-// slot per UTC month (U4): up when the month met the target, degraded under it, down when no
-// probe answered, the percent beside it. Degraded counts as up: the site answered.
 const MONTH = new Intl.DateTimeFormat("en-US", {
   month: "short",
   year: "numeric",

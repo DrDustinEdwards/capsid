@@ -25,19 +25,8 @@ import type { Finding } from "./watcher-detect";
 import { type WatcherCheck, WATCHER_CHECKS, owningCheck } from "./watcher-checks";
 import { MINUTE_MS } from "./time";
 
-// The watcher looks at the surface every half hour and, when something is wrong,
-// posts a job. It holds no blast-radius flag, cannot claim a job and cannot fix
-// anything. A watcher that could act on what it found would be an unattended agent
-// deciding at 03:00 what to do about a red default branch, so it writes the finding
-// down with the evidence and a named caller picks it up.
-//
-// Deduplication has two layers. The queue's own rule: `post` refuses a duplicate
-// while a job with the same (namespace, title) is open, and the title carries the
-// fingerprint. And the watcher's memory of each finding across jobs
-// (src/watcher-findings.ts, the watcher_findings table): an open job alone forgot a
-// finding the moment a person superseded or failed its job, and the next pass filed it
-// again. The row remembers that a person ended it, and a cleared finding stays quiet
-// for REOPEN_QUIET_MS before it may be filed again.
+// The watcher looks at the surface every half hour and, when something is wrong, posts a job. It
+// holds no blast-radius flag, cannot claim a job and cannot fix anything.
 
 const WATCHER_NAME = "watcher";
 export const WATCHER_ACTOR = `agent:${WATCHER_NAME}`;
@@ -54,11 +43,9 @@ export const DEFAULT_CADENCE_MINUTES = 30;
 // than being obeyed.
 const MIN_CADENCE_MINUTES = 5;
 
-// The watcher's identity inside the Worker, matching the minted `watcher` role in
-// scripts/roles.ts (every namespace, write, `capsid_work_jobs.post`, no flags), so the
-// credential a person can mint and the identity the tick uses are the same authority.
-// Spelled here because the tick has no bearer token to present.
-// test/watcher.test.ts fails if they drift.
+// The watcher's identity inside the Worker, matching the minted `watcher` role in scripts/roles.ts
+// (every namespace, write, `capsid_work_jobs.post`, no flags), so the credential a person can mint
+// and the identity the tick uses are the same authority.
 export function watcherAgent(): Agent {
   return {
     id: WATCHER_ACTOR,
@@ -121,13 +108,9 @@ export interface WatcherReport {
   cleared: string[];
 }
 
-/** The fingerprints of every open watcher job, over every open status rather than
- *  queued alone. The map decides what the pass skips posting, and a queued-only read
- *  would miss a claimed or blocked copy and post a duplicate.
- *
- *  A claimed or blocked job is still never closed: closing it underneath its owner
- *  would lose work. That guarantee lives in `clearFinding`'s keyed UPDATE, which
- *  moves a row only out of `queued`, so the wider read cannot close anything more. */
+// The fingerprints of every open watcher job, over every open status rather than queued alone. The
+// map decides what the pass skips posting, and a queued-only read would miss a claimed or blocked
+// copy and post a duplicate.
 export async function openWatcherFingerprints(env: Env): Promise<Map<string, string>> {
   const placeholders = OPEN_JOB_STATUSES.map((_, i) => `?${i + 2}`).join(", ");
   const { results } = await env.DB.prepare(
@@ -143,9 +126,9 @@ export async function openWatcherFingerprints(env: Env): Promise<Map<string, str
   return open;
 }
 
-/** A finding that is no longer found: the job is marked failed with "cleared", since
- *  nobody did the work. Keyed on queued, so a job claimed between the read and the
- *  write is not closed underneath its driver; RETURNING, not meta.changes. */
+// A finding that is no longer found: the job is marked failed with "cleared", since nobody did the
+// work. Keyed on queued, so a job claimed between the read and the write is not closed underneath
+// its driver; RETURNING, not meta.changes.
 export async function clearFinding(
   env: Env,
   id: string,
@@ -209,8 +192,8 @@ export function checkStates(gathered: Pick<Gathered, "findings" | "ran">): OpsSn
   });
 }
 
-/** The step the five-minute tick calls. Gates on its own cadence first, unless `force`
- *  (the Portal's Refresh, src/ops-feed.ts), which skips that check and nothing else. */
+// The step the five-minute tick calls. Gates on its own cadence first, unless `force` (the Portal's
+// Refresh, src/ops-feed.ts), which skips that check and nothing else.
 export async function watcherTick(
   env: Env,
   now: Date,

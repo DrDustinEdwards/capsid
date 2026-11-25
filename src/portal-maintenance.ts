@@ -4,12 +4,10 @@ import { readMaintenance } from "./maintenance";
 import type { PortalMaintenance } from "./ops-types/views";
 import { behindGate } from "./portal-auth";
 
-// The Portal's Maintenance list: GET /portal/api/maintenance. The list
-// the daily maintenance pass stored, the same one capsid_read_status action status serves per namespace, so
-// the Portal and chat cannot disagree. It reads KV only and runs nothing: the pass runs on
-// the five-minute tick once a day. A route, not a tool, so no grant is checked here
-// (one enforcement point, test/route-gates.test.ts): it answers to portalGate, and src/scope.ts lists
-// it among the routes gated some other way.
+// The Portal's Maintenance list: GET /portal/api/maintenance. The list the daily maintenance pass
+// stored, the same one capsid_read_status action status serves per namespace, so the Portal and
+// chat cannot disagree. It reads KV only and runs nothing: the pass runs on the five-minute tick
+// once a day.
 
 export const PORTAL_MAINTENANCE_PATH = "/portal/api/maintenance";
 

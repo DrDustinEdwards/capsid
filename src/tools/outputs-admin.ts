@@ -1,8 +1,6 @@
 import type { Shape } from "./operations";
 import { bool, mergeOutputs, nullable, num, obj, rows, str, strs } from "./outputs-shapes";
 
-// The output shapes of the Capsid Admin operations (merged by src/tools/outputs.ts).
-
 const agentResult: Shape = {
   ok: bool,
   action: str,

@@ -8,8 +8,6 @@ import {
   iconSettings,
 } from "capsomer/react/icons";
 
-// The menu's icons: the shared set where it has the drawing, the Portal's own 16-unit drawings where
-// it does not (Jobs, Sites, Pull requests, Packages, Health).
 const NAV_ICONS: Record<string, { d: string; box?: number }> = {
   needs: { d: iconQueue },
   sites: {

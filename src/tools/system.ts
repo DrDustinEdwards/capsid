@@ -5,12 +5,8 @@ import { readResources } from "../system-facts-store";
 import type { PublicVersions } from "../system-versions";
 import { fail, ok, type ToolCtx } from "./docs";
 
-// The versions and secrets models (src/system-facts.ts), read the way threads read the map:
-// what the nightly build stored, never GitHub or Cloudflare, so a call computes nothing.
-//   system_versions: capsid_read_status action versions. The public document
-//     (/public/versions/v1.json), so the read grant suffices and no namespace is needed.
-//   system_resources: capsid_admin_read_ops action resources. Private: secret names,
-//     tables and stores across every Worker, so admin only, like the rest of that tool.
+// Read the way threads read the map: what the nightly build stored, never GitHub or Cloudflare.
+// system_resources is private (secret names, tables and stores across every Worker): admin only.
 
 export function defineSystemOperations(_server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;

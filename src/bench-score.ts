@@ -22,12 +22,9 @@ import {
   signedBody,
 } from "./bench-requests";
 
-// THE JOB CLOSE (protocol section 4, "The job"). The score step finishes the run and closes
-// its job in one batch, so the run is not finished unless the close commits with it, and the
-// run key stops resolving in the same step. The close is a supersede by the harness; a job
-// with work recorded, which supersede refuses, is failed by the seat path with that reason,
-// no claim and no outcome row. Neither the run key nor the driver key can supersede it. The
-// analysis reads the claim file, never job status.
+// The score step finishes the run and closes its job in one batch, so the run is not finished
+// unless the close commits with it, and the run key stops resolving in the same step. The analysis
+// reads the claim file, never job status.
 export const BENCH_CLOSE_REASON = "closed by the harness; the claim is the claim file";
 const BENCH_HARNESS: Agent = {
   id: "bench-harness",
@@ -45,7 +42,6 @@ const BENCH_HARNESS: Agent = {
   row: null,
 };
 
-/** Commits `rowClose` only while the run is running, with its job's close for a treatment run. False when nothing was written. */
 export async function finishBenchRun(
   env: Env,
   run: { id: string; task_id: string; arm: Arm },
@@ -88,8 +84,8 @@ export async function finishBenchRun(
   }
 }
 
-// The receipt is written once, for a running treatment run, and never changes: the
-// harness checks once at the phase break (src/bench-run-key.ts, "THE REPRODUCTION RECEIPT").
+// The receipt is written once, for a running treatment run, and never changes: the harness checks
+// once at the phase break (src/bench-run-key.ts, "THE REPRODUCTION RECEIPT").
 export async function handleBenchRepro(request: Request, env: Env): Promise<Response> {
   const front = await signedBody(request, env, "BENCH_REPRO_REJECTED", parseReproRequest);
   if (!front.ok) return front.response;
@@ -189,7 +185,6 @@ export async function handleBenchScore(request: Request, env: Env): Promise<Resp
     JSON.stringify(report),
   );
   if (!(await finishBenchRun(env, run, finishedAt, [closeRow]))) {
-    // Two reports for one run racing: the first closed it, the second matched nothing.
     const after = await env.DB.prepare("SELECT status FROM bench_runs WHERE id = ?1")
       .bind(run.id)
       .first<{ status: string }>();

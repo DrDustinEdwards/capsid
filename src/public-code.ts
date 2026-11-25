@@ -4,11 +4,8 @@ import { CodeMapSchema, type PublicCode } from "./public-code-schema";
 import { publicRepos, type RepoPrivacy, type SystemModel } from "./system-model";
 
 // The public code maps (design capsid/research/design-system-explorer.md, section 5;
-// docs/public-data.md). devkit's code-map workflow writes code-map.json to an orphan
-// `code-map` branch in each repo that calls it. The daily public build reads that file
-// for every repo of a public system, parses it into new objects here, and stores the
-// lot as one document for the explorer's build. A repo of a private system is never
-// read, so its map cannot be published.
+// docs/public-data.md). devkit's code-map workflow writes code-map.json to an orphan `code-map`
+// branch in each repo that calls it.
 
 const BRANCH = "code-map";
 const FILE = "code-map.json";
@@ -16,8 +13,8 @@ const FILE = "code-map.json";
 // not one devkit wrote.
 const MAX_FILE_BYTES = 8_000_000;
 
-/** The repo's code-map.json from its code-map branch, or null when the repo has none
- *  (no branch, no file). Any other failure throws. */
+// The repo's code-map.json from its code-map branch, or null when the repo has none (no branch, no
+// file). Any other failure throws.
 export async function readCodeMap(env: Env, repoFull: string): Promise<unknown> {
   const [owner, repo] = repoFull.split("/");
   const resp = await ghFetch(
@@ -37,11 +34,9 @@ export async function readCodeMap(env: Env, repoFull: string): Promise<unknown> 
   return JSON.parse(text);
 }
 
-/**
- * Reads and parses the code map of every repo of a public system. A repo with no map is
- * left out; a map that fails the schema, or names another repo, throws, so the build keeps
- * the last good document rather than publish one it did not check.
- */
+// Reads and parses the code map of every repo of a public system. A repo with no map is left out; a
+// map that fails the schema, or names another repo, throws, so the build keeps the last good
+// document rather than publish one it did not check. /
 export async function buildPublicCode(
   env: Env,
   model: SystemModel,

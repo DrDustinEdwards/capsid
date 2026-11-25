@@ -1,35 +1,23 @@
 import { z, type ZodType } from "zod";
 
-// An input shape as the SDK takes it: field name to zod (classic) schema.
 export type Shape = Record<string, ZodType>;
 
-// The operations behind the served tools (the MCP 4 regroup).
-//
-// Capsid serves CAPSID_TOOLS and Capsid Admin CAPSID_ADMIN_TOOLS (src/tools/surface.ts), each one
-// whole job with an `action` argument. The work each action does is an operation: a handler with its own input
-// shape, defined once by the module that owns it (src/tools/docs-read.ts and the rest)
-// and dispatched by the composite tool in src/tools/surface.ts. An operation is not a
-// tool: nothing serves its name, scope never sees it, and an agent's tools axis names
-// the composite tool and its action ("capsid_read_doc.versions"), never the operation.
-//
-// The dispatcher validates the arguments against the operation's own shape, which is
-// what the SDK did when each operation was a tool, so a handler still receives
-// arguments its schema has parsed.
+// An operation is not a tool: nothing serves its name and scope never sees it; an agent's tools
+// axis names the composite tool and its action ("capsid_read_doc.versions").
 
 export interface OperationConfig {
   description: string;
   inputSchema: Shape;
 }
 
-// The SDK's tool result, as the handlers build it (ok and fail in ./docs).
 export interface OperationResult {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
   [key: string]: unknown;
 }
 
-// Handlers keep the argument types their own shape gives them; the dispatcher has parsed
-// them before the call, so the table stores each one taking unknown.
+// The dispatcher has parsed arguments before the call, so the table stores each handler taking
+// unknown.
 type OperationHandler = (args: unknown) => OperationResult | Promise<OperationResult>;
 
 interface Operation {
@@ -37,8 +25,6 @@ interface Operation {
   handler: OperationHandler;
 }
 
-// The structured copy of a successful result (MCP structuredContent), which the output schema
-// (./outputs) promises on every result that is not an error. A non-JSON answer is { text }.
 function withStructure(result: OperationResult): OperationResult {
   if (result.isError === true || result.structuredContent !== undefined) return result;
   const text = result.content.map((c) => c.text).join("\n");
@@ -77,8 +63,6 @@ export class Operations {
     return [...this.table.keys()];
   }
 
-  // Parses `args` against the operation's own shape, then runs it. A parse failure is
-  // the refusal the SDK gave before: the argument and what was wrong with it.
   async run(name: string, args: Record<string, unknown>, label: string): Promise<OperationResult> {
     const op = this.get(name);
     const parsed = z.object(op.config.inputSchema).safeParse(args);

@@ -21,8 +21,8 @@ export function isoWeek(d: Date): string {
   return `${t.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
-/** A stored time as milliseconds, or NaN when unreadable. D1 writes "YYYY-MM-DD HH:MM:SS"
- *  (UTC, no zone); GitHub and the Worker write ISO. */
+// A stored time as milliseconds, or NaN when unreadable. D1 writes "YYYY-MM-DD HH:MM:SS" (UTC, no
+// zone); GitHub and the Worker write ISO.
 export function timeMs(at: string | null | undefined): number {
   return parseSqlTime(at) ?? Number.NaN;
 }

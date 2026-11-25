@@ -1,13 +1,7 @@
-// THE HUMAN-TOUCH LOG (migrations/0023, job_touches): one row each time a person, or a policy
-// acting for one, touched a job. Without it a job that needed four rescues and one that needed
-// none both end "merged", and human effort confounds any comparison of agents.
-//
 // Each row rides in the same guarded batch as the transition it records (block, resume, release,
 // supersede, the seat's fail or complete, a review verdict acted on), so a transition the guard
 // refuses writes no touch.
 
-// The CHECK on job_touches.kind (migrations/0023, widened by 0031). test/job-touches-migration.test.ts
-// reads the CHECK from the schema every migration builds and compares it with this list both ways.
 export const TOUCH_KINDS = [
   "gate",
   "resume",
@@ -25,32 +19,20 @@ type TouchKind = (typeof TOUCH_KINDS)[number];
 export const ACTOR_KINDS = ["human", "seat", "driver", "policy", "reviewer", "system"] as const;
 export type ActorKind = (typeof ACTOR_KINDS)[number];
 
-// The seat's minted credentials, by agent name (`seat`, and `site-seat` for dustinedwards,
-// scripts/roles.ts). A retired operator key (`opkey:`) was the seat's too; it is left only on
-// older audit_log rows, and no job or touch carries one.
 const SEAT_AGENTS = new Set(["agent:seat", "agent:site-seat"]);
-// Credentials that act on a schedule rather than for a person: the watcher
-// (src/watcher.ts, WATCHER_ACTOR) and the
-// tick's own document writes (src/doc-statements.ts, SYSTEM_ACTOR). Spelled here rather than imported,
-// so this stays a pure module the unit tests load without the Worker.
+// Credentials that act on a schedule rather than for a person: the watcher (src/watcher.ts,
+// WATCHER_ACTOR) and the tick's own document writes (src/doc-statements.ts, SYSTEM_ACTOR). Spelled
+// here rather than imported, so this stays a pure module the unit tests load without the Worker.
 const SYSTEM_ACTORS = new Set(["agent:watcher", "improve-loop"]);
 
 export interface ActorContext {
-  // A driver's own resume under the signed gate policy (resumeJob's approved_by_policy
-  // by a caller that is not the seat). The approval is the policy's, not a person's.
+  // A driver's own resume under the signed gate policy (resumeJob's approved_by_policy by a caller
+  // that is not the seat). The approval is the policy's, not a person's.
   policy?: boolean;
   reviewer?: boolean;
-  // The caller is the seat by its flags (callerIsSeat: admin or can_merge), which a
-  // seat credential minted under another name still is.
   seat?: boolean;
 }
 
-/**
- * Who touched a job, as one of the six kinds job_touches.actor_kind allows; the one place this is
- * decided. A person first: `access:` is the administrator's Access login (MCP and Portal), `github:`
- * the same person on rows the old console wrote. Both are human even though they also pass
- * callerIsSeat: the question is who acted, not what they were allowed to do.
- */
 export function actorKind(actor: string, context: ActorContext = {}): ActorKind {
   if (context.policy) return "policy";
   if (context.reviewer) return "reviewer";
@@ -58,8 +40,7 @@ export function actorKind(actor: string, context: ActorContext = {}): ActorKind 
   if (SEAT_AGENTS.has(actor) || context.seat) return "seat";
   if (actor === "agent:reviewer") return "reviewer";
   if (SYSTEM_ACTORS.has(actor)) return "system";
-  // `<ns>-driver`. Any other minted agent that holds a job is working it, so it is a
-  // driver too.
+  // `<ns>-driver`. Any other minted agent that holds a job is working it, so it is a driver too.
   if (actor.startsWith("agent:")) return "driver";
   return "system";
 }
@@ -70,18 +51,15 @@ export interface Touch {
   kind: TouchKind;
   actor: string;
   actor_kind: ActorKind;
-  // JSON-serialized as given; undefined keys drop out.
   detail?: Record<string, unknown> | null;
-  // The touch ends a wait: waited_ms is measured from the job's latest gate row.
   sinceGate: boolean;
   at: string;
 }
 
 /**
- * The INSERT for one touch. `at` is bound, not defaulted, so waited_ms is the difference of two
- * times from the same clock the transition used. waited_ms is computed in SQL from the job's latest
- * gate row (by id, in insertion order), so a gate written earlier in the same batch counts; NULL
- * when the job never hit one or the touch does not end a wait.
+ * `at` is bound, not defaulted, so waited_ms is the difference of two times from the same clock
+ * the transition used. waited_ms is computed in SQL from the job's latest gate row (by id, in
+ * insertion order), so a gate written earlier in the same batch counts;
  */
 export function touchStatement(db: D1Database, touch: Touch): D1PreparedStatement {
   return db

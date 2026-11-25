@@ -26,15 +26,8 @@ import "capsomer/detail-panel.css";
 // Only Capsid's own page shows its 404 table, so the report and its stylesheets load with it.
 const NotFound = lazy(() => import("./NotFound").then((m) => ({ default: m.NotFound })));
 
-// A SITE PAGE'S LIVE READS (the Portal audit's new map, 2026-11-06; src/portal-site.ts): search
-// (Google Search Console and Bing Webmaster) and traffic (Cloudflare's edge: 404s, 5xx, web
-// vitals and AI crawlers) on the Search and traffic tab, and Workers Builds on the Deploys tab.
-// Each is read when its tab opens. A source with no data says why (docs/portal.md, "No data is
-// a state, never a zero"); the text a source returns (queries, paths, commit messages, logs) is
-// strangers' text, shown as text.
+// The text a source returns (queries, paths, commit messages, logs) is strangers' text, shown as text.
 
-// A read's state before its sources is Capsomer's ReadState; one source's answer, or why it has
-// none, is its SourceState. A site with no source set up is "No data", as one with nothing yet.
 function Source<T>({ src, children }: { src: SiteSource<T>; children: (data: T) => ReactNode }) {
   const result: SourceResult<T> = src.ok
     ? src
@@ -208,9 +201,6 @@ function Search({ ns }: { ns: string }) {
   );
 }
 
-// Core Web Vitals and the two diagnostic metrics, rated at the 75th percentile against
-// Google's published thresholds (web.dev/articles/vitals; /articles/fcp; /articles/ttfb):
-// good at or under the first number, poor over the second.
 const VITALS: Array<{
   key: WebVital;
   name: string;
@@ -462,7 +452,6 @@ function Traffic({ ns }: { ns: string }) {
   );
 }
 
-// Prelum's robots lists, which the Worker names each crawler by.
 const CRAWLER_KIND: Record<string, string> = {
   denied: "Denied",
   training: "Training",
@@ -470,8 +459,6 @@ const CRAWLER_KIND: Record<string, string> = {
   search: "Search",
 };
 
-// The Search and traffic tab. Capsid also keeps its own 404 table, with the hosts that linked
-// to each missing page, so its page shows that table too.
 export function SearchAndTraffic({ ns }: { ns: string }) {
   return (
     <>

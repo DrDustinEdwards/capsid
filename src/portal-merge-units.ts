@@ -3,19 +3,13 @@ import { REPORT_KEY, readSuspended, type UnitsReport } from "./merge-units";
 import { behindGate } from "./portal-auth";
 import { jsonResponse as json } from "@dustinedwards/site-runtime/http";
 
-// The Portal's Merge units panel (docs/autonomy.md, "Earned promotion and demotion"):
-// GET /portal/api/merge-units. The suspended units as the tick reads them (the list a lift
-// changes) and the promote and demote proposals of the units tick's last report, so the panel
-// can offer unit_resume and sign_policy_change on each. Its own route, read when the Pull
-// requests page opens, since OPS_FEED_READS is pinned and the feed does not grow a read. A
-// route, not a tool, so no grant is checked here (one enforcement point,
-// test/route-gates.test.ts): it answers to portalGate, and src/scope.ts lists it among the
-// routes gated some other way.
+// The Portal's Merge units panel (docs/autonomy.md, "Earned promotion and demotion"): GET
+// /portal/api/merge-units.
 
 export const PORTAL_MERGE_UNITS_PATH = "/portal/api/merge-units";
 
-/** The suspended units and the proposals. Two KV gets. A promote proposal for a unit that is
- *  suspended now cannot stand, so it is left out; an unreadable report is no proposals. */
+// The suspended units and the proposals. Two KV gets. A promote proposal for a unit that is
+// suspended now cannot stand, so it is left out; an unreadable report is no proposals.
 export async function readMergeUnits(kv: KVNamespace): Promise<PortalMergeUnits> {
   const [suspended, raw] = await Promise.all([readSuspended(kv), kv.get(REPORT_KEY)]);
   let report: Pick<UnitsReport, "generated" | "proposals"> | null = null;

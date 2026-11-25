@@ -4,16 +4,9 @@ import { readPrFiles } from "./github/pr-files";
 import { pathClassOfAll } from "./merge-class";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
-// A chat approval in the approval record (src/pr-approvals.ts). Dustin approves most pull requests
-// with a "yes" in a Claude chat and the session merges; the ledger records it so merge units
-// (src/merge-units.ts) have evidence to propose from. capsid_close_pr action merge with
-// `approved_in` (a link to his message) and `sha` merges that exact head and writes one row:
-// surface chat, status merged, the path class the units count in.
-//
 // The admin identity alone may name an approval (a driver key's session is not Dustin). Every
 // project thread is the admin identity, though, so the row is still the session's word: a record,
-// never counted by merge units as evidence for unattended merging. It is written after the merge
-// and never fails it.
+// never counted by merge units as evidence for unattended merging.
 
 const LINK = /^https:\/\/claude\.ai\/\S+$/;
 export const MAX_APPROVAL_LINK = 512;
@@ -33,7 +26,10 @@ export function chatApprovalRefusal(
   return null;
 }
 
-/** Writes the merged approval row and its audit row. Returns the path class it recorded, or a note on failure. */
+/**
+ * Writes the merged approval row and its audit row. Returns the path class it recorded, or a note
+ * on failure.
+ */
 export async function recordChatApproval(
   env: Env,
   actor: string,
@@ -49,7 +45,6 @@ export async function recordChatApproval(
 ): Promise<{ recorded: true; path_class: string | null } | { recorded: false; note: string }> {
   try {
     const [owner, name] = p.repo.split("/");
-    // The files are read after the merge: a merged pull request still lists them.
     const files = await readPrFiles(env, owner, name, p.number);
     const pathClass = files.problem ? null : pathClassOfAll(files.paths);
     const at = now.toISOString();

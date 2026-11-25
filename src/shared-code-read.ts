@@ -39,8 +39,8 @@ const RENOVATE_FILES = [
   ".renovaterc.json",
 ];
 
-/** A repo's root package.json, on its default branch or at `ref`, through the App.
- *  Uncached: the release-tag rule reads it to decide a write. */
+// A repo's root package.json, on its default branch or at `ref`, through the App. Uncached: the
+// release-tag rule reads it to decide a write.
 export async function readRootManifest(
   env: Env,
   full: string,
@@ -93,8 +93,8 @@ function depsOf(raw: string): Record<string, string> {
   return out;
 }
 
-/** One file of a repo on its default branch, as text, through the App, uncached: the
- *  nightly build reads a few hundred files and would otherwise write as many cache keys. */
+// One file of a repo on its default branch, as text, through the App, uncached: the nightly build
+// reads a few hundred files and would otherwise write as many cache keys.
 async function rawFile(env: Env, full: string, path: string): Promise<string> {
   const [owner, repo] = full.split("/");
   const resp = await ghFetch(
@@ -211,9 +211,9 @@ async function readApp(
   return app;
 }
 
-/** The repos the model names, once each, with the system that owns each and the namespace
- *  that maps it. A repo several systems share (a site and its admin MCP) is read once, under
- *  the system named for the repo, else the one with a domain, else the first. */
+// The repos the model names, once each, with the system that owns each and the namespace that maps
+// it. A repo several systems share (a site and its admin MCP) is read once, under the system named
+// for the repo, else the one with a domain, else the first.
 function modelApps(
   model: SystemModel,
   namespaceOf: ReadonlyMap<string, string>,

@@ -2,10 +2,9 @@ import { auditDetail } from "./audit-detail";
 import { queryParam } from "./portal-auth";
 import type { AuditDetail } from "./ops-types/portal";
 
-// Recent activity: a bounded, filtered read of audit_log across every namespace, for
-// Capsid Portal's Activity view. The filter comes off a query string, so every value is a
-// bound parameter; the test asserts the statement's shape as well as its results. One
-// row by id is what the Activity drawer reads (?id=), through the primary key.
+// Recent activity: a bounded, filtered read of audit_log across every namespace, for Capsid
+// Portal's Activity view. The filter comes off a query string, so every value is a bound parameter;
+// the test asserts the statement's shape as well as its results.
 
 export const ACTIVITY_LIMIT = 50;
 
@@ -36,8 +35,8 @@ export interface ActivityRow {
 // An audit row id: a positive whole number, as the autoincrement writes it.
 const ROW_ID = /^[1-9][0-9]{0,15}$/;
 
-/** The filter, or why the query string cannot be one. An id that is not a row id is
- *  refused rather than dropped, which would answer with the whole log instead. */
+// The filter, or why the query string cannot be one. An id that is not a row id is refused rather
+// than dropped, which would answer with the whole log instead.
 export function activityFilterFrom(
   url: URL,
 ): { ok: true; filter: ActivityFilter } | { ok: false; refusal: string } {

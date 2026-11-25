@@ -2,8 +2,8 @@ import type { JobRow } from "./jobs-schema";
 import type { PortalAction } from "./ops-types/portal";
 import { prUrlsFromJob } from "./outcome-prs";
 
-// The admin controls' shared vocabulary (src/controls.ts is the core): the action list,
-// the audit row names, and the helpers both the plan and the perform read.
+// The admin controls' shared vocabulary (src/controls.ts is the core): the action list, the audit
+// row names, and the helpers both the plan and the perform read.
 
 export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "overnight",
@@ -40,25 +40,23 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
 
 export type ActionParams = Record<string, string | undefined>;
 
-// The click's own audit row is `<prefix><action>`. Rows written before the move to
-// /portal say console-<action>; a query across that date names both (docs/schema.md).
+// The click's own audit row is `<prefix><action>`. Rows written before the move to /portal say
+// console-<action>; a query across that date names both (docs/schema.md).
 const CLICK_AUDIT_PREFIX = "portal-";
 
-// The automation switch (overnight) takes a reason in both directions, and an Undo
-// from the Portal's result message sends the reverse change with undo: "true". Its click row is then `portal-undo-<action>`, so an undo reads as its
-// own row, never as a fresh decision.
+// The automation switch (overnight) takes a reason in both directions, and an Undo from the
+// Portal's result message sends the reverse change with undo: "true". Its click row is then
+// `portal-undo-<action>`, so an undo reads as its own row, never as a fresh decision.
 export const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["overnight"]);
 const UNDO_INFIX = "undo-";
 
-// Which front door an action came in by. A click in the Portal and a call to the
-// controls tool are the same control; the audit row says which (controls design,
-// section 2): portal-<action> from the Portal as it always was, control-<action>
-// from chat.
+// Which front door an action came in by. A click in the Portal and a call to the controls tool are
+// the same control; the audit row says which (controls design, section 2): portal-<action> from
+// the Portal as it always was, control-<action> from chat.
 export type Surface = "portal" | "chat";
 const CHAT_AUDIT_PREFIX = "control-";
-// The controls a person must click in the Portal (security review round 4, finding 1): signing the auto-merge policy decides what merges with no person, a site key
-// opens a site's API, and activating a minted agent makes its key work. Every project thread is the admin, so chat could be talked into
-// either by text it read; a click in a signed-in browser is a person.
+// Every project thread is the admin, so chat could be talked into either by text it read; a click
+// in a signed-in browser is a person.
 const PORTAL_ONLY: ReadonlySet<PortalAction> = new Set<PortalAction>([
   "sign_policy_change",
   "sign_policy_from_repo",
@@ -73,8 +71,6 @@ export const portalOnlyRefusal = (action: PortalAction, surface: Surface): strin
 export const auditPrefix = (surface: Surface) =>
   surface === "portal" ? CLICK_AUDIT_PREFIX : CHAT_AUDIT_PREFIX;
 
-/** The click row's action name: portal-<action>, or portal-undo-<action> for an Undo
- *  (control- for chat). */
 export function clickAuditAction(
   action: PortalAction,
   params: ActionParams,
@@ -96,14 +92,11 @@ export function switchReasonRefusal(action: PortalAction): string {
 export const UNKNOWN_ACTION = (action: string) =>
   `unknown Portal action '${action}'. The Portal does: ${PORTAL_ACTIONS.join(", ")}. Merging a pull request and minting a credential are deliberately not among them: a merge can start a deploy and stays behind can_merge, and a mint hands out a key.`;
 
-/** A revision param as a positive integer, or null. */
 export function revisionOf(raw: string | undefined): number | null {
   if (!raw || !/^[1-9][0-9]{0,9}$/.test(raw)) return null;
   return Number(raw);
 }
 
-/** namespace_remove's two switches, each "true" or absent, as the delete's options
- *  (src/namespace-delete.ts). */
 export function deleteOptionsFrom(
   params: ActionParams,
 ):
@@ -129,9 +122,9 @@ export const UNIT_RESUME_REASON =
   "unit_resume needs a reason: why the rollback that suspended the unit is answered. It is recorded in the audit row.";
 export const AUTOMERGE_RESUME_REASON =
   "automerge_resume needs a reason: why the rollbacks or reverts that paused the namespace are answered. It is recorded in the audit row.";
-// close_shipped's complete (stale jobs D4: the existing admin_complete
-// path, crediting the holder). The pull requests the job names, from result_ref and the
-// summary, become the evidence the outcome verifies, at most the 10 the capsid_work_jobs tool takes.
+// close_shipped's complete (stale jobs D4: the existing admin_complete path, crediting the
+// holder). The pull requests the job names, from result_ref and the summary, become the evidence
+// the outcome verifies, at most the 10 the capsid_work_jobs tool takes.
 const CLOSE_SHIPPED_MAX_PRS = 10;
 export function shippedEvidence(job: JobRow): { result_ref?: string; prs: string[]; more: number } {
   const all = prUrlsFromJob(job);

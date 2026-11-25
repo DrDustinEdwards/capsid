@@ -2,19 +2,9 @@ import { isCanonPath } from "./canon";
 import type { Env } from "./env";
 import { auditStatement, snapshotLive } from "./store-guards";
 
-// The daily supersede pass (capsid/research/design-hybrid-search.md 3.3). A document
-// that a live document `supersedes` or `replaces` (src/links.ts) is marked superseded,
-// so search hides it by default and the current answer is not shown beside the old
-// one. Each change is an ordinary write: the live row is snapshotted, the status set,
-// and an audit row names the edge (snapshot invariant, test/write-invariants.test.ts). It never deletes and
-// never reverses itself. To un-supersede a document, remove the edge as well as editing
-// the status, or the next pass sets it again.
-//
-// Canon (src/canon.ts) is never marked: a driver may write an edge in its own namespace
-// but may not change that namespace's core.md or decisions.md, so an edge to one must
-// not do it on the driver's behalf. The seat changes a canon
-// document's status itself. The write path refuses such an edge, and a cross-namespace
-// one the writer cannot write, before it is stored (src/tools/docs-write.ts).
+// The daily supersede pass (capsid/research/design-hybrid-search.md 3.3). A document that a live
+// document `supersedes` or `replaces` (src/links.ts) is marked superseded, so search hides it by
+// default and the current answer is not shown beside the old one.
 
 export const SUPERSEDE_ACTOR = "system:supersede-pass";
 // Documents changed per pass, so a bad edge set changes a bounded number.

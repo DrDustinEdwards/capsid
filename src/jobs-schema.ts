@@ -4,8 +4,6 @@ import { checkScope, JOBS_TOOL } from "./scope";
 import { toHex } from "@dustinedwards/site-runtime/encoding";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
-// parked: wanted but not now (src/jobs-park.ts). Not open, not terminal: it holds no title slot
-// and its mirror stays active.
 export const JOB_STATUSES = [
   "queued",
   "claimed",
@@ -17,14 +15,13 @@ export const JOB_STATUSES = [
 ] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
-// The states a job still holds a title slot in. The partial unique index names the same
-// values (test/jobs.test.ts asserts they agree with the last migration defining it). Blocked
-// is open (migrations/0019): resume takes the same row back to claimed, and leaving it out
-// would let a watcher post the same finding again while the first waits for the seat.
+// The states a job still holds a title slot in. Blocked is open (migrations/0019): resume takes
+// the same row back to claimed, and leaving it out would let a watcher post the same finding again
+// while the first waits for the seat.
 export const OPEN_JOB_STATUSES: readonly JobStatus[] = ["queued", "claimed", "blocked"];
 
-// The finished states; a job's mirror document closes on these. Superseded is finished but
-// not a failure (migrations/0020): replaced before any work, so it writes no outcome row.
+// The finished states; a job's mirror document closes on these. Superseded is finished but not a
+// failure (migrations/0020): replaced before any work, so it writes no outcome row.
 const TERMINAL_JOB_STATUSES: readonly JobStatus[] = ["done", "failed", "superseded"];
 
 export function isTerminalJobStatus(status: JobStatus): boolean {
@@ -50,9 +47,6 @@ export const JOB_ACTIONS = [
 
 export const JOBS_ROWS_MAX = 100;
 
-// Every job is also a document, so brief and search see the queue. The table is the
-// source of truth for status.
-// Nothing else writes under it: the docs write tools refuse it (src/tools/docs-write.ts).
 export const JOB_DOC_PREFIX = "jobs/";
 export const jobDocPath = (id: string) => `${JOB_DOC_PREFIX}${id}.md`;
 
@@ -68,41 +62,28 @@ export interface JobRow {
   claimed_at: string | null;
   result_ref: string | null;
   result_summary: string | null;
-  // The holder's signature over result_summary (migrations/0027, src/job-signing.ts),
-  // or null: written before signing, or by a writer that does not sign.
   summary_sig?: string | null;
   gate_required: number;
-  // The scopes this job's work needs of the driver that claims it, as JSON, or null
-  // for the jobs that need nothing unusual (migrations/0009).
   required_scopes: string | null;
-  // The track record this job needs of that driver, as JSON, or null (migrations/0011).
   min_record: string | null;
   blocked_count: number;
   resumed_count: number;
-  // The retry cap's budget (migrations/0016): only the times the work was sent back to
-  // be corrected. See atCorrectionCap.
+  // The retry cap's budget (migrations/0016): only the times the work was sent back to be corrected.
+  // See atCorrectionCap.
   corrections_count: number;
-  // The kind Capsid read or was given, and the model and effort it recommends, with the
-  // one-line reason (migrations/0032, src/model-routing.ts). NULL: not routed yet, which
-  // the next claim fixes.
   kind?: string | null;
   model_recommended?: string | null;
   effort_recommended?: string | null;
   routing_reason?: string | null;
-  // The started label (migrations/0042, src/jobs-begin.ts): who marked a queued job
-  // started, and when. It never expires and refuses nothing. NULL until
-  // somebody begins the job.
+  // The started label (migrations/0042, src/jobs-begin.ts): who marked a queued job started, and
+  // when. It never expires and refuses nothing. NULL until somebody begins the job.
   started_at?: string | null;
   started_by?: string | null;
-  // When a parked job comes back on its own (migrations/0064, src/jobs-park.ts): an ISO
-  // time, or NULL for a job parked until somebody unparks it and for every other status.
   parked_until?: string | null;
   created_at: string;
   updated_at: string;
 }
 
-// The started label as a reader is told it (src/jobs-begin.ts): who began the job, when,
-// and what that means. Null for a job nobody began.
 export interface StartedNotice {
   by: string;
   at: string;
@@ -120,41 +101,41 @@ export function startedNotice(
   };
 }
 
-// The retry cap: two corrections, then a human. Each round is defensible on its own,
-// which is why the ceiling is counted rather than judged.
+// The retry cap: two corrections, then a human. Each round is defensible on its own, which is why
+// the ceiling is counted rather than judged.
 
 export const CORRECTION_CAP = 2;
 
 export const RETRY_CAP_REASON = "retry cap; human decision required";
 
-/** Whether a job has spent its correction budget. Fails closed: a count that is not a
- *  finite number at or above zero is treated as at the cap. */
+/**
+ * Whether a job has spent its correction budget. Fails closed: a count that is not a finite number
+ * at or above zero is treated as at the cap.
+ */
 export function atCorrectionCap(corrections: number): boolean {
   if (!Number.isFinite(corrections) || corrections < 0) return true;
   return corrections >= CORRECTION_CAP;
 }
 
-/** A capped job's summary: the cap, then the driver's own summary, which the human
- *  deciding needs to read. */
+/**
+ * A capped job's summary: the cap, then the driver's own summary, which the human deciding needs
+ * to read.
+ */
 export function cappedSummary(summary: string | null): string {
   const said = summary?.trim();
   return said ? `${RETRY_CAP_REASON}\n\n${said}` : RETRY_CAP_REASON;
 }
 
-// The scopes a job's work requires (migrations/0009), checked by the same function as
-// an agent's scopes. Flags only: the write grant and the namespace are required of
-// every claim already, so a job has only blast radius left to declare.
+// The scopes a job's work requires (migrations/0009), checked by the same function as an agent's
+// scopes. Flags only: the write grant and the namespace are required of every claim already, so a
+// job has only blast radius left to declare.
 export interface RequiredScopes {
   flags: ScopeFlag[];
 }
 
-// A requirement that cannot be read is corrupt, not absent: failing open would hand a damaged
-// requirement's job to any driver, and a garbled "needs can_merge" is not "needs nothing".
-// post validates both fields, so an unreadable value comes only from a write that bypassed it.
-//
-// So the job cannot strand behind a refusal nothing can satisfy, the claim marks it failed
-// with the field named, as for a bad signature; resume refuses and leaves it blocked. null,
-// undefined, "" and an object without the field are no requirement.
+// So the job cannot strand behind a refusal nothing can satisfy, the claim marks it failed with
+// the field named, as for a bad signature; resume refuses and leaves it blocked. null, undefined,
+// "" and an object without the field are no requirement.
 export type ParsedRequirement<T> = { ok: true; value: T } | { ok: false; problem: string };
 
 function parseObject(field: string, json: string): ParsedRequirement<Record<string, unknown>> {
@@ -179,8 +160,6 @@ export function parseRequiredScopes(
   const flags = parsed.value.flags;
   if (flags === undefined) return { ok: true, value: { flags: [] } };
   if (!Array.isArray(flags)) return { ok: false, problem: "required_scopes.flags is not an array" };
-  // A retired flag gated a tool that no longer exists, so a job that named one requires
-  // nothing by it.
   const current = flags.filter((f) => !RETIRED_FLAGS.includes(f));
   const unknown = current.filter((f) => !(SCOPE_FLAGS as readonly unknown[]).includes(f));
   if (unknown.length) {
@@ -193,7 +172,6 @@ export function parseRequiredScopes(
   return { ok: true, value: { flags: current as ScopeFlag[] } };
 }
 
-/** The problem with a job's stored requirements, or null when both read cleanly. */
 export function corruptRequirement(job: {
   required_scopes: string | null;
   min_record: string | null;
@@ -208,8 +186,6 @@ export function serializeRequiredScopes(required: Partial<RequiredScopes>): stri
   return JSON.stringify({ flags: required.flags ?? [] });
 }
 
-// The claim's authorization, through the one enforcement point: the write grant and
-// the namespace for every job, plus the job's own flags. Returns a refusal or null.
 export function missingForJob(
   agent: Agent,
   namespace: string,
@@ -226,23 +202,20 @@ export function missingForJob(
   });
 }
 
-/** The namespace half of missingForJob, for a resume that returns a job to its own
- *  claimant: the caller acquires nothing but still moves the job. */
 export function outsideJobNamespace(agent: Agent, namespace: string): string | null {
   return checkScope(agent, { tool: JOBS_TOOL, namespace, grant: "write" });
 }
 
-// job_<12 hex>, random rather than sequential so an id quoted in chat cannot be used
-// to address a job by arithmetic. The PRIMARY KEY refuses a collision.
-// Hex through toHex (@dustinedwards/site-runtime/encoding).
+// job_<12 hex>, random rather than sequential so an id quoted in chat cannot be used to address a
+// job by arithmetic. The PRIMARY KEY refuses a collision. Hex through toHex
+// (@dustinedwards/site-runtime/encoding).
 export function mintJobId(): string {
   return `job_${toHex(crypto.getRandomValues(new Uint8Array(6)))}`;
 }
 
-// What a job needs of the driver's history (migrations/0011): a scope says what a
-// credential may do, this says what it has done. Each bar must be a number the agent
-// record computes and the Portal shows. No rate bar: a rate over a small
-// denominator is noise.
+// What a job needs of the driver's history (migrations/0011): a scope says what a credential may
+// do, this says what it has done. Each bar must be a number the agent record computes and the
+// Portal shows. No rate bar: a rate over a small denominator is noise.
 export interface MinRecord {
   prs_merged?: number;
 }
@@ -267,8 +240,6 @@ export function serializeMinRecord(min: MinRecord): string {
   return JSON.stringify({ prs_merged: min.prs_merged ?? 0 });
 }
 
-// The bar against the record's numbers, a pure comparison; src/agent-record.ts
-// computes them. Returns a refusal naming the shortfall, or null.
 export function missingForRecord(
   record: { prs_merged: number },
   minRecord: string | null | undefined,
@@ -280,10 +251,9 @@ export function missingForRecord(
   return `this job asks for a driver with at least ${plural(prs_merged, "merged pull request")} on its record, and this one has ${record.prs_merged}.`;
 }
 
-// A swallowed parameter tag: a caller that closes a parameter tag inside a value sends the
-// later arguments as literal text in it. Refused, not cleaned up, because the lost arguments
-// cannot be recovered and the outcome row cannot be corrected after the write.
-// test/jobs.test.ts derives these names from the tool's schema.
+// A swallowed parameter tag: a caller that closes a parameter tag inside a value sends the later
+// arguments as literal text in it. Refused, not cleaned up, because the lost arguments cannot be
+// recovered and the outcome row cannot be corrected after the write.
 export const JOB_PARAM_NAMES = [
   "action",
   "namespace",
@@ -309,7 +279,6 @@ export function swallowedParamTag(value: string): string | null {
   return match ? match[1] : null;
 }
 
-// One message for every call site, naming both the field and the tag.
 export function swallowedTagRefusal(field: string, tag: string): string {
   const own = field === tag ? " (its own closing tag)" : "";
   return (

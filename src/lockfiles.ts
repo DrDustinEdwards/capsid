@@ -1,22 +1,9 @@
 // What a repo's lockfile says it installed: the version of each named dependency, per manifest
-// directory. The versions model (src/shared-code.ts) reads it so a pin is what the repo
-// installs, not only what its package.json asks for ("^0.7.0" asks for a range; the lockfile
-// names 0.7.3).
-//
-// Two formats:
-//   npm's package-lock.json, lockfileVersion 2 and 3: `packages`, keyed by install path. A
-//     workspace's own dependency sits at "<workspace>/node_modules/<name>" when it differs from
-//     the hoisted one at "node_modules/<name>".
-//   pnpm's pnpm-lock.yaml, lockfileVersion 9: `importers`, keyed by the manifest's directory
-//     ("." for the root), each dependency with a `specifier` and a `version`. A git dependency's
-//     version is its tarball URL with peers in parentheses; the version number is under
-//     `packages`, keyed "<name>@<that URL>" (pnpm.io/git).
-// YAML is read with the `yaml` parser, as devkit's no-bloat bin reads a workflow, so any
-// spelling YAML allows (flow maps, quoted keys, anchors, CRLF) is the same data.
+// directory. The versions model (src/shared-code.ts) reads it so a pin is what the repo installs,
+// not only what its package.json asks for ("^0.7.0" asks for a range; the lockfile names 0.7.3).
 
 import { parse } from "yaml";
 
-/** A YAML document as data, or the error that stopped it. A key written twice fails, as GitHub refuses it. */
 function readYaml(text: string): Record<string, unknown> | Error {
   try {
     const doc: unknown = parse(text, { uniqueKeys: true });
@@ -31,11 +18,8 @@ function readYaml(text: string): Record<string, unknown> | Error {
 const isMap = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 
-/** "v" plus the version, the spelling the tags use. */
 export const asTag = (v: string) => (v.startsWith("v") ? v : `v${v}`);
 
-/** The installed version of each of `names`, for the manifest in `dir` ("" for the root),
- *  from a package-lock.json at `lockDir`. Missing names are left out. */
 export function npmLockVersions(
   raw: string,
   lockDir: string,
@@ -60,8 +44,6 @@ export function npmLockVersions(
   return out;
 }
 
-/** The installed version of each of `names`, for the manifest in `dir`, from a
- *  pnpm-lock.yaml at `lockDir`. Missing names are left out. */
 export function pnpmLockVersions(
   raw: string,
   lockDir: string,
@@ -81,7 +63,6 @@ export function pnpmLockVersions(
     for (const name of names) {
       const dep = deps[name];
       if (name in out || !isMap(dep) || typeof dep.version !== "string") continue;
-      // Peers ride in parentheses after the version or the URL.
       const bare = dep.version.replace(/\(.*$/, "");
       const pkg = packages[`${name}@${bare}`];
       const v = /^\d+\.\d+\.\d+/.test(bare)
@@ -95,15 +76,16 @@ export function pnpmLockVersions(
   return out;
 }
 
-/** `dir` relative to `base`, both repo-relative directories ("" for the root). */
 function relative(base: string, dir: string): string {
   if (!base) return dir;
   return dir === base ? "" : dir.startsWith(`${base}/`) ? dir.slice(base.length + 1) : dir;
 }
 
-/** Each `uses: owner/repo/...@ref` of one workflow file, a job's or a step's: the repo and the ref as written. The
- *  version a sha stands for comes from the repo's tags (sharedCodeView), never from the "# vX.Y.Z" comment beside it,
- *  which a change can leave as it was while the sha moves back. A file that does not parse has no pins. */
+/**
+ * Each `uses: owner/repo/...@ref` of one workflow file, a job's or a step's: the repo and the ref
+ * as written. The version a sha stands for comes from the repo's tags (sharedCodeView), never from
+ * the "# vX.Y.Z" comment beside it, which a change can leave as it was while the sha moves back.
+ */
 export function workflowPins(text: string): Array<{ repo: string; ref: string }> {
   const doc = readYaml(text);
   if (doc instanceof Error || !isMap(doc.jobs)) return [];
@@ -123,19 +105,23 @@ export function workflowPins(text: string): Array<{ repo: string; ref: string }>
   return out;
 }
 
-/** How a workflow runs devkit's no-bloat check: each job that calls pr.yml or no-bloat.yml, and why it is off, if it is. */
 export interface NoBloatJob {
   job: string;
   workflow: "pr" | "no-bloat";
-  /** Why the job does not run the check: pr.yml's `no-bloat` or `node` not true, an `if` on the job or a job it needs,
-   *  or triggers that never run it. Null: on. */
+  /**
+   * Why the job does not run the check: pr.yml's `no-bloat` or `node` not true, an `if` on the job
+   * or a job it needs, or triggers that never run it. Null: on.
+   */
   off: string | null;
 }
 
 const CALLS = /^DrDustinEdwards\/devkit\/\.github\/workflows\/(pr|no-bloat)\.yml@/i;
 
-/** Why the workflow's triggers never run its no-bloat caller, or null: pr.yml is the pull request check, so it needs a
- *  pull_request trigger that no path, branch or type filter empties; no-bloat.yml runs on pull requests or a schedule. */
+/**
+ * Why the workflow's triggers never run its no-bloat caller, or null: pr.yml is the pull request
+ * check, so it needs a pull_request trigger that no path, branch or type filter empties;
+ * no-bloat.yml runs on pull requests or a schedule.
+ */
 function triggersOff(on: unknown, workflow: "pr" | "no-bloat"): string | null {
   const events: Record<string, unknown> =
     typeof on === "string"
@@ -165,9 +151,6 @@ function triggersOff(on: unknown, workflow: "pr" | "no-bloat"): string | null {
   return null;
 }
 
-/** Each job in one workflow file that calls devkit's pr.yml or no-bloat.yml, read as YAML the way devkit's no-bloat bin
- *  reads it (workflowInputs): a pull request that turns the check off is refused there, and this is the nightly look at
- *  what merged. A file that names a caller and does not parse runs nothing. */
 export function noBloatJobs(text: string): NoBloatJob[] {
   const doc = readYaml(text);
   if (doc instanceof Error)
@@ -196,7 +179,6 @@ export function noBloatJobs(text: string): NoBloatJob[] {
         for (const input of ["no-bloat", "node"])
           if (input in inputs && inputs[input] !== true && inputs[input] !== "true")
             return `the job "${id}" passes ${input}: ${String(inputs[input])}`;
-      // A job it waits for that is skipped skips it too.
       const seen = new Set<string>();
       const walk = (j: string): string | null => {
         const n = (jobs[j] as Record<string, unknown> | undefined)?.needs;

@@ -28,17 +28,6 @@ import { PageHead } from "./shared";
 import { Problems } from "./Problems";
 import { useWaiting, type AutoMergeAsks, type Entry } from "../lib/waiting";
 
-// NEEDS YOU, the home page (docs/design/design-portal-evaluation.md section 4, DECIDE 1,
-// ruled 2026-10-09; the Portal reorganization of 2026-11-23). It answers "what do I have to
-// decide" and lets each decision be made here: everything waiting for you, by kind, each row
-// with its own buttons (approve_pr, pr_close, the auto-merge controls, resume_job,
-// reset_breaker) through the one confirm dialog. Then the problems, worst first. What
-// happened since you last looked, the weekly digest and the charts are on Activity.
-
-// The inbox's kinds that are not decided on this page by their own control: they open
-// where they are fixed. Keyed by string, so an unknown kind still shows under its own name and
-// its tone's mark. Each kind has its own mark (Dustin's review of 2026-10-11: every row had the
-// same pause icon); the color says who acts: warning for a person, critical for a machine fault.
 const KIND: Record<string, { label: string; tone: Tone; glyph?: GlyphName } | undefined> = {
   "blocked-job": { label: "Blocked job", tone: "warn", glyph: "blocked" },
   question: { label: "Question", tone: "warn", glyph: "question" },
@@ -84,8 +73,6 @@ function Waiting() {
   );
 }
 
-// One kind's rows: a Capsomer group row in a heading, open, holding a row list. `after`
-// sits under the list (the PR group's bulk bar).
 function WaitGroup({
   id,
   title,
@@ -109,14 +96,11 @@ function WaitGroup({
   );
 }
 
-// A link out of the Portal, opened in a new tab: a row's title when it lives on GitHub.
 const newTab = ({ children, ...props }: RowLinkProps) => (
   <a {...props} target="_blank" rel="noreferrer noopener">
     {children}
   </a>
 );
-
-// ---- pull requests
 
 function PrGroup({ entries }: { entries: Entry[] }) {
   const { feed, confirm } = useApp();
@@ -238,9 +222,7 @@ function PrRow({
   );
 }
 
-// What a visual pull request shows before you approve it (src/visual-pr.ts): its live
-// preview and its screenshots, read from the pull request. They open in a new tab as links,
-// since the Portal's CSP loads no image from another origin.
+// Links open in a new tab: the Portal's CSP loads no image from another origin.
 function VisualLook({ visual }: { visual: NonNullable<OpsAwaitingSeat["visual"]> }) {
   return (
     <span className="visual-look">
@@ -264,9 +246,6 @@ function VisualLook({ visual }: { visual: NonNullable<OpsAwaitingSeat["visual"]>
   );
 }
 
-// ---- auto-merge: a policy that does not load, a paused project, a merge unit to sign or lift
-
-// The rows load after first paint, keeping their code off the first screen.
 const AutoMergeRows = lazy(() => import("./automerge").then((m) => ({ default: m.AutoMergeRows })));
 
 function AutoMergeGroup({ asks }: { asks: AutoMergeAsks }) {
@@ -278,8 +257,6 @@ function AutoMergeGroup({ asks }: { asks: AutoMergeAsks }) {
     </WaitGroup>
   );
 }
-
-// ---- questions and blocked jobs
 
 function JobGroup({ entries }: { entries: Entry[] }) {
   return (
@@ -318,7 +295,6 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
           {question ? "Question" : "Blocked"}
         </Status>
       }
-      // The title opens the job's panel; the job id is there (D11).
       title={item.title}
       onOpen={j ? () => open(`job:${j.id}`) : undefined}
       href={!j && item.link ? item.link : undefined}
@@ -365,8 +341,6 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
   );
 }
 
-// ---- stopped queues
-
 function StopGroup({ list, onReset }: { list: PortalNamespace[]; onReset: () => void }) {
   const { confirm } = useApp();
   return (
@@ -400,8 +374,6 @@ function StopGroup({ list, onReset }: { list: PortalNamespace[]; onReset: () => 
     </WaitGroup>
   );
 }
-
-// ---- everything else: it opens where it is fixed
 
 function OtherGroup({ entries }: { entries: Entry[] }) {
   const { now } = useApp();

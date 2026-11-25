@@ -15,15 +15,11 @@ import type {
   JobTouchRow,
 } from "./ops-types/claims";
 
-// The read side of claims apart from verified outcomes (migrations/0023_job_claims.sql). One
-// set of readers, shared by `capsid_admin_read_claims` (src/tools/claims.ts) and the Portal's
-// GET /portal/api/claims (src/portal-claims.ts), so the two cannot disagree. Read-only; every
-// caller value is a bound parameter, and every read carries a LIMIT one row past its bound so
-// a cut is reported in `truncated`.
+// Read side of claims (0023), shared by capsid_admin_read_claims and the Portal so they cannot disagree.
+// Read-only; every read takes one row past its bound so a cut is reported in `truncated`.
 
 export const CLAIMS_JOB_ROWS = 200;
 const CLAIMS_GROUP_LIMIT = 500;
-// Evaluation count rows: at most seven names by four agreements per group.
 const EVALUATION_ROWS = 5000;
 const TOUCH_ROWS = 5000;
 
@@ -40,8 +36,7 @@ function text(value: string | null | undefined): string | null {
   return trimmed.length ? trimmed : null;
 }
 
-// A time bound, normalized to the stored shape (ISO with milliseconds, UTC) so a
-// text comparison against recorded_at and at orders correctly.
+// Normalized to the stored shape (ISO with ms, UTC) so text comparison orders correctly.
 function isoBound(
   name: string,
   value: string | null,
@@ -57,7 +52,6 @@ function isoBound(
   return { ok: true, value: new Date(parsed).toISOString() };
 }
 
-/** The aggregate's filter from loose input (tool arguments or a query string). */
 export function claimsFilterFrom(input: {
   namespace?: string | null;
   agent?: string | null;
@@ -82,8 +76,6 @@ export function claimsFilterFrom(input: {
   };
 }
 
-/** One job with every claim, evaluation and touch recorded for it, or null when no
- *  such job exists. */
 export async function readJobClaims(db: D1Database, id: string): Promise<ClaimsJob | null> {
   const bound = CLAIMS_JOB_ROWS + 1;
   const [job, outcome, claims, evaluations, touches] = await Promise.all([
@@ -183,12 +175,8 @@ const usageTotals = (row: UsageSqlRow): ClaimsUsageTotals => ({
 const WAIT_CLASS_NEEDS_HUMAN = "needs_human";
 const WAIT_CLASS_UNREADABLE = "unreadable_gate";
 
-/**
- * The class of the gate a wait ended, from the gate row's detail (the JSON a block writes:
- * reason and command), using the gate policy's own classifier so "which waits could the
- * policy have approved" is answered by the code that approves them. No matching class, or no
- * command, needs a person. A detail that is not JSON is named, not folded into needs_human.
- */
+// Class of the gate a wait ended, from the gate detail JSON, using the gate policy's own classifier so "could
+// the policy have approved it" is answered by the code that approves. No match or command needs a person.
 export function gateClassOf(detail: string | null): string {
   if (detail === null) return WAIT_CLASS_NEEDS_HUMAN;
   let command: unknown;
@@ -220,10 +208,8 @@ function emptyGroup(agent: string | null, namespace: string): ClaimsGroup {
   };
 }
 
-/** Per agent and namespace: jobs and claims, each evaluation's agreement counts, and the
- *  human touches on those jobs with the total and median wait. An evaluation is attributed
- *  through its claim_id. A touch is attributed to every agent that claimed its job, so a job
- *  two drivers worked shows under both; a touch on a job with no claim is under agent null. */
+// Touches are attributed to every agent that claimed the job (so two drivers both show) and to agent null
+// when it has no claim; an evaluation is attributed through its claim_id.
 export async function readClaimsAggregate(
   db: D1Database,
   filter: ClaimsFilter,
@@ -259,10 +245,8 @@ export async function readClaimsAggregate(
       )
       .bind(namespace, agent, since, until, TOUCH_ROWS + 1)
       .all<TouchFoldRow>(),
-    // Each ended wait once, with the gate it ended: the latest gate row on the job
-    // before the touch, which is the row touchStatement measured waited_ms from. The
-    // agent filter is a test, not a join, so a job two agents claimed is not counted
-    // twice.
+    // Each ended wait once: the latest gate row before the touch (what waited_ms measured from). The agent
+    // filter is a test, not a join, so a job two agents claimed is not counted twice.
     db
       .prepare(
         `SELECT t.namespace AS namespace, t.actor_kind AS actor_kind, t.waited_ms AS waited_ms,
@@ -276,8 +260,7 @@ export async function readClaimsAggregate(
       )
       .bind(namespace, agent, since, until, TOUCH_ROWS + 1)
       .all<WaitFoldRow>(),
-    // claim.usage as the agent sent it, kept whole in job_claims.raw. Each claim is one
-    // session's own total, so claims on a job are summed.
+    // claim.usage as sent, whole in job_claims.raw; each claim is one session's total, so claims are summed.
     db
       .prepare(
         `SELECT namespace, COUNT(*) AS n,
@@ -330,8 +313,7 @@ export async function readClaimsAggregate(
       unclaimed: 0,
       unchecked: 0,
     };
-    // The table's CHECK allows only these four; anything else is a schema this reader
-    // does not know, and saying so beats dropping it.
+    // The table's CHECK allows only these four; saying so beats dropping an unknown schema.
     if (!(AGREEMENTS as readonly string[]).includes(row.agreement)) {
       throw new Error(
         `job_evaluations holds agreement '${row.agreement}', which this reader does not know`,

@@ -1,14 +1,9 @@
-/** One Web Analytics site as the live checks read it. The site token is never kept. */
 export interface WebAnalyticsSite {
   host: string;
-  // Whether the snippet is injected automatically for the host's orange-clouded traffic.
   auto_install: boolean | null;
-  // The site's ruleset switch, where Cloudflare reports one.
   enabled: boolean | null;
 }
 
-// The daily email digest (src/digest.ts), as Settings shows it: on, or the reason it is
-// off, where it goes, the hour it is sent, and the last send or refusal.
 export interface DigestState {
   on: boolean;
   problem: string | null;
@@ -17,9 +12,8 @@ export interface DigestState {
   last: { at: string; outcome: "sent" | "failed"; note: string } | null;
 }
 
-// GET /portal/api/push -> PortalPush. Phone alerts (src/push.ts): the VAPID public key a
-// browser subscribes with (null, with the problem, when the key is not set), and the
-// devices with alerts on. Never an endpoint.
+// GET /portal/api/push -> PortalPush: the VAPID public key a browser subscribes with (null with the problem
+// when unset) and the devices with alerts on. Never an endpoint.
 export interface PortalPush {
   generated: string;
   public_key: string | null;
@@ -31,19 +25,13 @@ export interface PortalPush {
     last_sent_at: string | null;
     last_status: number | null;
   }[];
-  // The daily email digest beside the alerts, so Settings says why it is off.
   digest: DigestState;
   // Present after op "test": each device's push service answer (0 when unreachable).
   results?: { id: number; status: number }[];
 }
 
-// GET /portal/api/stale -> PortalStale. The jobs that look stuck, from the reader behind
-// `capsid_work_jobs` action list with stale: true (src/stale-jobs.ts), over every namespace. rule is
-// which test the job met, the most actionable first: prs-settled (blocked, and every pull
-// request it names is merged or closed), steps-seen (blocked, and every manual step its
-// "check:" lines name is seen, src/manual-steps.ts), resumed-not-completed (the
-// merge-resume step resumed it 24 hours or more ago and it is not done), unchanged
-// (blocked or claimed, and its row has not changed in 3 days).
+// GET /portal/api/stale -> PortalStale: jobs that look stuck (src/stale-jobs.ts), over every namespace. `rule` is the
+// first test met: prs-settled, steps-seen, resumed-not-completed (24h+), unchanged (3 days).
 export type StaleRule = "unchanged" | "resumed-not-completed" | "prs-settled" | "steps-seen";
 
 export interface OpsStaleJob {
@@ -58,17 +46,13 @@ export interface OpsStaleJob {
 
 export interface PortalStale {
   generated: string;
-  // Oldest change first, at most 200.
   rows: OpsStaleJob[];
   truncated: boolean;
-  // Set when rows may be missing: more than 200, or the pull request cache unreadable.
   note: string | null;
 }
 
-// GET /portal/api/library -> PortalLibrary (src/portal-library.ts). The read-only Library
-// over the knowledge store. One of
-// three answers, by the query string: the shelves (no query), a search (?q=) or one
-// document (?ns=&path=). Writing stays in chat and with drivers.
+// GET /portal/api/library -> PortalLibrary (src/portal-library.ts), read-only. One of three answers by query
+// string: the shelves (none), a search (?q=) or one document (?ns=&path=).
 export type LibraryShelf = "decisions" | "rulings" | "research";
 
 export interface LibraryEntry {
@@ -81,8 +65,7 @@ export interface LibraryEntry {
 }
 
 interface LibraryHit extends LibraryEntry {
-  // FTS5's snippet: each matched word between U+0002 and U+0003 (LIBRARY_MARK_OPEN and
-  // LIBRARY_MARK_CLOSE in src/portal-library.ts), gaps as " ... ".
+  // FTS5 snippet: matched words between U+0002 and U+0003 (LIBRARY_MARK_OPEN/CLOSE), gaps as " ... ".
   snippet: string;
 }
 
@@ -108,9 +91,7 @@ export type PortalLibrary =
       incoming: Array<{ type: string; from_ns: string; from_path: string }>;
     };
 
-// GET /portal/api/trends?weeks= -> PortalTrends (src/trends.ts, src/portal-trends.ts). The
-// series the Portal's charts need and the feed does not carry (design-portal-evaluation.md
-// section 3, ruled 2026-10-09). Read-only; every time is UTC; weeks start on Monday.
+// GET /portal/api/trends?weeks= -> PortalTrends (src/trends.ts, src/portal-trends.ts). Read-only; times UTC, weeks start Monday.
 export interface TrendMinutesWeek {
   week: string; // ISO week, "2026-W41"
   start: string; // its Monday, YYYY-MM-DD
@@ -123,7 +104,6 @@ export interface TrendQueueDay {
   day: string;
   posted: number;
   ended: number;
-  // Open (queued, claimed, blocked or parked) at the day's end.
   open: number;
 }
 
@@ -145,8 +125,7 @@ export interface TrendCiDay {
   day: string;
   runs: number;
   failed: number;
-  // The default branch at the day's end: the last completed run that day, carried over a
-  // day with none; "none" before the first run in the window.
+  // Last completed run that day, carried over a day with none; "none" before the first run in the window.
   state: "green" | "red" | "none";
 }
 
@@ -154,12 +133,11 @@ export interface TrendCiRepo {
   namespace: string;
   repo: string;
   days: TrendCiDay[];
-  // More runs than one page (100) in the window: the earliest days may be missing runs.
+  // More runs than one page (100): the earliest days may be missing runs.
   truncated: boolean;
 }
 
-// DORA's deploy measures for one repository over the window, from deploy_outcomes (checklist
-// F4): every deploy whose live gate ran, split by what the gate decided.
+// DORA deploy measures for one repository from deploy_outcomes: every deploy whose live gate ran.
 export interface TrendDeployRepo {
   repo: string;
   deploys: number;
@@ -187,7 +165,6 @@ export interface PortalTrends {
     }>;
   };
   deploys: { repos: TrendDeployRepo[] };
-  // null slots and runs, with error set, when the bucket could not be listed.
   backups: {
     slots: {
       daily: TrendBackupSlot[];
@@ -197,7 +174,6 @@ export interface PortalTrends {
     runs: number | null;
     error: string | null;
   };
-  // Read from GitHub and kept an hour; a repo that could not be read is in not_read.
   ci: {
     read_at: string;
     repos: TrendCiRepo[];
@@ -205,10 +181,8 @@ export interface PortalTrends {
   };
 }
 
-// GET /portal/api/maintenance -> PortalMaintenance. The daily maintenance pass's list
-// (src/maintenance.ts), as stored by its last run: what the pass found that it did not act
-// on, and what it acted on (an auto-resume, a pruned branch). A "-not-checked" rule is a
-// read that failed, shown so a missing read is never taken for a clean result.
+// GET /portal/api/maintenance -> PortalMaintenance: the last daily pass's findings and actions. A "-not-checked"
+// rule is a failed read, shown so a missing read is never taken for clean.
 export type MaintenanceRule =
   | "later-passed"
   | "shipped-elsewhere"
@@ -227,43 +201,31 @@ export type MaintenanceRule =
   | "model-not-checked"
   | "rule-doc"
   | "rule-docs-not-checked"
-  // The release-tag rule (src/maintenance-releases.ts): a shared package's version tagged,
-  // left untagged (switched off, over the cap, not found), or below its newest tag.
   | "release-tagged"
   | "release-untagged"
   | "release-backwards"
   | "releases-not-checked";
 
 export interface OpsMaintenanceItem {
-  /** Which rule found it. */
   rule: MaintenanceRule;
   namespace: string;
-  /** The job the line is about, or null for a line that names none. */
   job: string | null;
-  /** The pull request the line is about, for the pull request rules. */
   pr?: string;
-  /** One plain line for the seat: what is wrong and what to do. */
   line: string;
 }
 
 export interface PortalMaintenance {
-  /** When the pass that wrote the list ran; null when no pass has run yet. */
   generated: string | null;
   items: OpsMaintenanceItem[];
-  /** What the pass read, so an empty list can be told from one that read nothing: open
-   *  pull requests, branches and compared site deploys summed over the repos read, the
-   *  repos read of the roster. */
+  /** What the pass read, so an empty list differs from one that read nothing. */
   read: { prs: number; branches: number; repos: number; roster: number; deploys: number };
 }
 
-// GET /portal/api/convergence -> PortalConvergence (src/site-convergence.ts). Per site
-// that opted into Capsid calling its operator API: what that API's sync_status says, what
-// its health route says per check with the repair each maps to, the site Worker's secrets
-// by name (never a value), and the last repairs Capsid ran. Read live on each request.
+// GET /portal/api/convergence -> PortalConvergence (src/site-convergence.ts): per opted-in site, its sync_status,
+// health checks with their repairs, Worker secret names (never values) and recent repairs. Read live.
 export interface SecretPresence {
   name: string;
   set: boolean;
-  // false: the Worker has it, and the site's configuration does not name it.
   expected: boolean;
 }
 
@@ -273,8 +235,7 @@ export interface ConvergenceCheck {
   detail: string | null;
   expected: number | null;
   present: number | null;
-  // The repair the site's configuration maps this check to, and why Capsid may not run
-  // it, where it may not (null: it may).
+  // The repair the configuration maps this check to, and why Capsid may not run it (null: it may).
   repair: string | null;
   repair_refusal: string | null;
 }
@@ -284,7 +245,6 @@ export interface ConvergenceSite {
   name: string;
   origin: string;
   read_at: string;
-  // Null with `problem` set when the site has no usable operator configuration.
   operator: {
     path: string;
     auth_var: string;
@@ -293,7 +253,6 @@ export interface ConvergenceSite {
     weekly: string[];
   } | null;
   problem: string | null;
-  // sync_status, as label and text; error says why it was not read.
   status: {
     ok: boolean;
     fields: Array<{ key: string; value: string }>;
@@ -305,7 +264,6 @@ export interface ConvergenceSite {
     checks: ConvergenceCheck[];
     error: string | null;
   } | null;
-  // The watcher's last read of the names (read_at), or why there is none.
   secrets: {
     state: "ok" | "none" | "error";
     script: string | null;
@@ -313,7 +271,6 @@ export interface ConvergenceSite {
     reason: string | null;
     read_at?: string;
   } | null;
-  // Newest first.
   recent: Array<{
     at: string;
     actor: string;
@@ -329,9 +286,8 @@ export interface PortalConvergence {
   sites: ConvergenceSite[];
 }
 
-// GET /portal/api/backups and capsid_admin_read_ops action backups -> PortalBackups
-// (src/site-backup.ts). A site's status is its backup_status as it answered: d1-dump's
-// backupHealth for the newest dump, and one per files pass under files.
+// GET /portal/api/backups and capsid_admin_read_ops action backups -> PortalBackups (src/site-backup.ts): each
+// site's backup_status as it answered, d1-dump's backupHealth for the newest dump and one per files pass.
 interface BackupFreshness {
   last_ok: string | null;
   age_hours: number | null;
@@ -359,9 +315,8 @@ export interface PortalBackups {
   not_configured: string[];
 }
 
-// THE OVERNIGHT PLAN AND THE MORNING DIGEST (src/overnight-plan.ts): the `capsid_work_jobs` action list views
-// "plan" and "digest", and the Portal's GET /portal/api/plan and GET /portal/api/digest,
-// which serve the same readers.
+// The overnight plan and morning digest (src/overnight-plan.ts): `capsid_work_jobs` list views "plan" and "digest"
+// and GET /portal/api/plan and /digest serve the same readers.
 
 interface PlannedJob {
   id: string;
@@ -370,8 +325,7 @@ interface PlannedJob {
   priority: number;
   estimate_minutes: number;
   estimate_source: "policy" | "record" | "default";
-  /** The job needs a human confirmation for a risky step (gate_required): the session
-   *  does the ordinary work and lists that step in the pull request for the seat. */
+  /** Needs a human confirmation for a risky step: the session does the ordinary work and lists that step in the PR. */
   gated: boolean;
 }
 
@@ -393,14 +347,12 @@ export interface SkippedJob {
 export interface OvernightPlan {
   generated: string;
   budget_minutes: number;
-  // Where the heavy/light split came from, so "every repo is heavy" is never a surprise.
+  // So "every repo is heavy" is never a surprise.
   policy: "document" | "default" | "invalid";
   policy_note: string | null;
-  // Heavy lanes share this budget; their sessions run one at a time.
   heavy_planned_minutes: number;
   lanes: PlanLane[];
   skipped: SkippedJob[];
-  // Counts beside the verdict, so an empty plan cannot pass for a clean one.
   queued_read: number;
   truncated: boolean;
 }
@@ -430,7 +382,6 @@ export interface DigestBlocked {
   namespace: string;
   title: string;
   at: string;
-  // The reason and the command, as the driver wrote them, cut to a readable length.
   summary: string;
   pull_requests: string[];
   usage: UsageTotals;
@@ -440,7 +391,6 @@ export interface DigestPr {
   job_id: string;
   namespace: string;
   url: string;
-  // merged: GitHub says merged. open: not merged (open or closed). unchecked: never read.
   state: "merged" | "open" | "unchecked";
   source: "outcome" | "blocked summary";
 }
@@ -453,7 +403,6 @@ export interface OvernightDigest {
   blocked: DigestBlocked[];
   pull_requests_ready: DigestPr[];
   pull_requests_merged: number;
-  // What the agents reported in claim.usage, summed over the jobs that reported any.
   totals: {
     usage: UsageTotals & { jobs: number };
     jobs_without_usage: number;
@@ -461,18 +410,13 @@ export interface OvernightDigest {
   truncated: string[];
 }
 
-// GET /portal/api/plan -> PortalPlan: the overnight plan over every namespace.
 export type PortalPlan = OvernightPlan;
 
-// GET /portal/api/digest?since= -> PortalDigest: what happened since then, over every
-// namespace. since defaults to the last 24 hours; one that is not an ISO time is a 400.
+// GET /portal/api/digest?since= -> PortalDigest over every namespace; since defaults to 24 hours, a non-ISO one is a 400.
 export type PortalDigest = OvernightDigest;
 
-// The merge units' state (src/merge-units.ts): those suspended after a rollback of an unattended
-// merge, and the promote and demote proposals of the units tick's last report. The Portal's
-// Merge units panel offers each its control (unit_resume, sign_policy_change).
+// Merge units suspended after a rollback of an unattended merge, plus the units tick's promote and demote proposals.
 export interface PortalMergeUnits {
-  // When the units tick last judged the evidence, or null before its first report.
   generated: string | null;
   suspended: Array<{ unit: string; since: string; reason: string }>;
   proposals: Array<{ kind: "promote" | "demote"; unit: string; title: string }>;

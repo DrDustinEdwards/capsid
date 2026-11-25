@@ -7,29 +7,17 @@ import { auditStatement } from "./store-guards";
 import { timeMs } from "./time";
 import { DAY_MS } from "./time";
 
-// THE AUTO-MERGE SAFETY METER AND SHUTOFF (docs/design/design-merge-pipeline.md, "The safety
-// meter"). Merge units (src/merge-units.ts) narrow one path class after a bad unattended merge;
-// this narrows the whole namespace. It only narrows: the tick stops merging that namespace's PRs
-// unattended and they fall to class approve; Dustin's approvals still execute. Lifting it is the
-// automerge_resume control.
-//
-// Three parts, none a D1 migration (audit_log rows and APP_KV only):
-//   1. Revert tracking. A merged PR that reverts one the tick auto-merged is recorded as an
-//      `auto-merge-reverted` audit row. A rollback is the deploy gate's verdict; a revert is
-//      Dustin's (or a driver's), and nothing else records it.
-//   2. The meter: the last seven days per namespace, in APP_KV, so the status tool, the Portal
-//      feed and the phone alerts read it with no D1 or GitHub read.
-//   3. The shutoff: a namespace pauses when 2 or more of the PRs the tick merged were rolled back
-//      or reverted in 7 days, or when that rate is more than 3 times the rate over the 30 days
-//      before.
+// Three parts, none a D1 migration (audit_log rows and APP_KV only): 1. Revert tracking. 2. The
+// meter: the last seven days per namespace, in APP_KV, so the status tool, the Portal feed and the
+// phone alerts read it with no D1 or GitHub read.
 
 export const PAUSED_KEY = "merge-safety:paused";
 export const LIFTED_KEY = "merge-safety:lifted";
 export const REPORT_KEY = "merge-safety:report";
 
 const WEEK_MS = 7 * DAY_MS;
-// The previous 30 days are days 7 to 37 before now; the audit window also has to reach
-// the merge a rollback is joined to, so it is the merge units' 90.
+// The previous 30 days are days 7 to 37 before now; the audit window also has to reach the merge a
+// rollback is joined to, so it is the merge units' 90.
 const BASELINE_MS = 30 * DAY_MS;
 const PAUSE_BAD_COUNT = 2;
 const PAUSE_RATE_FACTOR = 3;
@@ -61,12 +49,7 @@ export interface SafetyCounts {
   rolled_back: number;
   rollback_failed: number;
   reverts: number;
-  // Rollbacks and reverts of pull requests the tick merged unattended, one per pull
-  // request however many deploys or reverts it drew, before the lifted time is applied.
   bad_auto_7d: number;
-  // The times (ms) behind the judgment, over days 0 to 37: each bad event of an
-  // unattended pull request, and each unattended merge. judgeShutoff windows and lifts
-  // them, counting a pull request once per window at its latest event after the lift.
   bad_at: Array<{ key: string; ms: number }>;
   auto_at: number[];
 }
@@ -80,9 +63,6 @@ function paramsOf(row: AuditEvidence): Record<string, unknown> {
   }
 }
 
-/** The counts per namespace from the evidence. Pure. `namespaces` are listed even with
- *  no event; one seen in the evidence is added. A pull request counts as bad once, at its
- *  first rollback or revert, so one incident is not two. */
 export function countsFrom(
   audit: readonly AuditEvidence[],
   outcomes: readonly OutcomeEvidence[],
@@ -121,8 +101,6 @@ export function countsFrom(
     if (inReach(ms)) c.auto_at.push(ms);
   }
 
-  // Every bad event of each unattended pull request, kept so judgeShutoff can take the
-  // latest one after a resume (a fresh revert of a PR rolled back long ago counts).
   const badEvents = new Map<string, { ns: string; ms: number[] }>();
   const bad = (ns: string, repo: string, pr: number | null, ms: number) => {
     if (pr === null || !autoPrs.has(`${ns} ${repo}#${pr}`)) return;
@@ -137,8 +115,6 @@ export function countsFrom(
     const c = get(a.namespace);
     const p = paramsOf(a);
     if (a.action === "approved-merged") {
-      // A policy merge of a pull request that held an approval also closes the approval
-      // with an approved-merged row; that row is the same merge (src/trends.ts).
       if (p.reason === AUTO_MERGED_APPROVAL_REASON) continue;
       if (inWeek(timeMs(a.at))) c.approved++;
     } else if (a.action === "auto-merge-reverted") {
@@ -162,7 +138,6 @@ export function countsFrom(
   for (const [key, { ns, ms }] of badEvents) {
     const c = get(ns);
     for (const m of ms) if (inReach(m)) c.bad_at.push({ key, ms: m });
-    // A pull request is one bad event this week however many it drew.
     if (ms.some(inWeek)) c.bad_auto_7d++;
   }
   return [...out.values()];
@@ -191,13 +166,10 @@ async function readSafetyCounts(
   return countsFrom(audit.results ?? [], outcomes.results ?? [], namespaces, now);
 }
 
-/** The bad events and unattended merges of a namespace in the last seven days and in
- *  the 30 days before, with the events at or before the lifted time left out. */
 function windowed(c: SafetyCounts, lifted: string | undefined, now: Date) {
   const t = now.getTime();
   const after = lifted && Number.isFinite(Date.parse(lifted)) ? Date.parse(lifted) : -Infinity;
   const week = (ms: number) => ms > t - WEEK_MS;
-  // One event per pull request: its latest after the lifted time.
   const byPr = new Map<string, number>();
   for (const e of c.bad_at)
     if (e.ms > after) byPr.set(e.key, Math.max(byPr.get(e.key) ?? -Infinity, e.ms));
@@ -210,14 +182,13 @@ function windowed(c: SafetyCounts, lifted: string | undefined, now: Date) {
   };
 }
 
-/** The namespaces to pause now, each with its reason. Pure.
- *  Pause when 2 or more of the tick's own merges were rolled back or reverted in 7 days,
- *  or when the 7-day rate (bad over merges, merges floored at 1) is more than 3 times the
- *  rate over days 7 to 37. The rate rule needs a nonzero baseline (at least one bad
- *  event and at least one merge): with a clean baseline the rate is infinite for any
- *  first event, and one bad event alone is the merge units' job, not a namespace's, so
- *  only the count rule applies there. Events at or before the namespace's lifted time are
- *  answered and count for nothing. A namespace already paused is not paused again. */
+/**
+ * Pause when 2 or more of the tick's own merges were rolled back or reverted in 7 days, or when
+ * the 7-day rate (bad over merges, merges floored at 1) is more than 3 times the rate over days 7
+ * to 37. The rate rule needs a nonzero baseline (at least one bad event and at least one merge):
+ * with a clean baseline the rate is infinite for any first event, and one bad event alone is the
+ * merge units' job, not a namespace's, so only the count rule applies there.
+ */
 export function judgeShutoff(
   counts: readonly SafetyCounts[],
   paused: Readonly<Record<string, Paused>>,
@@ -245,8 +216,10 @@ export function judgeShutoff(
   return out;
 }
 
-/** The paused namespaces, as the tick reads them. A value that does not read throws, and
- *  the caller holds every namespace (fail closed), as for the suspended units. */
+/**
+ * The paused namespaces, as the tick reads them. A value that does not read throws, and the caller
+ * holds every namespace (fail closed), as for the suspended units.
+ */
 export async function readPaused(kv: KVNamespace): Promise<Record<string, Paused>> {
   const raw = await kv.get(PAUSED_KEY);
   if (!raw) return {};
@@ -256,7 +229,6 @@ export async function readPaused(kv: KVNamespace): Promise<Record<string, Paused
   return parsed as Record<string, Paused>;
 }
 
-/** The lifted-suspensions map stored at `key`: merge-safety's own, or merge-units'. */
 export async function readLifted(
   kv: KVNamespace,
   key: string = LIFTED_KEY,
@@ -293,8 +265,10 @@ export interface SafetyTickReport {
   newly_paused: string[];
 }
 
-/** One pass: count the week, pause a namespace the counts condemn, store the report.
- *  `namespaces` are those the signed policy covers (empty when it did not load). */
+/**
+ * One pass: count the week, pause a namespace the counts condemn, store the report. `namespaces`
+ * are those the signed policy covers (empty when it did not load).
+ */
 export async function safetyTick(
   env: Env,
   now: Date,
@@ -308,15 +282,15 @@ export async function safetyTick(
   const names = Object.keys(added);
   let paused: Record<string, Paused> = { ...before };
   if (names.length) {
-    // Read again just before writing and add only the new namespaces to that value, so a
-    // resume that landed while the counts were read is not written back over. KV has no
-    // compare-and-set: this narrows the window and does not close it.
+    // Read again just before writing and add only the new namespaces to that value, so a resume that
+    // landed while the counts were read is not written back over. KV has no compare-and-set: this
+    // narrows the window and does not close it.
     paused = {
       ...(await readPaused(env.APP_KV)),
       ...Object.fromEntries(Object.entries(added).map(([ns, reason]) => [ns, { since, reason }])),
     };
-    // The pause first: if the audit row then fails, the namespace is held and the next
-    // tick finds it already paused and writes no row, which costs a row, not the hold.
+    // The pause first: if the audit row then fails, the namespace is held and the next tick finds it
+    // already paused and writes no row, which costs a row, not the hold.
     await env.APP_KV.put(PAUSED_KEY, JSON.stringify(paused));
     await env.DB.batch(
       names.map((ns) =>
@@ -354,7 +328,6 @@ export interface MergeSafetyTickReport {
   newly_paused: string[];
 }
 
-/** What the tick calls: the revert pass (half-hourly), then the meter and the shutoff. */
 export async function mergeSafetyTick(env: Env, now: Date): Promise<MergeSafetyTickReport> {
   const loaded = await loadMergePolicy(env);
   const reverts = await revertsTick(env, now, loaded);
@@ -369,8 +342,6 @@ export async function mergeSafetyTick(env: Env, now: Date): Promise<MergeSafetyT
   };
 }
 
-/** The meter as the status tool and the Portal read it, or null before the first pass.
- *  An unreadable report reads as none. */
 export async function readSafetyReport(kv: KVNamespace): Promise<OpsMergeSafety | null> {
   const raw = await kv.get(REPORT_KEY).catch(() => null);
   if (!raw) return null;
@@ -402,8 +373,6 @@ export async function planResume(
   return { ok: true, namespace, paused };
 }
 
-/** Lift a namespace's pause: the tick may merge its pull requests unattended again, and
- *  the rollbacks and reverts before now count against it no more. Audited. */
 export async function resumeNamespace(
   env: Env,
   actor: string,
@@ -415,8 +384,8 @@ export async function resumeNamespace(
   if (!plan.ok) return plan;
   const lifted = { ...(await readLifted(env.APP_KV)), [plan.namespace]: now.toISOString() };
   await env.APP_KV.put(LIFTED_KEY, JSON.stringify(lifted));
-  // Read again just before writing, so a pause of another namespace that landed since the
-  // plan is kept. KV has no compare-and-set: this narrows the window and does not close it.
+  // Read again just before writing, so a pause of another namespace that landed since the plan is
+  // kept. KV has no compare-and-set: this narrows the window and does not close it.
   const rest = await readPaused(env.APP_KV);
   delete rest[plan.namespace];
   await env.APP_KV.put(PAUSED_KEY, JSON.stringify(rest));

@@ -1,17 +1,4 @@
-// The screenshots in docs/images (npm run shots) render only the sample fixtures: the
-// feed in dev/sample-feed.json and the responses dev/mock-api.ts seeds. A picture cannot
-// be searched for a leaked value, so this checks the text the pictures are drawn from.
-// It fails, and names each value, on:
-//   - an email address outside example.com and example.org;
-//   - a hostname other than example.com or example.org (and their subdomains),
-//     github.com under an example owner, and mcp.dustinedwards.info;
-//   - a portfolio name (a real site, project or person);
-//   - a job id that is not the sample shape, or one the mock names that the feed lacks;
-//   - a secret-shaped string, by the rules the Worker redacts with (site-runtime/redact).
-//
-// Run: node scripts/shots-privacy.mjs [file ...]. With no files it checks the two
-// fixtures. playwright.shots.config.ts runs it as globalSetup, so no shot is taken from
-// fixtures that fail it.
+// A picture cannot be searched for a leaked value, so this checks the text the pictures are drawn from: it fails, naming each value, on a real email, hostname, portfolio name, unsampled job id or secret-shaped string.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { redact } from "@dustinedwards/site-runtime/redact";
@@ -23,7 +10,6 @@ const DEFAULT_FILES = ["../dev/sample-feed.json", "../dev/mock-api.ts"].map((p) 
 const ALLOWED_EMAIL_DOMAIN = /^(?:[a-z0-9-]+\.)*example\.(?:com|org)$/i;
 const ALLOWED_HOST =
   /^(?:(?:[a-z0-9-]+\.)*example\.(?:com|org)|mcp\.dustinedwards\.info|github\.com)$/i;
-// github.com is allowed only as a path under an example owner.
 const GITHUB_OK = /^github\.com\/example(?:-org)?\//i;
 
 const TLDS =
@@ -34,23 +20,17 @@ const HOST = new RegExp(
 );
 const EMAIL = /[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})/g;
 
-// Names from the real portfolio. The allowed Worker host is taken out before this runs.
 const REAL_NAMES =
   /\b(?:dustin|edwards|dustinedwards|foxing|foxhound|foxhoundapp|germomics|txasm|julie|julieedwards|recova|carrel|bsw)\b/gi;
 
-// The sample job shape: job_ and 12 hex digits, with an optional -s<n> session suffix.
 const JOB_ANY = /\bjob_[A-Za-z0-9_-]+/g;
 const JOB_SAMPLE = /^job_[0-9a-f]{12}(?:-s\d+)?$/;
 const NOT_A_JOB = new Set(["job_id"]);
 
-// The prose in a TypeScript source, each part with its offset: string literals ("...",
-// '...', `...`) and comments. Hostnames and secret-named values are looked for only
-// here, so code such as `raw.live` or `token = randomUUID()` is not taken for one.
 function segments(src) {
   const out = [];
   const re =
     /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`|\/\/[^\n]*|\/\*[\s\S]*?\*\//g;
-  // A template's ${...} is code, blanked to keep the offsets.
   for (const m of src.matchAll(re))
     out.push({ text: m[0].replace(/\$\{[^}]*\}/g, (c) => " ".repeat(c.length)), index: m.index });
   return out;
@@ -60,7 +40,6 @@ function lineOf(text, index) {
   return text.slice(0, index).split("\n").length;
 }
 
-// Every problem in one file's text, as "file:line: what".
 export function scan(name, text, feedJobIds) {
   const problems = [];
   const at = (i, msg) => problems.push(`${name}:${lineOf(text, i)}: ${msg}`);
@@ -73,7 +52,6 @@ export function scan(name, text, feedJobIds) {
   for (const p of parts) {
     for (const m of p.text.matchAll(HOST)) {
       const host = m[1].toLowerCase();
-      // The domain part of an email is judged by the email check.
       if (p.text[m.index - 1] === "@") continue;
       if (!ALLOWED_HOST.test(host))
         at(p.index + m.index, `hostname that is not a sample host: ${host}`);
@@ -94,7 +72,6 @@ export function scan(name, text, feedJobIds) {
       at(m.index, `job id the sample feed does not define: ${id}`);
   }
 
-  // Token shapes and secret-named values, by the Worker's own rules.
   for (const p of parts)
     for (const kind of Object.keys(redact(p.text).redactions))
       at(p.index, `secret-shaped value (${kind})`);
@@ -119,7 +96,6 @@ export function check(files = DEFAULT_FILES) {
   return problems;
 }
 
-// playwright.shots.config.ts globalSetup: throws, so no shot is taken, when a fixture fails.
 export default function globalSetup() {
   const problems = check();
   if (problems.length)

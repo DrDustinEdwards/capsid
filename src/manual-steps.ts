@@ -2,25 +2,8 @@ import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
 import { readStoredSecrets, type StoredSecrets } from "./secret-presence";
 
-// DUSTIN'S MANUAL STEPS, DONE ONLY WHEN CAPSID CAN SEE THEM (improvement list item 14). A
-// session that needs a person to click something (approve an npm publish, add an Access app,
-// set a secret, fill a repo's About box) blocks its job as for any gate (src/jobs-holder-block.ts):
-// the reason carries the steps, and a line "check: <form>" in the reason or command names the
-// result Capsid looks for (docs/work-queue.md):
-//   check: secret NAME on <namespace>     the site's Worker has the secret NAME, from the
-//                                         names the watcher stored (src/secret-presence.ts)
-//   check: npm <package>@<version>        npm lists that version (registry.npmjs.org)
-//   check: access app <name>              Cloudflare Access has an application of that name
-//   check: github about <owner/repo> [homepage <url>]
-//                                         the repo has a description and a homepage (that
-//                                         homepage, when one is named), read through the App
-// A check line in any other form is a result Capsid cannot see, so it never counts as seen.
-//
-// The watcher's pass reads them (src/watcher.ts) and writes the counts per job to one APP_KV
-// value (src/stale-jobs.ts): the inbox and the stale view read the counts and never call out. A
-// job whose every named step is seen after it last changed is settled as a merged pull request
-// settles one: the inbox stops showing it as waiting on Dustin, and the stale view lists it as
-// steps-seen. Nothing here moves a job. A failed read is "unread", never "seen".
+// The watcher's pass reads them (src/watcher.ts) and writes the counts per job to one APP_KV value
+// (src/stale-jobs.ts): the inbox and the stale view read the counts and never call out.
 
 export const STALE_STEPS_KEY = "stale:steps";
 const MAX_JOBS = 25;
@@ -41,7 +24,6 @@ const ACCESS_APP = /^access\s+app\s+(.+)$/i;
 const GITHUB_ABOUT =
   /^github\s+about\s+([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(?:\s+homepage\s+(https?:\/\/\S+))?$/i;
 
-/** One check line's form, or kind "unknown" for a line Capsid has no read for. */
 export function parseStep(text: string): ManualStep {
   let m: RegExpMatchArray | null;
   if ((m = text.match(SECRET)))
@@ -53,7 +35,6 @@ export function parseStep(text: string): ManualStep {
   return { kind: "unknown", text };
 }
 
-/** The manual steps a blocked job's summary names, one per distinct check line. */
 export function stepsNamed(summary: string): ManualStep[] {
   const lines = [...new Set([...summary.matchAll(CHECK_LINE)].map((m) => m[1]!))];
   return lines.map(parseStep);
@@ -65,7 +46,6 @@ export interface StaleStepEntry {
   seen: number;
   unseen: number;
   unread: number;
-  // ISO time of the read.
   at: string;
 }
 
@@ -77,15 +57,16 @@ function tallySteps(states: readonly StepState[], at: string): StaleStepEntry {
   return entry;
 }
 
-/** Every step the job names was seen, and it named at least one. */
 export function stepsSeen(entry: StaleStepEntry | undefined): boolean {
   return entry !== undefined && entry.unseen === 0 && entry.unread === 0 && entry.seen > 0;
 }
 
 const isCount = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;
 
-/** The stored cache, keeping only entries of the right shape. Never written is empty;
- *  anything unreadable is reported, not thrown. */
+/**
+ * The stored cache, keeping only entries of the right shape. Never written is empty; anything
+ * unreadable is reported, not thrown.
+ */
 export function parseStepCache(text: string | null): {
   cache: StaleStepCache;
   problem: string | null;
@@ -122,10 +103,8 @@ export async function readStepCache(
   return parseStepCache(await kv.get(STALE_STEPS_KEY));
 }
 
-// What the pass can read. Each reader throws on a failed read.
 export interface StepReaders {
   secrets(namespace: string): Promise<StoredSecrets | null>;
-  // null: npm has no such package.
   npmVersions(name: string): Promise<string[] | null>;
   accessAppNames(): Promise<string[]>;
   githubAbout(
@@ -136,8 +115,10 @@ export interface StepReaders {
 
 const trimSlash = (url: string) => url.replace(/\/+$/, "");
 
-/** One step as the readers see it now. A read that throws is unread. A secret read before
- *  the job last changed says nothing about the step, so it is unread too. */
+/**
+ * One step as the readers see it now. A read that throws is unread. A secret read before the job
+ * last changed says nothing about the step, so it is unread too.
+ */
 export async function stepState(
   step: ManualStep,
   job: { namespace: string; updated_at: string },
@@ -222,11 +203,6 @@ export interface ManualStepsReport {
   note: string;
 }
 
-/**
- * The watcher's step: read the steps every blocked job names (the oldest MAX_JOBS, up to
- * MAX_STEPS each; a job naming more is left unread) and rewrite STALE_STEPS_KEY whole, so a
- * job no longer blocked or no longer naming a step drops out.
- */
 export async function checkManualSteps(
   env: Pick<Env, "DB" | "APP_KV">,
   now: Date,

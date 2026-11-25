@@ -5,18 +5,6 @@ import { jobAudit, mirrorStatements } from "./jobs-mirror";
 import { guardedTransition, readJob, refuse, type JobResult } from "./jobs-transition";
 import { verifySignedBody } from "./signed-docs";
 
-// Begin: the started label. A cloud session works a job without claiming it (its pull request is
-// the claim), so it needed a way to tell the next session that somebody is already on the job:
-// begin marks a queued job started, started_by and started_at (migrations/0042).
-//
-// A label, not a lease: it never expires, and nothing reads it to refuse anything. The first
-// session to begin keeps the label; a later begin is told who started it and when, and writes
-// nothing. Any caller with the write grant on the job's namespace may begin.
-//
-// begin is where a session that never claims starts acting on the body, so the signature is
-// checked here as claim checks it: a body changed after post is refused and the session told not
-// to run it. Nothing is written; claim is where a tampered job is marked failed.
-//
 // One guarded batch, like park: the label, mirror and audit row commit together, and the begin
 // moves updated_at, so two sessions beginning at once resolve to one label.
 
@@ -59,8 +47,8 @@ export async function beginJob(env: Env, agent: Agent, now: Date, id: string): P
     jobAudit(env.DB, agent.actor, "job-started", started, { started_at: at }),
   ]);
   if (!won) {
-    // Somebody began it, or it moved, between the read and the write. Never a refusal
-    // when the reason is another session's label: say whose it is.
+    // Somebody began it, or it moved, between the read and the write. Never a refusal when the reason
+    // is another session's label: say whose it is.
     const moved = await readJob(env.DB, id);
     const theirs = moved ? startedNotice(moved) : null;
     if (moved && theirs)

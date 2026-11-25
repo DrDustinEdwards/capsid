@@ -20,11 +20,8 @@ export function requireExists(
     .bind(namespace, path);
 }
 
-// The same abort for a job transition, as the first statement of the batch that
-// carries the UPDATE and every record of it. It fires unless the row is still in the
-// status and holder the caller read, at the updated_at the caller read, so the
-// mirror, audit and outcome rows built from that read commit only with the UPDATE
-// they describe. updated_at moves on every job UPDATE, so any change in between aborts.
+// The same abort for a job transition, as the first statement of the batch that carries the UPDATE
+// and every record of it.
 export function requireJobUnchanged(
   db: D1Database,
   id: string,
@@ -165,12 +162,8 @@ export function guardedCommit(opts: {
   };
 }
 
-// The document upsert, one spelling, shared by `capsid_write_doc` and `capsid_lint_namespace` mode `report`.
-// COALESCE on every optional column, so an omitted argument leaves the stored value
-// alone. docStatements (src/doc-statements.ts) sets every column and is not folded in.
-//
-// test/mutation-guard-coverage.test.ts and test/tool-annotations.test.ts both match
-// this call as a mutation marker, the same way they match pathMutation().
+// The document upsert, one spelling, shared by `capsid_write_doc` and `capsid_lint_namespace` mode
+// `report`.
 export function documentUpsert(
   db: D1Database,
   namespace: string,
@@ -196,9 +189,9 @@ export function documentUpsert(
     .bind(namespace, path, title, body, type, tags, status);
 }
 
-// Who made a write when no MCP client did: the Worker's own passes ("system:maintenance", "capsid:push", the improve loop)
-// are "system", and an agent key running a job names the job ("job:<id>"). A person's write with no client (the Portal, a
-// grant from before the name was kept) stays null rather than guessed.
+// Who made a write when no MCP client did: the Worker's own passes ("system:maintenance",
+// "capsid:push", the improve loop) are "system", and an agent key running a job names the job
+// ("job:<id>").
 export function clientOf(
   actor: string,
   params: unknown,
@@ -212,10 +205,9 @@ export function clientOf(
   return null;
 }
 
-// The audit row, spelled once. Every write path appends one
-// (snapshot invariant, test/write-invariants.test.ts). params is stored as JSON. An audit row whose params come from inside the batch (delete's
-// edges, a skill transition guarded by its new status) is an INSERT ... SELECT and
-// keeps its own statement.
+// The audit row, spelled once. Every write path appends one (snapshot invariant,
+// test/write-invariants.test.ts). params is stored as JSON. An audit row whose params come from
+// inside the batch (delete's edges, a skill transition guarded by its new status) is an INSERT ...
 export function auditStatement(
   db: D1Database,
   actor: string,
@@ -232,9 +224,9 @@ export function auditStatement(
     .bind(actor, action, namespace, path, JSON.stringify(params), clientOf(actor, params, client));
 }
 
-/** The audit row of a write that has already committed (a revision-guarded RETURNING write
- *  cannot share a batch with it). A failure is logged and returned as a warning for the
- *  caller to show, because the write stands and a thrown error would report it as refused. */
+// The audit row of a write that has already committed (a revision-guarded RETURNING write cannot
+// share a batch with it). A failure is logged and returned as a warning for the caller to show,
+// because the write stands and a thrown error would report it as refused.
 export async function auditCommitted(
   db: D1Database,
   actor: string,

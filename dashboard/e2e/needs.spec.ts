@@ -1,14 +1,9 @@
 import { expect, test, type Page, type Request } from "@playwright/test";
 import { visit } from "./views.ts";
 
-// Needs you, the home (docs/design/design-portal-evaluation.md DECIDE 1; the UX audit of
-// 2026-10-19, B1, B3 and M3): everything waiting for you first, by kind, each row deciding
-// in place through the existing controls; then Problems.
-
 const PREVIEW_URL = "**/api/actions/preview";
 const PERFORM_URL = "**/api/actions/perform";
 
-// Every control the page sends to preview, in order, as { action, params }.
 function previews(page: Page): Array<{ action: string; params: Record<string, string> }> {
   const sent: Array<{ action: string; params: Record<string, string> }> = [];
   page.on("request", (r: Request) => {
@@ -18,8 +13,7 @@ function previews(page: Page): Array<{ action: string; params: Record<string, st
   return sent;
 }
 
-// Performs are answered here with the feed as it is, so the mock's state stays for every
-// other spec, and counted.
+// Performs are answered with the feed as it is, so the mock's state stays for every other spec.
 async function performsLeaveFeed(page: Page, summary: string): Promise<{ count: number }> {
   const seen = { count: 0 };
   await page.route(PERFORM_URL, async (route) => {
@@ -46,23 +40,19 @@ test("PLANT: the home is Needs you, and the list comes first by kind", async ({ 
     /^Paused after repeated failures, ?1/,
     /^Also waiting, ?2/,
   ]);
-  // The list is above Problems.
   const order = await page.evaluate(() =>
     ["#waiting", "#attention"].map((s) => document.querySelector(s)!.getBoundingClientRect().top),
   );
   expect(order[0]).toBeLessThan(order[1]!);
-  // The inbox's count is the header's Inbox, once; the menu entry carries no second copy.
   await expect(
     page.locator("header.cap-site-header").getByRole("link", { name: "Inbox, 11 waiting on you" }),
   ).toHaveCount(1);
   await expect(
     page.locator("nav.cap-admin-menu").getByRole("link", { name: /^Needs you/ }),
   ).toHaveAccessibleName("Needs you");
-  // A pull request's title links to its GitHub page, in a new tab; the row's buttons decide it.
   const title = group(page, "w-prs").locator(".cap-row-title a").first();
   await expect(title).toHaveAttribute("href", "https://github.com/example-org/sample-c/pull/32");
   await expect(title).toHaveAttribute("target", "_blank");
-  // Problems leave out what the list above decides.
   await expect(page.getByRole("heading", { level: 2, name: "Problems" })).toBeVisible();
   await expect(
     page.locator("#attention").getByText(/waiting on you|await the seat|canon proposal/),
@@ -189,7 +179,6 @@ test("PLANT: Answer opens a reply box on the row, and Send previews resume_job w
   await row.getByRole("button", { name: /^Answer / }).click();
   const box = row.getByLabel("Your answer, sent to its driver");
   await expect(box).toBeFocused();
-  // Send with nothing typed says so and sends nothing.
   await row.getByRole("button", { name: "Send" }).click();
   await expect(row.getByRole("alert")).toHaveText("Type your answer first.");
   expect(sent).toEqual([]);
@@ -265,7 +254,6 @@ test("PLANT: a stopped queue is here with Reset, which previews reset_breaker fo
 });
 
 test.describe("on a touch phone", () => {
-  // A coarse pointer: Capsomer's --target is 44 px there.
   test.use({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true });
 
   test("on a phone each row's buttons are touch targets of 44 px, and the first is on the first screen", async ({
@@ -289,7 +277,6 @@ test.describe("on a touch phone", () => {
 });
 
 test("with nothing waiting it says so", async ({ page }) => {
-  // The page's first reads are the server's: the mock answers "nothing waits" to this cookie.
   await page
     .context()
     .addCookies([{ name: "wf-mock", value: "quiet", url: "http://localhost:4174/" }]);

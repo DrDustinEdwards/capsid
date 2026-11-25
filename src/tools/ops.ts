@@ -5,17 +5,13 @@ import { bounded, nsName } from "../limits";
 import { fail, ok, type ToolCtx } from "./docs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// An ISO time, as the other tools bound a timestamp argument.
 const MAX_AT = 40;
 
 export function defineOpsSnapshotOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
 
-  // The watcher's last pass, the value the Portal's Watch Floor reads (ops:snapshot in
-  // APP_KV, src/ops-snapshot.ts). Admin only in whole: the snapshot spans every
-  // namespace's sites, CI and Cloudflare state. TOOL_GRANTS.capsid_admin_read_ops in src/scope.ts
-  // states it and the registrar refuses anyone else before this handler runs. It reads
-  // one KV value and writes nothing.
+  // Admin only in whole: the snapshot spans every namespace's sites, CI and Cloudflare state
+  // (TOOL_GRANTS.capsid_admin_read_ops).
   ctx.ops.define(
     "ops_snapshot",
     {

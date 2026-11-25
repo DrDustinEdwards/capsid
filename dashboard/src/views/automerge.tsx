@@ -8,9 +8,6 @@ import type { OpsFeed } from "../types";
 import type { UnitRow } from "../lib/merge-units";
 import type { Kind } from "../lib/derive";
 
-// Auto-merge's controls, for Needs you and Pull requests: sign_policy_from_repo,
-// automerge_resume, sign_policy_change (the next version typed) and unit_resume
-// (docs/autonomy.md, "Earned promotion and demotion").
 export const UNIT_STATE: Record<UnitRow["state"], { kind: Kind; label: string }> = {
   auto: { kind: "ok", label: "Auto" },
   suspended: { kind: "warn", label: "Suspended" },
@@ -30,7 +27,6 @@ export const resumeRequest = (namespace: string): ConfirmRequest => ({
   title: `Resume auto-merge for ${namespace}`,
 });
 
-/** A unit's buttons: Lift suspension, Promote, and Demote while the policy lists it. */
 export function UnitButtons({
   row,
   policy,
@@ -95,7 +91,6 @@ export function UnitButtons({
   );
 }
 
-/** Needs you's Auto-merge rows. */
 export function AutoMergeRows({ asks }: { asks: AutoMergeAsks }) {
   const { confirm } = useApp();
   const { policy, paused, unitAsks, units } = asks;

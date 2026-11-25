@@ -33,7 +33,6 @@ export function incidents(feed: OpsFeed): Incident[] {
       status: JOB[j.status].label.toLowerCase(),
     });
   }
-  // A check's finding with no job in the live window: shown, not openable.
   for (const c of feed.snapshot?.checks ?? []) {
     if (c.state !== "finding") continue;
     for (const fp of c.findings) {

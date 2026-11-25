@@ -20,9 +20,6 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { readDocument } from "../doc-reads";
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
-// The document lifecycle beyond writing (src/tools/docs-write.ts writes): restore an
-// earlier version, delete, and move.
-
 export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
   const { db, actor, client } = ctx;
 
@@ -53,7 +50,6 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
         .first<{ id: number; title: string | null; body: string | null; snapshot_at: string }>();
       if (!version) return fail(`no version ${version_id} for ${namespace}/${path}`);
       const prior = await readDocument(db, namespace, path);
-      // The policy-document guard (see policyPathsRefusal).
       const restorePolicyRefusal = policyPathsRefusal(
         ctx,
         "restore",
@@ -62,9 +58,8 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
         [path],
       );
       if (restorePolicyRefusal) return fail(restorePolicyRefusal);
-      // A rule document is held to the same checks as a write (src/rule-docs.ts). A restore
-      // that recreates a deleted document puts back what was there, so it is judged
-      // against the version itself and passes.
+      // A rule document is held to the write checks (src/rule-docs.ts); restore judges a recreated
+      // document against the version itself, so it passes.
       const restoreRuleRefusal = ruleDocWriteRefusal(
         namespace,
         path,
@@ -72,9 +67,7 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
         version.body ?? "",
       );
       if (restoreRuleRefusal) return fail(restoreRuleRefusal);
-      // The same protocol capsid_write_doc action write runs, with restore's wordings. On the
-      // recreate path the guard is the ABSENCE of a row: the snapshot statement is
-      // only added when the pre-read saw one, so a racing create would otherwise be
+      // On the recreate path the guard is the ABSENCE of a row, so a racing create is not
       // overwritten with nothing kept.
       const commit = guardedCommit({
         db,
@@ -104,14 +97,13 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
       });
       if (!restoreRefusal.ok) return fail(restoreRefusal.message);
       const elicited = restoreRefusal.elicited;
-      // The stored body goes back EXACTLY as snapshotted, with no dash normalization.
-      // A snapshot is a record of what the document said.
+      // Restored EXACTLY as snapshotted, no dash normalization: a snapshot records what the
+      // document said.
       const body = version.body ?? "";
       const statements: D1PreparedStatement[] = [];
       if (prior) {
-        // Snapshot from the live row, inside the batch, as on write. Restore elicits a
-        // confirmation, so the gap between the read and the commit can be the full 90
-        // second prompt.
+        // Snapshot from the live row inside the batch: restore elicits confirmation, so the
+        // read-to-commit gap can be the full 90 second prompt.
         statements.push(snapshotLive(db, namespace, path));
       }
       statements.push(
@@ -152,7 +144,6 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
         snapshot_at: version.snapshot_at,
         sha256: await sha256Hex(body),
         bytes: new TextEncoder().encode(body).length,
-        // From the snapshot statement's result, as on write.
         snapshotted: Boolean(prior) && snapshotTaken(committed.results[0]),
         ...(prior
           ? {}
@@ -186,7 +177,6 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
         return fail(canonRefusal("delete", namespace, path));
       const prior = await readDocument(db, namespace, path);
       if (!prior) return fail(`not found: ${namespace}/${path}`);
-      // The policy-document guard (see policyPathsRefusal).
       const deletePolicyRefusal = policyPathsRefusal(
         ctx,
         "delete",
@@ -202,17 +192,11 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
       });
       if (!deleteRefusal.ok) return fail(deleteRefusal.message);
       const elicited = deleteRefusal.elicited;
-      // The edges are recorded inside the batch, before pathMutation removes them, so
-      // an edge added after an earlier read is still recorded; the audit row is the
-      // only place they survive. The aggregate always yields one row ('[]' when there
-      // are no edges), and RETURNING hands the list back for the count.
-      //
-      // The guard is not redundant with the `prior` read, which is a separate
-      // transaction: a delete matching zero rows would otherwise snapshot a body, write
-      // an audit row saying 'delete', and answer "deleted" having removed nothing.
-      // After an elicitation the guard is the body one: the human consented to deleting
-      // the body they were shown, so a body written in that window must abort the
-      // delete. The snapshot itself SELECTs the live row inside the batch.
+      // Edges are recorded inside the batch, before pathMutation removes them: the audit row is the
+      // only place they survive.
+      // The guard is not redundant with the `prior` read (a separate transaction): without it a
+      // delete matching zero rows would snapshot, audit 'delete' and answer "deleted" having
+      // removed nothing.
       let edgesRemoved = 0;
       try {
         const results = await db.batch([
@@ -282,16 +266,13 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
         if (canonGuarded(ctx.agent, namespace, end))
           return fail(canonRefusal("move", namespace, end));
       }
-      // Existence and the edge count are both read BEFORE the batch. D1's meta.changes
-      // cannot be used for either: documents carries FTS5 sync triggers, so an UPDATE
-      // reports the trigger's row changes too, and in a batch those accumulate across
-      // statements.
+      // Existence and edge count are read BEFORE the batch: documents has FTS5 sync triggers, so
+      // an UPDATE's meta.changes counts trigger rows and accumulates across a batch.
       const exists = await db
         .prepare("SELECT 1 AS ok FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
         .first<{ ok: number }>();
       if (!exists) return fail(`not found: ${namespace}/${path}`);
-      // The policy-document guard on both ends (see policyPathsRefusal).
       const movePolicyRefusal = policyPathsRefusal(ctx, "move", namespace, allow_improve_paths, [
         path,
         new_path,
@@ -299,10 +280,8 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
       if (movePolicyRefusal) return fail(movePolicyRefusal);
       const moved = await readDocument(db, namespace, path);
       const movedBody = moved?.body ?? "";
-      // Moving a document onto a rule path makes it a rule document, held to the same
-      // checks as a write that creates one (src/rule-docs.ts). Moving one away is free, and
-      // so is moving a rule document to another rule path: the
-      // body is the one already held to the checks.
+      // Moving a document onto a rule path makes it a rule document, held to the write checks
+      // (src/rule-docs.ts); moving away or between rule paths is free.
       const moveRuleRefusal = ruleDocWriteRefusal(
         namespace,
         new_path,
@@ -310,8 +289,8 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
         movedBody,
       );
       if (moveRuleRefusal) return fail(moveRuleRefusal);
-      // move needs confirmation: it repoints every edge and, unlike delete, leaves no
-      // snapshot of the old path, only an audit row.
+      // move needs confirmation: it repoints every edge and, unlike delete, leaves no snapshot of
+      // the old path, only an audit row.
       const moveRefusal = await requireConfirmation(server, confirm, {
         prompt: `Rename ${namespace}/${path} to ${namespace}/${new_path}? Edges pointing at the old path are repointed.`,
         declined: `move of ${namespace}/${path} declined`,
@@ -320,8 +299,7 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
       if (!moveRefusal.ok) return fail(moveRefusal.message);
       const { results: movingEdges } = await edgesTouching(db, namespace, path).all();
       const repointed = movingEdges.length;
-      // One batch: the guard, the rename, the edge repointing and the audit row, so a
-      // move cannot succeed without a record or be recorded without happening.
+      // One batch, so a move cannot succeed without a record or be recorded without happening.
       try {
         await db.batch([
           requireExists(db, namespace, path),

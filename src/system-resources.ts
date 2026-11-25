@@ -5,38 +5,10 @@ import { PERMISSION, type ResourceFacts } from "./system-resources-read";
 export type { ResourcesDoc };
 import type { SystemModel } from "./system-model";
 
-// THE SECRETS AND DATA MODEL: each Worker's secret names, D1 databases
-// and their tables, KV namespaces, R2 buckets, Durable Objects and queues, and which
-// systems use each, read from Cloudflare by the nightly build (src/system-facts.ts) so a
-// cleanup never needs a production check to learn who uses what. Private: it is stored in
-// APP_KV, served only to the Portal behind its sign-in and to capsid_admin_read_ops action
-// resources, never published (even a secret's name hints at how things are wired).
-//
-// NAMES, NEVER VALUES. A Worker's settings (GET .../workers/scripts/{script}/settings)
-// list every binding, and a plain_text or json binding carries its value beside its name.
-// bindingOf copies named fields into a fresh object per binding type, so a value, and any
-// field Cloudflare adds later, is dropped unread. A secret_text binding has no value to
-// return at all (developers.cloudflare.com/api/resources/workers/subresources/scripts/
-// subresources/script_and_version_settings/methods/get/).
-//
-// Which system a Worker belongs to is the `workers` list on each system in
-// system/model.json; a Worker no system names is a drift line. The model's own D1 and R2
-// containers (technology "D1...", "R2") are compared with what each system's Workers bind.
-//
-// PREVIEWS. A Worker Preview (npx wrangler preview, a PR branch's build) inherits no
-// production binding and binds its own preview stores, so a preview-only database or bucket
-// shows in no Worker's settings. The newest few Previews of each Worker are read (GET
-// .../workers/workers/{script}/previews, then each one's newest deployment, whose env lists
-// its bindings the same way, values included) and their stores count as used, labeled
-// "(preview)" (developers.cloudflare.com/api/resources/workers/subresources/workers/).
-//
-// Permissions on CF_OPS_TOKEN (read-only; each missing one is named, and the rest still runs):
-//   Workers Scripts Read        GET /accounts/{id}/workers/scripts and .../settings, and each
-//                               Worker's Previews and their deployments (held already)
-//   D1 Read                     GET /accounts/{id}/d1/database, POST .../d1/database/{id}/query
-//                               (a SELECT on sqlite_master only)
-//   Workers KV Storage Read     GET /accounts/{id}/storage/kv/namespaces
-//   Workers R2 Storage Read     GET /accounts/{id}/r2/buckets
+// THE SECRETS AND DATA MODEL: each Worker's secret names, D1 databases and their tables, KV
+// namespaces, R2 buckets, Durable Objects and queues, and which systems use each, read from
+// Cloudflare by the nightly build (src/system-facts.ts) so a cleanup never needs a production check
+// to learn who uses what.
 
 type User = ResourcesDoc["databases"][number]["used_by"][number];
 
@@ -182,8 +154,8 @@ export function resourcesDoc(model: SystemModel, facts: ResourceFacts, now: Date
 const isD1 = (technology: string) => /^D1\b/.test(technology);
 const isR2 = (technology: string) => /^R2\b/.test(technology);
 
-/** The drift lines: Workers no system names and names no Worker has, the model's D1 and R2
- *  containers against what each system's Workers bind, and stores no Worker binds. Pure. */
+// The drift lines: Workers no system names and names no Worker has, the model's D1 and R2
+// containers against what each system's Workers bind, and stores no Worker binds. Pure.
 export function resourceDrift(
   model: SystemModel,
   doc: ResourcesDoc,

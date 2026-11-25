@@ -18,19 +18,14 @@ import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
 import { byCheck, AgreementCounts, totals, counts, wait, JobDetail, AGREEMENTS } from "./ClaimsJob";
 
-// Chart 5, claim against verified per agent, is Enarratio's grouped bar chart, in the same
-// lazy chunk as the Portal's other charts.
 const AgreementChart = trendChart("AgreementChart");
 
 type FilterKey = (typeof FILTER_KEYS)[number];
 type Filter = Record<FilterKey, string>;
 
-// Checks is Jobs' tab (/queue), so the tab stays in the address beside the filter.
 const PARAMS = [...FILTER_KEYS, "job"] as const;
 const CHECKS_TAB = { tab: "checks" };
 
-// The filters and the open job live in the address (?namespace=&agent=&since=&until=&job=),
-// so a view can be reloaded or shared. The inputs apply on submit.
 export function Claims() {
   const { feed, now } = useApp();
   const filters = useUrlFilters(PARAMS, { fixed: CHECKS_TAB });
@@ -44,7 +39,6 @@ export function Claims() {
   const input = filters.input;
   const jobInput = filters.input.job;
   const key = FILTER_KEYS.map((k) => filter[k]).join("\u0000");
-  // The filter form applies the fields with the open job; the job form, the job with the filter.
   const go = (next: Filter, nextJob: string) => filters.apply({ ...next, job: nextJob });
 
   const agg = useAnswer<PortalClaimsAggregate>(["claims", key], () => fetchClaimsAggregate(filter));
@@ -69,7 +63,7 @@ export function Claims() {
           go(input, job);
         }}
       >
-        {/* Named fields and the tab, so a press before the page hydrates is the same GET to this address. */}
+        {/* Named fields and the tab, so a press before hydration is the same GET to this address. */}
         <input type="hidden" name="tab" value={CHECKS_TAB.tab} />
         {job && <input type="hidden" name="job" value={job} />}
         <ProjectSelect
@@ -304,9 +298,6 @@ export function Claims() {
   );
 }
 
-// The export (design-portal-evaluation.md, DECIDE 3, "claims export with waits and
-// usage"): the aggregate as shown, under the filter in force, as three CSV files, one per
-// table. Nothing is read again; a read that hit its bound says so in the file's name.
 function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
   const stamp = data.generated.slice(0, 10);
   const cut = data.truncated.length ? "-partial" : "";

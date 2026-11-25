@@ -1,4 +1,3 @@
-// The seat superseding a job before any work was done on it.
 import type { Env } from "./env";
 import type { Agent } from "./agents";
 import {
@@ -18,17 +17,10 @@ import {
 } from "./jobs-transition";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
-// Supersede: the seat replacing a job before any work was done on it (a corrected or
-// reposted body, a reorder, a withdrawal). Without it the only way to close such a job is
-// to claim and fail it, filling the history with failures that never happened. No outcome
-// row, no pull request rows.
-//
-// Allowed from `queued` by any caller that may write the namespace. From `claimed`, only
-// while the row records no work (no gate hit, resume, correction or result_ref), and only
-// by the holder or the seat. The whole rule is in the one keyed UPDATE; the checks before
-// it only choose the refusal message.
+// Supersede: the seat replacing a job before any work was done on it (a corrected or reposted
+// body, a reorder, a withdrawal). Without it the only way to close such a job is to claim and fail
+// it, filling the history with failures that never happened. No outcome row, no pull request rows.
 
-/** Why a job's row shows work was done on it, or null. */
 export function workRecorded(job: JobRow): string | null {
   const done: string[] = [];
   if (job.blocked_count > 0) done.push(`it has hit a gate ${plural(job.blocked_count, "time")}`);
@@ -39,8 +31,8 @@ export function workRecorded(job: JobRow): string | null {
   return done.length ? done.join(", ") : null;
 }
 
-// `extra` rides in the same guarded batch, so a caller's own write commits only with the
-// supersede (the bench score step, src/bench-score.ts finishBenchRun).
+// `extra` rides in the same guarded batch, so a caller's own write commits only with the supersede
+// (the bench score step, src/bench-score.ts finishBenchRun).
 export async function supersedeJob(
   env: Env,
   agent: Agent,
@@ -61,8 +53,6 @@ export async function supersedeJob(
 
   const current = await readJob(env.DB, id);
   if (!current) return refuse("supersede", `no job ${id}.`);
-  // The job's own namespace, asked here for the reason resume asks it: the tool's
-  // check saw only the namespace argument, which an id-based call may omit.
   const outside = outsideJobNamespace(agent, current.namespace);
   if (outside)
     return refuse(
@@ -112,16 +102,16 @@ export async function supersedeJob(
   }
 
   const summary = replacedBy ? `Superseded by ${replacedBy}: ${reason}` : `Superseded: ${reason}`;
-  // ?4 is the holder read above, so a claim that went to another driver between the
-  // read and this write is not superseded out from under the new one.
+  // ?4 is the holder read above, so a claim that went to another driver between the read and this
+  // write is not superseded out from under the new one.
   const job: JobRow = {
     ...current,
     status: "superseded",
     result_summary: summary,
     updated_at: now.toISOString(),
   };
-  // The guard makes the mirror and audit row commit only with the UPDATE: a row that
-  // changed since the read (a gate hit, a claim) aborts all three.
+  // The guard makes the mirror and audit row commit only with the UPDATE: a row that changed since
+  // the read (a gate hit, a claim) aborts all three.
   const won = await guardedTransition(env, current, [
     env.DB.prepare(
       `UPDATE jobs SET status = 'superseded', result_summary = ?2, summary_sig = NULL, updated_at = ?3

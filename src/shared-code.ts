@@ -2,37 +2,7 @@ import { asTag, type NoBloatJob } from "./lockfiles";
 import type { PackageSnapshot } from "./ops-types/sites";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "./ops-types/feed";
 
-// SHARED CODE: how far the centralization has got (capsid/rulings/shared-homes-2026-10-06.md). For each shared package in configuration
-// (shared_packages, migrations/0036): its newest tag, the tag each app pins, how many
-// releases behind each app is, and how many known local copies are still in the apps.
-//
-// THE VERSIONS MODEL (which Enarratio, Capsomer and devkit version each
-// site is pinned to). The apps are every
-// repo system/model.json names, each read on its default branch through the GitHub App: one
-// recursive tree, then every package.json outside node_modules (up to MANIFESTS_PER_APP),
-// the lockfile that covers it (package-lock.json or pnpm-lock.yaml, src/lockfiles.ts), the
-// Renovate config and the workflow files. The packages are the shared ones (shared_packages,
-// git dependencies, "github:DrDustinEdwards/<repo>#v1.2.3") and the published ones the
-// Packages view watches (ops_packages: Enarratio and its Astro packages, from npm). A pin is
-// the version the lockfile installed, else the tag the spec names. devkit is also a
-// Renovate preset ("github>DrDustinEdwards/devkit") and a set of reusable workflows
-// ("uses: DrDustinEdwards/devkit/.github/workflows/x.yml@<sha> # v0.21.0"), so it is found
-// in those too. The nightly build (src/system-facts.ts) publishes it per system
-// (src/system-versions.ts) and lists drift.
-//
-// Release tracking (Capsid improvement list, item 13): each package's own repo is read
-// too, for the version in its root package.json on the default branch, whether that
-// version has a release tag yet (untagged), and, when the package.json is not private,
-// npm's latest dist-tag from the registry's abbreviated document (src/ops-packages.ts,
-// readNpm). So each panel says tagged, on npm, and which apps are behind. The daily
-// maintenance pass tags an untagged version (src/maintenance-releases.ts), using
-// releaseDecision below, so the view and the pass agree on what "untagged" means.
-//
-// Read nightly by src/system-facts.ts and kept in KV, where the Portal (GET
-// /portal/api/shared-code) reads it: a few hundred GitHub reads a night, not per page.
-// The Portal reads afresh only when nothing is kept. Read-only: it writes nothing but its
-// own cache. The key's version moves when the view's shape does, so a cached answer
-// without the newer fields is never served.
+// SHARED CODE: how far the centralization has got (capsid/rulings/shared-homes-2026-10-06.md).
 
 interface SharedRow {
   name: string;
@@ -132,8 +102,8 @@ export function behindBy(pinned: string | null, tags: readonly string[]): number
   }).length;
 }
 
-/** What a repo's root package.json says about a release: the name npm knows it by, its
- *  version, and whether it is private (never published). */
+// What a repo's root package.json says about a release: the name npm knows it by, its version, and
+// whether it is private (never published).
 export interface RootManifest {
   name: string | null;
   version: string | null;
@@ -153,14 +123,9 @@ export function rootManifest(raw: string): RootManifest {
   };
 }
 
-/**
- * What a package's version asks for, given the repo's tags:
- * - tagged: a tag names this version already (v1.2.3 or 1.2.3);
- * - tag: no tag names it and it is newer than every release tag, so it is the next release;
- * - backwards: no tag names it but a newer release tag exists. Never tagged: the tag would
- *   start bump-consumers on an older version and move the apps backwards. Listed instead;
- * - not-a-release: no version, or not a plain x.y.z (a pre-release is tagged by hand).
- */
+// What a package's version asks for, given the repo's tags: - tagged: a tag names this version
+// already (v1.2.3 or 1.2.3); - tag: no tag names it and it is newer than every release tag, so it
+// is the next release; - backwards: no tag names it but a newer release tag exists.
 export type ReleaseDecision =
   | { kind: "tagged"; tag: string }
   | { kind: "tag"; tag: string; newest: string | null }
@@ -351,9 +316,9 @@ export function sharedCodeView(
   };
 }
 
-/** The repos with a root package.json where no workflow job runs devkit's no-bloat check: none calls pr.yml or
- *  no-bloat.yml, or each that does turns it off. A private repository passes `no-bloat: false` to pr.yml and runs
- *  no-bloat.yml weekly, so it is on. Only what was read is judged; a repo that could not be read is apps_failed's. */
+// The repos with a root package.json where no workflow job runs devkit's no-bloat check: none calls
+// pr.yml or no-bloat.yml, or each that does turns it off. A private repository passes `no-bloat:
+// false` to pr.yml and runs no-bloat.yml weekly, so it is on.
 function noBloatOff(apps: readonly AppRead[]): NonNullable<SharedCodeView["no_bloat_off"]> {
   const out: NonNullable<SharedCodeView["no_bloat_off"]> = [];
   for (const app of apps) {
@@ -379,8 +344,8 @@ type ReleaseFields = Pick<
   "version" | "untagged" | "private" | "npm_latest" | "npm_note" | "manifest_error"
 >;
 
-/** A package's release fields. Untagged only when the tags were read and none names the
- *  version: without the tags it is unknown, and unknown is not untagged. */
+// A package's release fields. Untagged only when the tags were read and none names the version:
+// without the tags it is unknown, and unknown is not untagged.
 function releaseFields(
   read: ReleaseRead | undefined,
   tags: readonly string[] | null,

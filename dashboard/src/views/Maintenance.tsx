@@ -18,14 +18,6 @@ import type { MaintenanceRule, OpsMaintenanceItem, PortalMaintenance } from "../
 import { Status } from "capsomer/react/status";
 import { KIND_STATUS } from "../lib/derive";
 
-// The Maintenance list on the Overview (job_549550d73d4e): what the daily maintenance pass
-// found, from GET /portal/api/maintenance, the list capsid_read_status action status serves. The seat reads
-// it at the start of a session. Loaded on its own, after the Overview, so the first paint
-// does not carry it. Nothing here changes anything: a row naming a job in the feed opens
-// that job's drawer, and a pull request is a link.
-
-// What to do first: something broken, then something waiting on the seat, then tidying,
-// then what the pass did on its own, and last what it could not read.
 const RULE: Record<MaintenanceRule, { kind: Kind; label: string; order: number }> = {
   "pr-red": { kind: "crit", label: "Red PR", order: 0 },
   "undeployed-merge": { kind: "warn", label: "Not deployed", order: 2 },
@@ -50,7 +42,6 @@ const RULE: Record<MaintenanceRule, { kind: Kind; label: string; order: number }
   "releases-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
 };
 
-// Rows shown before "more"; every critical row is shown.
 const ROWS = 8;
 
 export function Maintenance() {
@@ -124,8 +115,6 @@ export function Maintenance() {
   );
 }
 
-// A rule's finding: it opens its job when the job is still live, and is read, not opened,
-// otherwise. Its pull request is a link of its own beside it.
 function Row({ item, opens }: { item: OpsMaintenanceItem; opens: boolean }) {
   const { href } = useApp();
   const rule = RULE[item.rule];

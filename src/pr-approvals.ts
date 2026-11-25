@@ -4,21 +4,6 @@ import { ghFetch, resolveRepo } from "./github/client";
 import { auditStatement } from "./store-guards";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// THE APPROVAL RECORD (docs/design/design-merge-pipeline.md section 3, PR 3). The `approve_pr` control (src/controls.ts) records that Dustin
-// approved one or more pull requests at the head sha he saw; it never merges. The
-// executor in the auto-merge tick (PR 4) merges an approved pull request once its CI is
-// green on that sha, and voids the approval on a new push, red CI or after 7 days.
-//
-// What may be approved is what the tick classed (src/merge-class.ts) into the
-// awaiting-seat set: `approve` (and `auto`, which the tick merges anyway). `typed`, any
-// money path, only alone and only with its number typed as confirm (design section 8:
-// never batched, never automatic). `seat` and `wait`, and a pull request the tick has not
-// classed, are refused. A batch holding one refused pull request is refused whole, so
-// nothing is half-approved.
-//
-// Every write is in one D1 batch: a void of the pull request's open approval, if any
-// (`UPDATE ... WHERE id = ? AND status = 'approved' RETURNING id`, path mutation
-// invariant, test/path-mutation.test.ts), the new row, and an audit row for each.
 
 const MAX_PRS = 20;
 const SHA = /^[0-9a-f]{7,40}$/;

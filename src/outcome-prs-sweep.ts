@@ -15,10 +15,8 @@ const REVERIFY_PER_SWEEP = 50;
 // merge silently, and re-reading it forever would make a bounded job unbounded.
 const REVERIFY_WINDOW_DAYS = 30;
 
-/**
- * The pull requests whose merge status is due a re-read: those belonging to outcomes
- * recorded inside the window and not already known merged.
- */
+// The pull requests whose merge status is due a re-read: those belonging to outcomes recorded
+// inside the window and not already known merged. /
 export async function dueForReverify(
   env: Env,
   now: Date,
@@ -52,19 +50,10 @@ export interface SweepReport {
 
 const BACKFILL_ACTOR = "system:outcome-backfill";
 
-/**
- * Outcomes whose pull request, named only in result_ref, was never read, so commits,
- * files_changed and ci_green sit unverified. For each
- * such row in the window this reads every pull request the job names (its join rows and
- * its result_ref) the way complete does now, and writes GitHub's numbers. A row is
- * touched only while its commits are still unverified, and only when every named pull
- * request was read; one that was not stays as it was for the next sweep. tests_added is
- * the driver's and is never touched. Each correction is an audit_log row holding the
- * values before and after, so nothing here is an edit by hand.
- *
- * Bounded by `limit` per sweep and by the window, like the rest of the sweep. A row whose
- * pull request GitHub will not answer for is re-read each sweep until it leaves the window.
- */
+// Outcomes whose pull request, named only in result_ref, was never read, so commits, files_changed
+// and ci_green sit unverified. For each such row in the window this reads every pull request the
+// job names (its join rows and its result_ref) the way complete does now, and writes GitHub's
+// numbers.
 async function backfillOutcomes(
   env: Env,
   now: Date,
@@ -160,11 +149,9 @@ async function backfillOutcomes(
   return { backfilled, unread };
 }
 
-/**
- * One sweep. Seeds join rows for outcomes that stored none, then re-verifies what is
- * due. Older rows name their pull requests only in result_ref and the summary, so the
- * seed reads those. Every seeded URL is verified against GitHub before it is counted.
- */
+// One sweep. Seeds join rows for outcomes that stored none, then re-verifies what is due. Older
+// rows name their pull requests only in result_ref and the summary, so the seed reads those. Every
+// seeded URL is verified against GitHub before it is counted. /
 export async function reverifySweep(
   env: Env,
   now: Date,
@@ -215,10 +202,8 @@ export async function reverifySweep(
 const SWEEP_STAMP_KEY = "outcomes:reverify:last";
 const SWEEP_INTERVAL_MS = DAY_MS;
 
-/**
- * Run a sweep at most once a day, on the five-minute tick. The merge path already
- * handles merges the Worker makes. Returns null when it was not due.
- */
+// Run a sweep at most once a day, on the five-minute tick. The merge path already handles merges
+// the Worker makes. Returns null when it was not due. /
 export async function sweepIfDue(env: Env, now: Date): Promise<SweepReport | null> {
   let last: string | null = null;
   try {

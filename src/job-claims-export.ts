@@ -1,6 +1,3 @@
-// The claims export of capsid_admin_read_claims: a table paged by cursor, read-only.
-
-// The tables the export pages through, and the only names it will read.
 export const CLAIMS_EXPORT_TABLES = [
   "job_claims",
   "job_evaluations",
@@ -16,7 +13,6 @@ export interface ClaimsExportPage {
   after: number;
   limit: number;
   rows: Record<string, unknown>[];
-  // The cursor for the next page, or null when this page reached the end.
   next_after: number | null;
 }
 
@@ -24,11 +20,8 @@ function isClaimsExportTable(value: unknown): value is ClaimsExportTable {
   return typeof value === "string" && (CLAIMS_EXPORT_TABLES as readonly string[]).includes(value);
 }
 
-// One statement per table, spelled out, so no table name is ever interpolated into
-// SQL and the query-plan walk can read every one. The cursor is the row's id, which
-// AUTOINCREMENT never reuses. job_outcomes has a TEXT primary key, so its cursor is the
-// rowid, returned as the column `rowid`; its rows are never deleted, so a rowid a page
-// has passed is never handed out again.
+// The cursor is the row's id, which AUTOINCREMENT never reuses. its rows are never deleted, so a
+// rowid a page has passed is never handed out again.
 function exportStatement(db: D1Database, table: ClaimsExportTable): D1PreparedStatement {
   switch (table) {
     case "job_claims":
@@ -44,8 +37,10 @@ function exportStatement(db: D1Database, table: ClaimsExportTable): D1PreparedSt
   }
 }
 
-/** One page of a table, strictly after the cursor, oldest first. Pages never skip or
- *  repeat a row: each asks for the rows past the last one it was handed. */
+/**
+ * One page of a table, strictly after the cursor, oldest first. Pages never skip or repeat a row:
+ * each asks for the rows past the last one it was handed.
+ */
 export async function exportClaimsPage(
   db: D1Database,
   table: ClaimsExportTable,

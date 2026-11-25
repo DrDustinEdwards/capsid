@@ -58,8 +58,8 @@ export const REPORT_TOOL = {
   },
 } as const;
 
-/** The arguments of the model's report_review call, in either answer shape Workers AI gives
- *  (its own `tool_calls`, or the OpenAI `choices`), parsed whole. Null when there is none. */
+// The arguments of the model's report_review call, in either answer shape Workers AI gives (its own
+// `tool_calls`, or the OpenAI `choices`), parsed whole. Null when there is none.
 export function toolArguments(answer: unknown): unknown {
   const a = answer as {
     tool_calls?: Array<{
@@ -93,8 +93,8 @@ export function ranOut(answer: unknown): boolean {
   );
 }
 
-/** The model's answer, held to the shape the check shows: a known verdict, at most five
- *  findings of a known kind on a file the pull request changed. Anything else is null. */
+// The model's answer, held to the shape the check shows: a known verdict, at most five findings of
+// a known kind on a file the pull request changed. Anything else is null.
 export function parseVerdict(
   args: unknown,
   changed: ReadonlySet<string>,

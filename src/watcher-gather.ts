@@ -148,10 +148,9 @@ export async function gatherFindings(
     }
   }
 
-  // Every site's health route, and for the sites that opted into Capsid calling their
-  // operator API, the repair each failing health check maps to and the weekly tools
-  // (src/site-watch.ts); then the red and green mail. A site whose health could not be read
-  // leaves the check un-run, so its open finding is not cleared on no evidence.
+  // Every site's health route, and for the sites that opted into Capsid calling their operator API,
+  // the repair each failing health check maps to and the weekly tools (src/site-watch.ts); then the
+  // red and green mail.
   if (config && config.some((c) => c.origin && (c.operator || c.health_path))) {
     const repairs = await attempt("site repairs", () =>
       watchSites(env, config, WATCHER_ACTOR, fetchImpl, now),

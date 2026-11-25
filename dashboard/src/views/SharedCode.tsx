@@ -11,13 +11,6 @@ import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "../types"
 import { Status } from "capsomer/react/status";
 import { KIND_STATUS } from "../lib/derive";
 
-// SHARED CODE (job_584b4e7f2824): how far the centralization has got. One panel per shared
-// package from configuration (shared_packages), each app that uses it with the tag it
-// pins and how many releases behind it is, and the known local copies still in the apps.
-// Read from GET /portal/api/shared-code: what the nightly build read from every repo in the
-// system model through the GitHub App (src/system-facts.ts). Nothing here changes anything. The Packages view (npm
-// statistics) stays as it is.
-
 export function SharedCode() {
   const { now } = useApp();
   const load = useAnswer<SharedCodeView>(["shared-code"], fetchSharedCode);
@@ -43,7 +36,6 @@ export function SharedCode() {
           {data.packages.map((p) => (
             <PackagePanel key={p.name} pkg={p} />
           ))}
-          {/* What was read, at the foot: a view's heading stands alone (design D13). */}
           <p className="cap-text shared-read" data-tone="dim">
             Read {ago(parse(data.generated), now)} from {data.apps_read}{" "}
             {data.apps_read === 1 ? "app" : "apps"}
@@ -70,13 +62,7 @@ function behindText(u: SharedCodeApp): {
   };
 }
 
-// The release line (Capsid improvement list, item 13): the version in the repo's
-// package.json, whether it has a tag yet (the daily maintenance pass makes it), and npm's
-// latest, so the panel says tagged, on npm, and behind. A private package says nothing
-// about npm.
 function ReleaseLine({ pkg }: { pkg: SharedCodePackage }) {
-  // The repo's tags failing already says the repo could not be read; its package.json
-  // failing too says nothing new.
   if (pkg.manifest_error && pkg.tags_error) return null;
   if (pkg.manifest_error) {
     return (
@@ -87,7 +73,6 @@ function ReleaseLine({ pkg }: { pkg: SharedCodePackage }) {
     );
   }
   if (!pkg.version) return null;
-  // One span, so its words flow inline where the header lays its parts out as flex items.
   return (
     <span>
       {" · "}package.json <span className="cap-mono">{pkg.version}</span>
