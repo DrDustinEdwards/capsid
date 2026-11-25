@@ -21,6 +21,8 @@ import {
   watcherAgent,
 } from "../src/watcher.ts";
 import { MAX_FINDINGS_PER_PASS, runPass } from "../src/watcher-pass.ts";
+import { readHealth } from "../src/site-watch.ts";
+import { MAX_HEALTH_BYTES } from "../src/ops-snapshot.ts";
 import { newestMigration } from "../src/watcher-gather-platform.ts";
 import { WATCHER_CHECKS, owningCheck, type WatcherCheck } from "../src/watcher-checks.ts";
 import {
@@ -119,6 +121,23 @@ test("a pass is due on the first run, not inside the cadence, due after it, and 
   const verdict = passDue("not a date", 30, NOW);
   assert.equal(verdict.due, true);
   assert.match(verdict.reason, /does not parse/);
+});
+
+test("PLANT: readHealth does not read a body past the cap", async () => {
+  let pulled = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(c) {
+      pulled += 1_024;
+      c.enqueue(new Uint8Array(1_024).fill(32));
+      if (pulled > 10 * MAX_HEALTH_BYTES) c.close();
+    },
+  });
+  const r = await readHealth(
+    async () => new Response(body, { status: 200 }),
+    "https://x.example.com/health",
+  );
+  assert.equal(r.body, null);
+  assert.ok(pulled <= 2 * MAX_HEALTH_BYTES, `read ${pulled} bytes`);
 });
 
 // a healthy surface posts nothing

@@ -136,6 +136,18 @@ test("PLANT: a health body past the cap is not read whole and yields no sha", as
   assert.equal(p.sha, null, "a body past the cap was read whole");
 });
 
+test("a health route that redirects to another host is not that site's answer", async () => {
+  const impl = async () => {
+    const res = new Response(JSON.stringify({ status: "ok", sha: "deadbee" }), { status: 200 });
+    Object.defineProperty(res, "url", { value: "https://other.example.net/health" });
+    return res;
+  };
+  const p = await probeSite(site({}), impl, NOW, null);
+  assert.equal(p.state, "down");
+  assert.equal(p.sha, null);
+  assert.match(String(p.error), /redirected off the site to https:\/\/other\.example\.net/);
+});
+
 test("a failing health route on a site whose root answers is degraded, not down", async () => {
   const f = fetchFor({
     "https://sample.example.com/health": 404,

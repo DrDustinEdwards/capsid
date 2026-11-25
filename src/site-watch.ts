@@ -9,6 +9,8 @@ import { mapLimit } from "./map-limit";
 import { failingCheckNames } from "@dustinedwards/site-runtime/health-read";
 import { healthUrl } from "./ops-sites";
 import { callSignal } from "./call-signal";
+import { readCapped } from "@dustinedwards/site-runtime/body";
+import { MAX_HEALTH_BYTES } from "./ops-snapshot";
 
 // THE WATCHER'S SITE REPAIRS the one watcher for every site. On each watcher pass, for every site
 // with a health route (ops_sites.health_path): 1. Read its health route. Healthy (200, ok, and no
@@ -63,7 +65,15 @@ export async function readHealth(fetchImpl: FetchLike, url: string): Promise<Rea
       redirect: "manual",
       signal: callSignal(HEALTH_TIMEOUT_MS),
     });
-    return { status: res.status, body: await res.json().catch(() => null), error: null };
+    // Past the cap the body is not health (null), as in the ops probe.
+    const text = await readCapped(res, MAX_HEALTH_BYTES);
+    let body: unknown = null;
+    try {
+      body = text === null ? null : JSON.parse(text);
+    } catch {
+      // not JSON: no body
+    }
+    return { status: res.status, body, error: null };
   } catch (err) {
     return { status: 0, body: null, error: clip(errorMessage(err)) };
   }
