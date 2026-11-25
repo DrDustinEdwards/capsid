@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import type { R2Like } from "@dustinedwards/d1-dump";
 import { SITES, drillSite, firstFailure, selectSites } from "../scripts/drill-all.ts";
@@ -80,11 +81,21 @@ function plant(
   );
   if (complete) {
     const tables = [{ name: "documents", rows: rows.length, key: docKey }];
+    const keys = [docKey, `${prefix}_schema.json`];
+    const checksums = Object.fromEntries(
+      keys.map((k) => [
+        k,
+        `sha256:${createHash("sha256")
+          .update(bucket.objects.get(k) as string | Buffer)
+          .digest("hex")}`,
+      ]),
+    );
     bucket.objects.set(
       `${prefix}_complete.json`,
       JSON.stringify({
         exported_at: exportedAt,
-        keys: [docKey, `${prefix}_schema.json`],
+        keys,
+        checksums,
         tables,
         fts: withFts ? [{ name: "documents_fts", mode: "external", content: "documents" }] : [],
         excluded: [],

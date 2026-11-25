@@ -208,15 +208,15 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     permissions:
       contents: read
-    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@c07fc6642c81f16a0dd33b18d068cf4dcbdeec9e # v0.59.6
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@1f148951b94eb9c495dc94c1f7d5bb79fd5db7b1 # v0.61.0
     with:
       worker-name: capsid-mcp
       health-url: https://mcp.dustinedwards.info/health
       verify-command: >-
         npm ci --ignore-scripts --no-audit --no-fund || exit 3;
         CAPSID_LIVE_PROBE_KEY="$VERIFY_TOKEN" node scripts/verify-live.mjs
-      install: npm ci && npm ci --prefix dashboard
       pre-deploy: >-
+        npm ci --ignore-scripts --prefix dashboard &&
         node scripts/ci-config.mjs &&
         npx devkit-migrations migrations --apply capsid &&
         npm run build:dashboard
