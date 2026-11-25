@@ -141,7 +141,7 @@ export function parseOperator(raw: string, namespace: string): ParsedOperator {
 }
 
 /** The tools this site allows: its repairs and its weekly tools. */
-export function allowedTools(operator: SiteOperator): string[] {
+function allowedTools(operator: SiteOperator): string[] {
   return [...new Set([...Object.values(operator.repairs), ...operator.weekly])];
 }
 

@@ -34,7 +34,7 @@ export function carrelSecretName(namespace: string): string {
 }
 
 /** A new key: 32 random bytes, base64url, 43 characters (site-api refuses under 32). */
-export function mintSiteKey(): string {
+function mintSiteKey(): string {
   return base64url(crypto.getRandomValues(new Uint8Array(KEY_BYTES)));
 }
 

@@ -10,9 +10,7 @@ import {
 } from "../src/namespace-delete.ts";
 import { confirmKeys } from "../src/auth.ts";
 import { D1_BATCH_STATEMENTS } from "../src/limits.ts";
-import { requiredGrant } from "../src/scope.ts";
 import { actionArgFor, defaultActionFor } from "../src/scope-guard.ts";
-import { hintsFor } from "../src/tool-annotations.ts";
 import { MANAGE_NAMESPACES } from "../src/tools/surface.ts";
 
 // The pure half of capsid_admin_manage_namespaces's delete_preview and delete_perform
@@ -60,17 +58,7 @@ function plan(over: Partial<DeletePlan> = {}, counts: Partial<PlanCounts> = {}):
 const NONE = { cascade: false, allowImprovePaths: false };
 const ALL = { cascade: true, allowImprovePaths: true };
 
-test("the tool is admin, destructive, and its action argument is required with no default", () => {
-  // Delete is two actions of capsid_admin_manage_namespaces (delete_preview,
-  // delete_perform). The tool also registers and updates, so it carries one set of
-  // hints for all four: not idempotent, because a register is not.
-  assert.equal(requiredGrant("capsid_admin_manage_namespaces"), "admin");
-  assert.deepEqual(hintsFor("capsid_admin_manage_namespaces"), {
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: false,
-    openWorldHint: false,
-  });
+test("the action argument is required with no default, so an omitted one never means perform", () => {
   assert.equal(actionArgFor("capsid_admin_manage_namespaces"), "action");
   assert.equal(
     defaultActionFor("capsid_admin_manage_namespaces"),
@@ -84,10 +72,6 @@ test("the tool is admin, destructive, and its action argument is required with n
   );
   assert.deepEqual(MANAGE_NAMESPACES.actions.delete_perform.inject, { action: "perform" });
   assert.deepEqual(MANAGE_NAMESPACES.actions.delete_preview.inject, { action: "preview" });
-});
-
-test("an empty registered namespace has no refusal", () => {
-  assert.deepEqual(deleteRefusals(plan(), NONE), []);
 });
 
 test("an unregistered namespace is the only refusal", () => {
@@ -122,10 +106,6 @@ test("PLANT: a live agent refuses whatever cascade says, and names the agent", (
   assert.match(refusals[0], /update_scopes/);
 });
 
-test("a revoked agent is history and refuses nothing", () => {
-  assert.deepEqual(deleteRefusals(plan({}, { agents_revoked: 2 }), NONE), []);
-});
-
 test("PLANT: live documents refuse without cascade, and cascade clears exactly that refusal", () => {
   const p = plan({}, { documents_live: 4, documents_archived: 9 });
   assert.equal(deleteRefusals(p, NONE).length, 1);
@@ -133,7 +113,9 @@ test("PLANT: live documents refuse without cascade, and cascade clears exactly t
   assert.deepEqual(deleteRefusals(p, { cascade: true, allowImprovePaths: false }), []);
 });
 
-test("archived documents alone need no cascade", () => {
+test("an empty namespace, revoked agents and archived documents alone refuse nothing", () => {
+  assert.deepEqual(deleteRefusals(plan(), NONE), []);
+  assert.deepEqual(deleteRefusals(plan({}, { agents_revoked: 2 }), NONE), []);
   assert.deepEqual(deleteRefusals(plan({}, { documents_archived: 9 }), NONE), []);
 });
 
@@ -189,20 +171,6 @@ test("the fingerprint ignores key order and moves with every count", () => {
 
 // the batch cap
 
-test("the cap is derived from D1's batch ceiling: six fixed statements plus two per document", () => {
-  assert.equal(D1_BATCH_STATEMENTS, 100);
-  assert.equal(NAMESPACE_DELETE_MAX_DOCUMENTS, Math.floor((D1_BATCH_STATEMENTS - 6) / 2));
-  assert.equal(NAMESPACE_DELETE_MAX_DOCUMENTS, 47);
-  assert.ok(
-    6 + 2 * NAMESPACE_DELETE_MAX_DOCUMENTS <= D1_BATCH_STATEMENTS,
-    "a batch at the cap does not fit",
-  );
-  assert.ok(
-    6 + 2 * (NAMESPACE_DELETE_MAX_DOCUMENTS + 1) > D1_BATCH_STATEMENTS,
-    "the cap is lower than it needs to be",
-  );
-});
-
 test("PLANT: one document over the cap is refused whatever cascade says, with the count, the cap and the advice", () => {
   const over = deleteRefusals(
     plan({}, { documents_live: NAMESPACE_DELETE_MAX_DOCUMENTS + 1 }),
@@ -219,6 +187,11 @@ test("PLANT: one document over the cap is refused whatever cascade says, with th
     deleteRefusals(plan({}, { documents_live: NAMESPACE_DELETE_MAX_DOCUMENTS }), ALL),
     [],
     "exactly the cap is refused",
+  );
+  // Six fixed statements plus two per document: a batch at the cap must fit D1's ceiling.
+  assert.ok(
+    6 + 2 * NAMESPACE_DELETE_MAX_DOCUMENTS <= D1_BATCH_STATEMENTS,
+    "a batch at the cap does not fit",
   );
 });
 

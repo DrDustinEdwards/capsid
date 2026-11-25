@@ -170,7 +170,7 @@ const LOCAL_SUFFIXES = [".localhost", ".local", ".internal", ".home.arpa"];
 
 /** A hostname a probe may fetch: lowercase DNS labels, at least two, no IP literal and
  *  no local name. Returns the refusal, or null when it is fine. */
-export function hostnameRefusal(host: string): string | null {
+function hostnameRefusal(host: string): string | null {
   if (host.length === 0 || host.length > 253)
     return `the hostname '${host}' must be 1 to 253 characters.`;
   if (host !== host.toLowerCase()) return `the hostname '${host}' must be lowercase.`;

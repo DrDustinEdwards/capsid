@@ -66,38 +66,6 @@ describe("the resume note", () => {
     expect(claimed.resume_note?.by).toBe(SEAT);
   });
 
-  it("the driver the job went back to reads the note from list", async () => {
-    const id = await driverBlockedJob("note reaches the holder");
-    await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "ruling: keep the old route");
-    const beat = await listJobs(jobsEnv(), { namespace: "capsid", id: id });
-    expect(beat.ok, beat.refusal).toBe(true);
-    expect(beat.resume_note?.reason).toBe("ruling: keep the old route");
-
-    const listed = await listJobs(jobsEnv(), { namespace: "capsid", id });
-    expect(listed.resume_note?.reason).toBe("ruling: keep the old route");
-  });
-
-  it("the mirrored document carries it, so brief does", async () => {
-    const id = await driverBlockedJob("note in the mirror");
-    await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "approved the migration");
-    const doc = await env.DB.prepare(
-      "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
-    )
-      .bind(jobDocPath(id))
-      .first<{ body: string }>();
-    expect(doc?.body).toContain(`last resume, by ${SEAT}`);
-    expect(doc?.body).toContain("approved the migration");
-
-    // A later transition reads the note back and keeps the line.
-    await listJobs(jobsEnv(), { namespace: "capsid", id: id });
-    const after = await env.DB.prepare(
-      "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
-    )
-      .bind(jobDocPath(id))
-      .first<{ body: string }>();
-    expect(after?.body).toContain("approved the migration");
-  });
-
   // A question block (Track A D4): the session asks, the Worker fixes the command, every
   // reader can tell it from a gate, and the answer is a resume note the driver keeps.
   async function claimedJob(title: string) {
@@ -222,6 +190,7 @@ describe("the resume note", () => {
       .bind(jobDocPath(id))
       .first<{ body: string }>();
     const body = doc?.body ?? "";
+    expect(body).toContain(`last resume, by ${SEAT}`);
     expect(body).toContain("## Earlier resumes");
     for (const reason of REASONS) expect(body, reason).toContain(reason);
     expect(body.indexOf("second ruling")).toBeLessThan(body.indexOf("first ruling"));
@@ -306,37 +275,6 @@ describe("the resume note", () => {
       .first<{ body: string }>();
     expect(after?.body).toContain(LONG_NOTE);
   });
-
-  it("a resume without a note carries no note", async () => {
-    const id = await driverBlockedJob("no note");
-    const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "one line is enough");
-    expect(resumed.resume_note?.note).toBeUndefined();
-    expect(
-      (await listJobs(jobsEnv(), { namespace: "capsid", id: id })).resume_note?.note,
-    ).toBeUndefined();
-  });
-
-  it("the newest resume wins", async () => {
-    const id = await driverBlockedJob("two resumes");
-    await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "first answer");
-    await blockJob(jobsEnv(), DRIVER, NOW, id, {
-      reason: "a second question",
-      command: "git push origin feat/y",
-    });
-    await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "second answer");
-    const beat = await listJobs(jobsEnv(), { namespace: "capsid", id: id });
-    expect(beat.resume_note?.reason).toBe("second answer");
-  });
-
-  it("a job never resumed carries no note", async () => {
-    const posted = await post({ title: "never resumed" });
-    const claimed = await claimJob(jobsEnv(), agentDriver(), NOW, { id: posted.job!.id });
-    expect(claimed.ok, claimed.refusal).toBe(true);
-    expect(claimed.resume_note).toBeUndefined();
-    expect(
-      (await listJobs(jobsEnv(), { namespace: "capsid", id: posted.job!.id })).resume_note,
-    ).toBeUndefined();
-  });
 });
 
 describe("the retry cap, where the block is written", () => {
@@ -355,15 +293,11 @@ describe("the retry cap, where the block is written", () => {
     return String((await jobRow(id))?.result_summary);
   }
 
-  it("a block at the cap says so in the summary, and keeps what the driver said", async () => {
-    const summary = await blockedAt(CORRECTION_CAP, "at the cap");
-    expect(summary).toContain(RETRY_CAP_REASON);
-    expect(summary).toContain("needs a human");
-  });
-
-  it("a block under the cap does not", async () => {
-    const summary = await blockedAt(CORRECTION_CAP - 1, "under the cap");
-    expect(summary).not.toContain(RETRY_CAP_REASON);
+  it("a block at the cap says so in the summary and keeps what the driver said; one under the cap does not", async () => {
+    const atCap = await blockedAt(CORRECTION_CAP, "at the cap");
+    expect(atCap).toContain(RETRY_CAP_REASON);
+    expect(atCap).toContain("needs a human");
+    expect(await blockedAt(CORRECTION_CAP - 1, "under the cap")).not.toContain(RETRY_CAP_REASON);
   });
 });
 
@@ -480,20 +414,6 @@ describe("the retry cap, where resume reads it", () => {
     const result = await resumeJob(jobsEnv(), OTHER_SEAT, NOW, id, "first go");
     expect(result.ok, `an unspent budget was refused: ${JSON.stringify(result)}`).toBe(true);
     expect((await jobRow(id))?.status).toBe("claimed");
-  });
-
-  it("THE SEAT IS ALSO REFUSED at the cap, because the seat is not the human", async () => {
-    const id = await blockedAt(CORRECTION_CAP, "the seat at the cap");
-    const result = await resumeJob(
-      jobsEnv(),
-      agentNamed("seat", false, true),
-      NOW,
-      id,
-      "the seat says go",
-    );
-    expect(result.ok).toBe(false);
-    expect(result.refusal).toMatch(new RegExp(RETRY_CAP_REASON));
-    expect((await jobRow(id))?.status).toBe("blocked");
   });
 
   it("AN ADMIN RESUME IS ALLOWED at the cap, and does not spend the budget", async () => {

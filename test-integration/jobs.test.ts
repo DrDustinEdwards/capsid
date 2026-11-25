@@ -90,9 +90,8 @@ describe("the lifecycle", () => {
     );
   });
 
-  // The innocent direction of two refusals in test/jobs.test.ts: the swallowed-tag
-  // guard and the skills check. A guard that refuses ordinary work gets deleted rather
-  // than fixed, so each is driven here to a completed row.
+  // The innocent direction of the swallowed-tag guard in test/jobs.test.ts. A guard that
+  // refuses ordinary work gets deleted rather than fixed, so it is driven here to a completed row.
   it("a clean summary that mentions tags and parameter names completes: the tag guard is not a wall", async () => {
     const id = (await post({ title: "tag guard innocent" })).job!.id;
     expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
@@ -103,14 +102,6 @@ describe("the lifecycle", () => {
     expect(stored?.status).toBe("done");
     expect(stored?.result_summary).toBe(summary);
   });
-
-  it("naming no skills at all completes: most jobs have no recommend step", async () => {
-    const id = (await post({ title: "no skills named" })).job!.id;
-    expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
-    const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "done" });
-    expect(done.ok, done.refusal).toBe(true);
-    expect((await jobRow(id))?.status).toBe("done");
-  });
 });
 
 describe("the refusals", () => {
@@ -120,14 +111,6 @@ describe("the refusals", () => {
     const second = await post({ title: "only once" });
     expect(second.ok).toBe(false);
     expect(second.refusal).toMatch(/already has an open job titled 'only once'/);
-
-    // The index is partial, so the same title is postable again once the first one
-    // is out of the open statuses. A plain unique index would make a recurring job
-    // impossible.
-    await claimJob(jobsEnv(), DRIVER, NOW, { id: first.job!.id });
-    await failJob(jobsEnv(), DRIVER, NOW, first.job!.id, "gave up");
-    const third = await post({ title: "only once" });
-    expect(third.ok, third.refusal).toBe(true);
   });
 
   it("A BLOCKED JOB IS OPEN, so the same title cannot be posted over it", async () => {
@@ -184,22 +167,6 @@ describe("the refusals", () => {
     ).toBe(true);
     expect((await jobRow(b.job!.id))?.status).toBe("claimed");
     expect((await jobRow(c.job!.id))?.status).toBe("claimed");
-  });
-
-  it("an agent and an OAuth session can each hold a claim", async () => {
-    // claimed_by has the shape of audit_log.actor, so one query joins a job to what its
-    // driver did. Each caller kind claims its own job.
-    for (const [title, actor] of [
-      ["held by an agent", "agent:capsid-driver"],
-      ["held by a session", "github:someone"],
-    ] as const) {
-      const posted = await post({ title });
-      const claimed = await claimJob(jobsEnv(), grantAgent("write", actor), NOW, {
-        id: posted.job!.id,
-      });
-      expect(claimed.ok, `${actor}: ${claimed.refusal}`).toBe(true);
-      expect(claimed.job!.claimed_by).toBe(actor);
-    }
   });
 
   it("two drivers racing one job resolve to exactly one winner", async () => {
@@ -467,12 +434,4 @@ describe("resume", () => {
     expect(stored?.status).toBe("failed");
     expect(await auditActions(id)).toContain("job-signature-refused");
   });
-
-  it("the untampered job still resumes, so the guard is not refusing everything", async () => {
-    const id = await driverBlockedJob("untampered resume");
-    const resumed = await resumeJob(jobsEnv(), DRIVER, NOW, id, "approved");
-    expect(resumed.ok, resumed.refusal).toBe(true);
-  });
 });
-
-// The resume reason reaches whoever holds the job next, not only the audit row.

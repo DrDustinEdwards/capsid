@@ -35,7 +35,7 @@ const UNITS_HEADING = /^##\s+Auto units\s*$/i;
 // The path classes a unit may promote: every class src/merge-class.ts holds except
 // money (typed forever, design section 8), migration and workflow (each a step outside a
 // merge, class seat). test/policy-change.test.ts holds this to merge-class's list.
-export const PROMOTABLE_PATH_CLASSES: readonly string[] = [
+const PROMOTABLE_PATH_CLASSES: readonly string[] = [
   "docs",
   "dashboard-css",
   "tests",

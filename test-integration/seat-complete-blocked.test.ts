@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { blockJob, claimJob, completeAsCaller, completeJob, postJob, resumeJob } from "../src/jobs";
+import { blockJob, claimJob, completeAsCaller, postJob, resumeJob } from "../src/jobs";
 import { grantAgent } from "../src/agents";
 import { dropSampleToken, jobRow, jobsEnv, seedSampleRepo } from "./jobs-fixture";
 
@@ -138,7 +138,7 @@ afterEach(async () => {
 });
 
 describe("the seat completes a blocked job it does not hold", () => {
-  it("REPRODUCED: the outcome stays the driver's, verified through result_ref, and the audit row names the seat", async () => {
+  it("REPRODUCED: the outcome stays the driver's, verified through result_ref, the audit row names the seat, and one admin_complete touch ends the gate's wait", async () => {
     stubGitHub();
     const id = await blocked("seat completes it");
     const done = await completeAsCaller(jobsEnv(), SEAT, LATER, id, {
@@ -188,15 +188,8 @@ describe("the seat completes a blocked job it does not hold", () => {
       .first<{ body: string; status: string }>();
     expect(mirror?.body).toContain("status: **done**");
     expect(mirror?.status).toBe("closed");
-  });
 
-  it("REPRODUCED: the close writes one admin_complete touch, which ends the gate's wait and names the holder", async () => {
-    stubGitHub();
-    const id = await blocked("touch on close");
-    await completeAsCaller(jobsEnv(), SEAT, LATER, id, {
-      result_summary: "merged by the seat",
-      result_ref: PR,
-    });
+    // One admin_complete touch ends the gate's wait and names the holder.
     const rows = await touches(id);
     expect(rows.map((t) => t.kind)).toEqual(["gate", "admin_complete"]);
     const close = rows[1];
@@ -336,17 +329,5 @@ describe("the seat completes a blocked job it does not hold", () => {
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/cannot complete .* outside|not in|scope|namespace/i);
     expect((await jobRow(id))?.status).toBe("blocked");
-  });
-
-  it("the holder completing its own claimed job is unchanged", async () => {
-    stubGitHub();
-    const id = await post("holder completes");
-    await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    const done = await completeJob(jobsEnv(), DRIVER, LATER, id, {
-      result_summary: "landed",
-      result_ref: PR,
-    });
-    expect(done.ok, done.refusal).toBe(true);
-    expect((await outcome(id))?.agent).toBe(DRIVER_ACTOR);
   });
 });

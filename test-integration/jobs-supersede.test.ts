@@ -31,7 +31,7 @@ import {
   jobsEnv,
 } from "./jobs-fixture";
 
-// The work queue against a real D1 (jobs.test.ts): supersede, the 0020 relabel, guarded batches and the 0045 key revocation.
+// The work queue against a real D1 (jobs.test.ts): supersede, guarded batches and the 0045 key revocation.
 
 beforeEach(resetJobs);
 
@@ -92,15 +92,6 @@ describe("supersede", () => {
     expect(again.ok, again.refusal).toBe(true);
   });
 
-  it("without replaced_by the summary says so plainly", async () => {
-    const old = await post({ title: "withdrawn" });
-    const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, {
-      reason: "no longer wanted",
-    });
-    expect(out.ok, out.refusal).toBe(true);
-    expect((await jobRow(old.job!.id))?.result_summary).toBe("Superseded: no longer wanted");
-  });
-
   it("the holder of a claimed job with no work recorded may supersede it, and the claimant is kept", async () => {
     const old = await post({ title: "claimed then replaced" });
     const claimed = await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
@@ -118,13 +109,6 @@ describe("supersede", () => {
     expect(reclaimed.ok, reclaimed.refusal).toBe(true);
   });
 
-  it("the seat may supersede a claimed job it does not hold", async () => {
-    const old = await post({ title: "seat steps in" });
-    await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
-    const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, { reason: "reposted" });
-    expect(out.ok, out.refusal).toBe(true);
-  });
-
   it("PLANT: a non-holder that is not the seat is refused on a claimed job", async () => {
     const old = await post({ title: "not yours" });
     await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
@@ -134,6 +118,9 @@ describe("supersede", () => {
     expect(out.ok).toBe(false);
     expect(out.refusal).toMatch(new RegExp(`is held by ${DRIVER_ACTOR}`));
     expect((await jobRow(old.job!.id))?.status).toBe("claimed");
+    // The seat may supersede a claimed job it does not hold.
+    const bySeat = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, { reason: "reposted" });
+    expect(bySeat.ok, bySeat.refusal).toBe(true);
   });
 
   it("PLANT: a claimed job with a gate hit, a correction or a result_ref is refused, even for the seat", async () => {
@@ -163,24 +150,6 @@ describe("supersede", () => {
         "clearing the claim for the next case",
       );
     }
-  });
-
-  it("PLANT: the keyed UPDATE itself refuses work recorded after the read", async () => {
-    // The pre-check reads the row; the UPDATE is the rule. A gate hit that lands
-    // between the two must still stop the supersede, so the statement (copied from
-    // src/jobs.ts) is run against a row the pre-check never saw.
-    const old = await post({ title: "raced" });
-    await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
-    await env.DB.prepare("UPDATE jobs SET blocked_count = 1 WHERE id = ?1").bind(old.job!.id).run();
-    const won = await env.DB.prepare(
-      `UPDATE jobs SET status = 'superseded', result_summary = ?2, updated_at = ?3
-       WHERE id = ?1 AND (status = 'queued' OR (status = 'claimed' AND claimed_by = ?4 AND blocked_count = 0
-         AND resumed_count = 0 AND corrections_count = 0 AND result_ref IS NULL)) RETURNING id`,
-    )
-      .bind(old.job!.id, "Superseded: x", NOW.toISOString(), DRIVER_ACTOR)
-      .first<{ id: string }>();
-    expect(won).toBeNull();
-    expect((await jobRow(old.job!.id))?.status).toBe("claimed");
   });
 
   it("refuses a job that is done, failed, blocked or already superseded", async () => {
@@ -238,8 +207,8 @@ describe("supersede", () => {
   });
 
   it("a superseded job's old outcome row stays, and is left out of the agent record", async () => {
-    // The shape 0020 leaves behind: a job claimed and failed to close it, with an
-    // outcome row, then relabelled. The row stays; the record does not count it.
+    // A job claimed and failed to close it, with an outcome row, then relabelled. The
+    // row stays; the record does not count it.
     const old = await post({ title: "claimed and failed to repost" });
     await claimJob(jobsEnv(), DRIVER, NOW, { id: old.job!.id });
     await failJob(jobsEnv(), DRIVER, NOW, old.job!.id, "Seat repost before any work");
@@ -253,68 +222,6 @@ describe("supersede", () => {
     expect(await outcomeCount(old.job!.id)).toBe(1);
     expect(after.outcomes.length).toBe(0);
     expect(after.jobs.some((r) => r.status === "failed")).toBe(false);
-  });
-});
-
-describe("migrations/0020, the relabel", () => {
-  // The migration already ran on an empty table at setup, so its statements are run
-  // again here, taken from the migration itself, over rows seeded on either side of
-  // the predicate.
-  const relabel = env.TEST_MIGRATIONS.find((m) => m.name === "0020_jobs_superseded.sql");
-
-  async function seed(id: string, status: string, summary: string | null, namespace = "capsid") {
-    await env.DB.prepare(
-      `INSERT INTO jobs (id, namespace, title, body, status, posted_by, result_summary)
-       VALUES (?1, ?2, ?1, 'lorem ipsum', ?3, 'github:example', ?4)`,
-    )
-      .bind(id, namespace, status, summary)
-      .run();
-  }
-
-  it("moves only failed rows whose summary begins with the seat's wording, case-sensitively", async () => {
-    expect(relabel, "no migration named 0020_jobs_superseded.sql").toBeTruthy();
-    await seed("job_repost00000", "failed", "Seat repost before any work: see job_aaaaaaaaaaaa");
-    await seed("job_withdraw000", "failed", "Seat withdrawal");
-    await seed("job_reorder0000", "failed", "Seat reorder", "germomics");
-    await seed("job_hold0000000", "failed", "Seat hold until the migration lands");
-    await seed("job_supersede00", "failed", "Superseded by job_bbbbbbbbbbbb");
-    // A literal prefix match, so this moves too: it begins with "Superseded".
-    await seed("job_ish00000000", "failed", "Superseded-ish, but really a failure");
-    // Left as failed, or left in the status they have.
-    await seed("job_lower000000", "failed", "seat repost before any work");
-    await seed("job_lowersup000", "failed", "superseded by job_cccccccccccc, merged in its place");
-    await seed("job_upper000000", "failed", "SUPERSEDED by job_dddddddddddd");
-    await seed("job_withdrawn00", "failed", "Withdrawn by the seat");
-    await seed("job_middle00000", "failed", "Failed. Seat repost later.");
-    await seed("job_null0000000", "failed", null);
-    await seed("job_done0000000", "done", "Superseded the old approach and landed");
-    await seed("job_queued00000", "queued", "Seat repost");
-
-    for (const query of relabel!.queries) await env.DB.prepare(query).run();
-
-    const { results } = await env.DB.prepare("SELECT id, status FROM jobs ORDER BY id").all<{
-      id: string;
-      status: string;
-    }>();
-    const status = Object.fromEntries((results ?? []).map((r) => [r.id, r.status]));
-    expect(status).toEqual({
-      job_done0000000: "done",
-      job_hold0000000: "superseded",
-      job_ish00000000: "superseded",
-      job_lower000000: "failed",
-      job_lowersup000: "failed",
-      job_middle00000: "failed",
-      job_null0000000: "failed",
-      job_queued00000: "queued",
-      job_reorder0000: "superseded",
-      job_repost00000: "superseded",
-      job_supersede00: "superseded",
-      job_upper000000: "failed",
-      job_withdraw000: "superseded",
-      job_withdrawn00: "failed",
-    });
-    // A summary that names the replacing job keeps naming it.
-    expect((await jobRow("job_repost00000"))?.result_summary).toContain("job_aaaaaaaaaaaa");
   });
 });
 

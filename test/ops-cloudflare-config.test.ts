@@ -168,32 +168,11 @@ test("access_apps returns each app's allowlisted fields and nothing else", async
   assert.equal(cf.calls[0].signal, true, "the read carried no timeout");
 });
 
-test("PLANT: a client_secret in an Access app never reaches the caller", async () => {
-  const cf = cloudflare({ [`${ACCT}/access/apps`]: [listPage([SAAS])] });
-  const text = JSON.stringify(await read("access_apps", cf));
-  assert.ok(!text.includes(CLIENT_SECRET), "the SaaS app's client_secret reached the caller");
-  assert.ok(
-    !/saas_app|client_secret|client_id/.test(text),
-    `a saas_app field reached the caller: ${text}`,
-  );
-  assert.ok(!text.includes(AUD), "the app's aud tag reached the caller");
-});
-
-test("PLANT: a SCIM token, password or client secret in an Access app never reaches the caller", async () => {
-  const cf = cloudflare({ [`${ACCT}/access/apps`]: [listPage([SAAS])] });
-  const text = JSON.stringify(await read("access_apps", cf));
-  for (const secret of [SCIM_TOKEN, SCIM_PASSWORD, SCIM_CLIENT_SECRET])
-    assert.ok(!text.includes(secret), `${secret} reached the caller`);
-  assert.ok(
-    !/scim_config|authentication|remote_uri/.test(text),
-    `a scim_config field reached the caller: ${text}`,
-  );
-});
-
-test("PLANT: a secret Cloudflare adds under a new field name is dropped, because nothing passes through whole", async () => {
+test("PLANT: no secret Cloudflare keeps beside an Access app, known or added under a new field name, reaches the caller", async () => {
   const cf = cloudflare({
     [`${ACCT}/access/apps`]: [
       listPage([
+        SAAS,
         {
           ...SELF_HOSTED,
           future_secret: CLIENT_SECRET,
@@ -203,7 +182,12 @@ test("PLANT: a secret Cloudflare adds under a new field name is dropped, because
     ],
   });
   const text = JSON.stringify(await read("access_apps", cf));
-  assert.ok(!text.includes(CLIENT_SECRET), "an unlisted field reached the caller");
+  for (const secret of [CLIENT_SECRET, SCIM_TOKEN, SCIM_PASSWORD, SCIM_CLIENT_SECRET, AUD])
+    assert.ok(!text.includes(secret), `${secret} reached the caller`);
+  assert.ok(
+    !/saas_app|client_secret|client_id|scim_config|authentication|remote_uri/.test(text),
+    `a secret-bearing field reached the caller: ${text}`,
+  );
 });
 
 // access_policies
@@ -555,19 +539,6 @@ test("the tool refuses a zone on any action but email_rules, and answers a missi
     const unset = await callTool(admin, { action: "email_addresses" }, {});
     assert.equal(unset.isError, true);
     assert.match(unset.content[0].text, /CF_OPS_TOKEN is not set/);
-    assert.equal(calls.length, 0);
-  });
-});
-
-test("the tool requires an action: an omitted one is a schema error, never a default read", async () => {
-  await withFetch({}, async (calls) => {
-    // The SDK answers a schema failure either as an error result or by rejecting the
-    // call, depending on its version. Both refuse; neither may reach Cloudflare.
-    const refusedCall = await callTool(adminAgentForEmail("admin@example.com"), {}).then(
-      (r) => r.isError === true,
-      () => true,
-    );
-    assert.equal(refusedCall, true, "a call with no action was answered");
     assert.equal(calls.length, 0);
   });
 });

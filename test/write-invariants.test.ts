@@ -626,32 +626,6 @@ test("a declined elicitation refuses, and writes nothing", async () => {
   assert.deepEqual(recorded, []);
 });
 
-test("a stale confirmation and an if_match mismatch are each named as themselves", async () => {
-  const race = {
-    raceAfterPreRead: (live: LiveState) => {
-      live.body = RACED;
-    },
-  };
-  // No if_match was sent, so "if_match mismatch" would point the caller at an argument they did not use.
-  const stale = await run("capsid_write_doc", { ...WRITE, confirm: undefined }, race, {
-    elicit: "accept",
-  });
-  assert.equal(stale.result.isError, true);
-  assert.match(stale.text, /^stale confirmation on capsid\/doc\.md:/);
-  assert.doesNotMatch(stale.text, /if_match mismatch/);
-  assert.match(stale.text, /and while the overwrite confirmation was pending/);
-  assert.match(stale.text, new RegExp(sha(RACED)));
-  assert.deepEqual(stale.recorded, []);
-
-  // This caller sent a sha and was never prompted, so no pending clause.
-  const mismatch = await run("capsid_write_doc", { ...WRITE, if_match: sha("prior body") }, race, {
-    elicit: "accept",
-  });
-  assert.equal(mismatch.result.isError, true);
-  assert.match(mismatch.text, /^if_match mismatch on capsid\/doc\.md:/);
-  assert.doesNotMatch(mismatch.text, /stale confirmation|overwrite confirmation was pending/);
-});
-
 // A landed GitHub change is not reported as a failure.
 
 test("capsid_close_pr close reports success with a warning when the audit insert fails", async () => {

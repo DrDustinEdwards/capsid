@@ -16,18 +16,10 @@ async function anonymous(path: string, method = "GET") {
 }
 
 describe("the Portal host through the whole Worker", () => {
-  it("PLANT: / and /mcp send an anonymous caller to the Access sign-in, as live gate 7 asserts", async () => {
-    for (const path of ["/", "/mcp"]) {
-      const response = await anonymous(path);
-      expect(response.status, `${path} answered ${response.status}`).toBe(302);
-      expect(response.headers.get("Location") ?? "", `${path} redirected elsewhere`).toContain(
-        "sample.cloudflareaccess.com",
-      );
-    }
-  });
-
-  it("PLANT: none of the OAuth provider's own routes answers on the Portal host", async () => {
+  it("PLANT: / and none of the OAuth provider's own routes answer on the Portal host: an anonymous caller gets the Access sign-in (live gate 7)", async () => {
     for (const [path, method] of [
+      ["/", "GET"],
+      ["/mcp", "GET"],
       ["/mcp", "POST"],
       ["/token", "POST"],
       ["/authorize", "GET"],

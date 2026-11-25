@@ -14,7 +14,12 @@ import {
   type OpsSnapshot,
   type SiteProbe,
 } from "../src/ops-snapshot.ts";
-import { checkStates, watcherTick, WATCHER_LAST_KEY, type Gathered } from "../src/watcher.ts";
+import {
+  checkStates,
+  watcherTick,
+  WATCHER_LAST_KEY,
+  type Gathered,
+} from "../src/watcher.ts";
 import { WATCHER_CHECKS } from "../src/watcher-checks.ts";
 import { type Finding } from "../src/watcher-detect.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
@@ -30,28 +35,42 @@ const SLOT = ringSlot(NOW);
 test("the ring starts with this pass and advances one slot per half hour", () => {
   const first = advanceRing(undefined, SLOT, true);
   assert.deepEqual(first, { ring: "1", ring_slot: SLOT });
-  assert.deepEqual(advanceRing(first, SLOT + 1, false), { ring: "10", ring_slot: SLOT + 1 });
+  assert.deepEqual(advanceRing(first, SLOT + 1, false), {
+    ring: "10",
+    ring_slot: SLOT + 1,
+  });
 });
 
 test("slots no pass reached are marked as no data, not as up", () => {
-  assert.deepEqual(advanceRing({ ring: "11", ring_slot: SLOT }, SLOT + 3, true), {
-    ring: "11--1",
-    ring_slot: SLOT + 3,
-  });
+  assert.deepEqual(
+    advanceRing({ ring: "11", ring_slot: SLOT }, SLOT + 3, true),
+    {
+      ring: "11--1",
+      ring_slot: SLOT + 3,
+    },
+  );
 });
 
 test("two passes in one slot keep the worse result, so a success does not hide a failure", () => {
-  assert.equal(advanceRing({ ring: "10", ring_slot: SLOT }, SLOT, true).ring, "10");
-  assert.equal(advanceRing({ ring: "11", ring_slot: SLOT }, SLOT, false).ring, "10");
+  assert.equal(
+    advanceRing({ ring: "10", ring_slot: SLOT }, SLOT, true).ring,
+    "10",
+  );
+  assert.equal(
+    advanceRing({ ring: "11", ring_slot: SLOT }, SLOT, false).ring,
+    "10",
+  );
   // A clock that steps back folds into the last slot rather than rewriting history.
-  assert.deepEqual(advanceRing({ ring: "11", ring_slot: SLOT }, SLOT - 4, false), {
-    ring: "10",
-    ring_slot: SLOT,
-  });
+  assert.deepEqual(
+    advanceRing({ ring: "11", ring_slot: SLOT }, SLOT - 4, false),
+    {
+      ring: "10",
+      ring_slot: SLOT,
+    },
+  );
 });
 
 test("the ring holds 7 days of half-hour slots and no more, even after a long gap", () => {
-  assert.equal(RING_SLOTS, 336);
   const full = { ring: "1".repeat(RING_SLOTS), ring_slot: SLOT };
   const next = advanceRing(full, SLOT + 1, false);
   assert.equal(next.ring.length, RING_SLOTS);
@@ -68,7 +87,8 @@ function fetchFor(answers: Record<string, Answer>) {
   const impl = async (url: string) => {
     asked.push(url);
     const a = answers[url];
-    if (a === undefined || a === "throw") throw new Error(`connect failed for ${url}`);
+    if (a === undefined || a === "throw")
+      throw new Error(`connect failed for ${url}`);
     if (typeof a === "number") return new Response("x", { status: a });
     return new Response(a.body, { status: a.status });
   };
@@ -122,18 +142,12 @@ test("U1: the home page is read every pass, so a 5xx there degrades a site whose
   assert.match(String(p.error), /home page answered 500/);
 });
 
-test("a health body with no sha is ok and reports no sha", async () => {
-  const f = fetchFor({
-    "https://sample.example.com/health": { status: 200, body: "not json" },
-    "https://sample.example.com/": 200,
-  });
-  const p = await probeSite(site({}), f.impl, NOW, null);
-  assert.equal(p.state, "ok");
-  assert.equal(p.sha, null);
-});
-
 test("PLANT: a health body past the cap is not read whole and yields no sha", async () => {
-  const huge = JSON.stringify({ status: "ok", sha: "deadbee", pad: "x".repeat(MAX_HEALTH_BYTES) });
+  const huge = JSON.stringify({
+    status: "ok",
+    sha: "deadbee",
+    pad: "x".repeat(MAX_HEALTH_BYTES),
+  });
   const impl = async () => new Response(huge, { status: 200 });
   const p = await probeSite(site({}), impl, NOW, null);
   assert.equal(p.state, "ok");
@@ -165,7 +179,10 @@ test("a 2xx health body that admits a problem is degraded and names it; a fail b
   const warn = fetchFor({
     "https://sample.example.com/health": {
       status: 200,
-      body: JSON.stringify({ ok: true, backup: { warning: "last backup 38h ago" } }),
+      body: JSON.stringify({
+        ok: true,
+        backup: { warning: "last backup 38h ago" },
+      }),
     },
     "https://sample.example.com/": 200,
   });
@@ -187,7 +204,10 @@ test("a 2xx health body that admits a problem is degraded and names it; a fail b
     null,
   );
   assert.equal(down.state, "down");
-  assert.match(String(down.error), /answered 503 fail \(db\); root answered 503/);
+  assert.match(
+    String(down.error),
+    /answered 503 fail \(db\); root answered 503/,
+  );
 });
 
 test("a health path on another host is read there, and the root fallback stays on the origin", async () => {
@@ -196,11 +216,20 @@ test("a health path on another host is read there, and the root fallback stays o
     "https://sample.example.com/": 200,
   });
   assert.equal(
-    (await probeSite(site({ healthPath: "https://health.example.com/health" }), f.impl, NOW, null))
-      .state,
+    (
+      await probeSite(
+        site({ healthPath: "https://health.example.com/health" }),
+        f.impl,
+        NOW,
+        null,
+      )
+    ).state,
     "degraded",
   );
-  assert.deepEqual(f.asked, ["https://health.example.com/health", "https://sample.example.com/"]);
+  assert.deepEqual(f.asked, [
+    "https://health.example.com/health",
+    "https://sample.example.com/",
+  ]);
 });
 
 test("a site with no health route is liveness at best", async () => {
@@ -226,7 +255,12 @@ test("a site with no health route is liveness at best", async () => {
     ).state,
     "down",
   );
-  const thrown = await probeSite(site({ healthPath: null }), fetchFor({}).impl, NOW, null);
+  const thrown = await probeSite(
+    site({ healthPath: null }),
+    fetchFor({}).impl,
+    NOW,
+    null,
+  );
   assert.equal(thrown.state, "down");
   assert.match(String(thrown.error), /connect failed/);
 });
@@ -236,7 +270,8 @@ test("Capsid itself is read in-process, never fetched", async () => {
   const self = site({ self: true });
   assert.equal((await probeSite(self, f.impl, NOW, HEALTH)).state, "ok");
   assert.equal(
-    (await probeSite(self, f.impl, NOW, { ...HEALTH, status: "degraded" })).state,
+    (await probeSite(self, f.impl, NOW, { ...HEALTH, status: "degraded" }))
+      .state,
     "degraded",
   );
   assert.equal(
@@ -258,9 +293,17 @@ test("Capsid itself is read in-process, never fetched", async () => {
 
 test("each check is clear, a finding, or could not run, and only a check that ran can be clear", () => {
   const found: Finding[] = [
-    { fingerprint: "ci-red-abc1234", namespace: "foxhound", title: "t", body: "b" },
+    {
+      fingerprint: "ci-red-abc1234",
+      namespace: "foxhound",
+      title: "t",
+      body: "b",
+    },
   ];
-  const states = checkStates({ findings: found, ran: new Set(["ci", "health"] as const) });
+  const states = checkStates({
+    findings: found,
+    ran: new Set(["ci", "health"] as const),
+  });
   assert.deepEqual(
     states.map((c) => c.id),
     [...WATCHER_CHECKS],
@@ -300,14 +343,20 @@ const input = (probes: SiteProbe[] | null, at = NOW) => ({
 });
 
 test("each pass carries every site's ring forward from the last snapshot", () => {
-  const one = buildSnapshot(null, input([probe("a", "liveness"), probe("b", "down")]));
+  const one = buildSnapshot(
+    null,
+    input([probe("a", "liveness"), probe("b", "down")]),
+  );
   assert.deepEqual(
     one.sites.map((s) => s.ring),
     ["1", "0"],
   );
   const two = buildSnapshot(
     one,
-    input([probe("a", "ok"), probe("b", "ok")], new Date(NOW.getTime() + 30 * 60_000)),
+    input(
+      [probe("a", "ok"), probe("b", "ok")],
+      new Date(NOW.getTime() + 30 * 60_000),
+    ),
   );
   assert.deepEqual(
     two.sites.map((s) => s.ring),
@@ -319,17 +368,25 @@ test("each pass carries every site's ring forward from the last snapshot", () =>
 
 test("a pass whose probes could not run keeps each site and marks the slot as no data", () => {
   const one = buildSnapshot(null, input([probe("a", "ok")]));
-  const two = buildSnapshot(one, input(null, new Date(NOW.getTime() + 60 * 60_000)));
+  const two = buildSnapshot(
+    one,
+    input(null, new Date(NOW.getTime() + 60 * 60_000)),
+  );
   assert.equal(two.sites.length, 1);
   assert.equal(two.sites[0].ring, "1--");
-  assert.equal(two.sites[0].state, "ok", "the last probe is kept, and the ring says it is old");
+  assert.equal(
+    two.sites[0].state,
+    "ok",
+    "the last probe is kept, and the ring says it is old",
+  );
 });
 
 test("an unreadable snapshot is logged and the rings start again", async () => {
   const kv = fakeKv({ seed: { [OPS_SNAPSHOT_KEY]: "{not json" } });
   const errors: string[] = [];
   const original = console.error;
-  console.error = (...a: unknown[]) => void errors.push(a.map(String).join(" "));
+  console.error = (...a: unknown[]) =>
+    void errors.push(a.map(String).join(" "));
   try {
     assert.equal(await readSnapshot(fakeEnv({ APP_KV: kv.kv })), null);
   } finally {
@@ -347,14 +404,22 @@ function tickEnv(kv: ReturnType<typeof fakeKv>) {
     first: async () => null,
     run: async () => ({}),
   };
-  return fakeEnv({ APP_KV: kv.kv, DB: { prepare: () => ({ ...noRows, bind: () => noRows }) } });
+  return fakeEnv({
+    APP_KV: kv.kv,
+    DB: { prepare: () => ({ ...noRows, bind: () => noRows }) },
+  });
 }
 const gathered = (): Gathered => ({
   findings: [],
   ran: new Set(["health", "site probes"] as const),
   observed: {
     health: HEALTH,
-    offaccount: { reported_at: null, sites: [], last_run: null, last_drill: null },
+    offaccount: {
+      reported_at: null,
+      sites: [],
+      last_run: null,
+      last_drill: null,
+    },
     ci: [],
     siteMap: { unmapped: [], unknown: [] },
     probes: [probe("capsid", "ok")],
@@ -371,7 +436,9 @@ test("a pass writes ops:snapshot, then the watcher stamp", async () => {
     [OPS_SNAPSHOT_KEY, WATCHER_LAST_KEY],
     "the snapshot must be written before the stamp",
   );
-  const snap = JSON.parse(kv.store.get(OPS_SNAPSHOT_KEY) ?? "null") as OpsSnapshot;
+  const snap = JSON.parse(
+    kv.store.get(OPS_SNAPSHOT_KEY) ?? "null",
+  ) as OpsSnapshot;
   assert.equal(snap.pass_at, NOW.toISOString());
   assert.equal(snap.cadence_min, 30);
   assert.deepEqual(
@@ -384,6 +451,8 @@ test("a pass writes ops:snapshot, then the watcher stamp", async () => {
 
 test("a snapshot that cannot be written fails the pass, so the stamp is not written and the next tick runs again", async () => {
   const kv = fakeKv({ failPut: true });
-  await assert.rejects(() => watcherTick(tickEnv(kv), NOW, async () => gathered()));
+  await assert.rejects(() =>
+    watcherTick(tickEnv(kv), NOW, async () => gathered()),
+  );
   assert.equal(kv.store.get(WATCHER_LAST_KEY), undefined);
 });

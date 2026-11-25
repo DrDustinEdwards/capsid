@@ -36,7 +36,10 @@ const ROW: SiteRowFixture = {
   self_probe: 0,
   revision: 1,
   updated_at: "2026-10-01 00:00:00",
-  operator: JSON.stringify({ path: "/api/operator", auth_var: "SAMPLE_OPERATOR_TOKEN" }),
+  operator: JSON.stringify({
+    path: "/api/operator",
+    auth_var: "SAMPLE_OPERATOR_TOKEN",
+  }),
 };
 
 // ops_sites, answered by namespace. Any other statement is a test failure, not a quiet null.
@@ -67,7 +70,9 @@ const SECURITY_HEADERS: Record<string, string> = {
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 };
 
-type Answer = { status: number; body?: string; headers?: Record<string, string> } | "throw";
+type Answer =
+  | { status: number; body?: string; headers?: Record<string, string> }
+  | "throw";
 
 // The fake site: answers by "METHOD url", records every call. An unrouted URL throws,
 // so a fetch to anywhere unexpected fails loudly.
@@ -77,8 +82,12 @@ function site(answers: Record<string, Answer>) {
     const method = init?.method ?? "GET";
     calls.push({ method, url });
     const a = answers[`${method} ${url}`];
-    if (a === undefined || a === "throw") throw new Error(`connect failed for ${url}`);
-    return new Response(a.body ?? null, { status: a.status, headers: a.headers });
+    if (a === undefined || a === "throw")
+      throw new Error(`connect failed for ${url}`);
+    return new Response(a.body ?? null, {
+      status: a.status,
+      headers: a.headers,
+    });
   };
   return { impl, calls };
 }
@@ -111,7 +120,17 @@ function healthyAnswers(probeStatus: number): Record<string, Answer> {
 
 // Paths
 
-test("PLANT: pathRefusal refuses a path with '..', one not starting with /, and one with a query or a scheme", () => {
+test("PLANT: pathRefusal refuses a path with '..', one not starting with /, and one with a query or a scheme, and accepts ordinary site paths", () => {
+  for (const good of [
+    "/",
+    "/about",
+    "/blog/2026/10/a-post",
+    "/api/operator",
+    "/file.v2.json",
+    "/a~b/c_d-e",
+  ]) {
+    assert.equal(pathRefusal("page", good), null, `'${good}' was refused`);
+  }
   for (const bad of [
     "/../etc/passwd",
     "/a/../b",
@@ -129,19 +148,6 @@ test("PLANT: pathRefusal refuses a path with '..', one not starting with /, and 
       /page must be a path on the site, starting with \//,
       `'${bad}' was accepted`,
     );
-  }
-});
-
-test("THE INNOCENT DIRECTION: pathRefusal accepts ordinary site paths", () => {
-  for (const good of [
-    "/",
-    "/about",
-    "/blog/2026/10/a-post",
-    "/api/operator",
-    "/file.v2.json",
-    "/a~b/c_d-e",
-  ]) {
-    assert.equal(pathRefusal("page", good), null, `'${good}' was refused`);
   }
 });
 
@@ -169,16 +175,19 @@ test("PLANT: a namespace with no site row is refused, naming capsid_admin_run_co
     () => siteCheck(env, "sample", {}, s.impl, NOW),
     /sample has no site configured.*capsid_admin_run_controls control site_add/s,
   );
-  assert.equal(s.calls.length, 0);
-});
-
-test("PLANT: a row that declares no site (origin null) is refused the same way", async () => {
-  const { env } = siteEnv([
-    { ...ROW, origin: null, platform: null, health_path: null, script: null, operator: null },
+  // A row that declares no site (origin null) is refused the same way.
+  const bare = siteEnv([
+    {
+      ...ROW,
+      origin: null,
+      platform: null,
+      health_path: null,
+      script: null,
+      operator: null,
+    },
   ]);
-  const s = site(healthyAnswers(401));
   await assert.rejects(
-    () => siteCheck(env, "sample", {}, s.impl, NOW),
+    () => siteCheck(bare.env, "sample", {}, s.impl, NOW),
     /capsid_admin_run_controls/,
   );
   assert.equal(s.calls.length, 0);
@@ -205,7 +214,10 @@ test("PLANT: the operator API answering 200 to a caller with no credential is re
   const r = await siteCheck(env, "sample", {}, s.impl, NOW);
   assert.equal(r.probe.status, 200);
   assert.equal(r.probe.refused, false);
-  assert.match(r.probe.note, /^OPEN: answered 200 to a caller with no credential/);
+  assert.match(
+    r.probe.note,
+    /^OPEN: answered 200 to a caller with no credential/,
+  );
 });
 
 test("the probe sends no credential, and a named probe path overrides the operator API with a GET, never a POST", async () => {
@@ -214,7 +226,8 @@ test("the probe sends no credential, and a named probe path overrides the operat
   const seen: Array<Record<string, string>> = [];
   const s = site(answers);
   const impl = async (url: string, init?: RequestInit) => {
-    if (url.endsWith("/admin")) seen.push((init?.headers ?? {}) as Record<string, string>);
+    if (url.endsWith("/admin"))
+      seen.push((init?.headers ?? {}) as Record<string, string>);
     return s.impl(url, init);
   };
   const r = await siteCheck(env, "sample", { probe: "/admin" }, impl, NOW);
@@ -256,7 +269,11 @@ test("a probe with no answer reports null, never refused", async () => {
   const s = site(answers);
   const r = await siteCheck(env, "sample", {}, s.impl, NOW);
   assert.equal(r.probe.status, null);
-  assert.equal(r.probe.refused, null, "a probe that got no answer was reported as refused");
+  assert.equal(
+    r.probe.refused,
+    null,
+    "a probe that got no answer was reported as refused",
+  );
   assert.match(r.probe.note, /^no answer:/);
 });
 
@@ -274,11 +291,24 @@ test("PLANT: only the site's configured origin is fetched, for every read", asyn
   };
   const s2 = site(answers);
   await siteCheck(env, "sample", {}, s.impl, NOW);
-  await siteCheck(env, "sample", { page: "//other.example.net/x" }, s2.impl, NOW);
+  await siteCheck(
+    env,
+    "sample",
+    { page: "//other.example.net/x" },
+    s2.impl,
+    NOW,
+  );
   const all = [...s.calls, ...s2.calls];
-  assert.ok(all.length >= 6, `expected the health, page and probe reads twice, got ${all.length}`);
+  assert.ok(
+    all.length >= 6,
+    `expected the health, page and probe reads twice, got ${all.length}`,
+  );
   for (const c of all) {
-    assert.equal(new URL(c.url).origin, ORIGIN, `${c.method} ${c.url} left the site's origin`);
+    assert.equal(
+      new URL(c.url).origin,
+      ORIGIN,
+      `${c.method} ${c.url} left the site's origin`,
+    );
   }
 });
 
@@ -288,7 +318,11 @@ test("THE INNOCENT DIRECTION: the health route, the page and the probe are each 
   const r = await siteCheck(env, "sample", { page: "/about" }, s.impl, NOW);
   assert.deepEqual(
     s.calls.map((c) => `${c.method} ${c.url}`),
-    [`GET ${ORIGIN}/health`, `GET ${ORIGIN}/about`, `POST ${ORIGIN}/api/operator`],
+    [
+      `GET ${ORIGIN}/health`,
+      `GET ${ORIGIN}/about`,
+      `POST ${ORIGIN}/api/operator`,
+    ],
   );
   assert.equal(r.origin, ORIGIN);
   assert.equal(r.health.state, "ok");
@@ -316,9 +350,7 @@ test("PLANT: no text from any response body appears in the result, OPEN or refus
       `body text reached the result (probe ${status})`,
     );
   }
-});
-
-test("PLANT: a page that fails, and a health route that fails, still return no body text", async () => {
+  // A page and a health route that fail leak no body text either.
   const { env } = siteEnv([ROW]);
   const answers = healthyAnswers(401);
   answers[`GET ${ORIGIN}/health`] = { status: 500, body: MARKER };
@@ -327,8 +359,7 @@ test("PLANT: a page that fails, and a health route that fails, still return no b
     body: MARKER,
     headers: { "Content-Type": "text/html" },
   };
-  const s = site(answers);
-  const r = await siteCheck(env, "sample", {}, s.impl, NOW);
+  const r = await siteCheck(env, "sample", {}, site(answers).impl, NOW);
   assert.equal(r.page.status, 503);
   assert.notEqual(r.health.state, "ok");
   assert.doesNotMatch(JSON.stringify(r), new RegExp(MARKER));

@@ -295,28 +295,22 @@ describe("the OAuth round trip", () => {
     expect(await elsewhere.text()).not.toMatch(/"serverInfo"/);
   });
 
-  it("the exchange refuses a redirect_uri other than the authorization request's", async () => {
-    const { clientId, code } = await authorize(env.ADMIN_EMAIL!);
-    const refused = await tokenRequest({
-      grant_type: "authorization_code",
-      code: code!,
-      redirect_uri: "https://client.example.com/other",
-      client_id: clientId,
-      code_verifier: VERIFIER,
-    });
-    expect(refused.status).toBe(400);
-  });
-
-  it("the exchange refuses a wrong PKCE verifier", async () => {
-    const { clientId, code } = await authorize(env.ADMIN_EMAIL!);
-    const refused = await tokenRequest({
-      grant_type: "authorization_code",
-      code: code!,
-      redirect_uri: REDIRECT,
-      client_id: clientId,
-      code_verifier: "not-the-verifier-not-the-verifier-not-the-verifier",
-    });
-    expect(refused.status).toBe(400);
+  it("the exchange refuses a redirect_uri other than the authorization request's, and a wrong PKCE verifier", async () => {
+    for (const bad of [
+      { redirect_uri: "https://client.example.com/other" },
+      { code_verifier: "not-the-verifier-not-the-verifier-not-the-verifier" },
+    ]) {
+      const { clientId, code } = await authorize(env.ADMIN_EMAIL!);
+      const refused = await tokenRequest({
+        grant_type: "authorization_code",
+        code: code!,
+        redirect_uri: REDIRECT,
+        client_id: clientId,
+        code_verifier: VERIFIER,
+        ...bad,
+      });
+      expect(refused.status, JSON.stringify(bad)).toBe(400);
+    }
   });
 
   it("an Access identity that is not ADMIN_EMAIL or a co-owner gets no code", async () => {

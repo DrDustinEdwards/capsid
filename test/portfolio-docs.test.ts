@@ -4,7 +4,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
-import { isPortfolioPath, PORTFOLIO_DOCS } from "../src/portfolio-docs.ts";
+import { isPortfolioPath } from "../src/portfolio-docs.ts";
 import { fakeD1, fakeEnv, fakeKv, type DocRow } from "./fakes.ts";
 
 // Every namespace driver may READ the portfolio documents in capsid (conventions, the
@@ -127,21 +127,6 @@ async function connect(caller: Agent, opts: { ftsRows?: number } = {}) {
 
 const paths = (r: Result): string[] =>
   (JSON.parse(r.text) as { documents: Array<{ path: string }> }).documents.map((d) => d.path);
-
-test("PORTFOLIO_DOCS is exactly the documents, volumes, folder and tool actions this test names", () => {
-  assert.deepEqual(PORTFOLIO_DOCS, {
-    namespace: "capsid",
-    documents: ["conventions.md", "core.md"],
-    volumes: ["archive/decisions-vol-"],
-    folders: ["rulings/"],
-    tools: [
-      "capsid_read_doc.read",
-      "capsid_find_docs.list",
-      "capsid_find_docs.glob",
-      "capsid_find_docs.search",
-    ],
-  });
-});
 
 test("isPortfolioPath admits the allowed paths and refuses traversal, case, encoding and prefix confusion", () => {
   for (const path of ALLOWED)

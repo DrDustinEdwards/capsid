@@ -108,7 +108,7 @@ test("the watcher can post a job and cannot claim, complete or resume one", () =
 
 // the cadence
 
-test("a pass is due on the first run, not due inside the cadence, and due after it", () => {
+test("a pass is due on the first run, not inside the cadence, due after it, and a corrupt stamp RUNS it", () => {
   assert.equal(passDue(null, 30, NOW).due, true);
   assert.equal(
     passDue(hoursAgo(0.25), 30, NOW).due,
@@ -116,9 +116,6 @@ test("a pass is due on the first run, not due inside the cadence, and due after 
     "15 minutes into a 30 minute cadence is not due",
   );
   assert.equal(passDue(hoursAgo(1), 30, NOW).due, true);
-});
-
-test("a corrupt stamp RUNS the pass rather than blocking it forever", () => {
   const verdict = passDue("not a date", 30, NOW);
   assert.equal(verdict.due, true);
   assert.match(verdict.reason, /does not parse/);
@@ -242,25 +239,17 @@ test("backup findings: stale, never ran, and an unparseable stamp", () => {
   }
 });
 
-test("a live schema behind the newest migration is a finding", () => {
-  const found = healthFindings(HEALTHY, HEALTHY.sha, "0017_something_new.sql", "capsid");
-  assert.deepEqual(
-    found.map((f) => f.fingerprint),
-    ["schema-behind-0017_something_new.sql"],
-  );
-});
-
-test("a live schema ahead of master is its own finding, not a behind one", () => {
-  const found = healthFindings(
-    { ...HEALTHY, schema_version: "0018_applied_early.sql" },
-    HEALTHY.sha,
-    "0017_something_new.sql",
-    "capsid",
-  );
-  assert.deepEqual(
-    found.map((f) => f.fingerprint),
-    ["schema-ahead-0018_applied_early.sql"],
-  );
+test("a live schema behind the newest migration, or ahead of master, is its own finding", () => {
+  const fingerprints = (live: string, master: string) =>
+    healthFindings({ ...HEALTHY, schema_version: live }, HEALTHY.sha, master, "capsid").map(
+      (f) => f.fingerprint,
+    );
+  assert.deepEqual(fingerprints(HEALTHY.schema_version, "0017_something_new.sql"), [
+    "schema-behind-0017_something_new.sql",
+  ]);
+  assert.deepEqual(fingerprints("0018_applied_early.sql", "0017_something_new.sql"), [
+    "schema-ahead-0018_applied_early.sql",
+  ]);
 });
 
 test("an OPEN queue breaker is a finding the status check owns, and a closed one is not", () => {

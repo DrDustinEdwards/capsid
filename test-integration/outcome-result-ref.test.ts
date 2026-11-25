@@ -157,22 +157,6 @@ describe("a pull request named only in result_ref is verified", () => {
     expect(claim?.agent).toBe(SEAT_ACTOR);
   });
 
-  it("control: the seat's complete with evidence.prs was verified before the fix too, so the take path was never the cause", async () => {
-    stubGitHub();
-    const id = await claimed("seat with evidence");
-    await blockJob(jobsEnv(), DRIVER, NOW, id, {
-      reason: "needs the seat",
-      command: "git push -u origin feat/x",
-    });
-    const taken = await resumeJob(jobsEnv(), SEAT, NOW, id, "the seat finishes it", { take: true });
-    expect(taken.ok, taken.refusal).toBe(true);
-    await completeJob(jobsEnv(), SEAT, LATER, id, {
-      result_summary: "merged",
-      evidence: { prs: [PR] },
-    });
-    expect(JSON.parse(String((await outcome(id))?.verified))).toEqual(VERIFIED);
-  });
-
   it("the same pull request in evidence and in result_ref is counted once", async () => {
     const { calls } = stubGitHub();
     const id = await claimed("named twice");

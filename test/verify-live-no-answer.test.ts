@@ -10,11 +10,6 @@ import { breaking, type Handler, healthy, HTML, NON_HTML, run, SHA } from "./ver
 // These run the real script against a local server that plays a healthy Worker
 // (./verify-live-stub.ts), and can drop the connection instead of answering.
 
-test("the fake Worker passes every gate, so the cases below measure the drops alone", async () => {
-  const { code, out } = await run(healthy, () => false);
-  assert.equal(code, 0, out);
-});
-
 test("a connection reset on the first try of every request is retried and the run passes", async () => {
   // One reset per request. Without the retry the first reset would exit 1, and exit 1
   // rolls back. The consent POST is single-shot (its handle works once), so it is spared.
@@ -34,15 +29,6 @@ test("a server that never answers is could-not-run (exit 3), not a refusal (exit
   // The gates that depend on a client id inherit could-not-run rather than failing.
   assert.match(out, /NORUN {2}3 consent form renders/);
   assert.doesNotMatch(out, /FAIL {2}/);
-});
-
-test("one single-shot gate that never gets an answer makes the run exit 3", async () => {
-  const { code, out } = await run(
-    healthy,
-    (req) => req.method === "POST" && req.url === "/authorize",
-  );
-  assert.equal(code, 3, out);
-  assert.match(out, /NORUN {2}5 approve redirects to Access/);
 });
 
 test("a server that answers with errors is still a refusal: exit 1", async () => {

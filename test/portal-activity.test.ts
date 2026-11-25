@@ -33,18 +33,15 @@ test("PLANT: the id is BOUND, and the namespace and actor filters are not applie
   assert.deepEqual(read.params, [42, 50]);
 });
 
-test("the filter reads namespace and actor off the query string, trimmed", () => {
+test("the filter reads namespace and actor off the query string, trimmed, and an empty value is no filter", () => {
   const filter = filterOf(
     "https://capsid.example/console?namespace=capsid&actor=%20agent%3Acapsid-driver%20",
   );
   assert.equal(filter.namespace, "capsid");
   assert.equal(filter.actor, "agent:capsid-driver");
-});
-
-test("an empty or whitespace filter value is no filter, not a filter on the empty string", () => {
-  const filter = filterOf("https://capsid.example/console?namespace=&actor=%20%20");
-  assert.equal(filter.namespace, null);
-  assert.equal(filter.actor, null);
+  const empty = filterOf("https://capsid.example/console?namespace=&actor=%20%20");
+  assert.equal(empty.namespace, null);
+  assert.equal(empty.actor, null);
 });
 
 test("the filter values are BOUND, never interpolated into the statement", async () => {

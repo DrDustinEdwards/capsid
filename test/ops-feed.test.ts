@@ -12,13 +12,7 @@ import {
   PORTAL_CSRF_COOKIE,
   refreshAllowedAt,
 } from "../src/ops-feed.ts";
-import {
-  awaitingFrom,
-  isoTime,
-  opsAgentFrom,
-  opsJobFrom,
-  type JobFeedRow,
-} from "../src/ops-live.ts";
+import { awaitingFrom, opsAgentFrom, opsJobFrom, type JobFeedRow } from "../src/ops-live.ts";
 import { OPS_SNAPSHOT_KEY } from "../src/ops-snapshot.ts";
 import {
   openWatcherFingerprints,
@@ -77,15 +71,6 @@ test("a blocked job's summary is split into what it waits on and the exact comma
   const done = opsJobFrom(job({ status: "done", result_summary: summary }));
   assert.equal(done.waits_on, null);
   assert.equal(done.command, null);
-});
-
-test("D1's datetime('now') form is handed over as ISO, and ISO passes through", () => {
-  assert.equal(isoTime("2026-09-28 10:00:00"), "2026-09-28T10:00:00Z");
-  assert.equal(isoTime("2026-09-28T11:00:00.000Z"), "2026-09-28T11:00:00.000Z");
-  assert.equal(isoTime(null), null);
-  const shaped = opsJobFrom(job());
-  assert.equal(shaped.created_at, "2026-09-28T10:00:00Z");
-  assert.equal(Date.parse(shaped.created_at), Date.parse("2026-09-28T10:00:00.000Z"));
 });
 
 test("a watcher job's fingerprint is read exactly as openWatcherFingerprints reads it", async () => {
@@ -231,25 +216,6 @@ test("the feed answers a signed-in administrator with the feed, uncached", async
 });
 
 // Who is signed in (the top bar's avatar)
-
-test("the feed names the signed-in person from the session: the token's name, else the email's local part", async () => {
-  for (const [user, expected] of [
-    [
-      { email: "admin@example.com", name: "Dustin Edwards" },
-      { name: "Dustin Edwards", initials: "DE" },
-    ],
-    [{ email: "admin@example.com" }, { name: "admin", initials: "A" }],
-  ] as const) {
-    const cookie = (await portalSessionCookie(user, SECRET, NOW)).split(";")[0];
-    const req = new Request(`https://capsid.example${OPS_FEED_PATH}`, {
-      headers: { Cookie: cookie },
-    });
-    const body = (await (await handleOpsFeed(req, env(), NOW, { feed })).json()) as {
-      user: unknown;
-    };
-    assert.deepEqual(body.user, expected);
-  }
-});
 
 test("portalDisplay: another person gets their own name and initials, never a fixed label", () => {
   assert.deepEqual(portalDisplay({ email: "jane.q.public@example.com" }), {

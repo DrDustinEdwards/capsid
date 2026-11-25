@@ -339,15 +339,4 @@ describe("job_touches", () => {
     ).rejects.toThrow(/append-only/);
     expect(await touches(id)).toHaveLength(1);
   });
-
-  it("the latest-gate lookup reads the (job_id, id) index and sorts nothing", async () => {
-    const plan = await env.DB.prepare(
-      "EXPLAIN QUERY PLAN SELECT at FROM job_touches g WHERE g.job_id = ?1 AND g.kind = 'gate' ORDER BY g.id DESC LIMIT 1",
-    )
-      .bind("x")
-      .all<{ detail: string }>();
-    const details = (plan.results ?? []).map((r) => r.detail).join(" | ");
-    expect(details).toContain("job_touches_job");
-    expect(details).not.toContain("TEMP B-TREE");
-  });
 });

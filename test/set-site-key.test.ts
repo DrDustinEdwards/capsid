@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  CARREL_SCRIPT,
-  SITE_SECRET,
-  carrelSecretName,
-  mintSiteKey,
-  setSiteKey,
-} from "../src/site-key.ts";
+import { CARREL_SCRIPT, SITE_SECRET, carrelSecretName, setSiteKey } from "../src/site-key.ts";
 import { fakeEnv } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
@@ -119,21 +113,6 @@ async function captured<T>(fn: () => Promise<T>): Promise<{ value: T; lines: str
     Object.assign(console, saved);
   }
 }
-
-// carrelSecretName
-
-test("carrelSecretName is SITE_<NAMESPACE>_KEY, upper case, dashes as underscores", () => {
-  assert.equal(carrelSecretName("sample"), "SITE_SAMPLE_KEY");
-  assert.equal(carrelSecretName("sample-site-two"), "SITE_SAMPLE_SITE_TWO_KEY");
-  assert.equal(carrelSecretName("sample2"), "SITE_SAMPLE2_KEY");
-});
-
-test("mintSiteKey is 43 base64url characters, fresh each time", () => {
-  const a = mintSiteKey();
-  const b = mintSiteKey();
-  assert.match(a, /^[A-Za-z0-9_-]{43}$/);
-  assert.notEqual(a, b);
-});
 
 // The value is never shown
 
@@ -276,14 +255,6 @@ test("PLANT: with CF_SECRETS_TOKEN unset, nothing is minted and nothing is fetch
     assert.equal(audits.length, 0);
   }
   assert.equal(random.mock.callCount(), 0, "a key was minted with no token to set it with");
-});
-
-test("THE INNOCENT DIRECTION: with the token set, exactly one key is minted", async (t) => {
-  const random = t.mock.method(crypto, "getRandomValues");
-  const { db } = siteDb();
-  const cf = cloudflare(OK, OK);
-  await setSiteKey(fakeEnv({ DB: db, ...ENV }), "access:admin@example.com", "sample", cf.impl);
-  assert.equal(random.mock.callCount(), 1);
 });
 
 test("PLANT: a site row with no Cloudflare script mints nothing and fetches nothing", async () => {

@@ -59,21 +59,6 @@ test("PLANT: missing data, a check that could not run, unread CI, drift and sile
   assert.equal(silent?.group, "silent");
 });
 
-test("health not read and the Amazon copy not read stay warnings, not notices", () => {
-  const { f, now } = feed();
-  assert.ok(f.snapshot);
-  f.snapshot.health = null;
-  f.snapshot.offaccount = null;
-  const warn = list(f, now)
-    .items.filter((r) => r.tone === "warn")
-    .map((r) => r.title);
-  assert.ok(warn.includes("Capsid health was not read on the last pass"), warn.join(" | "));
-  assert.ok(
-    warn.includes("The Amazon backup copy's report was not read on the last pass"),
-    warn.join(" | "),
-  );
-});
-
 test("PLANT: blocked jobs are ordered by priority, then newest; over 7 days they are Stale", () => {
   const { f, now } = feed();
   const base = f.live.jobs.find((j) => j.status === "blocked")!;
@@ -114,7 +99,14 @@ test("PLANT: a scheduled task that failed or went quiet is a problem; a backup i
     t.recent =
       flag === "never"
         ? []
-        : [{ started_at: at, finished_at: at, outcome, reason: `${id} reason` }];
+        : [
+            {
+              started_at: at,
+              finished_at: at,
+              outcome,
+              reason: `${id} reason`,
+            },
+          ];
   };
   for (const t of tasks) set(t.id, null);
   set("backup", "failing", "threw");

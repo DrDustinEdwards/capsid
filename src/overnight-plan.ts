@@ -31,7 +31,7 @@ export const DEFAULT_BUDGET_MINUTES = 480;
 // say. Deliberately on the long side: an estimate that is too short overfills the night.
 export const DEFAULT_ESTIMATE_MINUTES = 60;
 // Outcomes a namespace needs before its own record is trusted over the default.
-export const MIN_SAMPLES = 5;
+const MIN_SAMPLES = 5;
 export const FLOOR_ESTIMATE_MINUTES = 15;
 const PLAN_JOBS_MAX = 500;
 

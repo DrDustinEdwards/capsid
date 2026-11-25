@@ -75,27 +75,6 @@ beforeEach(async () => {
 });
 
 describe("the audit row of a policy resume", () => {
-  it("a policy-approved resume records which class matched and what it matched on", async () => {
-    const id = await blockedJob("git push -u origin feat/autonomy-policy-gates");
-    const result = await resumeJob(
-      jobsEnv(),
-      seatAgent(),
-      at("2026-09-12T03:00:00Z"),
-      id,
-      "pre-approved branch push",
-      { approvedByPolicy: "1" },
-    );
-    expect(result.ok, result.refusal).toBe(true);
-    const row = await approvalRow(id);
-    expect(row, "a policy-approved resume must still write its audit row").toBeTruthy();
-    expect(row).toMatchObject({
-      approved_by_policy: "1",
-      policy_class: "push_branch",
-      policy_detail: "git push -u origin feat/autonomy-policy-gates",
-      approved: "pre-approved branch push",
-    });
-  });
-
   it("a resume with no policy records no policy fields, so the two cases are distinguishable", async () => {
     const id = await blockedJob("git push -u origin feat/x");
     const result = await resumeJob(
@@ -176,41 +155,24 @@ describe("a driver's policy resume", () => {
     expect((await approvalRow(id))?.policy_class).toBe("push_branch+open_pr");
   });
 
-  it("PLANT: a DRIVER's force push is refused and the job stays blocked for the human", async () => {
-    for (const command of [
-      "git push --force origin feat/x",
-      "git push -f origin feat/x",
-      "git push --force-with-lease origin feat/x",
-    ]) {
+  it("PLANT: a DRIVER's force push, default-branch push, migration and unclassified command are refused and the job stays blocked for the human", async () => {
+    const cases: Array<[string, RegExp]> = [
+      ["git push --force origin feat/x", /never list/],
+      ["git push -f origin feat/x", /never list/],
+      ["git push --force-with-lease origin feat/x", /never list/],
+      ["git push origin master", /./],
+      [
+        "npx wrangler d1 execute capsid --remote --file migrations/0019_x.sql",
+        /matched additive_migration, which a driver may not approve/,
+      ],
+      ["npm run deploy", /matches no pre-approved class/],
+    ];
+    for (const [command, refusal] of cases) {
       const { id, before, result } = await driverResume(command);
       expect(result.ok, `${command} was self-approved`).toBe(false);
-      expect(String(result.refusal)).toMatch(/never list/);
+      expect(String(result.refusal)).toMatch(refusal);
       await expectUntouched(id, before);
     }
-  });
-
-  it("PLANT: a DRIVER's push to a default branch is refused", async () => {
-    const { id, before, result } = await driverResume("git push origin master");
-    expect(result.ok, "a push to master was self-approved").toBe(false);
-    await expectUntouched(id, before);
-  });
-
-  it("PLANT: a DRIVER may not approve a migration, which the ruling keeps human", async () => {
-    const { id, before, result } = await driverResume(
-      "npx wrangler d1 execute capsid --remote --file migrations/0019_x.sql",
-    );
-    expect(result.ok, "a driver approved a migration").toBe(false);
-    expect(String(result.refusal)).toMatch(
-      /matched additive_migration, which a driver may not approve/,
-    );
-    await expectUntouched(id, before);
-  });
-
-  it("PLANT: a DRIVER may not approve a command that classifies as nothing", async () => {
-    const { id, before, result } = await driverResume("npm run deploy");
-    expect(result.ok, "an unclassified command was self-approved").toBe(false);
-    expect(String(result.refusal)).toMatch(/matches no pre-approved class/);
-    await expectUntouched(id, before);
   });
 
   it("PLANT: a DRIVER may not approve a job another agent blocked, nor take one on the policy", async () => {

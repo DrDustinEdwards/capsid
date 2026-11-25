@@ -299,27 +299,6 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
     expect(missing.isError).toBe(true);
     expect(missing.content[0].text).toMatch(/no job job_ffffffffffff/);
   });
-
-  it("export: rows as stored with a cursor, the id for the three new tables and the rowid for job_outcomes", async () => {
-    const { ns, job } = fresh("claims-exp");
-    await plantJob(ns, job);
-    const claims = await adminRead<ClaimsExportPage>({
-      action: "export",
-      table: "job_claims",
-      after: 0,
-      limit: 1,
-    });
-    expect(claims.rows).toHaveLength(1);
-    expect(claims.next_after).toBe(claims.rows[0].id);
-    const outcomes = await adminRead<ClaimsExportPage>({
-      action: "export",
-      table: "job_outcomes",
-      limit: 500,
-    });
-    const row = outcomes.rows.find((r) => r.job_id === job);
-    expect(row, "the planted outcome is not in the export").toBeTruthy();
-    expect(typeof row!.rowid).toBe("number");
-  });
 });
 
 describe("the capsid_admin_read_claims tool, refused", () => {

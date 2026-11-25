@@ -24,7 +24,7 @@ function entry(over: Partial<StalePrEntry> = {}): StalePrEntry {
   return { merged: 0, closed: 0, open: 0, unread: 0, at: ago(5 * 60 * 1000), ...over };
 }
 
-test("unchanged: a blocked or claimed job untouched for 3 days is stale, and a day short of it is not", () => {
+test("unchanged: a blocked or claimed job untouched for 3 days is stale, a day short of it is not, and a queued or finished job never is", () => {
   for (const status of ["blocked", "claimed"]) {
     const old = classifyStale(
       { status, updated_at: ago(STALE_UNCHANGED_MS), auto_resumed_at: null },
@@ -43,9 +43,6 @@ test("unchanged: a blocked or claimed job untouched for 3 days is stale, and a d
       `${status}, 2 days`,
     );
   }
-});
-
-test("unchanged: a queued or finished job is never stale for its age", () => {
   for (const status of ["queued", "done", "failed", "superseded"]) {
     assert.equal(
       classifyStale(
@@ -54,7 +51,7 @@ test("unchanged: a queued or finished job is never stale for its age", () => {
         NOW,
       ),
       null,
-      status,
+      `${status} is never stale for its age`,
     );
   }
 });
@@ -102,7 +99,7 @@ test("prs-settled: a blocked job whose pull requests are all merged or closed is
   );
 });
 
-test("prs-settled: one open or unread pull request, no pull request at all, or a job not blocked, is not settled", () => {
+test("prs-settled: one open or unread pull request, none at all, a job not blocked, or an entry read before the job last changed, is not settled", () => {
   const job = { status: "blocked", updated_at: ago(HOUR), auto_resumed_at: null };
   assert.equal(classifyStale(job, entry({ merged: 1, open: 1 }), NOW), null, "one still open");
   assert.equal(classifyStale(job, entry({ merged: 1, unread: 1 }), NOW), null, "one unread");
@@ -113,11 +110,11 @@ test("prs-settled: one open or unread pull request, no pull request at all, or a
     null,
     "claimed, not blocked",
   );
-});
-
-test("prs-settled: an entry read before the job last changed is ignored", () => {
-  const job = { status: "blocked", updated_at: ago(HOUR), auto_resumed_at: null };
-  assert.equal(classifyStale(job, entry({ merged: 1, at: ago(2 * HOUR) }), NOW), null);
+  assert.equal(
+    classifyStale(job, entry({ merged: 1, at: ago(2 * HOUR) }), NOW),
+    null,
+    "entry predates the job's last change",
+  );
 });
 
 test("a job matching several rules is listed once, under the most actionable rule", () => {

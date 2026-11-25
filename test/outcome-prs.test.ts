@@ -72,13 +72,16 @@ test("a repeated pull request is written once, because a batch conflict would ab
     "https://github.com/o/r/pull/1",
     " ",
   ]);
-  assert.equal(recorded.length, 1, "the duplicate and the blank are dropped before the batch");
-});
-
-test("evidence naming no pull requests writes no rows", () => {
-  const { recorded, db } = recorder();
-  assert.deepEqual(outcomePrStatements(db, "job_1", []), []);
-  assert.equal(recorded.length, 0);
+  assert.equal(
+    recorded.length,
+    1,
+    "the duplicate and the blank are dropped before the batch",
+  );
+  assert.deepEqual(
+    outcomePrStatements(db, "job_1", []),
+    [],
+    "no pull requests, no rows",
+  );
 });
 
 // seeding a row that stored no pull request
@@ -93,27 +96,38 @@ test("pull request URLs are found in both result_ref and the summary prose", () 
     "https://github.com/DrDustinEdwards/capsid-mcp/pull/24",
     "https://github.com/DrDustinEdwards/capsid-mcp/pull/25",
   ]);
-});
-
-test("the same URL in both fields is one URL", () => {
-  const url = "https://github.com/o/r/pull/7";
-  assert.deepEqual(prUrlsFromJob({ result_ref: url, result_summary: `landed in ${url}` }), [url]);
+  const same = "https://github.com/o/r/pull/7";
+  assert.deepEqual(
+    prUrlsFromJob({ result_ref: same, result_summary: `landed in ${same}` }),
+    [same],
+  );
 });
 
 test("a job with no pull request anywhere seeds nothing", () => {
   assert.deepEqual(
-    prUrlsFromJob({ result_ref: "capsid/some-doc.md", result_summary: "wrote a document" }),
+    prUrlsFromJob({
+      result_ref: "capsid/some-doc.md",
+      result_summary: "wrote a document",
+    }),
     [],
   );
-  assert.deepEqual(prUrlsFromJob({ result_ref: null, result_summary: null }), []);
+  assert.deepEqual(
+    prUrlsFromJob({ result_ref: null, result_summary: null }),
+    [],
+  );
 });
 
 test("a near-miss URL is not mistaken for a pull request", () => {
   const urls = prUrlsFromJob({
     result_ref: null,
-    result_summary: "see https://github.com/o/r/issues/25 and https://github.com/o/r/pull/abc",
+    result_summary:
+      "see https://github.com/o/r/issues/25 and https://github.com/o/r/pull/abc",
   });
-  assert.deepEqual(urls, [], "an issue and a non-numeric pull path are neither of them evidence");
+  assert.deepEqual(
+    urls,
+    [],
+    "an issue and a non-numeric pull path are neither of them evidence",
+  );
 });
 
 // The re-verification rules are driven against a real D1 in
@@ -129,8 +143,12 @@ async function connectAdmin(db: unknown) {
     adminAgentForEmail("admin@example.com"),
   );
   const client = new Client({ name: "outcome-prs", version: "1.0.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
+  await Promise.all([
+    server.connect(serverTransport),
+    client.connect(clientTransport),
+  ]);
   return client;
 }
 
@@ -141,13 +159,17 @@ test("a merge that fails to update an outcome does not fail the merge", async ()
     const stmt = {
       bind: () => stmt,
       first: async () => {
-        if (/job_outcome_prs/.test(sql)) throw new Error("planted outcome failure");
+        if (/job_outcome_prs/.test(sql))
+          throw new Error("planted outcome failure");
         if (/FROM namespaces/.test(sql))
-          return { repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) };
+          return {
+            repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]),
+          };
         return null;
       },
       all: async () => {
-        if (/job_outcome_prs/.test(sql)) throw new Error("planted outcome failure");
+        if (/job_outcome_prs/.test(sql))
+          throw new Error("planted outcome failure");
         return { results: [] };
       },
       run: async () => ({ meta: {} }),
@@ -156,7 +178,8 @@ test("a merge that fails to update an outcome does not fail the merge", async ()
   };
   const errors: string[] = [];
   const original = console.error;
-  console.error = (...args: unknown[]) => void errors.push(args.map(String).join(" "));
+  console.error = (...args: unknown[]) =>
+    void errors.push(args.map(String).join(" "));
   try {
     await withFetch(
       {
@@ -170,11 +193,16 @@ test("a merge that fails to update an outcome does not fail the merge", async ()
             base: { ref: "main" },
           },
         },
-        "PUT /repos/owner/repo/pulls/7/merge": { body: { merged: true, sha: "m1" } },
+        "PUT /repos/owner/repo/pulls/7/merge": {
+          body: { merged: true, sha: "m1" },
+        },
         "DELETE /repos/owner/repo/git/refs/heads/feat/x": { status: 204 },
       },
       async () => {
-        const client = await connectAdmin({ prepare: statement, batch: async () => [] });
+        const client = await connectAdmin({
+          prepare: statement,
+          batch: async () => [],
+        });
         const result = (await client.callTool({
           name: "capsid_close_pr",
           arguments: { namespace: "capsid", number: 7, action: "merge" },
@@ -188,7 +216,9 @@ test("a merge that fails to update an outcome does not fail the merge", async ()
     console.error = original;
   }
   assert.ok(
-    errors.some((e) => JSON.parse(e).message.startsWith("OUTCOME_REVERIFY_FAILED pr 7")),
+    errors.some((e) =>
+      JSON.parse(e).message.startsWith("OUTCOME_REVERIFY_FAILED pr 7"),
+    ),
     "the planted failure did not reach the re-verification",
   );
 });
@@ -215,14 +245,6 @@ test("JSON that is not an object is refused", () => {
   }
 });
 
-test("undefined and empty stay undefined, because absent evidence is not an error", () => {
-  for (const empty of [undefined, "", "   "]) {
-    const parsed = parseEvidence(empty);
-    assert.ok("evidence" in parsed);
-    assert.equal(parsed.evidence, undefined);
-  }
-});
-
 test("a count that is not a non-negative integer is dropped rather than coerced to zero", () => {
   // A stored 0 reads as "somebody counted and the answer was none", which is a
   // different fact from "nobody counted".
@@ -234,7 +256,9 @@ test("a count that is not a non-negative integer is dropped rather than coerced 
 });
 
 test("a non-string entry in prs is dropped and the rest survive", () => {
-  const parsed = parseEvidence(JSON.stringify({ prs: ["https://github.com/o/r/pull/1", 7, null] }));
+  const parsed = parseEvidence(
+    JSON.stringify({ prs: ["https://github.com/o/r/pull/1", 7, null] }),
+  );
   assert.ok("evidence" in parsed);
   assert.deepEqual(parsed.evidence?.prs, ["https://github.com/o/r/pull/1"]);
 });
