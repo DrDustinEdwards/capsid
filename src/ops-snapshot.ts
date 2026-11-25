@@ -140,6 +140,16 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
       signal: callSignal(PROBE_TIMEOUT_MS),
     });
     const latency_ms = Date.now() - started;
+    // A redirect off the site is another host's answer, not this site's (live-checks.ts refuses it too).
+    if (res.url && new URL(res.url).origin !== new URL(url).origin) {
+      await res.body?.cancel();
+      return {
+        status: null,
+        latency_ms: null,
+        body: null,
+        error: `redirected off the site to ${new URL(res.url).origin}`,
+      };
+    }
     if (!withBody) {
       await res.body?.cancel();
       return { status: res.status, latency_ms, body: null, error: null };
