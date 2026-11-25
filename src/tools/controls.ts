@@ -14,12 +14,8 @@ const ACCESS_PREFIX = "access:";
 export function defineControlOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
 
-  // The admin controls the Portal's buttons run, reachable from chat as one tool (a ruled
-  // exception to the tool surface rule). One registry (src/controls.ts) is behind both surfaces, so a control
-  // is implemented once and a test holds the two lists equal. Admin only in whole
-  // (TOOL_GRANTS.capsid_admin_run_controls): the registrar refuses every other caller before this handler
-  // runs. The confirmation is the Portal's: preview returns the plan and a signed token for
-  // five minutes that binds the action, its params and this administrator, and perform
+  // A ruled exception to the tool surface rule. Admin only (TOOL_GRANTS.capsid_admin_run_controls).
+  // Preview returns a signed five-minute token binding action, params and administrator; perform
   // takes only the token and spends it, so no confirmation is used twice.
   ctx.ops.define(
     "controls",
@@ -31,8 +27,8 @@ export function defineControlOperations(server: McpServer, ctx: ToolCtx): void {
           .enum(PORTAL_ACTIONS as unknown as [PortalAction, ...PortalAction[]])
           .optional()
           .describe("For preview: the control to preview."),
-        // Closed: every param some control takes, each a string. Which of
-        // them this control takes is checked by previewControl, which names them.
+        // Closed: every param some control takes, each a string; previewControl checks which this
+        // control takes.
         params: z
           .strictObject(
             Object.fromEntries(
@@ -52,9 +48,8 @@ export function defineControlOperations(server: McpServer, ctx: ToolCtx): void {
     },
     async (args) => {
       const now = new Date();
-      // The token binds an email, and a chat caller has one only when it is the administrator
-      // signed in through Access (agent:access:<email>). A minted agent
-      // has none and cannot hold a control, whatever its grant.
+      // The token binds an email, held only by the administrator signed in through Access
+      // (agent:access:<email>); a minted agent cannot hold a control whatever its grant.
       if (!ctx.actor.startsWith(ACCESS_PREFIX) || ctx.actor.length === ACCESS_PREFIX.length) {
         return fail(
           `controls needs the administrator signed in through Access; ${ctx.actor} is not.`,

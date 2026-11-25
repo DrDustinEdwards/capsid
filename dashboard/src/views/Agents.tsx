@@ -10,8 +10,6 @@ import { PageHead } from "./shared";
 import { Missing } from "capsomer/react/empty";
 import type { OpsAgent } from "../types";
 
-// Three tabs (the Portal audit's new map, 2026-11-06): the roster, the archive of revoked
-// agents, and the AI access granted on each server. The claim checks are Jobs' Checks tab.
 export function Agents() {
   const tab = tabOf(AGENT_TABS, useTabParam()) ?? AGENT_TABS[0].id;
   return (
@@ -23,7 +21,6 @@ export function Agents() {
   );
 }
 
-// An agent's first cell in both tables: its name, kind and namespaces.
 function AgentName({ a }: { a: OpsAgent }) {
   return (
     <td>
@@ -35,7 +32,6 @@ function AgentName({ a }: { a: OpsAgent }) {
   );
 }
 
-// An agent's work in both tables: its jobs by outcome and its merged pull requests.
 function AgentWork({ a }: { a: OpsAgent }) {
   return (
     <>
@@ -49,9 +45,7 @@ function AgentWork({ a }: { a: OpsAgent }) {
   );
 }
 
-// The revoked agents: still in the live table and waiting their 7 days (docs/auth.md; a
-// one-job runner key leaves it sooner, once its job ends), then the archived, newest move
-// first. Both are history, so each row opens the agent's drawer as the roster's do.
+// Revoked agents wait 7 days in the live table (docs/auth.md; a one-job runner key leaves sooner), then are archived. Both are history, so rows open the drawer.
 function Archive() {
   const { feed, now } = useApp();
   const rows = archiveAgents(feed.live.agents);
@@ -113,10 +107,8 @@ function Archive() {
   );
 }
 
-// Each MCP server's owner page (site-runtime ./owner-page, area 11 A15 and L9): the grants
-// you gave AI clients there, each with Revoke, its agent keys and its tool-call log. The
-// grants and the log live in each server's own Worker, and each server admits its own
-// administrators, so each page is on its server, behind its own sign-in.
+// Each MCP server's owner page (site-runtime ./owner-page, area 11 A15 and L9): grants, agent keys and tool-call log live in that
+// server's own Worker behind its own sign-in, so each page is on its server.
 const OWNER_PAGES = [
   { name: "Capsid", url: "https://mcp.dustinedwards.info/owner" },
   { name: "Carrel", url: "https://carrel-mcp.dustinedwards.info/owner" },

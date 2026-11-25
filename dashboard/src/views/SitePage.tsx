@@ -24,22 +24,11 @@ import { Convergence, SiteSecrets } from "./Convergence";
 import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
 import "./SitePage.css";
-// The settings form loads the first time Edit is pressed, so the page's first paint does not carry it.
 const SiteForm = lazy(() => import("./SiteConfig").then((m) => ({ default: m.SiteForm })));
 import { Uptime90 } from "./Uptime90";
 import { SiteWorkers } from "./Workers";
 import { SearchAndTraffic, SiteBuilds } from "./SiteTraffic";
 
-// ONE SITE'S OWN PAGE (the Portal audit's new map, 2026-11-06), /sites/<namespace>: what was
-// spread over Health's Sites and Deploys tabs, the site drawer, Settings' sites list and
-// Packages' Workers tab, in one place. Overview: its probe, uptime and errors. Deploys: what
-// Cloudflare recorded, and its Workers Builds with their logs. Search and traffic: Search
-// Console, Bing and Cloudflare's edge (views/SiteTraffic.tsx). Sync and repairs: its operator
-// API, where it opted in. Setup: its row (Edit, Remove), its Worker secrets, its operator key
-// (Rotate) and what its Workers bind. The tab is in the
-// address (?tab=), so Back, a bookmark and an alert reach it.
-
-// Chart 9 (error rate with deploy markers) is an Enarratio line chart, in the charts' lazy chunk.
 const ErrorRate = trendChart("ErrorRate");
 
 export function SitePage() {
@@ -116,8 +105,6 @@ export function SitePage() {
   );
 }
 
-// The site's uptime as Capsomer's uptime strip: Enarratio's figure with the week's and the
-// day's share up at the end of its title's line, and the key after it.
 const UPTIME_KEYS = [
   ["up", "Up"],
   ["degraded", "Degraded"],

@@ -2,9 +2,7 @@ import { findingClass, type FindingClass } from "./watcher-checks";
 import type { OpsFinding } from "./ops-types/feed";
 
 // The findings that post no job (digest and attention class, src/watcher-checks.ts), read from the
-// watcher's memory: the open rows with no job. The Portal's weekly digest panel and
-// attention list read them through the ops feed, and the Monday email through
-// weeklyDigestSection, so the three cannot disagree.
+// watcher's memory: the open rows with no job.
 
 const HEADLINE = /^Watcher: (.*?)\s*\[[^\]]+\]$/;
 const LINES_SHOWN = 3;
@@ -60,8 +58,8 @@ export async function openQuietFindings(db: D1Database): Promise<OpsFinding[]> {
   return out;
 }
 
-/** The email's weekly section: open digest-class findings per site. Empty on any day but
- *  Monday UTC, and empty when none are open. */
+// The email's weekly section: open digest-class findings per site. Empty on any day but Monday UTC,
+// and empty when none are open.
 export async function weeklyDigestLines(db: D1Database, now: Date): Promise<string[]> {
   if (now.getUTCDay() !== 1) return [];
   const digest = (await openQuietFindings(db)).filter((f) => f.class === "digest");

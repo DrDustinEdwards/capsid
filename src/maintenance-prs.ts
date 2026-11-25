@@ -7,9 +7,8 @@ import { HOUR_MS, days } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The daily maintenance pass's pull request rules: a green driver PR still open is waiting for the
-// seat (shown with its age); a PR red for more than 48 hours is shown with the failing step. Both
-// read what the auto-merge tick reads (the open list and each head's check runs, judged by ciVerdict).
-// A read that fails is listed as "not checked", so a missing read never passes as clean.
+// seat (shown with its age); A read that fails is listed as "not checked", so a missing read never
+// passes as clean.
 
 const RED_HOURS = 48;
 // Open pull requests read per repo. More are reported as not checked, not silently cut.
@@ -24,7 +23,6 @@ export interface PrCheck {
   status: string;
   conclusion: string | null;
   completed_at: string | null;
-  /** A GitHub Actions job, whose check run id is the job id and so has steps to read. */
   actions: boolean;
 }
 
@@ -33,23 +31,18 @@ export interface OpenPr {
   url: string;
   draft: boolean;
   created_at: string;
-  /** The job the body names, which is what makes it a driver's pull request. */
   job: string | null;
   checks: PrCheck[];
 }
 
 export interface PrReaders {
-  /** The open pull requests of the namespace's repo with their head's check runs. May
-   *  throw; `problem` says what part was not read. */
   openPrs(namespace: string): Promise<{ repo: string; prs: OpenPr[]; problem: string | null }>;
-  /** The failed step of a failed check run, or why it was not read. */
   failingStep(
     repo: string,
     check: PrCheck,
   ): Promise<{ step: string | null; problem: string | null }>;
 }
 
-/** A driver's pull request, not a draft, whose checks are all green: it waits for the seat. */
 export function greenAwaitingSeat(namespace: string, prs: OpenPr[], now: Date): MaintenanceItem[] {
   return prs
     .filter((pr) => pr.job !== null && !pr.draft && ciVerdict(pr.checks).conclusion === "success")
@@ -63,9 +56,11 @@ export function greenAwaitingSeat(namespace: string, prs: OpenPr[], now: Date): 
     }));
 }
 
-/** A pull request whose checks have all finished, at least one failed, and the first
- *  failure finished more than RED_HOURS ago on the current head. A re-run or a new push
- *  starts the clock again, because GitHub then reports new check runs. */
+/**
+ * A pull request whose checks have all finished, at least one failed, and the first failure
+ * finished more than RED_HOURS ago on the current head. A re-run or a new push starts the clock
+ * again, because GitHub then reports new check runs.
+ */
 export function redTooLong(
   prs: OpenPr[],
   now: Date,
@@ -86,8 +81,6 @@ export function redTooLong(
   return out;
 }
 
-/** The pull request rules over every namespace in `namespaces`, and how many open pull
- *  requests each read, so "nothing listed" can be told from "nothing read". */
 export async function gatherPrItems(
   namespaces: readonly string[],
   readers: PrReaders,
@@ -155,9 +148,6 @@ interface RawCheck {
   app?: { slug?: string } | null;
 }
 
-/** The readers on GitHub, through the App: the same open list and check-run reads the
- *  auto-merge tick makes (src/auto-merge-tick.ts), and one Actions job read per pull
- *  request that has been red long enough to be listed. */
 export function githubPrReaders(env: Env): PrReaders {
   return {
     async openPrs(namespace) {

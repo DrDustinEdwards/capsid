@@ -12,14 +12,14 @@
     }
   ],
   "baseline": {
-    "measured_at": "b4d42af7",
+    "measured_at": "c0a6dd40",
     "knip (Worker)": {},
     "knip (dashboard)": {},
     "jscpd": {
       "clones": 124,
       "lines": 1032,
-      "percentage": 0.68,
-      "unread": 5
+      "percentage": 0.7,
+      "unread": 4
     },
     "shared copies": {
       "clones": 0,
@@ -28,16 +28,16 @@
     "legacy": {},
     "size": {
       "dashboard/dev/mock-api.ts": 3177,
-      "dashboard/src/app/App.tsx": 700,
-      "dashboard/src/app/ConfirmDialog.tsx": 552,
-      "dashboard/src/lib/derive.ts": 543,
-      "dashboard/src/views/SiteTraffic.tsx": 618,
-      "dashboard/src/views/TrendCharts.tsx": 873,
-      "explorer/src/explorer.css": 1722,
+      "dashboard/src/app/App.tsx": 646,
+      "dashboard/src/app/ConfirmDialog.tsx": 519,
+      "dashboard/src/lib/derive.ts": 513,
+      "dashboard/src/views/SiteTraffic.tsx": 605,
+      "dashboard/src/views/TrendCharts.tsx": 830,
+      "explorer/src/explorer.css": 1711,
       "explorer/src/explorer.js": 561,
-      "explorer/src/pages.mjs": 933,
-      "scripts/verify-live.mjs": 766,
-      "src/ops-cloudflare.ts": 611,
+      "explorer/src/pages.mjs": 892,
+      "scripts/verify-live.mjs": 688,
+      "src/ops-cloudflare.ts": 595,
       "test/fakes.ts": 1458
     },
     "tests": {
@@ -45,9 +45,9 @@
       "cases": 2015
     },
     "comments": {
-      "lines": 14723,
-      "code": 126953,
-      "percentage": 10.39
+      "lines": 9800,
+      "code": 126932,
+      "percentage": 7.17
     }
   }
 }

@@ -1,12 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { visit } from "./views.ts";
 
-// The site configuration: added on Sites, changed and removed on the site's own Setup tab,
-// through the confirm dialog, against the production build and the dev mock (dev/mock-api.ts),
-// which keeps changes in memory for the life of the preview server. The tests run in order on
-// one namespace the mock has registered with no row (sample-i), and leave the configuration as
-// they found it.
-
 const NS = "sample-i";
 const settings = (page: Page) => page.locator("main section#settings");
 
@@ -38,7 +32,6 @@ test.describe.serial("the site configuration", () => {
     await expect(dialog).toContainText("ops_sites: add sample-i");
     await dialog.getByRole("button", { name: "Add site", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
-    // The form closed once the change was made, and the site waits for its first probe.
     await expect(page.getByRole("heading", { level: 2, name: "Add a site" })).toHaveCount(0);
     await page.locator("main").getByRole("link", { name: "Sample I", exact: true }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Sample I" })).toBeVisible();
@@ -83,7 +76,6 @@ test.describe.serial("the site configuration", () => {
     await expect(dialog.getByRole("button", { name: "Add site", exact: true })).toHaveCount(0);
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
-    // Cancel keeps what was typed.
     await expect(page.getByLabel("Origin", { exact: true })).toHaveValue(
       "http://sample-j.example.com",
     );
@@ -91,7 +83,6 @@ test.describe.serial("the site configuration", () => {
 
   test("remove on Setup", async ({ page }) => {
     await openSetup(page);
-    // Remove is in the edit form's Danger area, not beside Edit (UX audit M9).
     await expect(settings(page).getByRole("button", { name: `Remove ${NS}` })).toHaveCount(0);
     await settings(page)
       .getByRole("button", { name: `Edit ${NS}` })

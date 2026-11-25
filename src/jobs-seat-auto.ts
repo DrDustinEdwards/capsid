@@ -1,4 +1,3 @@
-// Where a resumed job goes, and the resume that follows a merge.
 import type { Env } from "./env";
 import { type JobRow } from "./jobs-schema";
 import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from "./jobs-mirror";
@@ -6,16 +5,14 @@ import { signJobText } from "./job-signing";
 import { actorKind, touchStatement } from "./job-touches";
 import { guardedTransition } from "./jobs-transition";
 
-// A minted agent's actor is `agent:<name>`: one credential, one driver. The admin
-// identity (`access:<email>`, or `github:<login>` from the old console) is shared by whatever
-// sessions connect with it. A retired operator key (`opkey:<fingerprint>`) is left only on older
-// audit_log rows.
 const isMintedActor = (actor: string): boolean => actor.startsWith("agent:");
 
-/** Where a resume sends a blocked job: back to `holder` (toQueue null), or to the queue
- *  with the reason, when the holder cannot act on it. With take the resumer acquires the
- *  job, so it never goes to the queue. resumeJob acts on it and the Portal's preview
- *  (src/controls.ts) states it, so the two agree. */
+/**
+ * Where a resume sends a blocked job: back to `holder` (toQueue null), or to the queue with the
+ * reason, when the holder cannot act on it. With take the resumer acquires the job, so it never
+ * goes to the queue. resumeJob acts on it and the Portal's preview (src/controls.ts) states it, so
+ * the two agree.
+ */
 export async function resumeDestination(
   env: Env,
   holder: string,
@@ -44,16 +41,18 @@ async function isRevokedActor(db: D1Database, actor: string): Promise<boolean> {
   return row?.revoked_at != null;
 }
 
-/** The actor that returns a blocked job whose pull requests have all merged
- *  (src/merge-resume.ts). A system actor, not a caller: it holds no grant, passes no
- *  checkScope, and can do exactly what autoResumeJob does. */
+/**
+ * The actor that returns a blocked job whose pull requests have all merged (src/merge-resume.ts).
+ * A system actor, not a caller: it holds no grant, passes no checkScope, and can do exactly what
+ * autoResumeJob does.
+ */
 export const MERGE_RESUME_ACTOR = "system:merge-resume";
 
-/** Resume a BLOCKED job to its holder, or to the queue when the holder cannot act, on
- *  the strength of one fact the caller has read: every pull request the job names has
- *  merged. Never completes, never takes the claim, never approves a gate command; the
- *  holder's own claim still finishes the job. Returns false when the job moved between
- *  the caller's read and this write, in which case nothing was written. */
+/**
+ * Resume a BLOCKED job to its holder, or to the queue when the holder cannot act, on the strength
+ * of one fact the caller has read: every pull request the job names has merged. Never completes,
+ * never takes the claim, never approves a gate command;
+ */
 export async function autoResumeJob(
   env: Env,
   now: Date,

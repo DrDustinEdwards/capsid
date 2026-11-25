@@ -7,13 +7,6 @@ import { checklistItems, unchangedItems } from "./job-checklist";
 // Which holder fails the breaker does not count (src/job-breaker.ts). "Not done, here's why" is a
 // good outcome, but a breaker ignoring every fail with a reason would stop nothing. So only two
 // kinds are left out, both shown by something other than the driver's word:
-//
-//   machinery  Capsid would refuse this job's complete right now, on the PR it is bound to: red or
-//              unfinished CI, or a test taken away (src/complete-ci.ts). The fail is the outcome
-//              Capsid's own refusal asked for.
-//   remainder  the reason carries a line "REMAINING: 2, 4" naming some but not all DONE WHEN items
-//              (src/job-checklist.ts) as left; at least one item not named says it changes a path,
-//              and every such path is changed by the PR the job is bound to.
 
 export type BreakerExemption = "machinery" | "remainder";
 

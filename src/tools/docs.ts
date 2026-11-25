@@ -64,9 +64,8 @@ export function pathMutation(
   ];
 }
 
-// Edges touching a document, read before a mutation so the caller can record
-// them. document_versions snapshots only title and body, so for a delete this
-// is the only place the edges survive.
+// Read before a mutation so the caller can record them: document_versions snapshots only title and
+// body, so for a delete this is the only place the edges survive.
 export function edgesTouching(
   db: D1Database,
   namespace: string,
@@ -82,10 +81,8 @@ export function edgesTouching(
 
 type ConfirmVerdict = "accepted" | "declined" | "unsupported";
 
-// Asks the connected client to confirm a destructive action via MCP elicitation.
-// Stateless Streamable HTTP clients usually cannot answer server-initiated requests,
-// so "unsupported" is the common case and callers fall back to requiring an explicit
-// confirm:true argument.
+// Stateless Streamable HTTP clients usually cannot answer elicitation, so "unsupported" is common
+// and callers fall back to requiring confirm:true.
 async function confirmDestructive(server: McpServer, message: string): Promise<ConfirmVerdict> {
   if (!server.server.getClientCapabilities()?.elicitation) return "unsupported";
   try {
@@ -108,12 +105,8 @@ async function confirmDestructive(server: McpServer, message: string): Promise<C
   }
 }
 
-// The confirmation step for every destructive tool. The messages stay per tool
-// because they are the instruction the caller acts on.
-//
-// It reports whether it actually elicited. An elicited answer can arrive 90 seconds
-// after the body it approved was read, so that consent goes stale like an if_match,
-// and write and restore arm the commit-time body guard on it.
+// Reports whether it actually elicited: an answer can arrive 90 seconds after the body it approved
+// was read, so that consent goes stale like an if_match.
 type ConfirmResult = { ok: true; elicited: boolean } | { ok: false; message: string };
 
 export async function requireConfirmation(
@@ -127,32 +120,21 @@ export async function requireConfirmation(
   return { ok: false, message: verdict === "declined" ? messages.declined : messages.unsupported };
 }
 
-// The grant, not a boolean. A boolean misread at every call site:
-// `buildServer(env, true, ...)` looks like "this is the operator server" when it
-// means "this grant may write", and a read-only ro: key is also an operator.
-// src/auth.ts resolves a key to exactly this union.
+// The grant, not a boolean: `buildServer(env, true, ...)` misreads as "the operator server" when it
+// means "may write", and a read-only ro: key is also an operator.
 export type ToolGrant = "write" | "read";
 
 export interface ToolCtx {
   env: Env;
   db: D1Database;
-  // The principal recorded on every audit_log row: "access:<email>" for an OAuth
-  // session, "agent:<name>" for a minted agent (src/agents.ts). Older rows keep
-  // "github:<login>", "opkey:<fingerprint>" (a retired operator key) or 'operator'.
+  // The principal on every audit_log row; older rows keep "github:<login>", "opkey:<fingerprint>"
+  // or 'operator'.
   actor: string;
-  // The name the MCP client was shown by at consent ("Grok Bot"), recorded beside the actor on a write; undefined when
-  // no OAuth client made the call (an agent key, a Portal action).
   client?: string;
-  // The caller, resolved once per request (src/agents.ts). `actor` is a projection of
-  // it; the scope checks read this.
   agent: Agent;
-  // checkScope bound to this caller (src/scope.ts): a refusal naming the missing
-  // scope, or null. The registrar has already checked the tool, grant, namespace and
-  // repo; this is for what only the handler knows: an action tool's action, and the
-  // flags a repo mutation needs.
+  // For what only the handler knows (an action tool's action, a repo mutation's flags); the
+  // registrar has checked tool, grant, namespace and repo.
   scope: (need: ScopeNeed) => string | null;
-  // Where each module defines its operations (./operations). The composite tools in
-  // ./surface dispatch to them.
   ops: Operations;
   lastActor: (ns: string, path: string) => Promise<string | null>;
   lastClient: (ns: string, path: string) => Promise<string | null>;

@@ -1,11 +1,5 @@
-// The explorer's pages, as HTML strings from the public model and numbers
-// (capsid/research/design-system-explorer.md, section 4; slice 5 of its build order).
-// Pure: no file, network or clock. build.mjs writes what these return; the tests read them.
-//
-// Every address is a prerendered page with its content in the HTML. A private system has a
-// page that says it is private, so no link to one 404s. Every system page links to the same
-// system on dustinedwards.info, and that site's pages link back (section 4, "Deep links both
-// ways"). Times of day never appear: the documents carry a date and nothing finer.
+// The explorer's pages, as HTML strings from the public model and numbers (capsid/research/design-system-explorer.md, section 4). Pure: no file, network or clock; build.mjs writes what these return.
+// Every address is a prerendered page with its content in the HTML. A private system has a page that says so, so no link 404s, and every system page links to the same system on dustinedwards.info (section 4, "Deep links both ways"). Times of day never appear: the documents carry a date and nothing finer.
 import { modelMapData, systemMapHtml, tiesOf } from "capsomer/behavior/system-map";
 import { patchSvg } from "capsomer/behavior/manual";
 import { familyFooterHtml } from "capsomer/behavior/family-footer";
@@ -91,11 +85,7 @@ const NAV_SECTIONS = [
 const navSection = (path) =>
   /^\/s\/[^/]+\/code\//.test(path) ? "/code/" : sectionOf(path, NAV_SECTIONS);
 
-/**
- * The card every page shares (src/og-card.png): a travel poster in the manner of JPL's Visions of
- * the Future (2016), after the 1930s national-park posters, flat layered shapes in the family's
- * teal under an amber sun. Drawn by og-card.mjs.
- */
+/** The card every page shares (src/og-card.png), drawn by og-card.mjs. */
 export const CARD = {
   url: "/assets/og-card.png",
   width: 1200,
@@ -120,13 +110,9 @@ const ICON_LINKS = iconLinks()
   .join("\n");
 
 /**
- * The page around a body: one stylesheet set, the theme script and one module script, no inline
- * script or style, so the policy in _headers needs no hash (the registry entry, site-runtime-headers); JSON-LD is
- * data, not script, so the policy does not apply to it. The head's tags are Prelum's, with the
- * production origin, so the 404 says noindex and claims no canonical. `title` is the page's own, before
- * ", Capsid"; `parent` is the page between its section and it in its breadcrumb trail. A wide page's
- * sections set their own width, for the front page's full-bleed parts; any other page is one column. `noindex` keeps a
- * page out of search (the search page: its results are this site's own pages, already listed).
+ * The page around a body: one stylesheet set, the theme script and one module script, no inline script or style, so the policy in _headers needs no hash (JSON-LD is data, not script).
+ * The head's tags are Prelum's, with the production origin, so the 404 says noindex and claims no canonical. `title` is before ", Capsid"; `parent` sits between the section and the page in its trail.
+ * A wide page's sections set their own width (the front page's full-bleed parts). `noindex` keeps the search page out of search: its results are already listed.
  * @param {{ title: string, description: string, path: string, body: string, asOf: string, wide?: boolean, data?: Record<string, unknown>[], fullTitle?: boolean, parent?: [string, string], noindex?: boolean }} page
  */
 export function layout({
@@ -191,8 +177,7 @@ ${footer(asOf)}
 }
 
 /**
- * The family letterhead (capsomer/site-header): the mark with "Dustin Edwards" over Capsid, search,
- * the theme button, and the sections in a second row, Home first. explorer.js wires it.
+ * The family letterhead (capsomer/site-header): the mark, search, the theme button and the sections in a second row, Home first. explorer.js wires it.
  * @param {string} here the current section @param {string} path
  */
 function header(here, path) {
@@ -206,10 +191,7 @@ function header(here, path) {
   });
 }
 
-/**
- * Every section's number, as the NASA Graphics Standards Manual (Danne & Blackburn, 1976) numbers
- * its parts: the section is n.0 and each heading on its pages n.1, n.2 and on.
- */
+/** Every section's number, as the NASA Graphics Standards Manual numbers its parts: the section is n.0 and each heading n.1, n.2 and on. */
 const SECTIONS = [...NAV, ["/search/", "Search"]].map(([href, label], i) => ({
   href,
   label,
@@ -223,9 +205,8 @@ export const sectionAt = (href) => SECTIONS.find((section) => section.href === h
 const sectionFor = (path) => sectionAt(path === "/search/" ? path : navSection(path));
 
 /**
- * A page's head, Capsomer's running head: its section's number and name over the manual's rule (a
- * plain head, not the building sign, so it never stacks a second dark slab under the letterhead). The site is named in the header and the title block, so not again
- * here. The page's own trail and heading follow it as text.
+ * A page's head, Capsomer's running head: its section's number and name over the manual's rule (a plain head, so it never stacks a second dark slab under the letterhead).
+ * The site is named in the header and title block, so not again here.
  * @param {string} path
  */
 export function manualHead(path) {
@@ -235,9 +216,7 @@ export function manualHead(path) {
 }
 
 /**
- * A page's title block, as the foot of every page of the Apollo flight plans (MSC Form 29, 1969)
- * boxes its mission, date and page; the page is numbered as the manual numbers its folios, n.0
- * for a section's own page. @param {string} path @param {string} asOf
+ * A page's title block, boxed like the foot of an Apollo flight plan; n.0 for a section's own page. @param {string} path @param {string} asOf
  */
 export function titleBlock(path, asOf) {
   const section = sectionFor(path);
@@ -263,9 +242,7 @@ export function numbered(body, path) {
 }
 
 /**
- * The close of every page: the family footer every dustinedwards.info site ends with (capsomer/family-footer,
- * Dustin, 2026-10-26), with Capsid's own part under its thin teal stripe: what the site is, every section,
- * where else to go and the day of its data. @param {string} asOf
+ * The family footer every dustinedwards.info site ends with (capsomer/family-footer), with Capsid's own part under its teal stripe. @param {string} asOf
  */
 function footer(asOf) {
   /** @param {{ href: string, label: string, no: number }} s */
@@ -285,9 +262,7 @@ function footer(asOf) {
 }
 
 /**
- * A page's heading block: the trail to it, its title and its lead sentence. The trail is a
- * direction strip, as the manual's signs point the way (6.2), and the block is drawn on its
- * layout grid, the columns and baseline the manual prints in fine red lines (5.1).
+ * A page's heading block: the trail to it (a direction strip, as the manual's signs point the way, 6.2), its title and its lead, on the manual's layout grid (5.1).
  * @param {Array<[string, string]>} trail earlier pages as [href, name] @param {string} here @param {string} title @param {string} [lead] html
  */
 export function pageHead(trail, here, title, lead) {
@@ -298,16 +273,14 @@ export function pageHead(trail, here, title, lead) {
 }
 
 /**
- * A flow's steps as the blocks painted round a Saturn V, which showed the cameras on the ground
- * how far it had rolled: one block a step, filled for those done, lit for the one shown.
+ * A flow's steps as blocks round a Saturn V: one a step, filled for those done, lit for the one shown.
  * @param {number} total @param {number} n
  */
 export const rollBlocks = (total, n) =>
   `<ol class="cap-roll" aria-hidden="true">${Array.from({ length: total }, (_, i) => `<li data-state="${i + 1 < n ? "done" : i + 1 === n ? "now" : "ahead"}"></li>`).join("")}</ol>`;
 
 /**
- * A flow's patch (Capsomer's patchSvg), as every Apollo crew wore its mission's: the flow's name
- * round the top, its number in the section round the foot, and its steps as dots round the disc.
+ * A flow's patch (Capsomer's patchSvg): its name round the top, its number round the foot and its steps as dots.
  * @param {Flow} f @param {string} no the flow's number, as 3.1
  */
 const patch = (f, no) =>
@@ -329,16 +302,14 @@ const familyMap = (model, options) =>
   systemMapHtml({ ...mapData(model), flows: mapFlows(flowsOf(model)) }, options);
 
 /**
- * A table that may be wider than a phone scrolls in its own box, which a keyboard can reach and
- * a screen reader names, rather than widening the page.
+ * A table wider than a phone scrolls in its own box, which a keyboard can reach and a screen reader names, rather than widening the page.
  * @param {string} id @param {string} inner @param {string} label
  */
 export const scroller = (id, inner, label) =>
   `<div class="scroller" id="${id}" role="region" aria-label="${escapeHtml(label)}" tabindex="0">${inner}</div>`;
 
 /**
- * One reading: a figure over what it counts, set like an instrument's dial. The label may lead
- * to where the figure is told in full. @param {string} value @param {string} label @param {string} [href]
+ * One reading: a figure over what it counts, linked to where it is told in full. @param {string} value @param {string} label @param {string} [href]
  */
 export const reading = (value, label, href) =>
   `<div class="reading"><dt>${href ? `<a href="${href}">${escapeHtml(label)}</a>` : escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
@@ -563,10 +534,8 @@ ${scroller(
  */
 
 /**
- * A flow's steps read against the model: each step's edge, its two ends and the parts it lights.
- * Every system, part, line and flow is public (src/system-model.ts, toPublic; a private system
- * only lacks its repo link), so the build stops only for a line the map does not have or a part
- * it does not hold (design section 4, "Animated flows").
+ * A flow's steps read against the model: each step's edge, its two ends and the parts it lights. Everything is public (toPublic; a private system only lacks its repo link),
+ * so the build stops only for a line the map lacks or a part it does not hold (design section 4, "Animated flows").
  * @param {any} model @param {any} flow
  * @returns {Flow}
  */
@@ -766,12 +735,8 @@ ${bands(f, true)}
 }
 
 /**
- * One step's heading, sentence and parts. The shown step is read; every other step is laid in the
- * same grid cell, unseen and out of the accessibility tree, so the section is as tall as the
- * longest step at any width and stepping never moves the drawing below it (design section 6,
- * CLS). The unseen copies carry no id and no link. Each is set as an Apollo cue card: a dark strip
- * naming the flow and the card, the roll blocks under it, short lines in capitals, and a box to
- * tick beside each part with a dotted leader to what it is to the step.
+ * One step's heading, sentence and parts. The shown step is read; every other step is laid in the same grid cell, unseen and out of the accessibility tree,
+ * so the section is as tall as the longest step and stepping never moves the drawing below it (design section 6, CLS). The unseen copies carry no id and no link.
  * @param {Step} st @param {number} total @param {Map<string, any>} systems @param {boolean} shown @param {string} name the flow's
  */
 function stepText(st, total, systems, shown, name) {
@@ -797,9 +762,7 @@ ${rollBlocks(total, st.n)}
 }
 
 /**
- * One step of a flow: where it is, what happens, the parts it touches, Back and Next, and the
- * parts of its system with the step's lit. The script (src/explorer.js) steps without a reload;
- * with no script every step is a page of its own.
+ * One step of a flow: where it is, what happens, its parts, Back and Next, and the system's parts with the step lit. Without script every step is a page of its own.
  * @param {any} model @param {Flow} f @param {number} n @param {string} asOf
  */
 export function stepPage(model, f, n, asOf) {
@@ -851,9 +814,7 @@ export function stepPage(model, f, n, asOf) {
 const STATEMENT_PATH = "/accessibility/";
 
 /**
- * The accessibility statement (devkit-a11y S6): Prelum's, with this site's facts. devkit-a11y's run of 2026-11-01 found
- * 320 px sideways scroll (fixed by Capsomer 0.62.0) and a map tile whose focus it could not see (the tile's edge does
- * thicken, on the polygon inside the group it measured), so no limitation of its own is open.
+ * The accessibility statement (devkit-a11y S6): Prelum's, with this site's facts; no limitation of its own is open (devkit-a11y run of 2026-11-01).
  * @param {string} asOf
  */
 export function accessibilityPage(asOf) {
@@ -888,9 +849,7 @@ export function notFoundPage(asOf) {
 }
 
 /**
- * Every page the explorer serves, as [path, html]: the front page, one per system, one per
- * public system with parts, one per flow and one per step of it, the code pages of each public
- * system with a code map, and the 404.
+ * Every page the explorer serves, as [path, html]: front page, systems, parts, flows and steps, code pages and the 404.
  * @param {any} model @param {any} stats @param {any} [code] the public code document
  * @param {any[]} [tools] the served tools (src/surface.mjs)
  * @returns {Array<[string, string]>}

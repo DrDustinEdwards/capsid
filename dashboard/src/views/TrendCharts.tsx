@@ -27,19 +27,11 @@ import { errorTotals } from "../ui/charts";
 import { Status } from "capsomer/react/status";
 import "./TrendCharts.css";
 
-// The Portal's charts drawn with Enarratio's primitives (docs/design/design-portal-evaluation.md
-// section 3; ruled 2026-10-09, DECIDE 6 and 7): 1 minutes of Dustin per week (Needs you),
-// 4 Tonight as a timeline (Queue), 10 the backup retention slots and 11 the default branches
-// by day (Health). Chart 8, each site's uptime, is ui/charts.tsx's UptimeTicks, and its
-// uptimeStrip is in the initial bundle with the Sites table. Charts 2 (waiting), 3 (the
-// queue), 5 (claims against verified), 7 (merges) and 9 (errors and deploys) are
-// Enarratio's bar, line and area charts from enarratio/lite, which drop Observable Plot and
-// fit the chunk budget. This module loads with the page that shows a chart, never in the
-// initial bundle. Each is Enarratio's whole figure (title, finding, notes, source, and a toolbar with the data download)
-// in Capsomer's chart frame, which redraws it to its width.
+// The Portal's charts drawn with Enarratio's primitives (docs/design/design-portal-evaluation.md section 3; DECIDE 6 and 7). Each is
+// Enarratio's whole figure in Capsomer's chart frame, from enarratio/lite (no Observable Plot, to fit the chunk budget). Loads with the
+// page that shows a chart, never in the initial bundle; uptime's UptimeTicks is in ui/charts.tsx.
 
-// A later read that failed keeps the last answer on screen; this says so, so the failure is
-// not hidden behind numbers that are no longer current.
+// A later read that failed keeps the last answer on screen and says so, so numbers no longer current are not passed off.
 function Stale({ error }: { error: string | null }) {
   return error ? (
     <p className="cap-text" data-tone="dim">
@@ -48,9 +40,7 @@ function Stale({ error }: { error: string | null }) {
   ) : null;
 }
 
-/** The first chart on Needs you: this week's minutes, the change on last week with its unit
- *  and direction, and eight weeks as a line with its axes and week dates (Dustin's review of
- *  2026-10-11: the tile was half width, a sparkline with no axes, and its words jargon). */
+// First chart on Needs you: this week's minutes, the change on last week, and eight weeks as a line (Dustin's review, 2026-10-11).
 export function MinutesTile() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
@@ -63,7 +53,7 @@ export function MinutesTile() {
   );
 }
 
-/** The change on last week in words, with its direction: more of Dustin's time is worse. */
+// More of Dustin's time is worse.
 export function minutesChange(
   now: number,
   before: number | null,
@@ -117,9 +107,8 @@ const MOST_CLASSES = 10;
 
 const hours = (v: number) => (v >= 1 ? `${v.toFixed(1)} h` : `${Math.round(v * 60)} min`);
 
-// The gate classes and who ended a wait, in words (Dustin's review of 2026-10-11: the chart
-// showed needs_human and push_branch). A compound command's classes are joined with "+"
-// (src/ops-types/, ClaimsWaitRow); a class this list does not know reads as words.
+// Gate classes and who ended a wait, in words (Dustin's review, 2026-10-11); a compound command's classes are joined with "+"
+// (ClaimsWaitRow); an unknown class reads as words.
 const GATE_WORDS: Record<string, string> = {
   needs_human: "A step only a person takes",
   additive_migration: "Applying a migration",
@@ -145,9 +134,7 @@ export function gateWords(gate: string): string {
     .join(", then ");
 }
 
-/** Total ended waiting per gate class, split by who ended it, longest first. A median
- *  cannot be combined across namespaces and says nothing of how often a gate waits; the
- *  total adds up, so the longest bar is where the hours went. */
+// Totals, not medians: a median cannot be combined across namespaces and says nothing of how often a gate waits.
 export function waitRows(waits: ClaimsWaitRow[]): {
   rows: Array<{ gate: string; endedBy: string; hours: number }>;
   classes: number;
@@ -177,10 +164,7 @@ export function waitRows(waits: ClaimsWaitRow[]): {
   };
 }
 
-/** The header chart on Needs you: one bar per gate class, stacked by who ended the wait,
- *  over the last 14 days. Reads the claims aggregate once when the page opens. */
-// The claims read behind chart 2, kept for ten minutes like useTrends: the page can be left
-// and reopened without reading the aggregate again. The window is fixed when the read is made.
+// The claims read behind chart 2 is kept ten minutes like useTrends, so leaving the page and returning does not re-read it.
 export function WaitingChart() {
   const { now } = useApp();
   const load = useAnswer(
@@ -228,9 +212,7 @@ export function WaitingChart() {
   );
 }
 
-/** Queue's header chart: jobs open at each day's end over 14 days. The trends route carries
- *  posted, ended and open, not the four states (queued, claimed, blocked, parked), so this
- *  is the one area and the days' posted and ended are said in words. */
+// The trends route carries posted, ended and open, not the four states, so this is one area and posted/ended are said in words.
 export function QueueChart() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
@@ -272,8 +254,6 @@ export interface ProjectCounts {
   queued: number;
 }
 
-/** Jobs' "By project" panel: each project's blocked, running and queued jobs as one stacked
- *  bar, the counts in the figure's table. Status colors through Capsomer's color pairs. */
 export function ProjectChart({ counts }: { counts: ProjectCounts[] }) {
   if (!counts.length) return null;
   const sum = (k: "blocked" | "running" | "queued") => counts.reduce((a, c) => a + c[k], 0);
@@ -307,7 +287,6 @@ export function ProjectChart({ counts }: { counts: ProjectCounts[] }) {
 
 const AGREEMENTS: readonly ClaimsAgreement[] = ["agree", "disagree", "unclaimed", "unchecked"];
 
-/** Agreement counts per agent, summed over the checks. An agent with no check is left out. */
 export function agreementRows(
   groups: ClaimsGroup[],
 ): Array<{ agent: string; agreement: ClaimsAgreement; checks: number }> {
@@ -349,7 +328,6 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
     y: "checks",
     series: "agreement",
     seriesDomain: AGREEMENTS,
-    // A color that means a status takes the status token (capsomer/enarratio.css themes the pair).
     colors: {
       agree: "var(--ok)",
       disagree: "var(--crit)",
@@ -364,8 +342,7 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
     source: { name: "Every check, summed per agent" },
   } as const;
   return (
-    // Columns where they fit, at most 900 px wide; under NARROW px, bars across, one band per
-    // agent, so a phone reads it without scrolling sideways (live chart check C12, 2026-11-03).
+    // Under NARROW px, bars run across, one band per agent, so a phone reads it without scrolling sideways (live chart check C12).
     <ChartPanel
       id="claim-agreement"
       draw={(width) =>
@@ -390,8 +367,7 @@ const MERGE_NAME: Record<(typeof MERGE_KINDS)[number], string> = {
   closed: "Closed unmerged",
 };
 
-/** Pull requests' chart: each week's merges and closes by who acted, stacked. Enarratio's bar
- *  chart has no event marker, so each rollback is listed under it. */
+// Enarratio's bar chart has no event marker, so each rollback is listed under it.
 export function MergesChart() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
@@ -414,7 +390,7 @@ export function MergesChart() {
     series: "kind",
     seriesDomain: MERGE_KINDS.map((k) => MERGE_NAME[k]),
     layout: "stacked",
-    // Labels are the ISO week without its year, so eight fit a phone's width.
+    // ISO week without its year, so eight fit a phone.
     xLabel: `ISO week, ${weeks[0]!.week.slice(0, 4)} on`,
     yLabel: "Pull requests",
     height: 240,
@@ -437,12 +413,9 @@ export function MergesChart() {
   );
 }
 
-/** Restore time in words: seconds under two minutes, else whole minutes. */
 const restoreWords = (s: number | null) =>
   s === null ? "-" : s < 120 ? `${s} s` : `${Math.round(s / 60)} min`;
 
-/** DORA's deploy measures per repository (checklist F4): deploy frequency, change failure
- *  rate and median time to restore, from each deploy's live gate. */
 export function DeploysTable() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
@@ -503,9 +476,7 @@ export function DeploysTable() {
   );
 }
 
-/** The site drawer's chart: the error rate for each of the last 24 hours, a line at the 1%
- *  alert, and a marker at each deploy in the window. The requests the old drawing showed as
- *  bars are in the caption's totals. */
+// The requests the old drawing showed as bars are in the caption's totals.
 export function ErrorRate({ site }: { site: SiteSnapshot }) {
   const cf = cfOk(site);
   const why = cfNoData(site.cloudflare);
@@ -556,9 +527,7 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
   return <ChartFrame draw={(width, fit) => lineChart({ ...opts, width, ...fit })} />;
 }
 
-/** Health's Deploys tab: each deploy a point, each run of failed probes or of missing watcher
- *  passes a span, one lane per site. Enarratio gives way to a plain list where the room is
- *  narrow, so a phone reads the events instead of scrolling a drawing. */
+// Enarratio gives way to a plain list where narrow, so a phone reads events instead of scrolling a drawing.
 export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: number }) {
   const { now } = useApp();
   const t0 = now - days * DAY;
@@ -569,7 +538,6 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
   const noData: string[] = [];
   for (const s of sites) {
     const ring = padRing(s.ring, RING_SLOTS);
-    // Consecutive slots of one kind make one span.
     for (let k = 0; k < ring.length;) {
       const c = ring[k];
       let end = k + 1;
@@ -623,11 +591,8 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
   return <ChartFrame draw={(width, fit) => timeline({ ...opts, width, ...fit })} />;
 }
 
-/** Tonight's plan as a timeline, one lane per repo, as if it started when the plan was read:
- *  the plan holds estimates, not a start time, and Enarratio's axis is a UTC clock. Light
- *  lanes start together; heavy lanes share one session, so they run one after another. A
- *  gated job is a warning. The window runs a tenth past the budget or the last job, so the
- *  last tick is not drawn on the edge. */
+// As if it started when the plan was read: the plan holds estimates, not a start time, and the axis is a UTC clock.
+// Heavy lanes share one session so run in turn; the window runs a tenth past the end so the last tick is not on the edge.
 function planEvents(plan: PortalPlan): {
   events: TimelineEvent[];
   start: number;
@@ -671,9 +636,7 @@ export function TonightTimeline({ plan }: { plan: PortalPlan }) {
   return <ChartFrame draw={(width, fit) => timeline({ ...opts, width, ...fit })} />;
 }
 
-// Drawn as a heat strip on the family ramp (capsomer/enarratio.css), a missing slot at its
-// strong end, at full height: as an uptime strip a missing slot was a third-height tick that
-// read as an underline. The subtitle and each cell's hover text say kept or missing.
+// Heat strip on the family ramp with a missing slot at full height: as an uptime strip it read as an underline.
 const missing = (v: number): string => (v >= 1 ? "missing" : "kept");
 
 export function BackupSlots() {
@@ -724,8 +687,7 @@ export function BackupSlots() {
   );
 }
 
-// Green 0, red 1, no run yet as no value: a heat strip's two ends on the family ramp, so red
-// reads as the strong end and a day with no verdict is drawn as missing, never as green.
+// Green 0, red 1, no run as no value: red reads as the strong end and a day with no verdict is missing, never green.
 function ciValues(r: TrendCiRepo): (number | null)[] {
   return r.days.map((d) => (d.state === "none" ? null : d.state === "red" ? 1 : 0));
 }
@@ -756,7 +718,6 @@ export function CiHistory() {
           <>
             {ci.repos.map((r) => {
               const streak = redStreak(r);
-              // A branch with no verdict in the window has nothing to draw; its line says so.
               if (!r.days.some((d) => d.state !== "none")) {
                 return (
                   <div className="slot-head" key={r.namespace} data-ci={r.namespace}>
@@ -797,12 +758,9 @@ export function CiHistory() {
   );
 }
 
-// Downloads as an area, one series per name the package has had (the Packages page). Over WEEKLY_AFTER days
-// the days are summed by week (from Monday, UTC): a point a day for a year and a half
-// was 194 kB of drawing, over the charts' 100 kB budget (live chart check, 2026-11-03).
+// Over WEEKLY_AFTER days the days are summed by week (Monday, UTC): a point a day for 18 months was 194 kB, over the 100 kB chart budget.
 const WEEKLY_AFTER = 120;
 
-/** The Monday (UTC) that starts a day's week, as YYYY-MM-DD. */
 function weekOf(day: string): string {
   const t = Date.parse(`${day}T00:00:00Z`);
   const back = (new Date(t).getUTCDay() + 6) % 7;
@@ -812,8 +770,7 @@ function weekOf(day: string): string {
 const plusDays = (day: string, n: number) =>
   new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
-/** The days (in order) summed by week and name, keeping only the weeks inside the history: a week
- *  npm has not finished counting, or one cut at the history's start, would read as a fall. */
+// Only weeks inside the history: one npm has not finished counting, or cut at the start, would read as a fall.
 function byWeek(days: PortalPackageHistory["days"]): PortalPackageHistory["days"] {
   const start = days[0]!.day;
   const end = days[days.length - 1]!.day;

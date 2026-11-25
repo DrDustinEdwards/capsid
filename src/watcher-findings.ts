@@ -2,32 +2,13 @@ import type { Env } from "./env";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 
-// THE WATCHER'S MEMORY OF A FINDING, one watcher_findings row per fingerprint, kept
-// across jobs (migrations/0024_watcher_findings.sql says why it exists).
-//
-// A job leaves the open set when a person supersedes or fails it, so a job alone would be
-// filed again by the next pass that still sees the condition. The row outlives the job:
-//
-//   seen, its job open                 count the sighting, post nothing
-//   seen, row open, job ended by a     'dismissed': the person's ending holds, and it is
-//     person (not the watcher's clear)   not filed again until it clears
-//   seen, dismissed                    count the sighting, post nothing
-//   seen, cleared, inside the quiet    count the sighting, post nothing
-//   seen, no row, or cleared and past  post a job, 'open'
-//     reopen_after
-//   not seen while its owning check    its queued job is failed as 'cleared' (as before),
-//     ran                              'cleared', reopen_after = now + REOPEN_QUIET_MS
-//
-// Every write is keyed on the fingerprint, and a state move is an UPDATE guarded by
-// the state it was read in, with RETURNING (path mutation invariant, test/path-mutation.test.ts): two passes
-// racing (the tick and the Portal's Refresh) cannot both move a row, and the loser is
-// told. The queue's own unique index still refuses a second open job with one title,
-// so a lost race here posts nothing twice.
+// THE WATCHER'S MEMORY OF A FINDING, one watcher_findings row per fingerprint, kept across jobs
+// (migrations/0024_watcher_findings.sql says why it exists). A job leaves the open set when a
+// person supersedes or fails it, so a job alone would be filed again by the next pass that still
+// sees the condition.
 
-// THE QUIET PERIOD: six hours. A finding that cleared, or that a person dismissed and
-// then cleared, is filed again only when it is seen at least six hours after it
-// cleared. Long enough that a flapping check (a probe, a CI rerun) files once, not
-// once per flap; short enough that a real recurrence the same day is still filed.
+// THE QUIET PERIOD: six hours. A finding that cleared, or that a person dismissed and then cleared,
+// is filed again only when it is seen at least six hours after it cleared.
 export const REOPEN_QUIET_MS = 6 * HOUR_MS;
 
 // The newest sightings kept on a row. Older ones are dropped, so a finding that
@@ -71,9 +52,9 @@ export interface EvidenceEntry {
   lines: string[];
 }
 
-/** The row's evidence with this sighting appended, newest last, the newest
- *  MAX_EVIDENCE kept. Evidence this Worker wrote that does not parse is a defect to
- *  see: it is logged and replaced, never silently dropped. */
+// The row's evidence with this sighting appended, newest last, the newest MAX_EVIDENCE kept.
+// Evidence this Worker wrote that does not parse is a defect to see: it is logged and replaced,
+// never silently dropped.
 export function appendEvidence(
   fingerprint: string,
   existing: string | null,
@@ -128,9 +109,9 @@ export type SightingVerdict =
   // File it.
   | { do: "post" };
 
-/** What one sighting does, from the row (null when there is none), the open job the
- *  queue holds for this fingerprint, and, for an 'open' row whose job is no longer
- *  open, how that job ended. Pure: the pass does the reads and the writes. */
+// What one sighting does, from the row (null when there is none), the open job the queue holds for
+// this fingerprint, and, for an 'open' row whose job is no longer open, how that job ended. Pure:
+// the pass does the reads and the writes.
 export function onSighting(
   row: FindingRow | null,
   openJobId: string | null,
@@ -185,8 +166,8 @@ const reopenAfter = (now: Date) => new Date(now.getTime() + REOPEN_QUIET_MS).toI
 // The reads and writes a pass makes, injected so test/watcher.test.ts can drive the
 // pass without a database. `d1FindingMemory` is the one the tick uses.
 export interface FindingMemory {
-  /** The rows for these fingerprints, and every 'open' or 'dismissed' row (the ones a
-   *  pass may clear), keyed by fingerprint. */
+  // The rows for these fingerprints, and every 'open' or 'dismissed' row (the ones a pass may
+  // clear), keyed by fingerprint.
   load(fingerprints: string[]): Promise<Map<string, FindingRow>>;
   /** How a job ended, or null when there is no such job. */
   job(id: string): Promise<JobEnd | null>;

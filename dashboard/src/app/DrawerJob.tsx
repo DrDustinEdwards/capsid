@@ -74,8 +74,6 @@ function CopyBlock({ id, text, label }: { id: string; text: string; label: strin
   );
 }
 
-// Whether supersede may end the job: a queued one, or a claimed one with no work
-// recorded yet (src/jobs-seat-supersede.ts, supersedeJob). The Worker checks again.
 function supersedable(j: OpsJob): boolean {
   if (j.status === "queued") return true;
   return (
@@ -86,7 +84,6 @@ function supersedable(j: OpsJob): boolean {
   );
 }
 
-// A drawer's one primary control.
 function ChangeIt({ label, req, hint }: { label: string; req: ConfirmRequest; hint?: string }) {
   const { confirm } = useApp();
   return (
@@ -111,8 +108,6 @@ function ChangeIt({ label, req, hint }: { label: string; req: ConfirmRequest; hi
   );
 }
 
-// The controls a job's status allows. Each opens the confirm dialog, which asks for a
-// reason and shows what changes before anything is written.
 function JobControls({ j }: { j: OpsJob }) {
   const { confirm } = useApp();
   const params = { id: j.id };
@@ -141,9 +136,6 @@ function JobControls({ j }: { j: OpsJob }) {
   }
   const failable = blocked || claimed || queued;
   if (!failable) return null;
-  // One primary action for the state the job is in, the other safe ones under More
-  // actions, and Mark failed alone in the Danger area (the UX audit's M9: it sat beside
-  // Close as shipped and Resume in a row of up to six).
   const resume = {
     action: "resume_job" as const,
     params,

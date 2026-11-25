@@ -1,10 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// PLANT: the Portal's pages are rendered on the server (src/entry.server.tsx), so a reader with
-// scripts off gets every chart, its words and its table. The Portal shipped as a browser-only app
-// once, and the chart check (prelum-chart-audit, B2) found all 17 demo charts empty with scripts
-// off; this is the check that it stays fixed. The demo pages are the ones a visitor and the live
-// check open.
+// PLANT: the Portal once shipped browser-only and all 17 demo charts were empty with scripts off; this keeps server rendering fixed.
 test.use({ javaScriptEnabled: false });
 
 for (const [path, charts] of [

@@ -1,10 +1,5 @@
-// The canary CHECK, separated from the gate so it can be driven by a test, for the same
-// reason scripts/freshness-lib.mjs exists: verify-live.mjs is a program that runs on import.
-//
-// What the canary is and why it has no expiry: scripts/bindings.mjs, CANARY_CLIENT.
-//
-// It reads KV directly rather than driving /authorize, where a missing client and a KV
-// outage are the same error page. The REST API's status is the distinction.
+// The canary check, apart from the gate so a test can drive it (verify-live.mjs runs on import).
+// It reads KV directly because /authorize shows a missing client and a KV outage as the same page; the REST status tells them apart.
 
 /**
  * @returns {Promise<{ outcome: "present"|"missing"|"unreachable"|"corrupt"|"has-ttl"|"ttl-unverified", detail?: string, expiration?: number }>}
@@ -16,8 +11,7 @@ export async function checkCanary({ fetchImpl, base, clientId, auth }) {
   try {
     resp = await fetchImpl(`${base}/values/${encodeURIComponent(key)}`, { headers: auth });
   } catch (err) {
-    // A thrown fetch is a network failure. It says nothing about the record, and calling
-    // it "missing" would manufacture data loss out of a DNS blip.
+    // A thrown fetch is a network failure, not a missing record.
     return { outcome: "unreachable", detail: err instanceof Error ? err.message : String(err) };
   }
 
@@ -27,8 +21,7 @@ export async function checkCanary({ fetchImpl, base, clientId, auth }) {
 
   if (resp.status === 404) return { outcome: "missing" };
 
-  // "A key exists at that name" is weaker than it looks: a truncated or foreign
-  // value still reads 200.
+  // A 200 is weaker than it looks: a truncated or foreign value also reads 200.
   const body = await resp.text().catch(() => "");
   let parsed = null;
   try {
@@ -40,12 +33,8 @@ export async function checkCanary({ fetchImpl, base, clientId, auth }) {
     return { outcome: "corrupt", detail: body.slice(0, 120) };
   }
 
-  // It must still be NON-EXPIRING. A record put back with a TTL (the 90 day one DCR gave
-  // every client) is a canary that can expire on its own, a second legitimate reason to
-  // be absent.
-  //
-  // An unreadable key LIST is neither a TTL nor "no TTL"; it is its own failing
-  // outcome.
+  // Must also be non-expiring: a record put back with a TTL could expire on its own.
+  // An unreadable key list is its own failing outcome.
   let entry;
   try {
     const listed = await fetchImpl(`${base}/keys?prefix=${encodeURIComponent(key)}`, {
@@ -67,7 +56,6 @@ export async function checkCanary({ fetchImpl, base, clientId, auth }) {
   return { outcome: "present" };
 }
 
-// outcome -> what the gate records. Kept beside the check so the two cannot drift.
 export function canaryReport(result, clientId, namespaceName) {
   const key = `client:${clientId}`;
   switch (result.outcome) {

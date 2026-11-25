@@ -1,9 +1,5 @@
-// The MCP 4 regroup's name mapping (capsid/rulings/mcp-2026-10-10.md), kept for the rule
-// docs lint: src/rule-docs.ts reads it to flag an old tool name still in a document.
-//
-// THE MAPPING. Every tool the old surface served maps to a new tool and, where the new
-// tool takes one, an action. test/tool-names-lib.test.ts holds the table to
-// src/tools/surface.ts.
+// The MCP 4 regroup's name mapping (capsid/rulings/mcp-2026-10-10.md), kept for the rule docs lint: src/rule-docs.ts flags an old tool name still in a document.
+// test/tool-names-lib.test.ts holds the table to src/tools/surface.ts.
 
 /** Old tools that became one action of a new tool. [new tool, action or null]. */
 export const SIMPLE: Record<string, [string, string | null]> = {
@@ -106,7 +102,6 @@ export const SPLIT: Record<string, Record<string, [string, string]>> = {
 // tool with no action.
 const SPLIT_DEFAULT: Record<string, string> = { improve_run: "run" };
 
-/** Every old tool name. */
 export const OLD_TOOLS: string[] = [
   ...Object.keys(SIMPLE),
   ...Object.keys(RENAMED),
@@ -118,12 +113,7 @@ export const OLD_TOOLS: string[] = [
 const NOT_A_TOOL_AFTER =
   /^\s+(grants?|tables?|columns?|rows?|fields?|flags?|modes?|status|scopes?|axis|role|key)\b/i;
 
-/**
- * The new spelling of an old tool reference.
- * `tool`: old tool name
- * `action`: old action, where the reference named one
- * `called`: the reference is a call, name(...)
- */
+/** The new spelling of an old tool reference; `called` means the reference is a call, name(...). */
 export function renamed(
   tool: string,
   action: string | undefined,
@@ -188,11 +178,9 @@ const FILE_EXTENSION = /^(ts|js|mjs|cjs|md|json|sql|yml|yaml|toml|txt|html|css)$
 const CALL_BEFORE = /\b(call|calls|calling|called|tool)\s*$/i;
 
 /**
- * Rewrite old tool references in prose. Only tool-call contexts are touched: a backtick
- * span holding a tool name (bare, qualified, called or followed by an action), and a bare
- * `name(` call. A name that is also a word (AMBIGUOUS) is rewritten only where the text
- * says it is the tool, and listed under `ambiguous` otherwise. Fenced code blocks are
- * left alone and listed under `fenced`. Both lists are for the seat to read.
+ * Rewrite old tool references in prose. Only tool-call contexts are touched (a backtick span holding a tool name, or a bare `name(` call).
+ * A name that is also a word (AMBIGUOUS) is rewritten only where the text says it is the tool, and listed under `ambiguous` otherwise;
+ * fenced code blocks are left alone and listed under `fenced`. Both lists are for the seat to read.
  */
 type LineNote = { line: number; text: string };
 

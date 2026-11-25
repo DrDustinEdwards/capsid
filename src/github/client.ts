@@ -1,8 +1,5 @@
-// GitHub App repo access for Capsid's repo fallthrough.
-//
-// Mints short-lived installation tokens from the App private key (RS256 JWT, site-runtime/jwt) and caches them in APP_KV for ~55 minutes. Resolves the target repo per
-// namespace from the D1 namespaces table, then reads and writes over the GitHub
-// REST API. No PAT, no clone.
+// Short-lived installation tokens (RS256 JWT, site-runtime/jwt) cached in APP_KV for ~55 minutes.
+// No PAT, no clone.
 
 import { repoPathProblem } from "../limits";
 // RepoEnv, not Env: this module must not be able to name the credentials it omits.
@@ -18,9 +15,8 @@ const GH_HEADERS = githubHeaders(null, "capsid");
 const TOKEN_TTL_SECONDS = 3300; // installation tokens live 60 min; refresh a little early
 const INSTALL_TTL_SECONDS = 86400; // installation id is stable
 const READ_CACHE_TTL_SECONDS = 60; // brief cache for read tools
-// Every GitHub call is bounded, so a hung connection fails the call instead of holding
-// the request (or a cron pass) until the runtime kills it. Long enough for a large
-// contents PUT; a caller's own signal wins.
+// Every call is bounded, so a hung connection fails instead of holding the request; a caller's own
+// signal wins.
 const GH_TIMEOUT_MS = 30_000;
 
 const installKey = (owner: string) => `gh:install:v2:${owner}`;
@@ -87,7 +83,8 @@ async function getInstallationToken(env: Env, owner: string, repo: string): Prom
   return minted.token;
 }
 
-// What the App can see, for the watcher's unmapped-repo check (src/unmapped-repos.ts). Listing /installation/repositories needs a token covering every repo, which getInstallationToken never mints. This one is minted for the call, limited to metadata:read, held in a local variable and never stored or logged. It is the only unscoped token in the Worker.
+// Minted per call, metadata:read only, never stored or logged: the only unscoped token in the
+// Worker.
 export interface InstalledRepo {
   full_name: string;
   private: boolean;
@@ -98,9 +95,6 @@ export interface InstalledRepo {
 const LIST_PER_PAGE = 100;
 const LIST_MAX_PAGES = 10;
 
-/** Every repo every installation of the App can see. Throws on any failed or partial
- *  read: a list read in part would read as "everything else is unmapped" or, worse,
- *  "nothing is". */
 export async function listInstalledRepos(
   env: Env,
 ): Promise<{ repos: InstalledRepo[]; installations: number }> {
@@ -170,7 +164,8 @@ export async function listInstalledRepos(
 // One installation covers every repo under a single owner, but each minted token is
 // scoped to one repo, so the token cache is per owner+repo to match.
 
-// The URL built for a repo call cannot escape /repos/<owner>/<repo>/. A "../.." smuggled through a file path or branch would normalize out of it once fetch() parsed the string. This runs after assembly and WHATWG normalization, building the same URL new URL() will (so a fake fetch keyed on the raw string cannot substitute: the raw string still contains the "..", the parsed pathname does not). owner and repo come from the namespace mapping (REPO_SHAPE excludes "." and ".."), so the base is traversal-free.
+// The built URL must not escape /repos/<owner>/<repo>/: a "../.." in a path or branch would
+// normalize out once fetch() parses it, so this checks the normalized URL.
 function repoApiUrl(owner: string, repo: string, path: string): string {
   const url = `${GH}${path}`;
   const base = `/repos/${owner}/${repo}`;
@@ -207,8 +202,6 @@ export async function ghFetch(
   return resp;
 }
 
-// The cache key is the full API path, including ?ref=, so different refs are
-// different keys.
 export async function cachedGet(
   env: Env,
   owner: string,
@@ -234,7 +227,8 @@ export async function cachedGet(
   return new Response(body, { status: resp.status });
 }
 
-// Invalidation after a write: without it a read returns the body the write replaced for up to READ_CACHE_TTL_SECONDS, and Capsid writes then reads back as its ordinary path. Swept by repo prefix, not by computed key: a key-precise invalidation must reproduce every spelling of every affected entry (encoded path, parent listing, trailing slash, with and without ?ref=), and one miss is a stale read. The sweep also covers a merge, whose paths are not known here, at the cost of one extra GitHub GET.
+// Swept by repo prefix, not computed key: a key-precise sweep must reproduce every spelling of
+// every entry, and one miss is a stale read.
 export async function invalidateRepoReads(env: Env, owner: string, repo: string): Promise<number> {
   const prefix = readPrefix(owner, repo);
   let cursor: string | undefined;
@@ -242,17 +236,13 @@ export async function invalidateRepoReads(env: Env, owner: string, repo: string)
   try {
     do {
       const page = await env.APP_KV.list({ prefix, cursor });
-      // Deletes within a page run in parallel, since they are independent and this
-      // runs on the write path where a caller is waiting. Pages stay sequential
-      // because the next cursor is only known once the current page returns.
       await Promise.all(page.keys.map((key) => env.APP_KV.delete(key.name)));
       deleted += page.keys.length;
       cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
   } catch (err) {
-    // The commit already landed. Failing the tool call because a cache sweep failed
-    // would misreport the write, so this is logged by name and the stale window
-    // stays bounded by the 60 second TTL.
+    // The commit already landed: failing the call over a cache sweep would misreport the write; the
+    // stale window is bounded by the 60 second TTL.
     logEvent(
       "GH_CACHE_INVALIDATION_FAILED",
       {
@@ -264,14 +254,11 @@ export async function invalidateRepoReads(env: Env, owner: string, repo: string)
   return deleted;
 }
 
-// The shape of a single repos entry: "owner/name". A looser shape would admit
-// "../other" as a legal mapping and make the authorization boundary traversable.
-// GitHub owner and repo names are drawn from [A-Za-z0-9._-]; the charset still
-// matches "..", so repoTokenOk below also rejects "." and "..".
+// Strict "owner/name": a looser shape would admit "../other" and make the authorization boundary
+// traversable.
 const REPO_SHAPE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
-// Neither side of an owner/name may be "." or "..": those walk a URL out of
-// /repos/<owner>/<repo>/ even though they satisfy the charset.
+// "." and ".." satisfy the charset but walk a URL out of /repos/<owner>/<repo>/.
 export function repoTokenOk(repoFull: string): boolean {
   if (!REPO_SHAPE.test(repoFull)) return false;
   const [owner, name] = repoFull.split("/");
@@ -283,10 +270,8 @@ export interface RepoEntry {
   label: string;
 }
 
-// Parse and validate a repos JSON array, shared by register_namespace and
-// update_namespace: a non-empty array of { repo: "owner/name", label? } with label
-// defaulting to "primary". Returns the normalized list or a caller-facing error.
-// It does NOT enforce a single primary; update_namespace layers that on top.
+// Shared by register_namespace and update_namespace; does not enforce a single primary
+// (update_namespace adds that).
 export function parseReposList(reposJson: string): { list: RepoEntry[] } | { error: string } {
   let parsed: unknown;
   try {
@@ -312,16 +297,12 @@ export function parseReposList(reposJson: string): { list: RepoEntry[] } | { err
   return { list };
 }
 
-/** A namespace's `repos` column as a list: no mapping (null, blank or `[]`) is an empty list,
- *  anything else goes through parseReposList. The readers of the column share this. */
 export function parseMappedRepos(
   reposJson: string | null,
 ): { list: RepoEntry[] } | { error: string } {
   return reposJson && reposJson.trim() !== "[]" ? parseReposList(reposJson) : { list: [] };
 }
 
-// update_namespace requires exactly one primary (register_namespace does not, so
-// this is not folded into parseReposList). Returns an error string or null.
 export function requireSinglePrimary(list: RepoEntry[]): string | null {
   const primaries = list.filter((r) => r.label === "primary").length;
   return primaries === 1
@@ -329,7 +310,8 @@ export function requireSinglePrimary(list: RepoEntry[]): string | null {
     : `repos must have exactly one entry labeled "primary" (found ${primaries})`;
 }
 
-// Resolve a namespace to one of its mapped repos. `selector` is a label from the namespace's repos array ("primary", "legacy") or a full "owner/name" that MUST appear in it. The mapping is the authorization boundary, so an unknown selector is rejected with the valid values rather than falling through to an arbitrary repo. With none, the default is the entry labeled "primary", or the first.
+// The mapping is the authorization boundary: an unknown selector is rejected, never falls through
+// to an arbitrary repo.
 export async function resolveRepo(
   env: Env,
   namespace: string,
@@ -339,9 +321,8 @@ export async function resolveRepo(
     .bind(namespace)
     .first<{ repos: string }>();
   if (!row) throw new Error(`unknown namespace: ${namespace}`);
-  // Fails closed: a corrupt repos column is reported as corrupt, not as "has no repo
-  // mapping". That is a different fact with a different fix, and reading the damage
-  // as an unconfigured namespace invites "fixing" it by overwriting the mapping.
+  // Fails closed: a corrupt repos column is reported as corrupt, not as an unconfigured namespace,
+  // which invites overwriting it.
   let list: Array<{ repo: string; label?: string }>;
   try {
     list = JSON.parse(row.repos || "[]");
@@ -378,10 +359,8 @@ export async function resolveRepo(
   return { owner, repo, full: chosen.repo };
 }
 
-// encodePath keeps the "/" between segments, so it cannot stop traversal on its own.
-// It refuses a "." or ".." segment as an inner guard, and repoApiUrl asserts the
-// assembled URL as the outer one. Both are kept: this gives a clear caller-facing
-// error, that catches anything this misses. Exported for the traversal test.
+// encodePath keeps "/", so it cannot stop traversal alone: this inner guard refuses "." and ".."
+// segments and repoApiUrl asserts the outer one. Exported for the traversal test.
 export function encodePath(path: string): string {
   return path
     .split("/")
@@ -395,10 +374,8 @@ export function encodePath(path: string): string {
     .join("/");
 }
 
-// Refuse a caller-supplied repo argument (path, branch, ref or workflow) at the
-// door, naming the argument. The URL assertion in repoApiUrl is the backstop; this
-// is the friendly error, and the guard for arguments that reach GitHub through
-// encodeURIComponent (refs, workflow names) rather than encodePath.
+// Refuses a caller-supplied repo argument at the door, naming it; repoApiUrl's assertion is the
+// backstop. Covers arguments that reach GitHub through encodeURIComponent.
 export function assertRepoArg(kind: string, value: string): void {
   const problem = repoPathProblem(value);
   if (problem) throw new Error(`${kind} ${problem}`);
@@ -427,8 +404,6 @@ export async function getRefSha(
   return ((await resp.json()) as { object: { sha: string } }).object.sha;
 }
 
-// The default branch's head commit sha. listRepoTree has no top-level sha (its shas
-// are per-entry blob shas), so it cannot answer this.
 export async function defaultBranchSha(
   env: Env,
   namespace: string,

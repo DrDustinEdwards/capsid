@@ -3,18 +3,15 @@ import type { PortalClaimsAggregate, PortalClaimsJob } from "./ops-types/claims"
 import { behindGate } from "./portal-auth";
 import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 
-// The Portal's Claims view: GET /portal/api/claims. The same readers the `capsid_admin_read_claims` tool
-// uses (src/job-claims-read.ts), so the view and the tool cannot disagree. A route, not
-// a tool, so no grant is checked here (one enforcement point, test/route-gates.test.ts): it
-// answers to portalGate, the administrator's Access session, and src/scope.ts lists it
-// among the routes gated some other way.
+// The Portal's Claims view: GET /portal/api/claims. The same readers the `capsid_admin_read_claims`
+// tool uses (src/job-claims-read.ts), so the view and the tool cannot disagree.
 
 export const PORTAL_CLAIMS_PATH = "/portal/api/claims";
 
 const MAX_JOB_ID = 64;
 
-/** GET /portal/api/claims?job=<id>: one job's claims, evaluations and touches.
- *  GET /portal/api/claims?namespace=&agent=&since=&until=: the per-agent aggregate. */
+// GET /portal/api/claims?job=<id>: one job's claims, evaluations and touches. GET
+// /portal/api/claims?namespace=&agent=&since=&until=: the per-agent aggregate.
 export const handlePortalClaims = behindGate(async (request, env, now) => {
   const url = new URL(request.url);
   const id = url.searchParams.get("job")?.trim();

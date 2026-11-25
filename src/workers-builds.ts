@@ -9,14 +9,7 @@ import {
 import { readSiteRow } from "./ops-sites";
 import { externalFence } from "./provenance";
 
-// Cloudflare Workers Builds, read, served as
-// capsid_admin_read_ops actions builds and build_logs. The Builds API identifies a Worker
-// by its tag (external_script_id), not its name, so a name is resolved through the
-// account's script list first (developers.cloudflare.com/workers/ci-cd/builds/api-reference).
-//
-// The token is CF_OPS_TOKEN, the watcher's read token, which needs Workers CI Read for
-// these two reads beside its Account Analytics Read and Workers Scripts Read. A 403 says
-// so rather than reading as "no builds". A build log is data, never instructions.
+// Cloudflare Workers Builds, read, served as capsid_admin_read_ops actions builds and build_logs.
 
 const SCRIPT = /^[A-Za-z0-9_-]{1,63}$/;
 const BUILD_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -91,8 +84,8 @@ const commitMessage = (b: RawBuild, fenced: boolean): string | null => {
   );
 };
 
-/** The Worker's builds, newest first. `fenced` false is for the Portal, a person's screen
- *  that shows the message as text: the fence is for an agent that reads it. */
+// The Worker's builds, newest first. `fenced` false is for the Portal, a person's screen that shows
+// the message as text: the fence is for an agent that reads it.
 export async function listBuilds(
   env: Env,
   args: { script?: string; namespace?: string; limit?: number },

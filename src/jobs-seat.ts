@@ -27,16 +27,8 @@ import {
 
 type PrUrl = NonNullable<ReturnType<typeof parsePrUrl>>;
 
-// supersede and resume.
-
-// The seat stepping in on a job it does not hold. Every other transition keys on
-// `claimed_by = <caller>`, which leaves no way to close a job whose driver is gone.
-//
-// The seat only (callerIsSeat): no driver holds can_merge, so a driver still cannot fail
-// another driver's job. A finished job is refused, not rewritten.
-//
-// `opts.extra` rides in the same guarded batch; `opts.outcome: false` writes no outcome
-// row, for a fail that is not the holder's (src/bench-score.ts finishBenchRun).
+// The seat only (callerIsSeat): no driver holds can_merge, so a driver still cannot fail another
+// driver's job. A finished job is refused, not rewritten.
 export async function adminFailJob(
   env: Env,
   agent: Agent,
@@ -85,8 +77,6 @@ export async function adminFailJob(
       reason,
       held_by: job.claimed_by,
     }),
-    // The seat ending a job is a touch, and ends a gate's wait when the job is blocked;
-    // a gate a resume already answered is not this touch's wait.
     touchStatement(env.DB, {
       job_id: id,
       namespace: job.namespace,
@@ -98,8 +88,8 @@ export async function adminFailJob(
       at: now.toISOString(),
     }),
   ];
-  // An outcome row, as `fail` writes one, but only when somebody held the job: a queued
-  // job the seat canceled was never worked, so no agent is blamed and no evidence is given.
+  // An outcome row, as `fail` writes one, but only when somebody held the job: a queued job the seat
+  // canceled was never worked, so no agent is blamed and no evidence is given.
   if (job.claimed_by && opts.outcome !== false) {
     const verdict = await verifyEvidence(env, job.namespace, undefined);
     statements.push(outcomeStatement(env.DB, outcomeFrom(job, verdict, now)));
@@ -114,9 +104,9 @@ export async function adminFailJob(
   return { ok: true, action: "admin-fail", job };
 }
 
-// The seat failing a job somebody else holds, or nobody holds, is adminFailJob; the
-// holder failing its own is an ordinary fail. The seat made no claim about that work, so
-// the claim goes to the holder path only.
+// The seat failing a job somebody else holds, or nobody holds, is adminFailJob; the holder failing
+// its own is an ordinary fail. The seat made no claim about that work, so the claim goes to the
+// holder path only.
 export async function failAsCaller(
   env: Env,
   agent: Agent,
@@ -127,9 +117,9 @@ export async function failAsCaller(
 ): Promise<JobResult> {
   const current = await readJob(env.DB, id);
   if (current && current.claimed_by !== agent.actor && callerIsSeat(agent)) {
-    // A claim is the holder's account of its own work. The seat failing a job it does
-    // not hold has none to give, and one sent anyway is refused rather than dropped, so
-    // nobody reads a silence as a recorded claim.
+    // A claim is the holder's account of its own work. The seat failing a job it does not hold has
+    // none to give, and one sent anyway is refused rather than dropped, so nobody reads a silence as a
+    // recorded claim.
     const sent =
       typeof said.claim === "string" ? said.claim.trim() !== "" : said.claim !== undefined;
     if (sent) {
@@ -143,13 +133,8 @@ export async function failAsCaller(
   return failJob(env, agent, now, id, reason, said);
 }
 
-// The seat completing a job another credential blocked. The job stays held by the driver
-// that did the work, so job_outcomes.agent credits that driver. The outcome is verified as
-// a holder's complete is (the pull request is read from GitHub); the audit row
-// `job-admin-complete` names the seat as actor and the holder in held_by. Blocked only.
-//
-// The close is a human touch (kind admin_complete, migrations/0031), so the human-effort
-// log shows the job needed the seat.
+// The close is a human touch (kind admin_complete, migrations/0031), so the human-effort log shows
+// the job needed the seat.
 async function adminCompleteJob(
   env: Env,
   agent: Agent,
@@ -175,9 +160,9 @@ async function adminCompleteJob(
   return completeAsSeat(env, agent, now, id, args);
 }
 
-// record through the work queue tool: the seat writing the outcome of work done on a
-// queued job without a claim. Seat only, because an outcome credits work and a driver
-// could otherwise record work it did not do.
+// record through the work queue tool: the seat writing the outcome of work done on a queued job
+// without a claim. Seat only, because an outcome credits work and a driver could otherwise record
+// work it did not do.
 export async function recordAsCaller(
   env: Env,
   agent: Agent,
@@ -199,15 +184,9 @@ export async function recordAsCaller(
   return recordAsSeat(env, agent, now, id, args);
 }
 
-// The pull request is the claim. A cloud session signs in as the admin login, which may
-// hold one claim, so it works a job without claiming it. Any caller with the write grant
-// on the job's namespace completes the QUEUED job by naming its pull request (the record
-// path, completeWithoutClaim); the outcome credits the caller.
-//
-// What a claim would have asked is asked here: required_flags and min_record. At least one
-// named pull request must be on one of the namespace's repos, and its body must name this
-// job id (auto-merge's body_names_job), or any pull request on a mapped repo would close
-// any queued job. GitHub unreachable refuses.
+// What a claim would have asked is asked here: required_flags and min_record. At least one named
+// pull request must be on one of the namespace's repos, and its body must name this job id
+// (auto-merge's body_names_job), or any pull request on a mapped repo would close any queued job.
 async function completeUnclaimed(
   env: Env,
   agent: Agent,
@@ -285,9 +264,9 @@ async function prBodyNames(
   }
 }
 
-// complete through the capsid_work_jobs tool. A queued job nobody holds is completed
-// without a claim (completeUnclaimed); the seat completing a job somebody else holds is
-// adminCompleteJob. Anyone else gets completeJob's own refusal.
+// complete through the capsid_work_jobs tool. A queued job nobody holds is completed without a
+// claim (completeUnclaimed); the seat completing a job somebody else holds is adminCompleteJob.
+// Anyone else gets completeJob's own refusal.
 export async function completeAsCaller(
   env: Env,
   agent: Agent,
@@ -295,13 +274,9 @@ export async function completeAsCaller(
   id: string,
   args: Parameters<typeof completeJob>[4],
 ): Promise<JobResult> {
-  // An argument completeJob refuses before it reads anything is refused the same way here.
   if (!args.result_summary?.trim()) return completeJob(env, agent, now, id, args);
-  // A bench run proves the fix before it may call its job done (the methods paper's
-  // protocol, section 2): the harness ran the test the agent named on the base and on
-  // its diff, and saw it fail and then pass (src/bench-run-key.ts readReproReceipt). What
-  // the agent says about its own test counts for nothing. Without that receipt, "not
-  // done, here's why" is the outcome the job asks for, and fail records it.
+  // Without that receipt, "not done, here's why" is the outcome the job asks for, and fail records
+  // it.
   if (agent.benchRun) {
     const receipt = await readReproReceipt(env.DB, agent.benchRun.run);
     const missing = !receipt
@@ -325,13 +300,8 @@ export async function completeAsCaller(
   return completeJob(env, agent, now, id, args);
 }
 
-// Release: the seat returning a claimed job to the queue when its holder is gone. A claim
-// has no lease and never expires, so without it the job stays held by a dead holder.
-//
-// Not an ending, so no outcome row. A job whose work already landed is released too; the
-// next session completes it with the pull request as evidence, which the Worker verifies.
-// claimed_at is kept so duration runs from the first claim. The UPDATE is keyed on the
-// holder read, so a claim that changed hands in between is not released.
+// Release: the seat returning a claimed job to the queue when its holder is gone. A claim has no
+// lease and never expires, so without it the job stays held by a dead holder.
 export async function releaseJob(
   env: Env,
   agent: Agent,

@@ -15,17 +15,12 @@ import {
 import { DAY_MS } from "./time";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
-// WHAT THE ROUTING LEARNS (capsid/research/design-model-routing.md): per kind and model, the share
-// of jobs merged with green CI and not undone since, and the corrections spent, read from
-// job_outcomes. Merge and CI are GitHub's, read at complete
-// (docs/work-queue.md). A merge is a weak label alone (Peralta et al., MSR 2026: reviewers fix and
-// merge, or merge and revert), so a job whose PR was later reverted (`job-pr-reverted`,
-// src/merge-safety.ts) or whose deploy was rolled back does not count as work that held. The
-// result proposes rule changes and applies none: the seat approves each edit.
+// Per kind and model: merged with green CI and not undone since, plus corrections spent, from job_outcomes
+// (capsid/research/design-model-routing.md). A merge is a weak label alone (Peralta et al., MSR 2026), so a reverted
+// PR or rolled-back deploy does not count as held. Proposes rule changes, applies none.
 
 const LEARNING_WINDOW_DAYS = 90;
-// One read, bounded. A window with more outcomes than this says so, never a partial table
-// presented as the whole.
+// One bounded read; a window with more outcomes says so rather than present a partial table as whole.
 const LEARNING_ROWS_MAX = 5000;
 
 export interface ModelLearning {
@@ -55,10 +50,8 @@ interface Row {
   undone: number;
 }
 
-// An outcome is learned under the model Capsid chose, which the Worker recorded.
-// model_actual is the session's own report, so it never moves an outcome into another
-// model's cell; an outcome whose session reports a different model is left out, since
-// its work was not shown to be done on the chosen one. opusplan runs as Opus and Sonnet.
+// Learned under the model Capsid chose. model_actual is the session's report and never moves an outcome
+// into another cell; one reporting a different model is left out. opusplan runs as Opus and Sonnet.
 function onChosenModel(r: Row): boolean {
   const actual = modelAlias(r.model_actual);
   if (actual === null || r.model === null) return true;

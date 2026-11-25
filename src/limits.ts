@@ -1,13 +1,12 @@
 import { z } from "zod";
 
-// Repo file paths take this bound too, but are not held to docPath's grammar:
-// a GitHub path is whatever the repo contains.
+// Repo file paths take this bound too, but are not held to docPath's grammar: a GitHub path is
+// whatever the repo contains.
 export const MAX_PATH = 512;
 export const MAX_TITLE = 1024;
 export const MAX_TAGS = 1024;
 export const MAX_NAMESPACE = 64;
 export const MAX_DOC_TYPE = 64;
-// Separate from MAX_DOC_TYPE despite the same value: different vocabularies.
 export const MAX_DOC_STATUS = 64;
 export const MAX_BODY = 1_000_000;
 export const MAX_LINKS_JSON = 8192;
@@ -17,27 +16,22 @@ export const MAX_GLOB = 512;
 export const MAX_REF = 255;
 export const MAX_REPO_SELECTOR = 256;
 export const MAX_SHA = 128;
-// A CI job or step name, or its numeric id, as capsid_inspect_repo action ci takes them. GitHub does not
-// document a ceiling; a name longer than this is not one a workflow file holds.
 export const MAX_CI_NAME = 512;
 // The seat's note on a capsid_work_jobs resume: rulings and a plan, longer than `reason` allows.
-// Not MAX_BODY: the note is stored in an audit row and rendered into the job's mirror
-// document beside the signed prompt, which can already be MAX_BODY on its own.
+// Not MAX_BODY: the note is stored in an audit row and rendered into the job's mirror document
+// beside the signed prompt, which can already be MAX_BODY on its own.
 export const MAX_RESUME_NOTE = 16_384;
-// The confirmation token capsid_admin_manage_namespaces action delete_preview returns: base64url claims carrying the plan's counts,
-// a dot and a 64-hex signature. Well under 2KB in practice.
 export const MAX_CONFIRM_TOKEN = 8192;
 
 export const MAX_ROWS = 500;
 export const SEARCH_ROWS = 25;
 export const BRIEF_BUDGET = 40_000;
-// Enforced by trimming, not warned about.
 export const GATHER_BUDGET = 150_000;
-// D1's ceiling on the statements in one batch, the number the bounds below are sized
-// against. delete_namespace derives its document cap from it.
+// D1's ceiling on the statements in one batch, the number the bounds below are sized against.
+// delete_namespace derives its document cap from it.
 export const D1_BATCH_STATEMENTS = 100;
-// Four statements per path plus an audit row: 20 paths is 81, under D1's
-// 100-statement batch ceiling.
+// Four statements per path plus an audit row: 20 paths is 81, under D1's 100-statement batch
+// ceiling.
 export const LINT_CONSUMED_MAX = 20;
 export const HISTORY_ROWS = 100;
 export const MAX_SCAN_CAP = 200;
@@ -63,16 +57,14 @@ export function pathProblem(path: string): string | null {
   if (hasControlChar(path))
     return "path must not contain control characters (including newlines and tabs)";
   // SQL reads the archive with LIKE 'archive/%', which folds ASCII case, and JavaScript with
-  // startsWith("archive/"), which does not. A path like Archive/x.md would be archived to one
-  // and live to the other, so only the exact prefix is accepted.
+  // startsWith("archive/"), which does not. A path like Archive/x.md would be archived to one and
+  // live to the other, so only the exact prefix is accepted.
   if (path.slice(0, 8).toLowerCase() === "archive/" && !path.startsWith("archive/")) {
     return "path must spell the archive prefix exactly 'archive/' (lowercase)";
   }
   return null;
 }
 
-// Whole-segment check, not includes(".."): "a..b" is a legal file name.
-// encodeURIComponent leaves "." and ".." untouched.
 export function repoPathProblem(value: string): string | null {
   if (value.length === 0) return "must not be empty";
   if (value.length > MAX_PATH) return `is longer than ${MAX_PATH} characters`;
@@ -92,34 +84,31 @@ export const docPath = z.string().superRefine((value, ctx) => {
   if (problem) ctx.addIssue({ code: "custom", message: problem });
 });
 
-// Every free-text input goes through this, so a bare z.string() in a tool schema
-// is a visible anomaly. test/limits.test.ts fails if one appears.
+// Every free-text input goes through this, so a bare z.string() in a tool schema is a visible
+// anomaly. test/limits.test.ts fails if one appears.
 export const bounded = (max: number) => z.string().max(max);
 
-// The fixed shapes a tool argument can declare as a pattern, so a client sees the shape
-// in the schema before it calls. Each matches every value the store and
-// GitHub hold today; a free-form string (a title, a query, a path) stays unpatterned.
-// A namespace is a lowercase slug, as every registered one is.
+// The fixed shapes a tool argument can declare as a pattern, so a client sees the shape in the
+// schema before it calls. Each matches every value the store and GitHub hold today; a free-form
+// string (a title, a query, a path) stays unpatterned. A namespace is a lowercase slug, as every
+// registered one is.
 export const nsName = bounded(MAX_NAMESPACE).regex(
   /^[a-z0-9][a-z0-9-]*$/,
   "a namespace is a lowercase slug: a-z, 0-9 and '-'",
 );
-// A repo label ("primary", "site-api") or a mapped "owner/name".
 export const repoSelector = bounded(MAX_REPO_SELECTOR).regex(
   /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)?$/,
   'a repo is a label or "owner/name"',
 );
-// A commit sha: hex, abbreviated or full (SHA-1 or SHA-256).
 export const gitSha = bounded(MAX_SHA).regex(
   /^[0-9a-fA-F]{7,64}$/,
   "a sha is 7 to 64 hex characters",
 );
-// A calendar day, YYYY-MM-DD.
 export const dayParam = bounded(10).regex(/^\d{4}-\d{2}-\d{2}$/, "a day is YYYY-MM-DD");
 
-// A job's result_ref is where the work landed: a document key inside the store, or
-// a pull request URL outside it. The URL is rendered as a link a human may click, so
-// the scheme is pinned to https and embedded credentials are refused.
+// A job's result_ref is where the work landed: a document key inside the store, or a pull request
+// URL outside it. The URL is rendered as a link a human may click, so the scheme is pinned to
+// https and embedded credentials are refused.
 export function resultRefProblem(value: string): string | null {
   if (value.length === 0) return "result ref must not be empty";
   if (value.length > MAX_PATH) return `result ref is longer than ${MAX_PATH} characters`;

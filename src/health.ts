@@ -17,7 +17,6 @@ import { DEFAULT_CADENCE_MINUTES } from "./watcher";
 
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 export const BACKUP_LAST_OK_KEY = "backup:last-ok";
-// Daily cron is 24h; 26h is that plus a 2h grace so one slow run does not warn.
 export const BACKUP_STALE_HOURS = 26;
 
 export async function backupFreshness(
@@ -32,8 +31,8 @@ export async function backupFreshness(
   }
   if (!lastOk) return { last_ok: null, age_hours: null, warning: "no successful backup recorded" };
   const stamped = Date.parse(lastOk);
-  // NaN compares false against the threshold, so without this an unreadable stamp
-  // would pass as fresh with no warning.
+  // NaN compares false against the threshold, so without this an unreadable stamp would pass as
+  // fresh with no warning.
   if (Number.isNaN(stamped)) {
     return {
       last_ok: lastOk,
@@ -57,8 +56,6 @@ function probeError(err: unknown): string {
   return `error: ${errorMessage(err).slice(0, 120)}`;
 }
 
-// The two bindings beside the store. Each probe reads a key that need not exist: a
-// null answer proves the binding resolves. Reported as fields, left out of status.
 async function probeBindings(env: Env): Promise<{ media: string; app_kv: string }> {
   let media = "unbound";
   if (env.MEDIA) {
@@ -107,7 +104,6 @@ async function readStore(env: Env): Promise<{ d1: string; schema_version: string
   return { d1, schema_version };
 }
 
-// A driver error can name a table or binding: the public body says "error", the log has it.
 function publicState(probe: string, state: string): string {
   if (!state.startsWith("error")) return state;
   logEvent(
@@ -118,7 +114,6 @@ function publicState(probe: string, state: string): string {
   return "error";
 }
 
-// In-process readers keep the probes' messages.
 export async function healthReport(env: Env): Promise<HealthReport> {
   const provenance = { sha: env.BUILD_SHA ?? "unknown" };
   const { d1, schema_version } = await readStore(env);
@@ -128,7 +123,6 @@ export async function healthReport(env: Env): Promise<HealthReport> {
   const bindings = await probeBindings(env);
   const ai_search = await aiSearchUsage(env).catch(() => null);
 
-  // Status is the store only: the live gate polls it after a deploy, and a 503 fails it.
   const healthy = d1 === "ok" && fts === "ok";
   return {
     status: healthy ? "ok" : "degraded",
@@ -144,8 +138,7 @@ export async function healthReport(env: Env): Promise<HealthReport> {
 /**
  * The runTask ledger as one warn check (src/task-runs.ts): a task whose newest run threw or was
  * refused, or one with a period that has gone quiet past two periods or never ran, as the Portal's
- * task list flags them. Tasks without a period count only on failure. The detail names the tasks,
- * never a reason (public).
+ * task list flags them. Tasks without a period count only on failure.
  */
 function taskCheck(env: Env, now: () => Date = () => new Date()): HealthCheck {
   return {
@@ -172,9 +165,7 @@ function taskCheck(env: Env, now: () => Date = () => new Date()): HealthCheck {
 /**
  * /health in the family shape: site-runtime's healthResponse (status pass, warn or fail, a check
  * list, no-store, noindex). The store is the fail level (D1 and the FTS probe, so a Worker bound
- * to the wrong database is a 503). The backup, MEDIA, AUDIT_BUCKET, APP_KV, OAUTH_KV and the task
- * ledger warn. The fields the deploy gate and rollback read (sha, schema_version, store) stay
- * beside the family fields. The watcher still probes itself through healthReport.
+ * to the wrong database is a 503).
  */
 export async function handleHealth(env: Env): Promise<Response> {
   const store = { d1: "unbound", fts: "skipped" };
@@ -190,19 +181,13 @@ export async function handleHealth(env: Env): Promise<Response> {
     taskCheck(env),
   ];
   if (env.MEDIA) checks.push({ ...r2Check("media", env.MEDIA), level: "warn" });
-  // The tool-call log's copies: one head of a fixed key, a class B read. Warn,
-  // like MEDIA: the daily copy retries on its next run, and tool-call-log below warns when
-  // rows go uncopied for two days.
   if (env.AUDIT_BUCKET)
     checks.push({ ...r2Check("audit_bucket", env.AUDIT_BUCKET), level: "warn" });
   if (env.APP_KV) checks.push({ ...kvCheck("app_kv", env.APP_KV), level: "warn" });
   if (env.OAUTH_KV) checks.push({ ...kvCheck("oauth_kv", env.OAUTH_KV), level: "warn" });
-  // The two Durable Objects, warn: a bound namespace mints an id, and no
-  // object is woken. Without RATE_LIMITER the limited routes refuse, and without
-  // TOOL_CALL_LOG a tool call goes unlogged; the store still answers, so neither is a 503.
-  // Left out: AI_SEARCH, because every read of it is a billed query and the hybrid search
-  // falls back to FTS5 without it; AI, because every call is billed inference
-  // (.ops-audit.json names it unprobed); ASSETS, because the Portal's files are the deploy's own.
+  // Without RATE_LIMITER the limited routes refuse, and without TOOL_CALL_LOG a tool call goes
+  // unlogged; the store still answers, so neither is a 503. Left out: AI_SEARCH, because every read
+  // of it is a billed query and the hybrid search falls back to FTS5 without it;
   checks.push(
     durableObjectCheck("rate_limiter", env.RATE_LIMITER),
     durableObjectCheck("tool_call_log", env.TOOL_CALL_LOG),
@@ -210,8 +195,8 @@ export async function handleHealth(env: Env): Promise<Response> {
   // The watcher's send_email binding, warn: without it a red or green mail is not sent and the
   // finding still opens in Incidents.
   checks.push(emailCheck("email", env.EMAIL));
-  // What is in the log, warn: a call started and never finished, a spike in
-  // calls, or rows not copied to AUDIT_BUCKET for two days.
+  // What is in the log, warn: a call started and never finished, a spike in calls, or rows not
+  // copied to AUDIT_BUCKET for two days.
   if (env.TOOL_CALL_LOG) checks.push(auditLogCheck(env));
   const response = await healthResponse({
     ping: async () => {
@@ -221,7 +206,6 @@ export async function handleHealth(env: Env): Promise<Response> {
       return store.d1 === "ok" || { ok: false, detail: store.d1 };
     },
     backup: () => backupFreshness(env),
-    // A KV get, not an R2 listing, so there is nothing to save by holding it per isolate.
     backupTtlMs: 0,
     sha: env.BUILD_SHA ?? "unknown",
     checks,

@@ -30,8 +30,8 @@ export async function readFactsJson<T>(env: Pick<Env, "APP_KV">, key: string): P
   }
 }
 
-/** The last build's drift lines for the maintenance pass, and a line of its own when the
- *  build has not run for two days. */
+// The last build's drift lines for the maintenance pass, and a line of its own when the build has
+// not run for two days.
 export async function readFactsDrift(
   env: Pick<Env, "APP_KV">,
   now: Date,

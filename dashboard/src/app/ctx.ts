@@ -1,10 +1,6 @@
 import { createContext, useContext } from "react";
 import type { OpsFeed, PortalAction, PortalPerformed } from "../types";
 
-// Eleven pages; the menu groups them (app/App.tsx GROUPS): Needs you and Health; Sites, one
-// page for every site and one for each; Pull requests and Projects; Activity, Jobs, Agents,
-// Packages and Library; Settings last, which holds preferences only. The ids are internal; the labels are the menu's words (the Queue is
-// "Jobs"). There is no redirect for an old address (pre-launch: no legacy shims).
 export const VIEWS = [
   { id: "needs", label: "Needs you", key: "y" },
   { id: "health", label: "Health", key: "h" },
@@ -19,9 +15,6 @@ export const VIEWS = [
   { id: "settings", label: "Settings", key: "e" },
 ] as const;
 
-// The tabs of each page that has them, in order: the first is the bare address, the rest
-// ?tab=<id>. A "page#tab" reference (placePath) names one. A site's own page has its tabs in
-// SITE_TABS.
 export const HEALTH_TABS = [
   { id: "problems", label: "Problems" },
   { id: "backups", label: "Backups" },
@@ -70,7 +63,6 @@ const PAGE_TABS: Partial<Record<(typeof VIEWS)[number]["id"], ReadonlyArray<{ id
   packages: PACKAGE_TABS,
 };
 
-/** The tab a page's ?tab= names, when the page has it; else null. */
 export function tabOf<T extends { id: string }>(
   tabs: ReadonlyArray<T>,
   name: string | null | undefined,
@@ -87,8 +79,6 @@ function isView(v: string | undefined): v is ViewId {
   return VIEWS.some((x) => x.id === v);
 }
 
-// The namespace filter is not here: each view keeps its own in the address (?ns=),
-// through useNsFilter in views/shared.tsx.
 export interface Filters {
   q: string;
   range: "24h" | "7d" | "30d";
@@ -99,58 +89,33 @@ export interface Ctx {
   now: number;
   view: ViewId;
   open: (ref: string) => void;
-  // The address open(ref) goes to, for a row drawn as a link.
   href: (ref: string) => string;
   go: (view: ViewId) => void;
   filters: Filters;
   setFilters: (f: Partial<Filters>) => void;
   copy: (text: string) => void;
-  // A short message in the toast.
   say: (msg: string) => void;
-  // Opens the confirm dialog for one control: it previews, then performs on the button
-  // named for the action (performLabel).
   confirm: (req: ConfirmRequest) => void;
-  // A performed action: takes its feed and shows its result in the message region,
-  // which stays until dismissed or replaced by the next action. An automation switch
-  // passes its reverse change as undo, and the message offers Undo.
   performed: (p: PortalPerformed, undo?: UndoRequest) => void;
-  // The session ended: show the signed-out page.
   signOut: () => void;
 }
 
-// One control's request to the confirm dialog. The dialog collects params.reason
-// itself for the actions that need one (NEEDS_REASON).
 export interface ConfirmRequest {
   action: PortalAction;
   params: Record<string, string>;
-  // The dialog's heading before the preview answers, in plain words, e.g. "Pause sample"
-  // or "Resume job: <its title>". Raw ids stay in the drawer.
   title: string;
-  // Called after a successful perform, once the app has taken the new feed.
   onDone?: (p: PortalPerformed) => void;
-  // The reverse action the result message offers as Undo, for a reversible control
-  // (park and unpark).
   undo?: UndoRequest;
-  // Several rows of one kind decided together (Needs you's batch approve): each item is
-  // the same single control with its own params, previewed on its own and listed in this
-  // one dialog, then performed one after another. action and params above are the first
-  // item's. No item takes a reason.
   batch?: ReadonlyArray<BatchItem>;
-  // The help under the typed version field (TYPED_CONFIRM), when the caller knows which
-  // number to type: a policy change signs the version after the one in force.
   confirmHelp?: string;
 }
 
 export interface BatchItem {
   action: PortalAction;
   params: Record<string, string>;
-  // The row in plain words, e.g. "sample-org/sample-a #12".
   label: string;
 }
 
-// The reverse of a switch change, sent by the message's Undo as its own action, with
-// params.undo "true" so the Worker writes portal-undo-<action>. focus is the id of the
-// switch that focus returns to.
 export interface UndoRequest {
   action: PortalAction;
   params: Record<string, string>;
@@ -169,17 +134,13 @@ export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>([
   "automerge_resume",
 ]);
 
-// The actions whose dialog also offers an optional note under the reason: resume_job's
-// is the full approval, which the driver reads as resume_note.note.
 export const TAKES_NOTE: ReadonlySet<PortalAction> = new Set<PortalAction>(["resume_job"]);
 
-// The actions whose dialog asks for the version number typed before the preview (confirm).
 export const TYPED_CONFIRM: ReadonlySet<PortalAction> = new Set<PortalAction>([
   "sign_policy_from_repo",
   "sign_policy_change",
 ]);
 
-// The confirm dialog's perform button, named for what it does (audit DECIDE 11).
 const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) => string)> = {
   overnight: (p) =>
     p.value === "off"
@@ -223,7 +184,6 @@ export function performLabel(action: PortalAction, params: Record<string, string
   return typeof l === "function" ? l(params) : l;
 }
 
-// One-way actions: once the preview arrives, focus goes to Cancel, not to perform.
 export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>([
   "revoke_agent",
   "fail_job",
@@ -238,7 +198,6 @@ export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>([
   "site_key_rotate",
 ]);
 
-// Destructive actions: the perform button is the danger style and sits apart from Cancel.
 export const DESTRUCTIVE: ReadonlySet<PortalAction> = new Set<PortalAction>([
   "revoke_agent",
   "fail_job",
@@ -255,15 +214,8 @@ export function useApp(): Ctx {
   return c;
 }
 
-// Routes, relative to the base (lib/base.ts):
-//   /                          needs you, the home (design-portal-evaluation.md, DECIDE 1)
-//   /<view>                    a view
-//   /<view>/<type>/<id>        a view with a drawer open over it (job, agent, audit row)
-//   /sites/<namespace>         one site's own page
-//   /sites/<namespace>/<type>/<id>  the same with a drawer over it
 export interface Route {
   view: ViewId;
-  // The site's namespace on a site's own page, else null.
   site: string | null;
   drawer: { type: DrawerType; id: string } | null;
 }
@@ -298,8 +250,6 @@ export function parseRoute(path: string): Route {
   return { view, site, drawer: type && DRAWER_TYPES.includes(type) && id ? { type, id } : null };
 }
 
-/** The address a page names, or a page and its tab or section as "page#tab": a tab of a page
- *  that has tabs is its ?tab=, anything else a #section on the page. */
 export function placePath(id: string): string {
   const [page, anchor] = id.split("#");
   if (!isView(page)) return routePath("needs");
@@ -309,13 +259,10 @@ export function placePath(id: string): string {
   return `${routePath(page)}${anchor ? `#${anchor}` : ""}`;
 }
 
-/** One site's own page, at a tab when one is named. */
 export function sitePath(namespace: string, tab?: SiteTab): string {
   return `/sites/${encodeURIComponent(namespace)}${tab && tab !== SITE_TABS[0].id ? `?tab=${tab}` : ""}`;
 }
 
-/** The address an OpenRef opens from a page: "view:<id>" its page or section, "site:<ns>" the
- *  site's page, and a job, an agent or an audit row the drawer over `view` (and `site`). */
 export function refPath(ref: string, view: ViewId, site?: string | null): string {
   const i = ref.indexOf(":");
   const type = ref.slice(0, i);

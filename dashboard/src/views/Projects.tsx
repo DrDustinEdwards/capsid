@@ -15,14 +15,7 @@ import { PageHead } from "./shared";
 import { useEditor } from "capsomer/react/config-form";
 import { Suspense, lazy } from "react";
 
-// The add and edit form loads only when it opens, with its fields' stylesheets.
 const ProjectForm = lazy(() => import("./ProjectConfig").then((m) => ({ default: m.ProjectForm })));
-
-// PROJECTS (the Portal audit's new map, 2026-11-06; out of Settings): each project's driver,
-// its jobs and the integrity of its latest truth report. A project paused after repeated
-// failures (the queue's circuit breaker, src/job-breaker.ts) is reset one way, so the reset
-// keeps its preview and confirm; Needs you offers the same Reset. Add project, and each row's
-// Edit, open the form that registers, remaps or deletes a project (views/ProjectConfig.tsx).
 
 function Driver({ ns }: { ns: string }) {
   const { feed, now } = useApp();
@@ -43,7 +36,6 @@ function Driver({ ns }: { ns: string }) {
   );
 }
 
-// The latest truth report's integrity. Null is no report ever run, not an integrity of zero.
 function Report({ n }: { n: PortalNamespace }) {
   const { now } = useApp();
   const rep = n.latest_report;
@@ -149,8 +141,6 @@ function Row({
 
 function Roster() {
   const { now } = useApp();
-  // The roster Needs you reads for its stops, so it follows the feed here too. The last
-  // good read stays on screen while a new one runs or after one fails.
   const load = useAnswer<PortalNamespaces>([LIVE, "namespaces"], fetchNamespaces);
   const read = load.reread;
   const data = load.data;

@@ -15,7 +15,6 @@ import { limitRefusalFor } from "./site-repair";
 import { CAPSID_NAMESPACE, jobRefusal } from "./site-jobs";
 
 import { plural } from "@drdustinedwards/site-helpers/text";
-// Previews of the job controls, dispatched from planAction (src/controls-plan.ts).
 
 export async function planJobAction(
   env: Env,

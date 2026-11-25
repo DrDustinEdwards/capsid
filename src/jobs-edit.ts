@@ -14,20 +14,12 @@ import {
 } from "./jobs-transition";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Edit: the seat correcting a job that nobody is working. A job's body is signed, so without this
-// every correction was a supersede and a repost.
-//
-// Only the seat (callerIsSeat), never a driver: one that could rewrite a body could hand itself a
-// different prompt under a signature this Worker made. Only while queued or blocked: a claimed job
-// is worked to the body it was handed, and a finished one is history.
-//
 // A new body goes through signedJobBody, the path post uses, so it is refused and signed as post
 // does, and claim and resume verify it likewise. The replaced version is copied to job_versions
 // (migrations/0033) in the same guarded batch as the UPDATE, mirror and audit row.
 
 const EDITABLE_STATUSES: readonly JobRow["status"][] = ["queued", "blocked"];
 
-/** One earlier version of a job, as an edit replaced it. */
 export interface JobVersion {
   edited_by: string;
   edited_at: string;
@@ -40,8 +32,6 @@ export interface JobVersion {
 
 const JOB_VERSIONS_MAX = 100;
 
-/** A job's earlier versions, newest first: what list returns for one named id to a
- *  caller holding write. */
 export async function jobVersions(db: D1Database, jobId: string): Promise<JobVersion[]> {
   const { results } = await db
     .prepare(
@@ -53,7 +43,6 @@ export async function jobVersions(db: D1Database, jobId: string): Promise<JobVer
   return results ?? [];
 }
 
-/** The other open job holding a (namespace, title), if any. */
 export async function openTitleHolder(
   db: D1Database,
   namespace: string,
@@ -109,8 +98,8 @@ export async function editJob(
       "a job needs a title: it is how the queue refuses a duplicate while one is still open.",
     );
   }
-  // After the seat check, so a driver is told it may not edit before it is told its body is
-  // unfilled (src/job-body-check.ts).
+  // After the seat check, so a driver is told it may not edit before it is told its body is unfilled
+  // (src/job-body-check.ts).
   const unfilled = jobTextRefusal(args.title, args.body);
   if (unfilled) return refuse("edit", unfilled);
   let signed: string | undefined;
@@ -122,8 +111,6 @@ export async function editJob(
 
   const current = await readJob(env.DB, id);
   if (!current) return refuse("edit", `no job ${id}.`);
-  // The job's own namespace: the tool's check saw only the namespace argument, which an
-  // id-based call may omit.
   const outside = outsideJobNamespace(agent, current.namespace);
   if (outside)
     return refuse("edit", `${agent.actor} cannot edit ${id} ('${current.title}'): ${outside}`);
@@ -134,9 +121,6 @@ export async function editJob(
     );
   }
 
-  // A new body's merged, tagged and published claims, read against GitHub and npm in the
-  // job's own namespace (src/job-fact-check.ts). A claim read as false refuses the edit; one
-  // that could not be read is a warning.
   const facts =
     args.body === undefined
       ? { refusal: null, warnings: [] }
@@ -159,8 +143,8 @@ export async function editJob(
   const changed = (["title", "body", "priority", "gate_required"] as const).filter(
     (field) => edited[field] !== current[field],
   );
-  // The same body signs to the same text, so an edit that restates the job is caught here
-  // rather than kept as a version identical to the row.
+  // The same body signs to the same text, so an edit that restates the job is caught here rather
+  // than kept as a version identical to the row.
   if (changed.length === 0)
     return refuse("edit", `${id} already reads that way. Nothing was written.`);
 
@@ -205,8 +189,6 @@ export async function editJob(
       }),
     ]);
   } catch (err) {
-    // The partial unique index over (namespace, title) for open jobs: another job took
-    // the title between the check above and this write.
     const message = errorMessage(err);
     if (/UNIQUE/i.test(message))
       return collision(

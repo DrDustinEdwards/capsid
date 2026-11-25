@@ -2,19 +2,9 @@ import type { Env } from "./env";
 import { auditStatement } from "./store-guards";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
-// THE OVERNIGHT RUN SWITCH (capsid/research/design-automation-for-speed.md, D2 and D3). A scheduled run of the per-namespace drivers on Dustin's own
-// machine, off unless he turns it on, with a "Runs on"
-// choice of API key or subscription. Three values (OVERNIGHT_MODES: api,
-// subscription, off) and the Portal's switch pattern: a reason on every change, an
-// audit row, and the value read back.
-//
-// What the switch is NOT: the way work normally runs. Hand-started VS Code tabs that
-// chain jobs are ordinary use Dustin starts himself; they are the default and this
-// switch does not touch them.
-//
-// Choosing the subscription records the decision where the switch is set, as the ruling
-// requires: who decided, when, and the reasoning, kept beside the mode in APP_KV and in
-// the audit row. The scheduler refuses to run on the subscription without that record.
+// THE OVERNIGHT RUN SWITCH (capsid/research/design-automation-for-speed.md, D2 and D3). A scheduled
+// run of the per-namespace drivers on Dustin's own machine, off unless he turns it on, with a "Runs
+// on" choice of API key or subscription.
 
 export const OVERNIGHT_MODE_KEY = "overnight:mode";
 export const OVERNIGHT_DECISION_KEY = "overnight:decision";
@@ -91,11 +81,9 @@ function parseDecision(raw: string | null): OvernightDecision | null {
   return null;
 }
 
-/**
- * The switch as stored. Anything unreadable or unexpected is off: a switch that fails
- * open would start a scheduled run on a value nobody set. The subscription mode with no
- * readable decision record reads as off for the same reason.
- */
+// The switch as stored. Anything unreadable or unexpected is off: a switch that fails open would
+// start a scheduled run on a value nobody set. The subscription mode with no readable decision
+// record reads as off for the same reason. /
 export async function overnightState(env: Env): Promise<OvernightState> {
   try {
     const mode = await env.APP_KV.get(OVERNIGHT_MODE_KEY);
@@ -133,12 +121,8 @@ export function decisionFor(
     : null;
 }
 
-/**
- * Set the switch, audited, and read back. The reason is required: turning automation on
- * or off needs one. Choosing the subscription writes the decision
- * record in the same step; any other value deletes it, so a later choice of the
- * subscription records its own date and reason rather than inheriting an old one.
- */
+// Set the switch, audited, and read back. The reason is required: turning automation on or off
+// needs one.
 export async function setOvernight(
   env: Env,
   actor: string,

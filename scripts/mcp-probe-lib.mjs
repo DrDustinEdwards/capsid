@@ -1,56 +1,34 @@
-// Gate 8's decisions, apart from scripts/verify-live.mjs so they can be tested: the same
-// reason scripts/cimd-probe-lib.mjs and scripts/canary-lib.mjs exist. Node standard
-// library only, because the live job runs with no npm ci.
-//
-// Every other gate stops short of the MCP connection: a deploy that answered OAuth
-// metadata, /register, the consent page and the Access redirect, and then broke every
-// tool call, passed them all (job_bb06c9be24c4, found in the #331 rollback report).
-// This gate makes the calls a client makes, through /ops/mcp with the live-probe agent's
-// key (scripts/roles.ts, role live-probe: read grant on capsid, the capsid_read_doc tool
-// only), in both protocol eras Capsid serves:
-//
+// Gate 8's decisions, apart from verify-live.mjs so they can be tested. Node standard library only (the live job runs no npm ci).
+// Every other gate stops short of the MCP connection, so a deploy that broke every tool call passed them all (job_bb06c9be24c4). This one makes a client's calls through /ops/mcp with the live-probe key (scripts/roles.ts) in both protocol eras:
 //   2025-11-25  initialize, notifications/initialized, tools/list, tools/call capsid_read_doc
 //   2026-07-28  server/discover, tools/list, tools/call capsid_read_doc, each with the _meta envelope
-//
-// When src/mcp-handler.ts stops passing isLegacyRequest to routeMcpEra, 2025-11-25 leaves ERAS
-// in the same pull request.
+// When src/mcp-handler.ts stops passing isLegacyRequest to routeMcpEra, 2025-11-25 leaves ERAS in the same pull request.
 
 export const ERAS = ["2025-11-25", "2026-07-28"];
 
-// What tools/list must return on /mcp to the live-probe agent, which holds the read grant:
-// Capsid's tools a read grant can call, not Capsid Admin's and not the write tools, which
-// are not listed for a read grant (src/scope.ts toolListed; area 11, T7). So the gate
-// catches a deploy that lost a read tool; one that lost a write tool shows in the tests.
-// test/live-gate-mcp.test.ts holds it to CAPSID_TOOLS and TOOL_GRANTS, so a change to the
-// served surface changes this in the same commit.
+// What tools/list must return on /mcp to the live-probe agent: Capsid's read-grant tools (write tools are not listed for a read grant, src/scope.ts toolListed).
+// test/live-gate-mcp.test.ts holds it to CAPSID_TOOLS and TOOL_GRANTS, so a surface change changes this in the same commit.
 export const EXPECTED_TOOLS = 8;
 
-// The tool the probe reads with.
 export const READ_TOOL = "capsid_read_doc";
 
-// The read: the document /health already depends on (`capsid/conventions.md` keeps the word "conventions"), in
-// the one namespace the probe agent is scoped to.
+// The document /health already depends on, in the probe agent's one namespace.
 export const PROBE_READ = { namespace: "capsid", path: "conventions.md", word: "conventions" };
 
 const CLIENT_INFO = { name: "capsid-live-gate", version: "1" };
 
-// A JSON-RPC answer from a body that is JSON, or an event stream carrying it on a data:
-// line (the 2025-era lane answers text/event-stream). Null when neither.
+// A JSON-RPC answer from a JSON body, or from an event stream's data: line (the 2025-era lane streams). Null when neither.
 export function rpcMessage(text) {
   try {
     return JSON.parse(text);
-  } catch {
-    // Not JSON: read it as an event stream below.
-  }
+  } catch {}
   for (const line of String(text).split(/\r?\n/)) {
     if (!line.startsWith("data:")) continue;
     try {
       const parsed = JSON.parse(line.slice(5).trim());
       if (parsed && typeof parsed === "object" && ("result" in parsed || "error" in parsed))
         return parsed;
-    } catch {
-      // A data line that is not JSON is not the answer; keep reading.
-    }
+    } catch {}
   }
   return null;
 }
@@ -63,7 +41,6 @@ function envelope(era) {
   };
 }
 
-// The requests, in order, for one era. Each names what its answer must show.
 export function eraSteps(era) {
   const modern = era !== "2025-11-25";
   const params = (p = {}) => (modern ? { ...p, _meta: envelope(era) } : p);
@@ -122,7 +99,6 @@ export function requestBody(step) {
   return JSON.stringify(body);
 }
 
-// The problem with one answer, or null. `status` is the HTTP status and `text` the body.
 export function stepProblem(step, status, text) {
   const where = `${step.era} ${step.label}`;
   if (status === 401 || status === 403) {
@@ -192,9 +168,7 @@ export function stepProblem(step, status, text) {
   }
 }
 
-// Runs every era. `post(body, headers)` sends one request and resolves to { status, text },
-// or throws when there was no answer (verify-live's NoAnswer), which this lets through.
-// Resolves to the list of problems, empty when every step passed.
+// Runs every era. `post(body, headers)` resolves to { status, text } or throws NoAnswer, which passes through. Resolves to the problems, empty when every step passed.
 export async function probeMcp(post) {
   const problems = [];
   for (const era of ERAS) {

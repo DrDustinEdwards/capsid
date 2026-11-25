@@ -15,11 +15,6 @@ import { factsForPr, type OpenPr } from "./auto-merge-tick-facts";
 export function declineParams(
   policyVersion: string,
   facts: Pick<PrFacts, "repo" | "number" | "headSha">,
-  // A policy refusal, "head_moved" when GitHub refused the pinned merge, or
-  // "unit_suspended" when a rollback suspended the PR's merge unit (src/merge-units.ts),
-  // "namespace_paused" when the safety shutoff paused the namespace (src/merge-safety.ts),
-  // "changes_existing_test" when the PR edits an existing test (src/merge-class.ts), or
-  // "pr_is_draft" when the PR is still a draft.
   verdict: {
     failed:
       | PolicyCheck
@@ -52,8 +47,8 @@ function mergeParams(
   passed: PolicyCheck[],
   mergeSha: string | null,
   now: Date,
-  // The merge unit's path class (src/merge-units.ts), so a later rollback of this merge
-  // can be traced to its unit.
+  // The merge unit's path class (src/merge-units.ts), so a later rollback of this merge can be
+  // traced to its unit.
   pathClass: string | null = null,
 ): Record<string, unknown> {
   return {
@@ -70,16 +65,16 @@ function mergeParams(
   };
 }
 
-// A decline is logged when the decision for that PR changes, not on every look (a PR kept
-// refused was logged about 1,400 times a day). The last logged decision per PR lives in
-// APP_KV as "<head sha> <failed check>"; a first decline, a different check or a new head sha
-// is a change. `why` is not in the key: it carries counts and times that move without the
-// decision moving. The TTL bounds what a closed PR leaves behind.
+// A decline is logged when the decision for that PR changes, not on every look (a PR kept refused
+// was logged about 1,400 times a day). `why` is not in the key: it carries counts and times that
+// move without the decision moving.
 const LAST_DECLINE_PREFIX = "improve:auto-merge-last-decline:";
 const LAST_DECLINE_TTL_SECONDS = 14 * 24 * 60 * 60;
 
-/** Audit a decline unless the same PR was already logged with this head sha and check.
- *  A KV failure logs the row anyway: a repeated row is better than a lost one. */
+/**
+ * Audit a decline unless the same PR was already logged with this head sha and check. A KV failure
+ * logs the row anyway: a repeated row is better than a lost one.
+ */
 export async function auditDeclineOnChange(
   env: Env,
   facts: { repo: string; number: number; headSha: string },
@@ -99,8 +94,7 @@ export async function auditDeclineOnChange(
       { level: "error" },
     );
   }
-  // The row first, so a failed KV write repeats a row on the next tick rather than
-  // losing one.
+  // The row first, so a failed KV write repeats a row on the next tick rather than losing one.
   await env.DB.batch([statement]);
   try {
     await env.APP_KV.put(key, decision, { expirationTtl: LAST_DECLINE_TTL_SECONDS });
@@ -115,8 +109,6 @@ export async function auditDeclineOnChange(
   }
 }
 
-// The merge units held back this tick (src/merge-units.ts), and the namespaces the safety
-// shutoff paused (src/merge-safety.ts): each a set, or "all" when it could not be read.
 export type Suspended = ReadonlySet<string> | "all";
 export type PausedNamespaces = ReadonlyMap<string, string> | "all";
 
@@ -129,16 +121,17 @@ export interface AutoMergeOutcome {
   head_sha?: string;
   why: string | null;
   passed: string[];
-  // The merge pipeline's class (src/merge-class.ts), report-only; null when the PR's
-  // files were never read (the body names no job, or the tick threw).
+  // The merge pipeline's class (src/merge-class.ts), report-only; null when the PR's files were
+  // never read (the body names no job, or the tick threw).
   merge_class?: Classification | null;
-  // (src/visual-pr.ts).
   visual?: VisualPr;
 }
 
-/** Judge one PR (named job, promoted unit, visual or approved), merge it when the policy passes, and audit either way.
- *  Pushes exactly one outcome, before its audit row, so a caller can tell a PR that was
- *  judged from one that threw first. */
+/**
+ * Judge one PR (named job, promoted unit, visual or approved), merge it when the policy passes,
+ * and audit either way. Pushes exactly one outcome, before its audit row, so a caller can tell a
+ * PR that was judged from one that threw first.
+ */
 export async function judgeOnePr(
   env: Env,
   policyVersion: string,
@@ -157,7 +150,6 @@ export async function judgeOnePr(
   visual = false,
 ): Promise<void> {
   const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);
-  // A promoted unit widens only the namespace's allowed paths (src/auto-merge-policy.ts).
   const pathClass = facts.filesProblem ? null : pathClassOfAll(facts.changedPaths);
   const promotedUnit =
     pathClass && units.includes(`${namespace} / ${pathClass}`)
@@ -165,9 +157,9 @@ export async function judgeOnePr(
       : null;
   const verdict = evaluatePolicy(facts, allowedAuthors, promotedUnit);
   let merge_class = mergeClass(facts, verdict, pr.draft === true);
-  // Five holds that only narrow. A draft waits as class wait. The other four leave the PR for
-  // Dustin as class approve (his approval still executes below): a visual change, an existing
-  // test it changes, a paused namespace, and a unit a rollback suspended.
+  // Five holds that only narrow. A draft waits as class wait. The other four leave the PR for Dustin
+  // as class approve (his approval still executes below): a visual change, an existing test it
+  // changes, a paused namespace, and a unit a rollback suspended.
   const unit = merge_class.path_class ? unitKey(namespace, merge_class.path_class) : null;
   let hold: {
     failed:
@@ -178,8 +170,8 @@ export async function judgeOnePr(
       | "visual_awaits_look";
     reason: string;
   } | null = null;
-  // A draft first, and it keeps its class wait: GitHub refuses to merge a draft with a
-  // 405, so sending it would only fail.
+  // A draft first, and it keeps its class wait: GitHub refuses to merge a draft with a 405, so
+  // sending it would only fail.
   if (verdict.merge && pr.draft === true) {
     hold = {
       failed: "pr_is_draft",
@@ -213,9 +205,9 @@ export async function judgeOnePr(
     merge_class = { class: "approve", path_class: merge_class.path_class, reasons: [hold.reason] };
   const held = hold !== null;
   const merges = verdict.merge && !held;
-  // The executor (docs/design/design-merge-pipeline.md section 4): a PR the policy leaves open
-  // but Dustin approved merges here once CI is green on the approved sha, or its approval is
-  // voided, expired or refused. Not for a draft.
+  // The executor (docs/design/design-merge-pipeline.md section 4): a PR the policy leaves open but
+  // Dustin approved merges here once CI is green on the approved sha, or its approval is voided,
+  // expired or refused. Not for a draft.
   if (!merges && approval && pr.draft !== true) {
     const done = await executeApproval(env, namespace, facts, merge_class, approval, now);
     if (done.done === "merged") {
@@ -279,9 +271,8 @@ export async function judgeOnePr(
     );
     return;
   }
-  // merge_method "merge", because a squash would not keep the audited head sha. Pinned
-  // to the sha the checks read: a push since then gets a 409 and the next tick judges
-  // the new head.
+  // merge_method "merge", because a squash would not keep the audited head sha. Pinned to the sha
+  // the checks read: a push since then gets a 409 and the next tick judges the new head.
   let result: unknown;
   try {
     result = await managePr(env, namespace, pr.number, "merge", "merge", undefined, facts.headSha);
@@ -332,8 +323,8 @@ export async function judgeOnePr(
       (result as { sha?: string }).sha ?? null,
       now,
     );
-  // The merge has landed and the catch does not retry a PR whose outcome is pushed, so the row
-  // the safety meter and merge units read is tried a second time.
+  // The merge has landed and the catch does not retry a PR whose outcome is pushed, so the row the
+  // safety meter and merge units read is tried a second time.
   const writeMerged = () =>
     env.DB.batch([
       systemAudit(

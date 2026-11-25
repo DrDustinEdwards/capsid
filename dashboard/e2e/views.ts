@@ -1,25 +1,19 @@
 import { expect, type Page } from "@playwright/test";
 import { VIEWS, placePath, type ViewId } from "../src/app/ctx.ts";
 
-// Every view the app registers, so a new view is covered without editing a test. The
-// count is asserted where it is used: an empty list would otherwise pass vacuously.
+// The count is asserted where used, since an empty list would pass vacuously.
 export const ALL_VIEWS = VIEWS.map((v) => ({
   id: v.id as ViewId,
   label: v.label as string,
 }));
 export const VIEW_COUNT = 11;
 
-// A place: a view, or a view and its tab or section as "view#tab" (placePath in
-// src/app/ctx.ts).
 export type Place = ViewId | `${ViewId}#${string}`;
 
-// Relative to the Portal's root.
 function urlOf(id: Place): string {
   return `.${placePath(id)}`;
 }
 
-// Opens a place and waits until its page's heading is up and nothing on it is still
-// loading.
 export async function visit(page: Page, id: Place): Promise<void> {
   const view = id.split("#")[0] as ViewId;
   const label = ALL_VIEWS.find((v) => v.id === view)!.label;
@@ -31,15 +25,11 @@ export async function visit(page: Page, id: Place): Promise<void> {
 export interface Overflow {
   doc: { scroll: number; client: number };
   root: { scroll: number; client: number } | null;
-  // Elements inside the root that scroll sideways: overflow-x auto or scroll, and wider
-  // than their box. A cap-table-wrap that actually scrolls counts.
   scrollers: string[];
 }
 
-// root: "main" for a view, the drawer's selector for a drawer.
 export async function measure(page: Page, root = "main"): Promise<Overflow> {
-  // A folded section is measured open, as a visitor would see it: its charts are on the page
-  // (rendered on the server) and redraw to their width once it opens.
+  // Measured open, as a visitor would see it.
   const opened = await page.evaluate((sel) => {
     const closed = [
       ...(document
@@ -49,8 +39,7 @@ export async function measure(page: Page, root = "main"): Promise<Overflow> {
     for (const d of closed) d.open = true;
     return closed.length;
   }, root);
-  // A chart redraws to its width after the fold opens (a resize observer, then a render), so
-  // the measure waits for that, up to two seconds; a chart that never fits is still reported.
+  // A chart redraws after the fold opens (a resize observer, then a render), so the measure waits up to two seconds.
   if (opened) {
     await page
       .waitForFunction(
@@ -85,7 +74,6 @@ export async function measure(page: Page, root = "main"): Promise<Overflow> {
   }, root);
 }
 
-// Every way the page scrolls sideways, named; empty when it does not.
 export function sideways(o: Overflow, where: string): string[] {
   const out: string[] = [];
   if (o.doc.scroll > o.doc.client)

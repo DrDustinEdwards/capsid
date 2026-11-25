@@ -4,14 +4,9 @@ import { checkScope } from "./scope";
 import { namespaceFilter, resourceRefusal } from "./resources";
 
 export function registerPrompts(server: McpServer, agent: Agent, db: D1Database): void {
-  // Prompts: reusable templates stored as type 'prompt' documents whose bodies use
-  // {{variable}} placeholders. Handled at the protocol level, since McpServer only
-  // lists prompts registered at build time, so the D1 query runs lazily on
-  // prompts/list and prompts/get.
-  //
-  // A prompt is named "<namespace>/<path without .md>", the way every other tool
-  // addresses a document. A bare path is not a document key: two namespaces can both
-  // hold prompts/brief.md.
+  // Prompts: reusable templates stored as type 'prompt' documents whose bodies use {{variable}}
+  // placeholders. Handled at the protocol level, since McpServer only lists prompts registered at
+  // build time, so the D1 query runs lazily on prompts/list and prompts/get.
   const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
   const promptVariables = (body: string) => [
     ...new Set([...body.matchAll(PLACEHOLDER)].map((m) => m[1])),

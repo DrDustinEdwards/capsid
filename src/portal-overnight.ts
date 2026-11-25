@@ -5,13 +5,8 @@ import { behindGate } from "./portal-auth";
 import { jsonResponse as json } from "@dustinedwards/site-runtime/http";
 
 // The Portal's Tonight plan and its "since you last looked" strip
-// (docs/design/design-portal-evaluation.md, DECIDE 3):
-// GET /portal/api/plan and GET /portal/api/digest. The readers behind `capsid_work_jobs` action list
-// with view "plan" and view "digest" (src/overnight-plan.ts), over every namespace, so the
-// Portal and chat cannot disagree. Their own routes, read when the page that shows them
-// opens, since OPS_FEED_READS is pinned and the feed does not grow a read. Routes, not
-// tools, so no grant is checked here (one enforcement point, test/route-gates.test.ts): each
-// answers to portalGate, and src/scope.ts lists them among the routes gated some other way.
+// (docs/design/design-portal-evaluation.md, DECIDE 3): GET /portal/api/plan and GET
+// /portal/api/digest.
 
 export const PORTAL_PLAN_PATH = "/portal/api/plan";
 export const PORTAL_DIGEST_PATH = "/portal/api/digest";

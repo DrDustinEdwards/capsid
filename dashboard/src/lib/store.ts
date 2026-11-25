@@ -1,8 +1,6 @@
 import type { OpsFeed } from "../types";
 import { formatBytes } from "capsomer/behavior/format";
 
-// The D1 store against its cap (capsid/decisions.md 2026-09-30, "admin panels review
-// adopted", item 5): a warning from half, Foxhound's threshold.
 const STORE_WARN_FRACTION = 0.5;
 
 export function storeUse(feed: OpsFeed): { fraction: number; warn: boolean } | null {
@@ -12,7 +10,6 @@ export function storeUse(feed: OpsFeed): { fraction: number; warn: boolean } | n
   return { fraction, warn: fraction >= STORE_WARN_FRACTION };
 }
 
-/** The Needs attention row's words, from half the cap; null below it or unreported. */
 export function storeAttention(feed: OpsFeed): { title: string; sub: string } | null {
   const use = storeUse(feed);
   const s = feed.live.store;

@@ -13,14 +13,11 @@ function summarizeCommit(c: {
     sha: c.sha,
     date: c.commit.author.date,
     author: c.commit.author.name,
-    // First line only. Commit bodies here run to paragraphs, and inlining them buries
-    // the shape of the history. Read one commit by sha for the full message.
+    // First line only: commit bodies bury the shape of the history.
     subject: c.commit.message.split("\n")[0],
   };
 }
 
-// Patch bodies are OFF by default and budgeted when on. The file list is always
-// returned: names, status and line counts answer most questions and cost nothing.
 function filesWithBudget(
   files: Array<{
     filename: string;
@@ -59,9 +56,7 @@ function filesWithBudget(
   return { count: out.length, patch_truncated: truncated, patch_bytes: spent, entries: out };
 }
 
-/** Commits, a comparison, or one commit, chosen by which args are present. An
- *  ambiguous combination is refused rather than resolved by precedence: a caller
- *  passing both sha and base has two questions, and neither is answered silently. */
+/** An ambiguous combination is refused, not resolved by precedence. */
 export async function repoHistory(
   env: Env,
   namespace: string,

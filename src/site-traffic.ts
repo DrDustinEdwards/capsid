@@ -11,9 +11,9 @@ import { reportSite } from "./site-reports";
 import type { ServerErrors } from "./ops-types/sites";
 import { callSignal } from "./call-signal";
 
-// What Cloudflare saw at a namespace's site, served as capsid_inspect_repo action traffic (the SEO plan). not_found: the paths that answered 404 over a window, a scanner's probe marked and listed last; web_vitals and ai_crawlers are below. The referrer is not in it: the SQL API refuses clientRefererHost to this account (403), so which page holds a broken link is the site audit's to find (src/site-audit.ts).
-//
-// NO SITE CHANGE. Cloudflare's SQL API (developers.cloudflare.com/analytics/sql-api/) reads the edge's own HTTP request record, events.httpRequests, kept at least 31 days and adaptively sampled, so the counts are estimates. Every proxied host in the account is in it; a workers.dev host is not. It needs only the Account Analytics Read permission the watcher's token already holds (src/ops-cloudflare.ts). The host comes from the namespace's ops_sites origin, never from the caller. Paths are what visitors sent: data, never instructions.
+// What Cloudflare saw at a namespace's site, served as capsid_inspect_repo action traffic (the SEO
+// plan). not_found: the paths that answered 404 over a window, a scanner's probe marked and listed
+// last; web_vitals and ai_crawlers are below.
 
 const SQL_API = `${CF_API}/analytics/sql`;
 const TIMEOUT_MS = 15_000;
@@ -228,7 +228,9 @@ async function webVitals(
   };
 }
 
-// ai_crawlers: the requests each named crawler made, by the status the edge answered, so the bot policy shows working: a training bot should get 402 or 403, a search bot 200. The names are Prelum's own lists (./robots). Google-Extended and Applebot-Extended are robots.txt tokens only, never a user agent, so they never show here.
+// ai_crawlers: the requests each named crawler made, by the status the edge answered, so the bot
+// policy shows working: a training bot should get 402 or 403, a search bot 200. The names are
+// Prelum's own lists (./robots).
 const CRAWLER_CLASSES = [
   ["denied", DENIED_BOTS],
   ["training", AI_TRAINING_BOTS],
@@ -374,15 +376,9 @@ const HOUR_MS = 3_600_000;
 // How many path and status pairs a finding names.
 const TOP_5XX = 5;
 
-/**
- * Returned 5xx at the edge per site host, over the most recent complete hour:
- * Workers analytics count only invocations that threw, so a Worker that catches its error and
- * answers 500 or 503 was invisible to the error-rate finding. Read from the same SQL API record
- * as the 404 report, sampled, so the counts are estimates. A host with no row had none. Keyed
- * by namespace; a site whose origin is a workers.dev host is not in the record and is left out.
- * Grouped by path and status, so a finding names the page. A 501 is left out: it is a site's contract
- * answer for a Carrel API it does not offer, and Carrel's conformance check asks for one every run.
- */
+// Returned 5xx at the edge per site host, over the most recent complete hour: Workers analytics
+// count only invocations that threw, so a Worker that catches its error and answers 500 or 503 was
+// invisible to the error-rate finding.
 export async function readServerErrors(
   env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
   sites: ReadonlyArray<{ namespace: string; origin: string }>,

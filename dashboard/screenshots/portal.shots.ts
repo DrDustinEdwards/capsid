@@ -4,20 +4,11 @@ import { expect, test, type Page } from "@playwright/test";
 import { visit, type Place } from "../e2e/views.ts";
 import { SHOTS_NOW } from "./clock.ts";
 
-// The README screenshots, from sample data only (dev/sample-feed.json and the responses
-// dev/mock-api.ts seeds; scripts/shots-privacy.mjs has checked both before this runs).
-// Run: npm run build, then npm run shots. Each PNG lands in the repo's docs/images.
-//
-// Nothing here performs a control: the control shot stops at the preview, and the
-// mock's state is never changed.
-
 const OUT = fileURLToPath(new URL("../../docs/images/", import.meta.url));
 const FIXTURE = fileURLToPath(new URL("../dev/sample-feed.json", import.meta.url));
 
 type Theme = "light" | "dark";
 
-// Before the app starts: the theme the app would restore (lib/prefs.ts, wf-theme), the
-// matching color scheme, and the browser's clock pinned to the mock's.
 async function prepare(page: Page, theme: Theme): Promise<void> {
   await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
   await page.addInitScript((t) => {
@@ -86,8 +77,6 @@ test("queue with a job drawer open, light", async ({ page }) => {
   await shoot(page, "queue-drawer-light");
 });
 
-// Pause is a switch now (e2e/switches.spec.ts), so the dialog shot uses Mark failed on a
-// queued job: the same preview, with the reason asked for first (as e2e/confirm.spec.ts).
 test("a control's preview open, light", async ({ page }) => {
   await open(page, "queue");
   await page.goto("queue/job/job_0cdf2803f0ba");
@@ -98,10 +87,8 @@ test("a control's preview open, light", async ({ page }) => {
     .getByRole("textbox", { name: "Reason", exact: true })
     .pressSequentially("maintenance window");
   await dialog.getByRole("button", { name: "Preview" }).click();
-  // The rows it changes are behind Details (e2e/confirm.spec.ts); the shot opens them.
   await dialog.getByText("Details", { exact: true }).click();
   await expect(dialog.getByText("What changes")).toBeVisible();
-  // Stops at the preview: the perform button is on screen and never pressed.
   await expect(dialog.getByRole("button", { name: "Mark failed", exact: true })).toBeVisible();
   await shoot(page, "control-preview-light");
 });

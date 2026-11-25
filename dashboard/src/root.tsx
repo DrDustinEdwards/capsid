@@ -12,23 +12,14 @@ import {
   useRouteLoaderData,
   type LoaderFunctionArgs,
 } from "react-router";
-// The faces the Portal draws, self-hosted (CSP font-src 'self'): Inter and Martian Mono, and Jost
-// for the error page's title (--poster). One variable file each, every weight; the network's other
-// faces stay out of the stylesheet.
 import "capsomer/fonts-inter.css";
 import "capsomer/fonts-martian-mono.css";
 import "capsomer/fonts-jost.css";
 import monoFontUrl from "capsomer/fonts/martian-mono-latin-wght-normal.woff2?url";
 import uiFontUrl from "capsomer/fonts/inter-latin-wght-normal.woff2?url";
-// Capsomer: its layer order and tokens first, then its element defaults (base.css, which carries
-// the utility classes), its layout classes and text roles, then its components (all in the cap.*
-// layers, so the app's unlayered styles win), then the app's styles. Every stylesheet the shell or most pages need is here; a
-// component that only some pages draw (a form field, a switch, the anchor bar, the filter bar)
-// brings its stylesheet with the view that draws it, so the other pages never load it.
+// Components are in the cap.* layers so the app's unlayered styles win; a component only some pages draw brings its stylesheet with its view.
 import "capsomer/tokens.css";
 import "capsomer/base.css";
-// Only the parts of layout.css and text.css the Portal draws (the stack, cluster and panes, and the text roles), inside
-// its 43 KB CSS budget. A class whose stylesheet is not imported fails devkit-css-vars (.css-vars.json, "classes").
 import "capsomer/layout-gap.css";
 import "capsomer/layout-stack.css";
 import "capsomer/layout-cluster.css";
@@ -60,8 +51,6 @@ import "capsomer/uptime-strip.css";
 import "capsomer/chips.css";
 import "capsomer/message.css";
 import "capsomer/table.css";
-// The whole chart stylesheet: Enarratio's base, the token mapping, gridlines, series inks and
-// the color pairs (capsomer CHANGELOG 0.56.0).
 import "capsomer/enarratio.css";
 import "./styles.css";
 import { createQueryClient } from "./lib/api";
@@ -74,12 +63,10 @@ export function loader({ context }: LoaderFunctionArgs) {
   return { nonce: nonceFor(context) };
 }
 
-// The theme before first paint: the saved choice, else the system's (Capsomer's themeScript).
 const NO_FLASH = themeScript(THEME_PREF);
 
 export function Layout({ children }: { children: ReactNode }) {
-  // The CSP nonce (the Worker's per-request policy, src/portal-app.ts) on every script the
-  // document renders: the theme line, React Router's hydration data and its module scripts.
+  // The CSP nonce goes on every script the document renders, React Router's included.
   const nonce = useRouteLoaderData<typeof loader>("root")?.nonce ?? "";
   const demo = pageBase(useLocation().pathname) !== "";
   return (
@@ -91,14 +78,11 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="color-scheme" content="light dark" />
         <meta name="robots" content="noindex" />
         <meta name="theme-color" content="#01585c" />
-        {/* The static no-flash theme line, set before first paint. */}
         <script nonce={nonce} dangerouslySetInnerHTML={markup(NO_FLASH)} />
         <link rel="icon" href="/favicon.ico" sizes="48x48" />
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-        {/* The manifest is behind the Portal's sign-in, and a manifest is fetched without cookies unless the link
-            says use-credentials (https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/manifest).
-            The demo installs nothing. */}
+        {/* A manifest is fetched without cookies unless the link says use-credentials, and this one is behind the sign-in; the demo installs nothing. */}
         {demo ? null : (
           <link rel="manifest" href="/site.webmanifest" crossOrigin="use-credentials" />
         )}
@@ -115,8 +99,6 @@ export function Layout({ children }: { children: ReactNode }) {
 }
 
 export default function Root() {
-  // One client per page load (and, on the server, per request: server/prefetch.ts), so no
-  // request shares a cache.
   const [client] = useState(createQueryClient);
   return (
     <StrictMode>
@@ -127,10 +109,8 @@ export default function Root() {
   );
 }
 
-// Both faces preloaded: every page draws the UI face and the mono labels above the fold, and they load
-// with font-display: optional (Capsomer 0.68), so a face found late, once the stylesheet has arrived,
-// leaves the visit in its size-matched fallback. A preload starts both with the document. Same files as
-// fonts.css's url()s, so Vite emits one asset each; crossorigin, or the preload is fetched twice.
+// font-display: optional leaves a face found late in its fallback, so both preload with the document.
+// Same files as fonts.css's url()s so Vite emits one asset each; crossorigin, or the preload is fetched twice.
 export const links = () =>
   [uiFontUrl, monoFontUrl].map((href) => ({
     rel: "preload",
@@ -144,9 +124,6 @@ export function meta({ error }: { error?: unknown }) {
   return [{ title: error ? errorTitle(error, "Capsid Portal") : "Capsid Portal" }];
 }
 
-// An address no page answers, or a page that failed to render: Capsomer's shared error page, so the
-// words, the noindex and the way out match every other site's. Only development shows the thrown
-// message; the old boundary printed it to any visitor.
 export function ErrorBoundary({ error }: { error: unknown }) {
   const base = pageBase(useLocation().pathname);
   return (

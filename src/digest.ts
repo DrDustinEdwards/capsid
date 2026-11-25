@@ -8,21 +8,11 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { weeklyDigestLines } from "./watcher-digest";
 import { DAY_MS, utcDay } from "./time";
 
-// THE DAILY EMAIL DIGEST (docs/design/design-merge-pipeline.md section 5: Web Push for the four
-// urgent things, everything else in a daily email). Once a UTC day, after DIGEST_HOUR_UTC, the
-// tick mails one plain-text message to ALERT_EMAIL: what waits on Dustin now, rollbacks, and
-// what finished, blocked and became ready since the last digest. Read through the same reader as
-// capsid_work_jobs action list view digest, so the mail and the Portal cannot disagree. It
-// writes nothing but its own state in KV.
-//
-// It does nothing until Email Routing is on: the send_email binding can only send to a
-// destination verified in Email Routing, from a zone with it on, an account setting only Dustin
-// can change. So it needs the EMAIL binding, ALERT_EMAIL, ALERT_FROM and EMAIL_ROUTING "on"
-// (docs/portal.md, "Daily digest"). Until then each tick returns at once, and the Portal's
-// Settings says which is missing (digestState below).
+// Once a UTC day, after DIGEST_HOUR_UTC, the tick mails one plain-text message to ALERT_EMAIL:
+// what waits on Dustin now, rollbacks, and what finished, blocked and became ready since the last
+// digest.
 
 export const DIGEST_LAST_KEY = "digest:last";
-// 12:00 UTC is 07:00 in Chicago in summer and 06:00 in winter: before the day starts.
 const DIGEST_HOUR_UTC = 12;
 const LIST_MAX = 15;
 const PORTAL_URL = `https://${PORTAL_HOST}/`;
@@ -57,7 +47,6 @@ async function readLast(env: Env): Promise<LastDigest | null> {
   }
 }
 
-/** What the Portal shows: on or off and why, and the last send. */
 export async function digestState(env: Env): Promise<DigestState> {
   const problem = digestProblem(env);
   return {
@@ -74,10 +63,8 @@ const list = <T>(items: T[], line: (t: T) => string): string[] => [
   ...(items.length > LIST_MAX ? [`- and ${items.length - LIST_MAX} more in the Portal`] : []),
 ];
 
-// The reader behind capsid_work_jobs action list view digest, or a test's stand-in.
 type DigestReader = typeof readOvernightDigest;
 
-/** The mail, from the state now. Reads only. */
 async function composeDigest(
   env: Env,
   now: Date,
@@ -146,8 +133,8 @@ async function composeDigest(
       (j) => `${j.namespace} ${j.id}: ${j.title} (${j.result_kind ?? j.status})`,
     ),
   );
-  // Mondays UTC only: the watcher's hygiene findings, per site (src/watcher-digest.ts).
-  // A failed read is a note here, never a failed mail.
+  // Mondays UTC only: the watcher's hygiene findings, per site (src/watcher-digest.ts). A failed
+  // read is a note here, never a failed mail.
   let weekly: string[] = [];
   if (now.getUTCDay() === 1) {
     try {
@@ -185,7 +172,6 @@ export interface DigestReport {
   sent: boolean;
 }
 
-/** Once a UTC day after DIGEST_HOUR_UTC, when Email Routing is on: compose and send. */
 export async function digestTick(
   env: Env,
   now: Date,
@@ -199,8 +185,8 @@ export async function digestTick(
   const today = utcDay(now);
   if (last && last.at.slice(0, 10) === today)
     return { ran: false, note: `already ${last.outcome} ${last.at}`, sent: false };
-  // Since the last digest that went out, so a failed day's news is in the next one; a
-  // first digest, or one after a long gap, covers the last day only.
+  // Since the last digest that went out, so a failed day's news is in the next one; a first digest,
+  // or one after a long gap, covers the last day only.
   const lastAt = last?.outcome === "sent" ? Date.parse(last.at) : NaN;
   const since = new Date(
     Number.isFinite(lastAt) && now.getTime() - lastAt < 7 * DAY_MS
@@ -214,8 +200,8 @@ export async function digestTick(
     subject: mail.subject,
     text: mail.text,
   });
-  // A refusal is recorded for the day, so it is not retried every five minutes; the Portal
-  // shows it, and tomorrow's digest covers today too.
+  // A refusal is recorded for the day, so it is not retried every five minutes; the Portal shows it,
+  // and tomorrow's digest covers today too.
   const record: LastDigest = sent.sent
     ? { at: now.toISOString(), outcome: "sent", note: mail.subject }
     : {

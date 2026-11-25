@@ -36,9 +36,10 @@ import { planApproval, performApproval } from "./pr-approvals";
 import { auditStatement } from "./store-guards";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
-// A control's perform (src/controls.ts is the core): the one dispatch to the shared mutators.
-
-/** One action, performed by the administrator `email`: the shared mutator, then the click's audit row. */
+/**
+ * One action, performed by the administrator `email`: the shared mutator, then the click's audit
+ * row.
+ */
 export async function performAction(
   env: Env,
   email: string,
@@ -52,15 +53,15 @@ export async function performAction(
   const actor = agent.actor;
   // Set once the mutator succeeds, so the catch knows whether the action happened.
   const state: PerformContext["state"] = { committed: false, summary: "", warning: null };
-  // The switches: a reason in both directions, checked again because a token signed before
-  // this rule could lack one. The reason and whether this is an Undo go in the click row.
+  // The switches: a reason in both directions, checked again because a token signed before this rule
+  // could lack one. The reason and whether this is an Undo go in the click row.
   const switchReason = SWITCHES.has(action) ? required(params, "reason") : null;
   if (SWITCHES.has(action) && !switchReason)
     return { ok: false, refusal: switchReasonRefusal(action) };
   const undo = params.undo === "true";
   const click = clickAuditAction(action, params, surface);
-  // The click's own audit row, naming the admin and the click's address (sourceAddress); the
-  // shared mutators' rows do not always say who asked.
+  // The click's own audit row, naming the admin and the click's address (sourceAddress); the shared
+  // mutators' rows do not always say who asked.
   const auditClick = async (
     namespace: string | null,
     detail: object,
@@ -141,8 +142,8 @@ export async function performAction(
         break;
       }
       case "approve_pr": {
-        // Planned again from the state now: the heads, the classes and the open approvals
-        // may have moved since the preview, and the approval is of what is true now.
+        // Planned again from the state now: the heads, the classes and the open approvals may have moved
+        // since the preview, and the approval is of what is true now.
         const clean = Object.fromEntries(
           Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string"),
         );
@@ -187,8 +188,8 @@ export async function performAction(
         break;
       }
       case "sign_policy_from_repo": {
-        // The file is read again and must read as the preview's did (the hash the token
-        // binds), and the typed version must be the file's.
+        // The file is read again and must read as the preview's did (the hash the token binds), and the
+        // typed version must be the file's.
         const done = await performPolicyFromRepo(
           env,
           actor,
@@ -232,7 +233,6 @@ export async function performAction(
       }
       case "namespace_add":
       case "namespace_edit": {
-        // Checked again, as the site controls are: the token binds the params, not the rules.
         const namespace = required(params, "namespace") ?? undefined;
         const bad = namespaceNameRefusal(namespace);
         if (bad || !namespace) return { ok: false, refusal: bad ?? `${action} needs a namespace.` };
@@ -273,8 +273,8 @@ export async function performAction(
         break;
       }
       case "namespace_remove": {
-        // deleteAsPlanned reads the plan again, applies every refusal again, and requires the
-        // fingerprint the preview bound: anything counted that moved since refuses it.
+        // deleteAsPlanned reads the plan again, applies every refusal again, and requires the fingerprint
+        // the preview bound: anything counted that moved since refuses it.
         const namespace = required(params, "namespace") ?? undefined;
         const bad = namespaceNameRefusal(namespace);
         if (bad || !namespace)
@@ -334,7 +334,6 @@ export async function performAction(
             refusal: "pr_close needs a reason: why the pull request is closed without merging.",
           };
         const repo = required(params, "repo") ?? undefined;
-        // Only the close shape comes back from action "close".
         const result = (await managePr(env, namespace, number, "close", "squash", repo)) as {
           repo: string;
           head_branch: string | null;
@@ -342,8 +341,8 @@ export async function performAction(
         };
         state.committed = true;
         state.summary = `Closed ${result.repo}#${number}${result.head_branch_deleted ? `; its branch ${result.head_branch} was deleted` : ""}.`;
-        // managePr writes no audit row of its own (the guardedWrite behind capsid_close_pr action close does),
-        // so the control writes the change's row beside the click row.
+        // managePr writes no audit row of its own (the guardedWrite behind capsid_close_pr action close
+        // does), so the control writes the change's row beside the click row.
         await env.DB.batch([
           auditStatement(env.DB, actor, "pr-closed", namespace, null, {
             repo: result.repo,

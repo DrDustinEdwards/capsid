@@ -19,25 +19,15 @@ function prLabel(url: string): string {
   return m ? `${m[1]} #${m[2]}` : url;
 }
 
-// Chart 7, merges per week by who acted, loads the same way for Pull requests.
 const MergesChart = trendChart("MergesChart");
 
-// Pull requests: Auto-merge (the signed policy and its Load from repo and sign, the safety
-// meter and the merge units), the pull requests recorded in the last 7 days, and the chart
-// last. What waits for you, pull requests and auto-merge's asks, is on Needs you; the
-// default-branch table is on Health.
 export function PullRequests() {
   const { feed, now, confirm } = useApp();
   const live = feed.live;
   return (
     <div className="cap-admin-page">
       <PageHead title="Pull requests" />
-      {/* Auto-merge, one section: whether the signed policy loads, then the safety meter.
-          A pause alert opens it (src/push.ts, /prs#auto-merge). */}
       <div className="cap-stack" id="auto-merge">
-        {/* The signed auto-merge policy (src/auto-merge-policy.ts): whether the Worker loads it,
-            and the control that writes it from docs/policy/auto-merge.md and signs it
-            (sign_policy_from_repo). The version is typed in the dialog. */}
         <Panel title="Auto-merge policy">
           <div className="cap-stack" data-gap="4">
             {live.merge_policy.loads ? (
@@ -60,8 +50,6 @@ export function PullRequests() {
             </div>
           </div>
         </Panel>
-        {/* The auto-merge safety meter (src/merge-safety.ts): the last seven days per
-            project, and the shutoff. Resuming is the automerge_resume control. */}
         {live.merge_safety && (
           <Panel
             flush
@@ -226,12 +214,8 @@ export function PullRequests() {
   );
 }
 
-// The merge units (a project and a kind of change, such as sample/docs; src/merge-units.ts):
-// those the signed policy promotes to auto, those suspended after a rollback of an unattended
-// merge, and the tick's promote and demote proposals, each with its buttons (./automerge).
 function MergeUnits() {
   const { feed } = useApp();
-  // Its own read (GET /portal/api/merge-units), again with each feed, so a lift drops its row.
   const load = useAnswer([LIVE, "merge-units"], fetchMergeUnits);
   const policy = feed.live.merge_policy;
   const units = load.data;

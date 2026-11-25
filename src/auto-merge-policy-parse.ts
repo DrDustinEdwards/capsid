@@ -1,30 +1,18 @@
 import { onRoster } from "./roster";
 import { POLICY_ID_ITEM, policyField } from "./signed-docs";
 
-// The merge policy document read into a MergePolicy.
-
 export interface MergePolicy {
   version: string;
   enabled: boolean;
   namespaces: string[];
   checks: string[];
   refusedPaths: string[];
-  // Each entry is `<namespace> / <pattern>`, from the `## Allowed paths, <namespace>`
-  // heading it was written under, compared with the code's list like the steps are.
   allowedPaths: string[];
   authors: string[];
-  // The merge units promoted to auto (docs/design/design-merge-pipeline.md section 7,
-  // PR 10), each `<namespace> / <path class>`, from the `## Auto units` section. Like the
-  // author allowlist, the list lives only in the signed document; the code holds only the
-  // path classes a unit may name (PROMOTABLE_PATH_CLASSES).
   units: string[];
-  // Each entry is `<namespace> / <workflow> / <job> / <step>`. One flat list keeps the
-  // load-time agreement check one comparison both ways.
   requiredCi: string[];
 }
 
-// Check ids are read with POLICY_ID_ITEM. Paths, steps and authors carry a leading
-// word so they are not read as check ids.
 const PATH_ITEM = /^- path `([^`]+)`/;
 const STEP_ITEM = /^- step `([^`]+)`/;
 const AUTHOR_ITEM = /^- author `([^`]+)`/;
@@ -32,9 +20,6 @@ const ALLOW_ITEM = /^- allow `([^`]+)`/;
 const UNIT_ITEM = /^- unit `([^`]+)`/;
 const UNITS_HEADING = /^##\s+Auto units\s*$/i;
 
-// The path classes a unit may promote: every class src/merge-class.ts holds except
-// money (typed forever, design section 8), migration and workflow (each a step outside a
-// merge, class seat). test/policy-change.test.ts holds this to merge-class's list.
 const PROMOTABLE_PATH_CLASSES: readonly string[] = [
   "docs",
   "dashboard-css",
@@ -45,15 +30,13 @@ const PROMOTABLE_PATH_CLASSES: readonly string[] = [
   "deps-other",
   "src-worth",
 ];
-// The heading a required step is filed under: `## Required CI, <namespace>`. A step
-// written before any such heading is a refusal rather than a step belonging to
-// whichever namespace came first.
+// The heading a required step is filed under: `## Required CI, <namespace>`. A step written before
+// any such heading is a refusal rather than a step belonging to whichever namespace came first.
 const CI_HEADING = /^##\s+Required CI,\s*([a-z0-9-]+)\s*$/i;
-// The heading an allowed path is filed under: `## Allowed paths, <namespace>`. Same rule:
-// an allowed path under no such heading is a refusal, never a limit on some namespace.
+// The heading an allowed path is filed under: `## Allowed paths, <namespace>`. Same rule: an
+// allowed path under no such heading is a refusal, never a limit on some namespace.
 const ALLOW_HEADING = /^##\s+Allowed paths,\s*([a-z0-9-]+)\s*$/i;
 
-/** Parse the policy body below its frontmatter. Returns the policy or a refusal. */
 export function parseMergePolicy(body: string): { policy: MergePolicy } | { error: string } {
   const version = policyField(body, "version");
   if (!version) {
@@ -87,8 +70,8 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
   let inUnits = false;
   for (const line of body.split("\n")) {
     const trimmed = line.trim();
-    // Any heading closes the section, so a step under `## What a merge means` is not
-    // filed under the last namespace that appeared above it.
+    // Any heading closes the section, so a step under `## What a merge means` is not filed under the
+    // last namespace that appeared above it.
     if (trimmed.startsWith("##")) {
       const heading = CI_HEADING.exec(trimmed);
       ciNamespace = heading ? heading[1] : null;
@@ -99,7 +82,6 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
     }
     const unitItem = UNIT_ITEM.exec(trimmed);
     if (unitItem) {
-      // A unit is a widening, so every way it can be malformed refuses the whole document.
       if (!inUnits)
         return {
           error: `the policy lists unit '${unitItem[1]}' outside the ## Auto units section, so whether it is promoted is unstated.`,

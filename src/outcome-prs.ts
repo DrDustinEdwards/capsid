@@ -5,15 +5,9 @@ import { prFacts } from "./job-outcomes";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { timeMs } from "./time";
 
-// Merge-state re-verification. An outcome row records merge state when `complete`
-// runs, but the seat merges afterwards, so the row would always read "opened, not
-// merged". This path updates that one field from GitHub; everything else on an
-// outcome row stays write-once.
-//
-// A URL names a number, not a pull request. A repository that is recreated or
-// transferred hands its numbers out again, so each row pins the pull request it named
-// (GitHub's node id) on its first read, and every later read refuses a pull request
-// whose id differs (migrations/0026).
+// Merge-state re-verification. An outcome row records merge state when `complete` runs, but the
+// seat merges afterwards, so the row would always read "opened, not merged". This path updates that
+// one field from GitHub; everything else on an outcome row stays write-once.
 
 /** Which pull request answered at a URL when it was read. */
 export interface PrIdentity {
@@ -21,9 +15,9 @@ export interface PrIdentity {
   created_at: string | null;
 }
 
-/** One row per pull request the evidence named, written in the same batch as the outcome.
- *  A pull request complete could read carries its merge state, the time it was read and
- *  its identity; one it could not read stays NULL, for the sweep to retry and pin. */
+// One row per pull request the evidence named, written in the same batch as the outcome. A pull
+// request complete could read carries its merge state, the time it was read and its identity; one
+// it could not read stays NULL, for the sweep to retry and pin.
 export function outcomePrStatements(
   db: D1Database,
   jobId: string,
@@ -80,12 +74,7 @@ export interface ReverifyOutcome {
   changed: boolean;
 }
 
-// The outcome's pull request counts, recomputed from its join rows. A row marked
-// unverifiable is in no count: prs_merged leaves it out, and prs_opened stays the
-// driver's number, unverified, for as long as any row is unread or unverifiable, so no
-// reader takes the merged count for a total (the rule verifyEvidence already applies
-// to a partly read list). recordFor (src/agent-record.ts) counts merges only when
-// prs_opened is verified. A true flag is never downgraded.
+// The outcome's pull request counts, recomputed from its join rows.
 function recountStatement(db: D1Database, jobId: string): D1PreparedStatement {
   return db
     .prepare(
@@ -106,10 +95,8 @@ function recountStatement(db: D1Database, jobId: string): D1PreparedStatement {
     .bind(jobId);
 }
 
-/** The two statements that record one pull request's merge state against one outcome,
- *  pinning its identity when the row has none yet. A row already marked unverifiable is
- *  never written. Exported as a builder so the integration suite can run the real SQL
- *  against D1; reverifyPr itself needs GitHub, which the integration runtime cannot reach. */
+// The two statements that record one pull request's merge state against one outcome, pinning its
+// identity when the row has none yet. A row already marked unverifiable is never written.
 export function reverifyStatements(
   db: D1Database,
   jobId: string,
@@ -140,8 +127,8 @@ export function reverifyStatements(
 
 export type Unverifiable = "identity-changed" | "repo-recreated";
 
-/** Mark one row unverifiable, once, with its reason, and recount the outcome without it.
- *  The row keeps what it held; it is only never read by URL again. */
+// Mark one row unverifiable, once, with its reason, and recount the outcome without it. The row
+// keeps what it held; it is only never read by URL again.
 export function unverifiableStatements(
   db: D1Database,
   jobId: string,
@@ -161,8 +148,8 @@ export function unverifiableStatements(
   ];
 }
 
-/** When the repository a pull request URL names was created, or null when it could not
- *  be read. Resolved through the namespace mapping, as prFacts is. */
+// When the repository a pull request URL names was created, or null when it could not be read.
+// Resolved through the namespace mapping, as prFacts is.
 async function repoCreatedAt(env: Env, namespace: string, prUrl: string): Promise<string | null> {
   const parsed = parsePrUrl(prUrl);
   if (!parsed) return null;
@@ -196,18 +183,9 @@ type Decision =
   | { kind: "mark"; why: Unverifiable; note: string }
   | { kind: "leave" };
 
-/**
- * Whether the pull request GitHub answered with is the one a row named. answered is
- * null when the pull request could not be read (a recreated repository may not have
- * reached the number yet).
- *
- * A pinned row compares node ids. An unpinned row (recorded before the id was kept, or
- * complete could not read it) is pinned now, unless the repository was created after
- * the outcome named the pull request (it was recreated, decided without the pull
- * request) or the pull request answering was opened after it; neither can be the one
- * named. Anything that cannot be compared leaves the row as it was, to be tried again:
- * a guess would be the failure this exists to prevent.
- */
+// Whether the pull request GitHub answered with is the one a row named. answered is null when the
+// pull request could not be read (a recreated repository may not have reached the number yet). A
+// pinned row compares node ids.
 function decide(
   row: { pr_node_id: string | null; named_at: string | null },
   answered: PrIdentity | null,
@@ -246,13 +224,9 @@ function decide(
   return { kind: "verify", pin: answered };
 }
 
-/**
- * Re-read one pull request and write what GitHub says, for every outcome row that
- * named it and that it is still the pull request of. prs_merged is a COUNT over the
- * join rows, not an increment, because this runs on a merge and on a sweep and so will
- * run twice on the same pull request. A row whose number now belongs to a different
- * pull request is marked unverifiable instead, and is not in the result.
- */
+// Re-read one pull request and write what GitHub says, for every outcome row that named it and that
+// it is still the pull request of. prs_merged is a COUNT over the join rows, not an increment,
+// because this runs on a merge and on a sweep and so will run twice on the same pull request.
 export async function reverifyPr(
   env: Env,
   namespace: string,

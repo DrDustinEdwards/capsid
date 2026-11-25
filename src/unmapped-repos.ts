@@ -40,8 +40,8 @@ export function parseOnPurpose(body: string | null): Set<string> {
   return out;
 }
 
-/** The namespace a repo most likely belongs in, from its name alone: the repo named
- *  for a namespace, else the longest namespace the name starts with up to a dash. */
+// The namespace a repo most likely belongs in, from its name alone: the repo named for a namespace,
+// else the longest namespace the name starts with up to a dash.
 export function suggestNamespace(fullName: string, namespaces: string[]): string | null {
   const name = (fullName.split("/")[1] ?? "").toLowerCase();
   if (namespaces.includes(name)) return name;
@@ -63,9 +63,9 @@ export function unmappedRepos(read: RepoMapRead): UnmappedRepo[] {
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
 }
 
-/** The App's repos against the namespace mapping. Throws, rather than returning a
- *  partial answer, on anything it cannot read whole: an empty list from the App is not
- *  believed either, because "0 unmapped" over "0 listed" says nothing. */
+// The App's repos against the namespace mapping. Throws, rather than returning a partial answer, on
+// anything it cannot read whole: an empty list from the App is not believed either, because "0
+// unmapped" over "0 listed" says nothing.
 export async function readRepoMap(env: Env): Promise<RepoMapRead> {
   const { repos, installations } = await listInstalledRepos(env);
   if (repos.length === 0) {

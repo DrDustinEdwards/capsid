@@ -12,12 +12,8 @@ const MAX_JOB_ID = 64;
 export function defineClaimsOperations(server: McpServer, ctx: ToolCtx): void {
   const { db } = ctx;
 
-  // What agents said about their work beside what the Worker verified, and every time a
-  // human touched a job (migrations/0023_job_claims.sql). Admin only in whole: the
-  // tables span every namespace and every agent, and the export is the whole dataset.
-  // TOOL_GRANTS.capsid_admin_read_claims in src/scope.ts states it and the registrar refuses anyone else
-  // before this handler runs. It reads only, through src/job-claims-read.ts, which the
-  // Portal's Claims view reads too.
+  // Admin only in whole (TOOL_GRANTS.capsid_admin_read_claims): the tables span every namespace and
+  // agent.
   ctx.ops.define(
     "claims",
     {
@@ -74,8 +70,8 @@ export function defineClaimsOperations(server: McpServer, ctx: ToolCtx): void {
           case "export": {
             if (!args.table)
               return fail(`export needs a table: ${CLAIMS_EXPORT_TABLES.join(", ")}.`);
-            // JSON stays parseable, because the export script reads it, so the tag is a field
-            // rather than a fence: every text column here was written by an agent.
+            // The tag is a field rather than a fence so the JSON stays parseable (the export script
+            // reads it); every text column here was written by an agent.
             return ok({
               ...(await exportClaimsPage(
                 db,

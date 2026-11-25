@@ -42,15 +42,12 @@ import { reverifyPr } from "../outcome-prs";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { chatApprovalRefusal, MAX_APPROVAL_LINK, recordChatApproval } from "../chat-approval";
 
-// The pull request's canonical URL, for a managePr result that did not carry one.
-// The merge response names the repo and the caller named the number, which is all a
-// GitHub pull request URL is.
 function prUrlFor(result: { repo?: string }, number: number): string {
   return `https://github.com/${result.repo ?? ""}/pull/${number}`;
 }
 
-// manage_pr's sha belongs to action 'merge' only. Thrown rather than returned, because
-// guardedWrite reports a value returned from its callback as success.
+// Thrown rather than returned, because guardedWrite reports a value returned from its callback as
+// success.
 function refuseShaOffMerge(action: string, sha: string | undefined): void {
   if (action !== "merge" && sha !== undefined)
     throw new Error(
@@ -58,9 +55,7 @@ function refuseShaOffMerge(action: string, sha: string | undefined): void {
     );
 }
 
-// A merge pinned to a sha that GitHub refused with 409 because the head moved. Rethrown
-// with a message that says so, so guardedWrite reports it as a refusal. Any other error
-// passes through unchanged.
+// Rethrown so guardedWrite reports it as a refusal.
 function headMovedRefusal(number: number) {
   return (err: unknown): never => {
     if (err instanceof HeadMovedError) {
@@ -76,14 +71,6 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
   const { guardedRead, guardedWrite } = repoGuards(ctx);
 
-  // Repo fallthrough: live GitHub access via the Capsid GitHub App. Reads are
-  // open to any admitted client; writes require the write grant (TOOL_GRANTS in
-  // src/scope.ts). The target repo is resolved per namespace from the namespaces
-  // table.
-
-  // A namespace can map to more than one repo. The optional `repo` argument on every repo tool selects one: a
-  // label ("primary", "legacy") or a full "owner/name" mapped to the namespace. Omit
-  // it to target the primary. capsid_find_docs action namespaces shows the mapping.
   const REPO_ARG = 'A repo label or mapped "owner/name". Defaults to the primary repo.';
 
   ctx.ops.define(
@@ -124,8 +111,8 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     },
     ({ namespace, path, paths, ref, repo }) =>
       guardedRead("read_repo_file", namespace, repo, () => {
-        // EXACTLY ONE OF THE TWO. Accepting both and preferring one would make the
-        // ignored argument invisible.
+        // EXACTLY ONE OF THE TWO: accepting both and preferring one would make the ignored argument
+        // invisible.
         if (path && paths)
           throw new Error("read_repo_file: pass path for one file or paths for several, not both");
         if (!path && !paths)
@@ -237,11 +224,8 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
             repo,
             sha,
           ).catch(headMovedRefusal(number));
-          // A merge makes the outcome rows naming this pull request stale, so they are
-          // re-read from GitHub now rather than at the daily sweep. It never fails the
-          // merge, which already happened: reporting it as failed because a
-          // bookkeeping update did not land would misreport the merge, and the sweep
-          // picks the row up either way.
+          // Never fails the merge, which already happened: a bookkeeping update that did not land
+          // would misreport it, and the daily sweep picks the row up either way.
           if (action === "merge" && approved_in !== undefined && sha !== undefined) {
             const merged = result as { repo: string; sha?: string };
             const approval = await recordChatApproval(
@@ -318,9 +302,8 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       },
     },
     ({ namespace, repo, limit, ref, run_id, jobs, job, step }) =>
-      // The log is withheld from a read-only caller: a build log carries whatever the
-      // workflow echoed. Asked of checkScope rather than decided here, and the same
-      // answer gates the failed-run tail and a step's log.
+      // A build log carries whatever the workflow echoed, so a read-only caller gets none; asked of
+      // checkScope, and the same answer gates the failed-run tail and a step's log.
       guardedRead("ci_status", namespace, repo, () =>
         ciStatus(env, namespace, repo, {
           limit,
@@ -334,10 +317,8 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       ),
   );
 
-  // capsid_inspect_repo actions refs and history are reads and stay open to ro: keys.
-  // capsid_close_pr action delete_branch needs the write grant: it destroys refs. These
-  // three are a ruled exception to the tool surface
-  // rule (CLAUDE.md).
+  // A ruled exception to the tool surface rule (CLAUDE.md): refs and history stay open to ro: keys;
+  // delete_branch needs the write grant, since it destroys refs.
 
   ctx.ops.define(
     "repo_refs",

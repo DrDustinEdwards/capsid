@@ -10,8 +10,6 @@ import {
 } from "./auto-merge-policy";
 import { isMoneyPath } from "./scope";
 
-// The pull request facts and the checks that judge them against the policy.
-
 export interface PrFacts {
   number: number;
   repo: string;
@@ -21,33 +19,23 @@ export interface PrFacts {
   headSha: string;
   body: string;
   changedPaths: string[];
-  // Why the changed-file list is incomplete, or null. An incomplete list refuses.
   filesProblem: string | null;
-  // Additions plus deletions across the changed files, as GitHub counts them, or null
-  // when a file came back without its counts, which size_within_cap refuses.
+  // Additions plus deletions across the changed files, as GitHub counts them, or null when a file
+  // came back without its counts, which size_within_cap refuses.
   changedLines: number | null;
-  // The existing tests the pull request changes (src/github/pr-files.ts). No policy check
-  // reads it: the class and the tick do, and hold such a pull request for Dustin.
+  // The existing tests the pull request changes (src/github/pr-files.ts). No policy check reads it:
+  // the class and the tick do, and hold such a pull request for Dustin.
   existingTestEdits: string[];
-  // null when no check run has reported, which is NOT green.
   ciConclusion: string | null;
   ciNote: string;
-  // The steps of the newest run of each workflow on the head sha, and why they could
-  // not be read, or null.
   ciSteps: Array<{ workflow: string; job: string; step: string; conclusion: string | null }>;
   ciStepsProblem: string | null;
-  // The owner/name of the repo the PR's head branch lives on, as GitHub reports it, or
-  // null when GitHub reports none (a fork that was deleted).
   headRepo: string | null;
-  // GitHub reports none.
   prAuthor: string | null;
   // Resolved from the job id in the PR body; jobClaimedBy is for the audit row only.
   jobId: string | null;
   jobClaimedBy: string | null;
   jobStatus: string | null;
-  // Every pull request URL the job's holder recorded: result_ref and the
-  // job_outcome_prs rows, all written by the transitions that complete or block a job
-  // (src/jobs-holder.ts) or seeded from what they wrote.
   jobPrUrls: string[];
 }
 
@@ -61,21 +49,19 @@ export function jobIdFromBody(body: string): string | null {
   return JOB_ID_IN_BODY.exec(body ?? "")?.[0] ?? null;
 }
 
-// The statuses in which a job has handed its PR on (done, or blocked at a gate). Any other
-// status proves nothing from its id in a PR body.
 const HANDED_ON_STATUSES = ["blocked", "done"];
 
-// A PR URL as the job records hold it, compared case-insensitively. The match ends at
-// the PR number, so pull/23 never matches pull/234.
+// A PR URL as the job records hold it, compared case-insensitively. The match ends at the PR
+// number, so pull/23 never matches pull/234.
 const PR_URL = new RegExp(PR_URL_SOURCE, "g");
 
 function normalizedPrUrls(text: string | null): string[] {
   return [...(text ?? "").matchAll(PR_URL)].map((m) => m[0].toLowerCase());
 }
 
-// Named separately from the refused list because their consequence is not local (a
-// migration runs against the live database, a workflow measures the code, a lockfile decides
-// what is installed). Removing a pattern from one list does not quietly open the other.
+// Named separately from the refused list because their consequence is not local (a migration runs
+// against the live database, a workflow measures the code, a lockfile decides what is installed).
+// Removing a pattern from one list does not quietly open the other.
 const MIGRATION_WORKFLOW_LOCKFILE: Array<{ pattern: RegExp; why: string }> = [
   { pattern: /(^|\/)migrations\//i, why: "a migration, which runs against the live database" },
   { pattern: /(^|\/)\.github\/workflows\//i, why: "a workflow, which is what measures the code" },
@@ -89,8 +75,8 @@ const MIGRATION_WORKFLOW_LOCKFILE: Array<{ pattern: RegExp; why: string }> = [
 export function evaluatePolicy(
   facts: PrFacts,
   allowedAuthors: string[],
-  // The promoted unit this PR falls in, when the signed policy lists its namespace and
-  // path class under ## Auto units (the tick computes the path class). It widens only
+  // The promoted unit this PR falls in, when the signed policy lists its namespace and path class
+  // under ## Auto units (the tick computes the path class). It widens only
   // paths_allowed_for_namespace: never a refused path, money, a migration or a workflow.
   promoted: { unit: string } | null = null,
 ): PolicyVerdict {
@@ -102,8 +88,8 @@ export function evaluatePolicy(
     passed: [...passed],
   });
 
-  // A path list that was not read whole is not judged on the part that loaded: a
-  // refused path on page two would merge that way.
+  // A path list that was not read whole is not judged on the part that loaded: a refused path on
+  // page two would merge that way.
   if (facts.filesProblem) {
     return no(
       "paths_not_refused",
@@ -135,8 +121,8 @@ export function evaluatePolicy(
   }
   passed.push("no_migration_workflow_lockfile");
 
-  // A namespace with a limit merges only a change whose every path is inside it. A PR
-  // that changes no file shows nothing inside the limit, so it waits for the seat too.
+  // A namespace with a limit merges only a change whose every path is inside it. A PR that changes
+  // no file shows nothing inside the limit, so it waits for the seat too.
   const allowedRules = allowedPathsFor(facts.namespace);
   if (allowedRules) {
     if (facts.changedPaths.length === 0) {
@@ -157,8 +143,6 @@ export function evaluatePolicy(
   }
   passed.push("paths_allowed_for_namespace");
 
-  // A fork's head is code nobody holding a credential here pushed. GitHub reports no
-  // head repo when the fork was deleted, which is refused the same way.
   if (!facts.headRepo || facts.headRepo.toLowerCase() !== facts.repo.toLowerCase()) {
     return no(
       "head_in_base_repo",
@@ -167,10 +151,6 @@ export function evaluatePolicy(
   }
   passed.push("head_in_base_repo");
 
-  // Version 10: work comes from project threads, not the job queue,
-  // so most pull requests name no job. One whose unit has earned unattended merging (a
-  // promoted unit, from his recorded approvals) stands in for the job trace: the three
-  // job checks pass on the unit, and every other check still applies.
   const earned = !facts.jobId && promoted !== null;
   if (!facts.jobId && !earned) {
     return no(
@@ -180,7 +160,6 @@ export function evaluatePolicy(
   }
   passed.push("body_names_job");
 
-  // Case-insensitive, as GitHub treats logins. An empty allowlist matches nobody.
   const author = facts.prAuthor?.toLowerCase() ?? null;
   if (!author || !allowedAuthors.some((a) => a.toLowerCase() === author)) {
     return no(
@@ -201,8 +180,8 @@ export function evaluatePolicy(
     }
     passed.push("job_handed_on");
 
-    // The PR itself must be recorded against the job, or anyone could name a finished
-    // job in a PR body.
+    // The PR itself must be recorded against the job, or anyone could name a finished job in a PR
+    // body.
     const url = `https://github.com/${facts.repo}/pull/${facts.number}`.toLowerCase();
     if (!facts.jobPrUrls.some((recorded) => normalizedPrUrls(recorded).includes(url))) {
       return no(
@@ -238,10 +217,11 @@ export function evaluatePolicy(
   return { merge: true, passed };
 }
 
-/** The ci_green check on the head sha with the policy's required steps, shared by the policy
- *  and the approval executor (docs/design/design-merge-pipeline.md section 4). green: all
- *  succeeded. wait: CI unfinished or steps unreadable. red: failed, or a required step did not
- *  succeed. never: no required steps are written down for the namespace. */
+/**
+ * The ci_green check on the head sha with the policy's required steps, shared by the policy and
+ * the approval executor (docs/design/design-merge-pipeline.md section 4). never: no required steps
+ * are written down for the namespace.
+ */
 export function ciGreenOn(
   facts: Pick<
     PrFacts,
@@ -287,9 +267,9 @@ export function ciGreenOn(
   return { state: "green", why: `CI on ${sha} is green, with every required step` };
 }
 
-// Every completed check run must have concluded success, skipped or neutral, and at
-// least one must have reported. A PR with no checks is not green: its workflow never
-// started, which cannot be told apart from a workflow that was removed.
+// Every completed check run must have concluded success, skipped or neutral, and at least one must
+// have reported. A PR with no checks is not green: its workflow never started, which cannot be
+// told apart from a workflow that was removed.
 export function ciVerdict(
   runs: Array<{ name: string; status: string; conclusion: string | null }>,
 ): { conclusion: string | null; note: string } {

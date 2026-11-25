@@ -13,17 +13,8 @@ import { Overview } from "./Overview";
 import { UnownedResources } from "./Workers";
 import { PageHead } from "./shared";
 
-// HEALTH (docs/design/design-portal-evaluation.md section 2; the Portal audit's new map,
-// 2026-11-06): "is anything broken" across everything, answered in one line first. Then the
-// tiles, then one tab at a time: Problems (the watcher's findings and the maintenance pass's
-// list), Backups, CI's default branches, Scheduled tasks, and Cloudflare (the Workers no site
-// owns, and every store). Each site's own state is on its page under Sites. The tab is in the
-// address (?tab=), so Back, a bookmark and an alert reach it; the one namespace filter (?ns=)
-// narrows every tab and is kept when the tab changes.
-
 const Maintenance = lazy(() => import("./Maintenance").then((m) => ({ default: m.Maintenance })));
 
-// The problems the verdict names before it says "and N more".
 const NAMED = 3;
 
 export function Health() {
@@ -64,13 +55,9 @@ function TabPanel({ tab }: { tab: HealthTab }): ReactNode {
   }
 }
 
-// One line: "All good", or how many problems and the first few by name, each a link to
-// where it is fixed (Capsomer's Verdict). The same problems as Needs you's list (what waits on
-// you is not one of them: it is in Waiting for you), so the two pages never disagree.
 function HealthVerdict() {
   const { feed, now, open, href } = useApp();
   const { items, groups } = attentionList(feed, now, href);
-  // Every problem, none held back behind "more": the verdict names the first few itself.
   const { problems } = arrange(items, { groups, rows: Infinity });
   return (
     <Verdict

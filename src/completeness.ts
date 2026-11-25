@@ -6,13 +6,6 @@ import { bounded } from "./limits";
 import type { CompletenessView } from "./ops-types/feed";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// THE COMPLETENESS SCOREBOARD, read for the Portal (GET /portal/api/completeness). devkit's daily
-// live run (.github/workflows/live.yml, bin/live.mjs) writes board.json to its orphan
-// `scoreboard` branch: every area of the shared code against the package and every live site,
-// each cell filled only from the live checks and the verifiers' verdicts. devkit decides the
-// cells; Capsid only reads the board through the GitHub App, so a thread cannot mark itself
-// complete here either.
-//
 // The board is a public repo's file, read as data: parsing keeps only the named fields, bounded,
 // and drops a link that is not https. Kept ten minutes in KV (it changes once a day and on a
 // merged verdict).
@@ -26,8 +19,8 @@ export const COMPLETENESS_CACHE_KEY = "portal:completeness:v1";
 const CACHE_TTL_SECONDS = 600;
 const MAX_ERRORS_SHOWN = 5;
 
-// Text the board wrote, kept within `max` characters: a longer one is cut with an ellipsis,
-// never dropped, so a cell's reason still says why (a 1,214-character reason once showed blank).
+// Text the board wrote, kept within `max` characters: a longer one is cut with an ellipsis, never
+// dropped, so a cell's reason still says why (a 1,214-character reason once showed blank).
 const Text = (max: number) =>
   z
     .string()
@@ -74,7 +67,6 @@ const BoardSchema = z.object({
     .max(50),
 });
 
-/** The board as the Portal shows it, from devkit's parsed board.json. Pure. */
 function completenessView(raw: unknown, now: Date): CompletenessView {
   const parsed = BoardSchema.safeParse(raw);
   if (!parsed.success) {

@@ -1,9 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// Sign out, clicked in a real browser against the production build. It must send the
-// CSRF header the feed carried, and the page after it must say the person chose to
-// leave, not that the session expired. A failed sign-out must be said, because a
-// session left open on a shared screen is the case the button exists for.
+// A failed sign-out must be said: a session left open on a shared screen is the case the button exists for.
 
 const SIGN_OUT_URL = "**/api/sign-out";
 

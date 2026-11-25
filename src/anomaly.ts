@@ -4,15 +4,6 @@ import { HOUR_MS } from "./time";
 
 // ANOMALY RULES ON THE AUDIT LOG (capsid/research/design-owasp-hardening.md): a hit is a watcher
 // finding plus a Portal attention item, nothing more. No suspension and no revoke.
-//
-// Per minted agent (actor "agent:<name>", the watcher excepted), the last 24 hours against the 14
-// days before, from audit_log counted per actor, action and hour:
-//   - a new action the agent wrote in the last day and never in its baseline (an agent with no
-//     baseline is judged by the first-use rule instead);
-//   - a rate spike: its busiest hour over RATE_FACTOR times its busiest baseline hour, and at
-//     least RATE_FLOOR rows, so a quiet agent's second call is not a spike;
-//   - an off-hours first use: no baseline, first row between 00:00 and 06:00 America/Chicago.
-// The window is a day so a hit stays a finding for a day, then clears itself.
 
 const BASELINE_DAYS = 14;
 const RECENT_HOURS = 24;
@@ -20,16 +11,13 @@ const RATE_FACTOR = 3;
 export const RATE_FLOOR = 30;
 const OFF_HOURS_END = 6;
 
-/** One row of the grouped read: an actor's rows of one action in one UTC hour. */
 export interface ActionHour {
   actor: string;
   action: string;
-  // "YYYY-MM-DDTHH", UTC.
   hour: string;
   n: number;
 }
 
-/** The window's start for readActionHours, in audit_log's datetime format. */
 function anomalySince(now: Date): string {
   return new Date(now.getTime() - (BASELINE_DAYS * 24 + RECENT_HOURS) * HOUR_MS)
     .toISOString()
@@ -37,9 +25,11 @@ function anomalySince(now: Date): string {
     .replace("T", " ");
 }
 
-/** The read the rules run on: every minted agent's audit rows of the last BASELINE_DAYS
- *  plus one days, grouped by action and hour, the watcher (`except`) left out. On the
- *  audit_log_at index (migrations/0005), bounded by the window. */
+/**
+ * The read the rules run on: every minted agent's audit rows of the last BASELINE_DAYS plus one
+ * days, grouped by action and hour, the watcher (`except`) left out. On the audit_log_at index
+ * (migrations/0005), bounded by the window.
+ */
 export async function readActionHours(
   db: D1Database,
   now: Date,
@@ -56,10 +46,10 @@ export async function readActionHours(
   return results ?? [];
 }
 
-// An actor or action in a fingerprint: prelum's slug, without the agent: prefix, at most 60 characters.
+// An actor or action in a fingerprint: prelum's slug, without the agent: prefix, at most 60
+// characters.
 const slug = (text: string): string => slugify(text.replace(/^agent:/i, ""), { max: 60 });
 
-/** The hour of day in America/Chicago for a UTC hour key. */
 export function chicagoHour(hourKey: string): number {
   const h = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Chicago",

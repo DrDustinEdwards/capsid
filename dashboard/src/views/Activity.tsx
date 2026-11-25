@@ -20,18 +20,12 @@ import { Suspense, lazy } from "react";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 
-// What happened since you last looked, the weekly digest, then the audit log, then the two
-// trend charts. The
-// digest strip and the charts load after first paint (their reads and Enarratio code stay off
-// the first screen).
 const SinceLastLooked = lazy(() =>
   import("./Overnight").then((m) => ({ default: m.SinceLastLooked })),
 );
 const MinutesTile = trendChart("MinutesTile");
 const WaitingChart = trendChart("WaitingChart");
 
-// A job transition writes two rows with the same action, actor and path; this says which
-// is the job's and which its mirror document's.
 const TARGET_LABEL: Record<"job" | "document", string> = {
   job: "(job)",
   document: "(mirror document)",
@@ -39,8 +33,6 @@ const TARGET_LABEL: Record<"job" | "document", string> = {
 
 export function Activity() {
   const { feed, now: appNow } = useApp();
-  // The filter lives in the address (capsomer/react/route-hooks): the fields follow it (back, a link)
-  // and apply on submit, replacing the history entry.
   const filters = useUrlFilters(["namespace", "actor"] as const);
   const { namespace, actor } = filters.applied;
   const { namespace: nsInput, actor: actorInput } = filters.input;
@@ -50,7 +42,6 @@ export function Activity() {
   );
 
   const data = load.data;
-  // The rows were just read from the server, so none is later than the read itself.
   const now = data ? Math.max(appNow, parse(data.generated)) : appNow;
   const actors = [
     ...new Set([
@@ -86,8 +77,6 @@ export function Activity() {
         <label className="cap-sr-only" htmlFor="actActor">
           Who
         </label>
-        {/* A picker, not a box to type an id into from memory (the UX audit's m7): every
-            agent on the roster, and every actor in the rows read. */}
         <select
           id="actActor"
           name="actor"
@@ -206,10 +195,6 @@ export function Activity() {
   );
 }
 
-// The watcher's digest-class findings (src/watcher.ts, findingClass): CSP, security
-// headers, analytics and beacon settings, scorer drift. They post no job; one block per
-// site lists what is open, and the Monday email carries the same list. Hidden while none
-// is open, so a quiet week adds nothing to the page.
 function WeeklyDigest() {
   const { feed, now } = useApp();
   const open = feed.live.findings.filter((f) => f.class === "digest");

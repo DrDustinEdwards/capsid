@@ -2,22 +2,8 @@ import type { OpsSiteConfig, SiteMapDrift } from "./ops-types/sites";
 import { auditCommitted } from "./store-guards";
 import { parseOperator } from "./site-operator";
 
-// The sites the watcher probes for Capsid Portal (capsid/research/design-ops-console.md),
-// read from configuration, not code. The rows live in D1 (ops_sites,
-// migrations/0022_ops_sites.sql) and are edited in the Portal's Settings view through
-// the same preview and perform as every other control (src/portal-actions.ts). This
-// module reads them, validates an edit, and writes one.
-//
-// A row with an origin is a site. A row with no origin says its namespace serves no
-// site, so the site-map drift check can tell a decision from an omission. With no row
-// that has an origin, the watcher probes nothing and the Portal hides the Sites view.
-//
-// Why a table and not one settings record: each row is edited on its own, with a
-// guarded UPDATE on its revision, so two edits to different sites cannot overwrite
-// each other, and a stale preview of one site is refused without touching the rest.
-// The schema holds the platform to two values and the origin and platform to both or
-// neither. And the backup dumps every table in TABLES (src/backup.ts), so the
-// configuration is in the nightly dump with no extra step.
+// The sites the watcher probes for Capsid Portal (capsid/research/design-ops-console.md), read from
+// configuration, not code.
 
 export interface OpsSite {
   namespace: string;
@@ -78,8 +64,8 @@ function configFrom(row: SiteRow): OpsSiteConfig {
   };
 }
 
-/** The stored operator JSON, parsed by the same rules an edit passes. A stored value that
- *  no longer passes (a ceiling tightened since) is not used, and the reason is shown. */
+// The stored operator JSON, parsed by the same rules an edit passes. A stored value that no longer
+// passes (a ceiling tightened since) is not used, and the reason is shown.
 function operatorFrom(
   raw: string | null | undefined,
   namespace: string,
@@ -118,11 +104,9 @@ export function sitesFrom(config: readonly OpsSiteConfig[]): OpsSite[] {
   return out;
 }
 
-/** The registered namespace a row belongs to: its own key, or, for a further host of a
- *  namespace (a row keyed `<namespace>-<host>`, such as capsid-portal or
- *  foxhound-admin-mcp, migrations/0052), the longest registered namespace it starts with.
- *  Null when it is neither. A further host is probed and alerted like any site; it is not
- *  a namespace, so it has no repository of its own. */
+// The registered namespace a row belongs to: its own key, or, for a further host of a namespace (a
+// row keyed `<namespace>-<host>`, such as capsid-portal or foxhound-admin-mcp, migrations/0052),
+// the longest registered namespace it starts with. Null when it is neither.
 function owningNamespace(key: string, registered: readonly string[]): string | null {
   if (registered.includes(key)) return key;
   const owners = registered
@@ -168,8 +152,8 @@ const HEALTH_PATH_SHAPE = /^\/[A-Za-z0-9._~/-]{0,199}$/;
 const NAME_MAX = 80;
 const LOCAL_SUFFIXES = [".localhost", ".local", ".internal", ".home.arpa"];
 
-/** A hostname a probe may fetch: lowercase DNS labels, at least two, no IP literal and
- *  no local name. Returns the refusal, or null when it is fine. */
+// A hostname a probe may fetch: lowercase DNS labels, at least two, no IP literal and no local
+// name. Returns the refusal, or null when it is fine.
 function hostnameRefusal(host: string): string | null {
   if (host.length === 0 || host.length > 253)
     return `the hostname '${host}' must be 1 to 253 characters.`;
@@ -191,8 +175,8 @@ function hostnameRefusal(host: string): string | null {
   return null;
 }
 
-/** The origin as https://host, or the refusal. Nothing but a scheme and a host: no
- *  credentials, no port, no path, no query and no fragment. */
+// The origin as https://host, or the refusal. Nothing but a scheme and a host: no credentials, no
+// port, no path, no query and no fragment.
 export function originFrom(
   raw: string,
 ): { ok: true; origin: string } | { ok: false; refusal: string } {
@@ -211,9 +195,9 @@ export function originFrom(
   return { ok: true, origin: `https://${host}` };
 }
 
-/** The refusal for a health path, or null. Starts with /, unreserved characters only,
- *  no empty or dot segment. Or an https URL whose host passes as an origin's would and
- *  whose path passes the same rules, for a site that serves its health on another host. */
+// The refusal for a health path, or null. Starts with /, unreserved characters only, no empty or
+// dot segment. Or an https URL whose host passes as an origin's would and whose path passes the
+// same rules, for a site that serves its health on another host.
 export function healthPathRefusal(path: string): string | null {
   const absolute = /^https:\/\/([^/?#@:]+)(\/.*)$/.exec(path);
   if (absolute) return hostnameRefusal(absolute[1]!) ?? healthPathRefusal(absolute[2]!);
@@ -227,9 +211,9 @@ export function healthPathRefusal(path: string): string | null {
   return null;
 }
 
-/** The URL a health path names: the path on the site's origin, or the https URL itself
- *  where the site serves its health on another host (Carrel's public one is on its MCP
- *  host; its app is behind Access). */
+// The URL a health path names: the path on the site's origin, or the https URL itself where the
+// site serves its health on another host (Carrel's public one is on its MCP host; its app is behind
+// Access).
 export function healthUrl(origin: string, healthPath: string): string {
   return healthPath.startsWith("https://") ? healthPath : origin + healthPath;
 }
@@ -363,12 +347,11 @@ export async function addSite(db: D1Database, actor: string, site: SiteInput): P
   return { ok: true, site: after, warning };
 }
 
-/** Replace a row's fields, only if it is still at `revision`. An origin change clears
- *  the in-process probe, which is right for Capsid's own origin only. */
-/** The refusal for an edit that moves a row's origin while it names an operator token,
- *  or null. Moving the origin would send the token to the new host on the watcher's next
- *  pass: clear the operator configuration
- *  first, or in the same edit. */
+// Replace a row's fields, only if it is still at `revision`. An origin change clears the in-process
+// probe, which is right for Capsid's own origin only.
+// The refusal for an edit that moves a row's origin while it names an operator token, or null.
+// Moving the origin would send the token to the new host on the watcher's next pass: clear the
+// operator configuration first, or in the same edit.
 export function originMoveRefusal(before: OpsSiteConfig, site: SiteInput): string | null {
   if (before.origin === site.origin) return null;
   const operatorAfter =
@@ -430,8 +413,8 @@ export async function editSite(
   return { ok: true, site: after, warning };
 }
 
-/** Remove a row, only if it is still at `revision`. The prior row goes in the audit
- *  row, which is the only copy afterwards outside the nightly dump. */
+// Remove a row, only if it is still at `revision`. The prior row goes in the audit row, which is
+// the only copy afterwards outside the nightly dump.
 export async function removeSite(
   db: D1Database,
   actor: string,

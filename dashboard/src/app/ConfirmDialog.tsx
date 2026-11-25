@@ -30,20 +30,11 @@ import {
   type ConfirmRequest,
 } from "./ctx";
 
-// The actions whose Details start open: a rule change's or a policy's added and removed
-// lines are what the person is deciding.
 const OPEN_DETAILS: ReadonlySet<string> = new Set(["sign_policy_from_repo"]);
 
-// The one confirm dialog every control opens, on Capsomer's dialog. It collects a reason
-// where the action needs one, previews (which writes nothing), shows what will change and
-// the audit rows, and performs only on the button named for the action (performLabel).
-// Cancel, Close and Esc close it; a click outside does not, so a typed reason is never lost
-// that way. For a one-way action the preview puts focus on Cancel, not on perform (audit
-// DECIDE 11).
 interface DialogProps {
   req: ConfirmRequest;
   csrf: string;
-  // Called once, with the result when the action was performed.
   onClose: (performed: PortalPerformed | null) => void;
   onSignedOut: () => void;
 }
@@ -56,9 +47,7 @@ export function ConfirmDialog(props: DialogProps) {
   );
 }
 
-// Open until finish(), then closed by Capsomer's dialog, which hands focus back to the
-// control that opened it, or, when that control is gone (a revoked agent loses its Revoke
-// button), to the drawer or the page.
+// Closed by Capsomer's dialog, which returns focus to the opener, or to the drawer or page when that control is gone (a revoked agent's Revoke button).
 function useClosing({ onClose, onSignedOut }: Pick<DialogProps, "onClose" | "onSignedOut">) {
   const [open, setOpen] = useState(true);
   const result = useRef<PortalPerformed | null | "signed-out">(null);
@@ -96,19 +85,13 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   const confirmRef = useRef<HTMLInputElement>(null);
   const started = useRef(false);
   const needsReason = NEEDS_REASON.has(req.action);
-  // A reason typed before the dialog opened (the reply box on a Needs you row) is the
-  // reason: the dialog previews with it at once and shows it, rather than asking again.
   const given = needsReason ? (req.params.reason ?? "").trim() : "";
   const askReason = needsReason && !given;
   const [reason, setReason] = useState("");
   const takesNote = TAKES_NOTE.has(req.action);
   const [note, setNote] = useState("");
-  // The actions that widen autonomy ask for the version number typed before the preview, so
-  // the token carries it; a wrong number is refused with the right one.
   const typesConfirm = TYPED_CONFIRM.has(req.action);
   const [typedVersion, setTypedVersion] = useState("");
-  // Preview, then perform (capsomer/react/confirm-dialog's useTwoStep). An error's field flag says
-  // it is about the reason or version field itself, so it is shown there.
   const step = useTwoStep({
     preview: (params: Record<string, string>) =>
       previewAction(csrf, { action: req.action, params }),
@@ -120,9 +103,6 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   const label = performLabel(req.action, req.params);
   const destructive = DESTRUCTIVE.has(req.action);
 
-  // Every click on Preview ends in something the person can see: the preview, a
-  // refusal, a timeout, or the reason it could not be sent. A click that does nothing
-  // is the defect this dialog was sent back for.
   const runPreview = async (why: string) => {
     const typed = needsReason ? given || why.trim() : "";
     if (needsReason && !typed) {
@@ -156,13 +136,11 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
     await step.runPreview(params);
   };
 
-  // The reason is read from the field itself as well as from state, so a value the
-  // browser filled in without an input event still counts.
+  // Read from the field too, so a value the browser filled in without an input event counts.
   const reasonNow = () => reasonRef.current?.value ?? reason;
 
   useEffect(() => {
-    // Once, even under StrictMode's double effect: an action without a reason
-    // previews as soon as the dialog opens.
+    // Once, even under StrictMode's double effect.
     if (!started.current) {
       started.current = true;
       if (!askReason && !typesConfirm) void runPreview("");
@@ -192,9 +170,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
     );
   } else if (askReason || typesConfirm || (error && !error.field)) {
     primary = (
-      // A plain button with its own handler: Preview never depends on the form's submit
-      // event, and it is held only while a request is in flight, never silently because
-      // the reason is empty (that click says so instead).
+      // Preview never depends on the form's submit event; it is held only while a request is in flight.
       <Button
         variant="primary"
         pending={pending === "preview"}
@@ -216,8 +192,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
       size="md"
     >
       <DialogHeader>
-        {/* The heading stays in plain words (req.title); the server's summary, which can
-            name a job by its id, sits under it once the preview answers. */}
+        {/* The server's summary can name a job by its id, so it sits under the plain heading once the preview answers. */}
         <DialogTitle>{req.title}</DialogTitle>
         {preview && <DialogDescription data-summary="">{preview.summary}</DialogDescription>}
       </DialogHeader>
@@ -284,7 +259,6 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
                 readOnly={busy}
                 onChange={(e) => setReason(e.target.value)}
                 onKeyDown={(e) => {
-                  // Ctrl or Cmd with Enter previews; a plain Enter is a new line.
                   if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !busy) {
                     e.preventDefault();
                     void runPreview(reasonNow());
@@ -312,9 +286,6 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
             Checking what this will change...
           </div>
         )}
-        {/* The sentence above is the answer; the rows it changes and the audit rows it
-            writes are the server's own text, behind Details (the UX audit's M5). A rule
-            change's lines are what is being decided, so they start open. */}
         {preview && (
           <Disclosure summary="Details" defaultOpen={OPEN_DETAILS.has(req.action)}>
             <div className="cap-stack" data-gap="4">
@@ -376,10 +347,6 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   );
 }
 
-// Several rows decided in one dialog (Needs you's batch approve). Each item is previewed on
-// its own, as its single control would be, and the previews are listed together; perform
-// sends each item's own token, one after another, and a refusal of one does not stop the
-// rest. The result names what was done and, lasting, what was not.
 function BatchDialog({
   req,
   csrf,
@@ -480,7 +447,7 @@ function BatchDialog({
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount (the started ref guards StrictMode): the dialog asks for its preview as it opens; a dependency would preview again
   }, []);
 
-  // Every item here is one-way once performed together, so the preview leaves focus on Cancel.
+  // One-way once performed together, so the preview leaves focus on Cancel.
   useEffect(() => {
     if (pending === null) cancelRef.current?.focus();
   }, [pending]);

@@ -4,15 +4,12 @@ import type { RepoEntry } from "./github/client";
 import { MAX_NAMESPACE, MAX_REPO_SELECTOR, MAX_REPOS_JSON } from "./limits";
 import { auditStatement } from "./store-guards";
 
-// Registering and remapping a namespace, the one row in the namespaces table that the repo
-// tools and the namespaces list read. Two doors share it: capsid_admin_manage_namespaces
-// actions register and update (src/tools/namespaces.ts), and the namespace_add and
-// namespace_edit controls (src/controls.ts), so the rules and the audit rows are written once.
-// Deleting is src/namespace-delete.ts.
+// Two doors share it: capsid_admin_manage_namespaces actions register and update
+// (src/tools/namespaces.ts), and the namespace_add and namespace_edit controls (src/controls.ts),
+// so the rules and the audit rows are written once.
 
 const NAMESPACE = /^[a-z0-9][a-z0-9-]*$/;
 
-/** Why a namespace name is refused, or null: the slug the tools' nsName takes. */
 export function namespaceNameRefusal(namespace: string | undefined): string | null {
   if (!namespace) return "namespace is required";
   if (namespace.length > MAX_NAMESPACE || !NAMESPACE.test(namespace))
@@ -20,8 +17,10 @@ export function namespaceNameRefusal(namespace: string | undefined): string | nu
   return null;
 }
 
-/** A register's repo mapping: one repo as 'owner/name' with an optional label (default
- *  'primary'), or a repos JSON array, with exactly one entry labeled primary. */
+/**
+ * A register's repo mapping: one repo as 'owner/name' with an optional label (default 'primary'),
+ * or a repos JSON array, with exactly one entry labeled primary.
+ */
 export function registerRepos(input: {
   repo?: string;
   label?: string;
@@ -42,8 +41,8 @@ export function registerRepos(input: {
       return { ok: false, refusal: `label is at most ${MAX_REPO_SELECTOR} characters.` };
     list = [{ repo: input.repo, label }];
   }
-  // Two primaries or none would make every repo tool resolve by accident, and update
-  // would refuse to fix it in place.
+  // Two primaries or none would make every repo tool resolve by accident, and update would refuse to
+  // fix it in place.
   const primaryError = requireSinglePrimary(list);
   return primaryError ? { ok: false, refusal: primaryError } : { ok: true, list };
 }
@@ -65,7 +64,6 @@ export function updateRepos(
   return primaryError ? { ok: false, refusal: primaryError } : { ok: true, list: parsed.list };
 }
 
-/** The mapping the namespace holds now, as stored, or null when it is not registered. */
 export async function namespaceRepos(db: D1Database, namespace: string): Promise<string | null> {
   const row = await db
     .prepare("SELECT repos FROM namespaces WHERE namespace = ?1")
@@ -74,8 +72,10 @@ export async function namespaceRepos(db: D1Database, namespace: string): Promise
   return row ? row.repos : null;
 }
 
-/** A digest of a stored mapping, which a preview binds so the perform refuses an edit made
- *  in between (the mapping itself could outgrow the confirmation token). */
+/**
+ * A digest of a stored mapping, which a preview binds so the perform refuses an edit made in
+ * between (the mapping itself could outgrow the confirmation token).
+ */
 export function reposDigest(repos: string): Promise<string> {
   return sha256Hex(repos);
 }
@@ -85,8 +85,10 @@ export const ALREADY_REGISTERED = (namespace: string) =>
 export const NOT_REGISTERED = (namespace: string) =>
   `namespace not found: ${namespace}. Use capsid_admin_manage_namespaces action register to create it.`;
 
-/** Register: create-only, refused if the namespace exists. One batch, the row and its
- *  audit row 'register_namespace'. */
+/**
+ * Register: create-only, refused if the namespace exists. One batch, the row and its audit row
+ * 'register_namespace'.
+ */
 export async function registerNamespace(
   db: D1Database,
   actor: string,
@@ -104,9 +106,11 @@ export async function registerNamespace(
   return { ok: true };
 }
 
-/** Update: remap an existing namespace's repos, recording the prior mapping in the audit row
- *  'update_namespace'. It does not rename the namespace or move its documents. With
- *  `expectedDigest`, the mapping must still be the one a preview read. */
+/**
+ * Update: remap an existing namespace's repos, recording the prior mapping in the audit row
+ * 'update_namespace'. It does not rename the namespace or move its documents. With
+ * `expectedDigest`, the mapping must still be the one a preview read.
+ */
 export async function updateNamespace(
   db: D1Database,
   actor: string,

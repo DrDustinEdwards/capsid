@@ -1,12 +1,6 @@
-// The front page. First what Capsid is, beside one claim checked against GitHub, which the
-// reader can change. Then what it remembers: a search and a session start over an example
-// store. Then the panel: every tool Capsid serves as a circuit, lit by the grants a
-// caller holds, which the reader switches. Then one job's life as a guided tour, the drawing of
-// Capsid's insides pinned beside the chapters, each with its day's figures; then everything it
-// holds as the manual's contents. Pure, as pages.mjs is.
-//
-// Every number is from the public numbers or the model; every sentence that states a fact about
-// how Capsid works is the model's own flow text.
+// The front page: what Capsid is beside one claim checked against GitHub that the reader can change; what it remembers (a search and a session start over an example store); the panel, every tool as a circuit lit by the grants a caller holds;
+// one job's life as a guided tour with the drawing pinned beside the chapters; then everything it holds as the manual's contents. Pure, as pages.mjs is.
+// Every number is from the public numbers or the model, and every sentence stating how Capsid works is the model's own flow text.
 
 import { graph, thing, website } from "@drdustinedwards/site-helpers/schema";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
@@ -135,9 +129,7 @@ const CHECKS = [
 ];
 
 /**
- * The first screen: what Capsid is, the two ways on, and one claim checked, which the reader
- * can change to see Capsid catch it. The example's numbers are an example; the figure under
- * it is this instance's own.
+ * The first screen: what Capsid is, the two ways on, and one claim checked, which the reader can change to see Capsid catch it. The example's numbers are an example; the figure under it is this instance's own.
  * @param {any} stats
  */
 function hero(stats) {

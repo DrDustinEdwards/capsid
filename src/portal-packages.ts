@@ -9,13 +9,6 @@ import { notFoundReport } from "@dustinedwards/site-runtime/not-found";
 import type { PortalNotFound } from "./ops-types/sites";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The Packages view's on-demand history: GET /portal/api/packages/history?name=. The
-// daily downloads come from npm's range API when the view asks, not pass by pass
-// and are cached (src/ops-packages.ts). A route, not
-// a tool, so no grant is checked here (one enforcement point, test/route-gates.test.ts): it
-// answers to portalGate, and src/scope.ts lists it among the routes gated some other
-// way. Only a configured package can be asked for, so the route cannot be used to
-// fetch any name from npm.
 
 export const PORTAL_PACKAGE_HISTORY_PATH = "/portal/api/packages/history";
 

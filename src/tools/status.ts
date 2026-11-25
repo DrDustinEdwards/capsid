@@ -9,8 +9,6 @@ import { resetBreaker } from "../job-breaker";
 import { fail, ok, type ToolCtx } from "./docs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The two operations behind capsid_read_status (status) and capsid_admin_manage_switches
-// (the admin's switches). Both tools keep names under which agents' tools lists grant them.
 export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
 
@@ -55,8 +53,7 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
     },
     async ({ action, namespace, value, reason, path, threshold, sha256 }) => {
       try {
-        // Admin only, stated in TOOL_GRANTS (src/scope.ts) and enforced by the registrar
-        // before this handler runs.
+        // Admin only: TOOL_GRANTS (src/scope.ts), enforced by the registrar.
         if (action === "sign_policy") {
           if (!namespace || !path || !sha256)
             return fail(

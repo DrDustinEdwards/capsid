@@ -1,29 +1,14 @@
 #!/usr/bin/env node
-// Derive the off-account backup mirror's key, the repo secret BACKUP_CREDENTIAL_KEY.
-//
-// The Worker holds ONE root secret, IMPROVE_SCORE_SECRET, and derives the key that signs
-// requests to /backup/credential from it under its own context string. The mirror repo
-// and the restore rehearsal hold only the derived key.
-//
-// The derivation has to be reproducible outside the Worker to set that secret up. It is
-// the same computation as deriveBackupCredentialKey in src/signed-requests.ts:
-// HMAC-SHA256(root, "capsid-backup-credential:v1"). test/backup-credential.test.ts runs
-// this script and compares the key with the Worker's.
-//
-// USAGE. The root secret comes from the environment, never from an argument: an argument
-// lands in the shell history and in the process list.
-//
+// Derive the off-account backup mirror's key (repo secret BACKUP_CREDENTIAL_KEY): HMAC-SHA256(IMPROVE_SCORE_SECRET, "capsid-backup-credential:v1"),
+// the same as deriveBackupCredentialKey in src/signed-requests.ts (test/backup-credential.test.ts compares them).
+// The root secret comes from the environment, never an argument (shell history, process list):
 //   IMPROVE_SCORE_SECRET=... node scripts/derive-backup-key.mjs \
 //     | gh secret set BACKUP_CREDENTIAL_KEY --repo DrDustinEdwards/capsid-backups
-//
-// It prints the derived key and nothing else, so it can be piped. It never prints the
-// root secret. Everything explanatory goes to stderr.
+// Prints only the derived key, so it can be piped; explanations go to stderr.
 
 import { createHmac } from "node:crypto";
 
-// A whitespace-only value counts as unset: it would derive a key from spaces that no
-// request ever verifies against. The value itself is used as given, not trimmed, so a
-// key derived here matches the Worker's for the same secret.
+// Whitespace-only counts as unset (it would derive a key nothing verifies). The value is used untrimmed so the key matches the Worker's.
 const rawRoot = process.env.IMPROVE_SCORE_SECRET;
 const root = rawRoot && rawRoot.trim() !== "" ? rawRoot : undefined;
 
