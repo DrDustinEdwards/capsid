@@ -21,11 +21,7 @@ test("the pre-deploy guard rebuilds the config, applies the migrations that only
   const apply = deploy.indexOf("npx devkit-migrations migrations --apply capsid");
   const build = deploy.indexOf("npm run build:dashboard");
   assert.ok(config > 0 && apply > config && build > apply, "the pre-deploy guard is out of order");
-  assert.match(
-    deploy,
-    /install: npm ci && npm ci --prefix dashboard/,
-    "the Portal is not installed",
-  );
+  assert.match(deploy, /npm ci --ignore-scripts --prefix dashboard/, "the Portal is not installed");
 });
 
 test("the deploy's live gate makes gate 8's MCP call with the probe key", () => {
