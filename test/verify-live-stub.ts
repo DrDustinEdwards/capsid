@@ -10,9 +10,7 @@ import { PROBE_REDIRECT } from "../scripts/cimd-probe-lib.mjs";
 import { MCP_HOST } from "../src/mcp-host.ts";
 import { consentDialogHeaders, securityHeadersFor } from "../src/security-headers.ts";
 
-// A local server that plays a healthy Worker for scripts/verify-live.mjs, and the runner
-// that points the real script at it. Shared by test/verify-live-no-answer.test.ts and
-// test/live-gate-mcp.test.ts.
+// A local server that plays a healthy Worker for scripts/verify-live.mjs, and the runner that points the script at it.
 
 export const SCRIPT = join(import.meta.dirname, "..", "scripts", "verify-live.mjs");
 export const SHA = "4df127439ed3aa19aef8e350ab6311957b8f8611";
@@ -27,7 +25,6 @@ export const NON_HTML: Record<string, string> = {
 };
 export const HTML: Record<string, string> = { ...NON_HTML, ...lower(await consentDialogHeaders()) };
 
-// A Worker that passes every gate.
 export function healthy(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? "/", "http://x");
   const json = (status: number, body: unknown) => {
@@ -36,8 +33,6 @@ export function healthy(req: IncomingMessage, res: ServerResponse) {
   };
   if (url.pathname === "/health")
     return json(200, { status: "ok", sha: SHA, store: { d1: "ok", fts: "ok" } });
-  // CIMD, and tightened DCR that refuses the probe's unlisted redirect, and the probe
-  // document served here, at the URL the script is pointed at through VERIFY_PROBE_CLIENT_ID.
   if (url.pathname === "/register")
     return json(400, {
       error: "invalid_redirect_uri",
@@ -58,7 +53,6 @@ export function healthy(req: IncomingMessage, res: ServerResponse) {
     });
   }
   if (url.pathname === "/authorize" && req.method === "POST") {
-    // The Access sign-in, as src/access-login.ts builds it, for this stub's own origin.
     const signIn = new URL(
       `${ACCESS_SAAS.teamDomain}/cdn-cgi/access/sso/oidc/${ACCESS_SAAS.clientId}/authorization`,
     );
@@ -94,7 +88,6 @@ export function healthy(req: IncomingMessage, res: ServerResponse) {
     });
     return res.end();
   }
-  // The MCP host serves no Portal (src/mcp-host.ts): the plain 404.
   if (url.pathname === "/portal/") {
     res.writeHead(404, NON_HTML);
     return res.end("not found");
@@ -114,8 +107,6 @@ export function healthy(req: IncomingMessage, res: ServerResponse) {
 
 export type Handler = (req: IncomingMessage, res: ServerResponse) => void;
 
-// Serves `handler` except where `drop` says to destroy the socket instead of answering,
-// which is what a reset connection looks like to fetch.
 export async function run(
   handler: Handler,
   drop: (req: IncomingMessage, nth: number) => boolean,

@@ -13,11 +13,8 @@ import { D1_BATCH_STATEMENTS } from "../src/limits.ts";
 import { actionArgFor, defaultActionFor } from "../src/scope-guard.ts";
 import { MANAGE_NAMESPACES } from "../src/tools/surface.ts";
 
-// The pure half of capsid_admin_manage_namespaces's delete_preview and delete_perform
-// (the delete_namespace operation): the refusals, the plan fingerprint and the
-// confirmation key. The store half is test-integration/delete-namespace.test.ts,
-// against a real D1, because the batch is INSERT ... SELECT and json_each the node fake
-// does not evaluate.
+// The store half is test-integration/delete-namespace.test.ts on a real D1, because the batch is INSERT ... SELECT and
+// json_each, which the node fake does not evaluate.
 
 function zeroCounts(): PlanCounts {
   return {
@@ -168,8 +165,6 @@ test("the fingerprint ignores key order and moves with every count", () => {
     "a swapped document would not move the fingerprint",
   );
 });
-
-// the batch cap
 
 test("PLANT: one document over the cap is refused whatever cascade says, with the count, the cap and the advice", () => {
   const over = deleteRefusals(

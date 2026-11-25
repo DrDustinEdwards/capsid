@@ -6,14 +6,8 @@ import { buildServer } from "../src/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { dropSampleToken, jobRow, jobsEnv, seedSampleRepo } from "./jobs-fixture";
 
-// Claims apart from verified outcomes, against a real D1 (migrations/0023). What the
-// agent said lands in job_claims in the transition's own batch, before GitHub is read,
-// and the worker's checks land beside it in job_evaluations. Append-only is a trigger,
-// so it is exercised here rather than read off the DDL.
-//
-// job_claims and job_evaluations refuse DELETE once they hold a row, so nothing here
-// empties them: every assertion is scoped to the job id the test posted, and ids are
-// minted fresh per post.
+// Claims apart from verified outcomes, against a real D1 (migrations/0023): the agent's claims land in job_claims in the transition's batch, before GitHub is read.
+// Append-only is a trigger, so assertions are scoped to the job id each test posted, minted fresh per post.
 
 const SEAT = "access:admin@example.com";
 const DRIVER_ACTOR = "agent:driver-aaaa";
@@ -125,7 +119,6 @@ describe("job_claims: what the agent said", () => {
       result_ref: PR,
     });
 
-    // job_outcomes is unchanged: it still stores GitHub's number.
     const outcome = await env.DB.prepare(
       "SELECT commits, files_changed FROM job_outcomes WHERE job_id = ?1",
     )

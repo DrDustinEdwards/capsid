@@ -14,10 +14,6 @@ import {
 } from "../src/ops-snapshot.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// capsid_admin_read_ops action "snapshot": the watcher's last pass over MCP, admin
-// only (TOOL_GRANTS), and one site's uptime ring read by slot or by time (ringReading
-// in src/ops-snapshot.ts).
-
 const NOW = new Date("2026-09-28T12:10:00.000Z");
 const SLOT = ringSlot(NOW);
 const HALF_HOUR = 30 * 60_000;
@@ -51,8 +47,6 @@ const SNAPSHOT: OpsSnapshot = {
   site_map: null,
   sites: [SITE],
 };
-
-// The ring
 
 test("slot 0 is the newest slot, and each slot names the half hour it covers", () => {
   const values = [0, 1, 2, 3].map((slot) => ringReading(SITE, { slot }));
@@ -96,8 +90,6 @@ test("REFUSES a slot or time outside the ring, a time after its newest slot, and
   );
   assert.match(String(ringReading(SITE, { at: new Date("not a time") })), /not a time/);
 });
-
-// The tool
 
 interface ToolResult {
   isError?: boolean;

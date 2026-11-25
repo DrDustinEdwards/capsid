@@ -14,14 +14,8 @@ import {
   type FindingRow,
 } from "../src/watcher-findings";
 
-// The watcher's memory of a finding across jobs (migrations/0024_watcher_findings.sql),
-// driven through the tick against a real D1, so the job rows the queue holds are the
-// thing asserted on.
-//
-// THE REFILES THIS FILE REPRODUCES (job queue: watcher dedupe). The only memory the
-// watcher had of a finding was an open job with the fingerprint in its title, so:
-//   - ci-red was filed 13 times between 2026-09-20 and 09-23, because its fingerprint
-//     carried the head sha and every red commit was a new finding.
+// ci-red was once filed 13 times in four days: its fingerprint carried the head sha, so every red commit was a new finding, and the
+// watcher's only memory was an open job with the fingerprint in its title. Driven through the tick against a real D1.
 
 const SECRET = "test-root-secret";
 const NOW = new Date("2026-09-12T12:00:00.000Z");
@@ -51,7 +45,6 @@ async function watcherJobs(titlePart: string) {
   return results ?? [];
 }
 
-// A red run on the default branch, completed `hoursOld` before `when`.
 const redRun = (sha: string, when: Date, hoursOld: number) => ({
   head_sha: sha,
   status: "completed",
@@ -82,7 +75,6 @@ describe("reproduction: the refile the watcher's memory exists to stop", () => {
     );
     expect(first.posted).toHaveLength(1);
 
-    // A second red commit lands on the same red branch.
     const later = at(3);
     const second = await pass(
       later,
@@ -103,7 +95,6 @@ describe("reproduction: the refile the watcher's memory exists to stop", () => {
       "the incident's job was closed as cleared while the branch was still red",
     ).toBe("queued");
 
-    // The head shas are the incident's evidence, newest last.
     const row = await findingRow("ci-red-sample");
     expect(row).toMatchObject({ state: "open", seen_count: 2 });
     const evidence = JSON.parse(row!.evidence) as EvidenceEntry[];
@@ -144,7 +135,6 @@ describe("the finding's row across jobs", () => {
       reopen_after: null,
     });
 
-    // The drift is fixed; the site map check ran and did not see it.
     await pass(at(2), []);
     expect(await findingRow(f.fingerprint)).toMatchObject({
       state: "cleared",
@@ -152,11 +142,9 @@ describe("the finding's row across jobs", () => {
       reopen_after: new Date(at(2).getTime() + REOPEN_QUIET_MS).toISOString(),
     });
 
-    // Back inside the quiet period: counted, not filed.
     expect((await pass(at(3), [f])).posted).toEqual([]);
     expect(await findingRow(f.fingerprint)).toMatchObject({ state: "cleared", seen_count: 3 });
 
-    // Back after it: a recurrence, filed once, on a new job.
     const again = await pass(at(9), [f]);
     expect(again.posted).toEqual([f.fingerprint]);
     const jobs = await watcherJobs("site-map-drift-");
@@ -245,7 +233,6 @@ describe("the finding's row across jobs", () => {
       job_id: "job_000000000001",
       seen_count: 1,
     });
-    // And a dismissal is keyed on the job the row was read with.
     const cleared = (await findingRow("backup-stale"))!;
     expect(await memory.open(cleared, f, "job_000000000003", at(2))).toBe(true);
     expect(

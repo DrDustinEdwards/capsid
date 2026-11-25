@@ -1,7 +1,5 @@
-// The D1 fake disagrees with a handler where SQLite would. Each test drives one
-// statement shape that src/ issues, in the words src/ issues it, and asserts the row
-// state SQLite would leave, so the fake cannot ignore a write, ignore a predicate, or
-// parse the statement wrong.
+// Each test drives one statement shape src/ issues and asserts the row state SQLite would leave,
+// so the fake cannot ignore a write or a predicate.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeD1 } from "./fakes.ts";

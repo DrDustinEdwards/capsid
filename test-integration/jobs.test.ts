@@ -29,16 +29,8 @@ import {
   driverBlockedJob,
 } from "./jobs-fixture";
 
-// The work queue against a real D1. Every property under test is a property of the
-// database, not of a handler:
-//
-//   - the partial unique index over (namespace, title) is what refuses a duplicate
-//     post, and only SQLite enforces it;
-//   - the claim is `UPDATE ... WHERE status = 'queued' RETURNING id`, so "exactly
-//     one of two callers wins" is a statement about SQLite's transaction, not about
-//     the code around it.
-//
-// A fake that answered these by SQL shape would agree with whatever it was asked.
+// The work queue against a real D1: the partial unique index over (namespace, title) refuses a duplicate post, and the claim's
+// UPDATE ... RETURNING id is what makes exactly one of two callers win. A fake answering by SQL shape agrees with anything.
 
 beforeEach(resetJobs);
 
@@ -76,7 +68,6 @@ describe("the lifecycle", () => {
     await listJobs(jobsEnv(), { namespace: "capsid", id: id });
     await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "s" });
 
-    // Both the queue's own audit row and the mirrored document's write land.
     const actions = await auditActions(id);
     expect(actions).toContain("job-posted");
     expect(actions).toContain("job-claimed");
@@ -127,7 +118,6 @@ describe("the refusals", () => {
 
     const second = await post({ title: "waiting on the seat" });
     expect(second.ok).toBe(false);
-    // The refusal names the row, so the reader does not have to look it up.
     expect(second.refusal).toMatch(new RegExp(`${first.job!.id} is blocked`));
     expect(second.refusal).toMatch(/queued, claimed or blocked/);
   });
@@ -161,7 +151,6 @@ describe("the refusals", () => {
           .first<{ n: number }>()
       )?.n,
     ).toBe(3);
-    // Completing one leaves the others held.
     expect(
       (await completeJob(jobsEnv(), DRIVER, NOW, a.job!.id, { result_summary: "done" })).ok,
     ).toBe(true);
@@ -213,7 +202,6 @@ describe("the refusals", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.refusal).toMatch(/IMPROVE_SCORE_SECRET is unset/);
-    // Fail closed: nothing queued.
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs").first<{ n: number }>())?.n).toBe(
       0,
     );
@@ -279,13 +267,11 @@ describe("blocked", () => {
     expect(blocked.ok, blocked.refusal).toBe(true);
     const stored = await jobRow(id);
     expect(stored?.status).toBe("blocked");
-    // The command is in the summary verbatim; the Portal shows this string.
     expect(String(stored?.result_summary)).toContain("git push origin feat/thing");
     expect(String(stored?.result_summary)).toContain("deploys the Worker");
   });
 });
 
-// Blocked is a pause: resume lets a job stopped at a gate carry its own outcome.
 describe("resume", () => {
   it("block, resume, complete: the same job carries its own outcome", async () => {
     const id = await driverBlockedJob("block resume complete");

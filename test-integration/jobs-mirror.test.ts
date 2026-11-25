@@ -17,8 +17,6 @@ import {
   TEST_SECRET,
 } from "./jobs-fixture";
 
-// The work queue against a real D1 (jobs.test.ts): the mirrored document, list, the improve_status block and the signature.
-
 beforeEach(resetJobs);
 
 describe("the mirrored document", () => {
@@ -55,10 +53,8 @@ describe("the mirrored document", () => {
     const atDone = await readDoc();
     expect(atDone!.body).toContain("status: **done**");
     expect(atDone!.body).toContain("landed");
-    // A done job's document is closed, so brief stops carrying it as open work.
     expect(atDone!.status).toBe("closed");
 
-    // Every rewrite snapshotted the one it replaced: three writes, two snapshots.
     const versions = await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM document_versions WHERE namespace = 'capsid' AND path = ?1",
     )
@@ -68,7 +64,6 @@ describe("the mirrored document", () => {
   });
 
   it("PLANT: a failed job's document is closed too, because failed is terminal", async () => {
-    // A failed job is as finished as a done one, so its mirror must not stay active.
     const posted = await post({ title: "failed is terminal" });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
@@ -171,13 +166,11 @@ describe("the improve_status jobs block", () => {
     // it with the clock this test passed in.
     expect(summary.done_today).toBe(1);
 
-    // The blocked jobs come back as rows, with the command in them.
     expect(summary.blocked_jobs).toHaveLength(1);
     expect(summary.blocked_jobs[0].id).toBe(stuck.job!.id);
     expect(summary.blocked_jobs[0].title).toBe("stuck");
     expect(String(summary.blocked_jobs[0].waiting_on)).toContain("npm run deploy");
 
-    // The other namespace is not in these numbers.
     const other = await jobsSummary(env.DB, "germomics", NOW);
     expect(other.queued).toBe(1);
     expect(other.blocked_jobs).toEqual([]);
@@ -201,7 +194,6 @@ describe("the improve_status jobs block", () => {
     const status = await capsidStatus(jobsEnv(), "capsid");
     expect(status.namespaces).toHaveLength(1);
     expect(status.namespaces[0].jobs.queued).toBe(1);
-    // Every namespace in the report has one, so a consumer never has to check.
     const all = await capsidStatus(jobsEnv());
     for (const ns of all.namespaces) {
       expect(ns.jobs, `${ns.namespace} has no jobs block`).toBeTruthy();
@@ -230,7 +222,6 @@ describe("the signature", () => {
     expect(stored?.status).toBe("failed");
     expect(String(stored?.result_summary)).toMatch(/does not match its body/);
 
-    // The refusal is audited.
     expect(await auditActions(id)).toContain("job-signature-refused");
   });
 });

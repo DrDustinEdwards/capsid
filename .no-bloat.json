@@ -12,13 +12,13 @@
     }
   ],
   "baseline": {
-    "measured_at": "78d8be9",
+    "measured_at": "ae31a03",
     "knip (Worker)": {},
     "knip (dashboard)": {},
     "jscpd": {
       "clones": 124,
       "lines": 1032,
-      "percentage": 0.71,
+      "percentage": 0.72,
       "unread": 4
     },
     "shared copies": {
@@ -38,16 +38,16 @@
       "explorer/src/pages.mjs": 816,
       "scripts/verify-live.mjs": 671,
       "src/ops-cloudflare.ts": 565,
-      "test/fakes.ts": 1458
+      "test/fakes.ts": 1432
     },
     "tests": {
       "files": 273,
       "cases": 2011
     },
     "comments": {
-      "lines": 8955,
-      "code": 126932,
-      "percentage": 6.6
+      "lines": 7159,
+      "code": 126725,
+      "percentage": 5.35
     }
   }
 }

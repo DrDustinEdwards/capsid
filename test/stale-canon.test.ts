@@ -19,9 +19,6 @@ import {
 } from "../src/stale-canon.ts";
 import { findingClass, owningCheck } from "../src/watcher-checks.ts";
 
-// Stale canon after a merge (improvement item 23, src/stale-canon.ts): the pure matching.
-// Fake data throughout: namespace "sample", repo paths of a made-up app.
-
 const NOW = new Date("2026-10-18T12:00:00Z");
 
 const merge = (
@@ -89,7 +86,6 @@ test("citesPath: a whole path matches, a longer or nested path does not", () => 
   assert.ok(!citesPath("src/admin/shell", "src/admin/shell.ts"));
   // A path with no slash and no dot is a word in prose.
   assert.ok(!citesPath("The Makefile target", "Makefile"));
-  // Regex characters in a path are literal.
   assert.ok(citesPath("app/(admin)/page.tsx is the route", "app/(admin)/page.tsx"));
   assert.ok(!citesPath("app/xadminx/page.tsx", "app/(admin)/page.tsx"));
 });
@@ -203,7 +199,6 @@ test("a document written after the merge is not flagged, so writing it clears th
     ).length,
     1,
   );
-  // The citation gone clears it too.
   assert.equal(
     staleCanonFlags("sample", prs, [doc("core.md", { body: "the shell is gone" })], []).length,
     0,

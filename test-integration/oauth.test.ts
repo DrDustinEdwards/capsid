@@ -2,23 +2,13 @@ import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { cimdClient } from "./cimd-stub";
 
-// The OAuth surface with a real KV under it. The provider is
-// @cloudflare/workers-oauth-provider, wired into src/index.ts; unit tests stop at the
-// handlers on either side of that wiring.
-//
-// Asserted here is what a browser and a client depend on: the discovery documents
-// describe this server, /register takes only the allowlisted Grok, Gemini and ChatGPT
-// callbacks and grants nothing (tightened DCR, site-runtime's registrationRefusal in
-// src/index.ts), the consent dialog renders for a client known by its metadata document
-// with its security headers, and a callback from another browser is refused.
+// The OAuth surface with a real KV under it (the provider wired into src/index.ts): discovery documents, /register taking only the allowlisted callbacks and granting nothing,
+// the consent dialog with its security headers, and a callback from another browser refused.
 
 describe("discovery", () => {
   it("serves protected-resource and authorization-server metadata", async () => {
-    // workers-oauth-provider 1.x serves RFC 9728 metadata for the canonical resource at
-    // its path-suffixed location only, on the canonical host, and every 401 challenge
-    // names that URL. Measured 2026-09-27: 0.10.3 also answered the bare
-    // /.well-known/oauth-protected-resource and any host; 1.1.0 answers 404 to both.
-    // The MCP host is the resource (src/mcp-host.ts, src/index.ts).
+    // workers-oauth-provider 1.x serves RFC 9728 metadata for the canonical resource at its path-suffixed location only, on the canonical host, and every 401 challenge names that URL;
+    // 0.10.3 also answered the bare /.well-known/oauth-protected-resource and any host. The MCP host is the resource (src/mcp-host.ts).
     {
       const origin = "https://mcp.dustinedwards.info";
       const resource = await SELF.fetch(`${origin}/.well-known/oauth-protected-resource/mcp`);
@@ -52,9 +42,7 @@ describe("discovery", () => {
     };
     expect(serverDoc.authorization_endpoint).toContain("/authorize");
     expect(serverDoc.token_endpoint).toContain("/token");
-    // PKCE is the provider default, asserted so it cannot change unnoticed.
     expect(serverDoc.code_challenge_methods_supported).toContain("S256");
-    // CIMD for Claude, Claude Code and ChatGPT, and tightened DCR for Grok and Gemini.
     expect(serverDoc.registration_endpoint).toBe("https://capsid.test/register");
     expect(
       (serverDoc as { client_id_metadata_document_supported?: boolean })
@@ -86,8 +74,7 @@ describe("tightened dynamic client registration", () => {
   });
 
   it("refused registrations never spend the day's 30, so the live gate's probe cannot use it up", async () => {
-    // Run 41245505021 rolled a deploy back when the gate's probes had spent the day's 30. A refusal
-    // counts only toward its own address's five an hour (site-runtime registrationLimited).
+    // A deploy was once rolled back when the gate's probes had spent the day's 30. A refusal counts only toward its own address's five an hour (registrationLimited).
     for (let n = 0; n < 7; n++) {
       for (let i = 0; i < 5; i++) {
         const response = await register(
@@ -132,7 +119,6 @@ describe("tightened dynamic client registration", () => {
 });
 
 describe("authorize", () => {
-  // A client known only by its metadata document (./cimd-stub).
   function registerClient(): string {
     return cimdClient(["https://client.example.com/callback"], "authorize-client");
   }
@@ -197,7 +183,6 @@ describe("F10: the Origin allowlist on /mcp", () => {
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
       });
     expect((await post("https://evil.example")).status).toBe(403);
-    // The innocent direction: both still fail auth, a different guard with a different status.
     expect((await post()).status).not.toBe(403);
     expect((await post("https://claude.ai")).status).not.toBe(403);
   });

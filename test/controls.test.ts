@@ -10,11 +10,6 @@ import { OVERNIGHT_MODE_KEY } from "../src/overnight.ts";
 import { buildAdminServer } from "../src/server.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// The controls tool, capsid_admin_run_controls (src/tools/controls.ts), and the
-// registry behind it (src/controls.ts): the Portal's buttons as one admin tool, with
-// one confirmation shared by both surfaces.
-// The Portal's own routes are test/portal-actions.test.ts and test-integration/.
-
 const EMAIL = "admin@example.com";
 const ACTOR = `access:${EMAIL}`;
 
@@ -132,7 +127,6 @@ test("preview writes nothing and describes the change; perform runs exactly it, 
     assert.equal(kv.store.get(OVERNIGHT_MODE_KEY), "api");
 
     const rows = auditRows(d1);
-    // The mutator's own row names the caller, and the click row names the surface.
     assert.ok(
       rows.some((r) => r.action === "overnight-set" && r.actor === ACTOR),
       JSON.stringify(rows.map((r) => [r.action, r.actor])),
@@ -157,7 +151,6 @@ test("PLANT: a confirmation is spent by its first perform, whichever surface run
     assert.match(again.content[0].text, /already used/);
     assert.equal(d1.recorded.length, rowsAfterFirst, "a replayed confirmation wrote a row");
 
-    // A token the Portal's door previewed is spent by chat's perform, and then by nobody.
     const portal = await previewControl(env, EMAIL, "overnight", MODE.params, new Date(), "portal");
     assert.equal(portal.ok, true);
     if (!portal.ok) return;
@@ -220,8 +213,7 @@ test("a switch without a reason, or a Portal-only control from chat, is refused 
       params: { value: "off", reason: "x", site: "y" },
     });
     assert.equal(stray.isError, true, "a param the control does not take was carried");
-    // Signing the auto-merge policy and setting a site key take a click in the Portal
-    // (security review round 4, finding 1).
+    // Chat cannot sign the auto-merge policy or set a site key: both take a Portal click.
     for (const [control, params] of [
       [
         "sign_policy_change",

@@ -5,8 +5,7 @@ import { completeAccessLogin, startAccessLogin, type LoginFlow } from "../src/ac
 import { fakeEnv, fakeKv } from "./fakes.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// The state cookie that binds a sign-in to the browser that started it
-// (src/access-login.ts). The round trip through Access is test-integration/oauth-round-trip.test.ts.
+// The state cookie binding a sign-in to the browser that started it; the round trip is test-integration/oauth-round-trip.test.ts.
 
 const ORIGIN = "https://capsid.example.com";
 const FLOW: LoginFlow = {

@@ -7,9 +7,7 @@ import { accessRedirectProblem } from "../scripts/access-redirect-lib.mjs";
 // runs in the live CI job with no npm ci and no build step.
 import { ACCESS_SAAS } from "../scripts/bindings.mjs";
 
-// verify-live gate 5: approving the consent form must redirect to the MCP login's Access
-// for SaaS app. The URL shape below is the one production answered after #185 deployed
-// (actions run 36360666932), with this test's own state, nonce and challenge.
+// verify-live gate 5: approving the consent form must redirect to the MCP login's Access for SaaS app, in the URL shape production answered.
 
 const ORIGIN = "https://mcp.dustinedwards.info";
 

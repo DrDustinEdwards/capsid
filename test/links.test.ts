@@ -33,8 +33,6 @@ test("parseLinks rejects a non-array, an unknown type, a missing to_path and inv
   }
 });
 
-// An edge endpoint is a document key, so it is held to the same grammar as a
-// document path.
 test("an edge endpoint is held to the document path grammar", () => {
   const cases: Array<[string, RegExp]> = [
     ["../escape.md", /must not contain '\.\.'/],

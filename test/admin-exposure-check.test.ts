@@ -7,8 +7,7 @@ import {
   seatKeyPath,
 } from "../scripts/admin-exposure-check.ts";
 
-// job_e1973c5bcb69: a driver session must not be able to reach Capsid as the admin.
-// The check reads `claude mcp list`, so these tests feed it that output.
+// A driver session must not be able to reach Capsid as the admin. The check reads `claude mcp list`, so these tests feed it that output.
 
 // The shape of today's output, with the servers that matter (names and URLs are public).
 const TODAY = [

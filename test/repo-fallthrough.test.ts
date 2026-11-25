@@ -12,10 +12,8 @@ import {
 } from "../src/github.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// The repo fallthrough tools, which reach private repos through this Worker's App
-// token. These drive the real handlers against a stubbed GitHub, because the
-// refusals matter most: a tool that deletes the default branch or bills a rerun it
-// did not start is worse than one that is missing.
+// Real handlers against a stubbed GitHub, because the refusals matter most: a tool that deletes the default
+// branch or bills a rerun it did not start is worse than a missing one.
 
 const ONE_REPO = [{ repo: "o/r", label: "primary" }];
 
@@ -41,8 +39,6 @@ const fileBody = (content: string, sha = "s") => ({
   sha,
 });
 const REPO_META = { body: { default_branch: "main" } };
-
-// repo_refs
 
 const BRANCHES = [
   { name: "main", commit: { sha: "m1" } },
@@ -107,8 +103,6 @@ test("repo_refs returns branches, tags and open PRs with ahead/behind and PR lin
   );
 });
 
-// repo_history, every mode
-
 const COMMIT_ROWS = [
   {
     sha: "c1",
@@ -172,7 +166,6 @@ test("repo_history compare mode reports ahead/behind and changed files", async (
       assert.equal(out.files.count, 1);
       assert.equal(out.files.entries[0].path, "src/a.ts");
       assert.equal(out.files.entries[0].additions, 10);
-      // Patch bodies are OFF unless asked for.
       assert.equal(
         out.files.entries[0].patch,
         undefined,
@@ -275,8 +268,6 @@ test("repo_history REFUSES an ambiguous combination rather than picking one", as
   });
 });
 
-// delete_branch, all three refusals
-
 test("delete_branch REFUSES the default branch, and force does not lift it", async () => {
   await withFetch({ "GET /repos/o/r": REPO_META }, async () => {
     await assert.rejects(() => deleteBranch(makeEnv(), "ns", "main"), /is the default branch/);
@@ -331,8 +322,6 @@ test("delete_branch REFUSES a branch that does not exist rather than reporting s
   );
 });
 
-// ci_status: ref and run_id filters, and the log budget
-
 const RUN_ROW = (over: Record<string, unknown> = {}) => ({
   id: 42,
   name: "CI",
@@ -376,7 +365,6 @@ test("ci_status filters a branch name as branch and expands an abbreviated sha b
       );
     },
   );
-  // A full sha costs no extra call.
   await withFetch(
     { "GET /repos/o/r/actions/runs": { body: { workflow_runs: [] } } },
     async (calls) => {
@@ -388,7 +376,6 @@ test("ci_status filters a branch name as branch and expands an abbreviated sha b
       );
     },
   );
-  // A ref that resolves to nothing is a named refusal, not an empty run list.
   await withFetch(
     { "GET /repos/o/r/commits/deadbee": { status: 404, text: "Not Found" } },
     async () => {
@@ -423,9 +410,7 @@ test("ci_status run_id returns just that run, and refuses one that does not exis
   );
 });
 
-// A realistic job log: every line timestamped, groups labeled "Run <command>"
-// rather than by step name, and post-run cleanup at the end. The step name appears
-// nowhere in it.
+// A realistic job log: every line timestamped, groups labeled "Run <command>" rather than by step name, cleanup at the end; the step name appears nowhere.
 const JOB_LOG = [
   "2026-09-06T00:57:25.0Z ##[group]Run actions/checkout@abc",
   "2026-09-06T00:57:26.0Z setup noise nobody asked for",
@@ -486,15 +471,12 @@ test("ci_status finds the failing step BY TIMESTAMP, since its name is not in th
   );
 });
 
-// The two clocks have different precision: the jobs API truncates completed_at to
-// the second, while log lines carry sub-second stamps. An upper bound of `at <= to`
-// cuts the failure output stamped within that last second.
+// jobs API truncates completed_at to the second while log lines carry sub-second stamps, so `at <= to` would cut the failure output stamped in that last second.
 const SUBSECOND_LOG = [
   "2026-09-18T02:43:45.1000000Z setup noise nobody asked for",
   "2026-09-18T02:43:46.8697156Z ##[group]Run npm run verify:live",
   "2026-09-18T02:43:47.4117562Z PASS  1 health + provenance",
   "2026-09-18T02:43:47.6486773Z PASS  1c backup freshness",
-  // Everything below here lands after the truncated second.
   "2026-09-18T02:43:48.2975644Z PASS  2b canary client record",
   "2026-09-18T02:43:48.7756331Z PASS  2 register (fresh client)",
   "2026-09-18T02:43:48.8080189Z [TypeError: fetch failed] { [cause]: Error: read ECONNRESET }",
@@ -528,7 +510,6 @@ test("ci_status keeps the failure that lands AFTER the step's truncated complete
         failed_run: { log?: string; log_region?: string };
       };
       const body = out.failed_run.log ?? "";
-      // The error is in the sub-second tail.
       assert.match(
         body,
         /ECONNRESET/,
@@ -540,7 +521,6 @@ test("ci_status keeps the failure that lands AFTER the step's truncated complete
         /PASS {2}2b canary/,
         "output between the truncated second and the real end was dropped",
       );
-      // Still bounded on both sides.
       assert.equal(/setup noise/.test(body), false, "output from before the step leaked in");
       assert.equal(
         /reap: deleted client/.test(body),
@@ -582,7 +562,6 @@ test("ci_status NAMES the fallback when the step has no usable window", async ()
         /cleanup included/,
         "the fallback did not admit what it returned",
       );
-      // And it really is the whole job, cleanup and all, as it says.
       assert.match(out.failed_run.log ?? "", /orphan processes/);
     },
   );
@@ -617,8 +596,6 @@ test("ci_status caps the failing step's log at the budget, keeping the END", asy
     },
   );
 });
-
-// read_repo_file batch
 
 test("read_repo_file batch returns each file's error INDEPENDENTLY", async () => {
   await withFetch(

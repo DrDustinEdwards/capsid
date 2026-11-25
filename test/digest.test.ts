@@ -6,10 +6,6 @@ import type { OvernightDigest } from "../src/ops-types/views.ts";
 import { selectRows, type Row } from "./fake-sql.ts";
 import { fakeKv } from "./fakes.ts";
 
-// The daily email digest (docs/design/design-merge-pipeline.md section 5; DECIDE 5 of
-// 2026-10-09). It sends nothing until Email Routing is on, once a UTC day after 12:00,
-// and says in the Portal why it is off.
-
 const NOON = new Date("2026-10-11T12:05:00.000Z");
 const H = 3_600_000;
 

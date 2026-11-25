@@ -5,9 +5,6 @@ import { backupSlots, ciDays } from "../src/trends-outside.ts";
 import { lastDays, mondayOf, weekStarts } from "../src/trends-days.ts";
 import { timeMs } from "../src/time.ts";
 
-// The counting rules behind GET /portal/api/trends, on plain values. The SQL runs against
-// a real D1 in test-integration/portal-trends.test.ts.
-
 const NOW = new Date("2026-10-11T04:30:00.000Z"); // a Sunday
 const at = (s: string) => timeMs(s);
 

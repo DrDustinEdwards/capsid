@@ -15,11 +15,9 @@ import {
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// Small defects from the 2026-09-16 source audit, one plant each, kept so a fixed defect
-// cannot return unnoticed when its file is rewritten. The CSP rate-limit defect is
-// planted in test/csp-rate-limit.test.ts, beside the fail-open tests it reverses.
+// Small defects from the 2026-09-16 source audit, one plant each, so a fixed defect cannot return unnoticed when its file is rewritten.
+// The CSP rate-limit defect is planted in test/csp-rate-limit.test.ts.
 
-// Capsid by default; Capsid Admin, which serves the admin tools, when asked.
 async function connect(
   agent: Agent | "read" | "write",
   rows: Record<string, unknown[]> = {},
@@ -44,8 +42,6 @@ const call = async (client: Client, name: string, args: Record<string, unknown> 
 const text = (result: { content: Array<{ text: string }> }) =>
   result.content.map((c) => c.text).join("");
 
-// a handler default the scope table cannot see
-
 // An agent minted narrowed, as the watcher role is (scripts/roles.ts): the tools axis
 // names the tool and one of its actions, which is what opts into the qualifier.
 function narrowedTo(tools: string[]): Agent {
@@ -64,9 +60,8 @@ function narrowedTo(tools: string[]): Agent {
 }
 
 test("PLANT: an agent scoped to capsid_lint_namespace.gather may call it with no mode at all", async () => {
-  // capsid_lint_namespace's handler reads an omitted mode as gather. Unless DEFAULT_ACTION agrees, the
-  // registrar passes no action and allowsToolAction refuses an unknown action on a
-  // narrowed tool, so the caller is refused the one mode it was minted for.
+  // capsid_lint_namespace's handler reads an omitted mode as gather; unless DEFAULT_ACTION agrees, the registrar passes no action and
+  // allowsToolAction refuses it on a narrowed tool, so the caller is refused the one mode it was minted for.
   const { client, close } = await connect(
     narrowedTo(["capsid_lint_namespace", "capsid_lint_namespace.gather"]),
     {
@@ -132,10 +127,8 @@ test("PLANT: the same caller with no mode is still refused finalize", async () =
 });
 
 test("DERIVED: every action tool whose action argument is optional has a table default", async () => {
-  // Derived from the served schemas. An optional action argument is a handler default,
-  // and if the enforcement point does not know it, a narrowed caller is refused the
-  // tool's own default.
-  // Both servers: the admin tools are served by Capsid Admin alone.
+  // Derived from the served schemas on both servers (the admin tools only on Capsid Admin). An optional action argument is a handler default;
+  // if the enforcement point does not know it, a narrowed caller is refused the tool's own default.
   const tools = [];
   for (const surface of ["capsid", "admin"] as const) {
     const { client, close } = await connect(adminAgentForEmail("admin@example.com"), {}, surface);
@@ -165,8 +158,6 @@ test("DERIVED: every action tool whose action argument is optional has a table d
   );
 });
 
-// a null integrity is not a zero
-
 test("PLANT: an unmeasured integrity renders as unmeasured, never as 0%", () => {
   // buildTruthReport returns null when no check had a subject to judge, as for an
   // empty namespace. 0% would claim the worst possible state.
@@ -188,8 +179,6 @@ test("PLANT: an unmeasured integrity renders as unmeasured, never as 0%", () => 
   assert.doesNotMatch(body, INTEGRITY_LINE);
   assert.equal(integrityOf(body), null);
 });
-
-// a report overwrites a report
 
 const TODAY = reportPath(new Date());
 
@@ -272,8 +261,6 @@ test("the same call WITH confirm: true overwrites, snapshotting first", async ()
   }
 });
 
-// the resource listing's bound is on the caller's rows
-
 // Rows a scoped caller may not see, sorted before the ones it may: 'aaa' sorts before
 // 'capsid' in the (namespace, path) order the keyset walk uses.
 const CROWDED = {
@@ -349,8 +336,6 @@ test("THE ADMIN DIRECTION: an unscoped caller still sees every namespace, bounde
     await close();
   }
 });
-
-// closing a pull request deletes a branch
 
 // A write-grant caller holding no flags is refused capsid_close_pr close: driven through a
 // real MCP call, both directions, as a row of PLANTS in test/blast-radius.test.ts.

@@ -3,8 +3,6 @@ import { test } from "node:test";
 import { reviewCaller, reviewScope, REVIEW_OWNER_ID } from "../src/review.ts";
 import { parseVerdict, toolArguments } from "../src/review-answer.ts";
 
-// The gate on who may spend a review: the shared workflows, on a pull request, in a
-// repository Dustin owns. Any of the three missing is a refusal.
 test("reviewCaller admits devkit's review.yml or pr.yml on a pull request in Dustin's repository and nothing else", () => {
   const claims = {
     repository: "DrDustinEdwards/foxing",
@@ -46,9 +44,6 @@ test("reviewCaller admits devkit's review.yml or pr.yml on a pull request in Dus
   );
 });
 
-// The model's answer is held to the check's shape: the tool call's arguments are read in either
-// shape Workers AI answers with, an unknown verdict is no verdict, and a finding on a file the
-// diff does not touch, or of a kind not reported, is dropped.
 test("toolArguments and parseVerdict keep a known verdict and only findings on changed files", () => {
   const changed = new Set(["src/a.ts"]);
   const args = {

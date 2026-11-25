@@ -32,8 +32,6 @@ import {
   TEST_SECRET,
 } from "./jobs-fixture";
 
-// The work queue against a real D1 (jobs.test.ts): edit and park.
-
 beforeEach(resetJobs);
 
 const PLAIN_DRIVER = plain(DRIVER);
@@ -158,7 +156,6 @@ describe("edit", () => {
       edited_at: LATER.toISOString(),
     });
 
-    // The mirror is rewritten with the row, and the edit is audited.
     const doc = await env.DB.prepare(
       "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
     )
@@ -244,7 +241,6 @@ describe("park", () => {
     // The higher-priority job is parked, so the next claim in the namespace takes the other.
     const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
     expect(claimed.job?.id).toBe(otherId);
-    // And a claim that names the parked job is refused.
     const named = await claimJob(jobsEnv(), OTHER, NOW, { id: parkedId });
     expect(named.ok).toBe(false);
     expect((await jobRow(parkedId))?.status).toBe("parked");
@@ -271,7 +267,6 @@ describe("park", () => {
     expect(stored?.result_summary).toBeNull();
     expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
     expect(await auditActions(id)).toEqual(expect.arrayContaining(["job-parked", "job-unparked"]));
-    // A job that is not parked is not unparked.
     expect((await unparkJob(jobsEnv(), SEAT_AGENT, LATER, id)).refusal).toMatch(/not parked/);
   });
 
@@ -294,7 +289,6 @@ describe("park", () => {
     );
     expect((await parkJob(jobsEnv(), SEAT_AGENT, LATER, dueId, WHY, "2026-09-11")).ok).toBe(true);
     expect((await jobRow(dueId))?.parked_until).toBe(DUE);
-    // Not due yet: the tick leaves it.
     expect((await returnDueParked(jobsEnv(), at("2026-09-10T23:59:00.000Z"))).returned).toEqual([]);
 
     const takenId = (await post({ title: "taken while parked" })).job!.id;

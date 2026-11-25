@@ -4,20 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { BACKUP_CRON, TICK_CRON } from "../src/index";
 import { claimJti } from "../src/signed-requests";
 
-// The scheduled handler, all three crons, against real bindings.
-//
-// Several expressions fire in the 09:00 UTC hour and Cloudflare delivers one
-// invocation per expression, so the handler dispatches on `controller.cron`.
-// test/crons.test.ts derives the handler's list and the config's list from
-// each other; this runs them, so a branch that throws on a real binding is visible.
-//
-// Each test asserts: the invocation completes, its work is observable in a real
-// store, and the branches it was not supposed to take left no trace.
+// Several crons fire in the 09:00 UTC hour and Cloudflare delivers one invocation per expression, so the handler dispatches
+// on controller.cron; test/crons.test.ts checks the lists agree, this runs them against real bindings.
 
 const controller = (cron: string) =>
   ({ cron, scheduledTime: Date.now(), noRetry() {} }) as unknown as ScheduledController;
 
-// The run ledger's rows for one task (src/task-runs.ts), oldest first.
 async function ledger(task: string) {
   const { results } = await env.DB.prepare(
     "SELECT outcome, reason FROM task_runs WHERE task = ?1 ORDER BY id",
@@ -33,11 +25,8 @@ async function fire(cron: string) {
   await waitOnExecutionContext(ctx);
 }
 
-// The tick with outbound fetch refused at once. Its watcher reads and the site pulse
-// probe every live site over the network, which took the tick from about 17 s to past
-// this suite's 30 s timeout on a slow runner (run 41222921780); a refused read is what a
-// test without credentials meets anyway, and each step records it. The tick's own
-// handler (the signed-in crawl's Portal pages) is in-process and unaffected.
+// The tick with outbound fetch refused at once: the watcher and site pulse probe every live site over the network and pushed
+// the tick past this suite's 30 s timeout on a slow runner. A refused read is what a test without credentials meets anyway.
 async function fireTickOffline() {
   const offline = vi
     .spyOn(globalThis, "fetch")
@@ -50,7 +39,6 @@ async function fireTickOffline() {
 }
 
 describe("the three cron expressions", () => {
-  // The ledger assertions below count rows, so each test starts from an empty ledger.
   beforeEach(async () => {
     await env.DB.prepare("DELETE FROM task_runs").run();
   });
@@ -109,9 +97,6 @@ describe("the three cron expressions", () => {
   });
 
   it("PLANT: a cron branch that throws stays inside its own waitUntil, and the next cron still runs", async () => {
-    // The backup branch throws on a real invocation: the handler still returns, the
-    // failure is logged under its own name rather than swallowed, and a later cron
-    // runs normally.
     const planted = new Error("planted MEDIA failure");
     const brokenMedia = new Proxy(
       {},
@@ -132,7 +117,6 @@ describe("the three cron expressions", () => {
         lines.some((l) => l.includes("BACKUP_CRON_THREW") && l.includes("planted MEDIA failure")),
         lines.join(" | "),
       ).toBe(true);
-      // And the run ledger says so, where the Portal reads it.
       expect(await ledger("backup")).toEqual([
         { outcome: "threw", reason: "planted MEDIA failure" },
       ]);

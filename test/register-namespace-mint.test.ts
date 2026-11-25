@@ -6,10 +6,8 @@ import { buildAdminServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// capsid_admin_manage_namespaces action "register" returns the mint instruction and
-// does not mint. Minting is gated on agent.admin so that an agent cannot widen itself;
-// registering is admin-only because the mapping it edits is the authorization
-// boundary, but it still must not mint.
+// register is admin-only because the mapping it edits is the authorization boundary, and it must still not
+// mint; minting is gated on agent.admin so an agent cannot widen itself.
 
 test("capsid_admin_manage_namespaces register registers, mints nothing, and returns the mint instruction", async () => {
   const d1 = fakeD1({});

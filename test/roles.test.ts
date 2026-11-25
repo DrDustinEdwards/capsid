@@ -14,10 +14,8 @@ import { buildServer } from "../src/server.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// Named roles. "Post a job and nothing else" is an action inside one tool, so a tools
-// entry may be qualified, `capsid_work_jobs.post`, and the registrar asks the enforcement
-// point about the qualified name where the action is known, the shape the one enforcement
-// point rule permits for `capsid_work_jobs` and `capsid_lint_namespace`.
+// "Post a job and nothing else" is an action inside one tool, so a tools entry may be qualified
+// (`capsid_work_jobs.post`) and the registrar checks the qualified name.
 
 function scopedAgent(mutate: (scopes: ReturnType<typeof defaultScopes>) => void = () => {}): Agent {
   const scopes = defaultScopes(["capsid"]);
@@ -33,8 +31,6 @@ function scopedAgent(mutate: (scopes: ReturnType<typeof defaultScopes>) => void 
     row: null,
   };
 }
-
-// the qualified tool entry, as a pure rule
 
 test("a wildcard axis and an unqualified tool entry allow every action", () => {
   assert.equal(allowsToolAction("*", "capsid_work_jobs", "post"), true);
@@ -76,8 +72,6 @@ test("the qualified name is what a scopes column round-trips, so the narrowing s
   const back = parseScopes(serializeScopes(scopes));
   assert.deepEqual(back.tools, ["capsid_work_jobs", "capsid_work_jobs.post"]);
 });
-
-// the same rule, at the one enforcement point
 
 test("checkScope refuses an action the tools axis narrowed away, and names the action", () => {
   const watcher = scopedAgent((s) => {
@@ -144,8 +138,6 @@ test("the jobs tool asks the enforcement point about the qualified name", async 
     `the narrowing refused the one action it allows: ${listed}`,
   );
 });
-
-// the roles
 
 const byName = (name: string) => {
   const role = ROLES.find((r: (typeof ROLES)[number]) => r.name === name);

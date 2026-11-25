@@ -18,14 +18,12 @@ import { defaultScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { MAX_RESUME_NOTE, MAX_TITLE } from "../src/limits.ts";
 
-// The work queue's vocabulary, derived from the migration files, so the statuses the
-// code believes in and the statuses the index enforces cannot drift apart. The
-// lifecycle against a real D1 is test-integration/jobs.test.ts.
+// Derived from the migration files, so the statuses the code believes in and the statuses the index
+// enforces cannot drift apart.
 
 const MIGRATIONS_DIR = join(import.meta.dirname, "..", "migrations");
 
-// The queue's transitions: src/jobs.ts and the modules it re-exports. sourceFile
-// throws on a missing name, so a renamed module fails here rather than going unscanned.
+// sourceFile throws on a missing name, so a renamed module fails here rather than going unscanned.
 const JOB_MODULES = [
   "jobs.ts",
   "jobs-claim.ts",
@@ -43,9 +41,8 @@ const JOB_MODULES = [
 ];
 const jobModulesSource = () => JOB_MODULES.map((name) => sourceFile(name)).join("\n");
 
-/** Every definition of the jobs_open_title index across migrations/, in the order
- *  wrangler applies them. The last one is the index the database ends up with, so
- *  this reads the directory rather than one file. */
+/** Every jobs_open_title definition across migrations/ in apply order; the last is the index the
+ *  database ends up with. */
 function openTitleIndexClauses(): { file: string; statuses: string[] }[] {
   const found: { file: string; statuses: string[] }[] = [];
   for (const file of readdirSync(MIGRATIONS_DIR)
@@ -176,13 +173,9 @@ test("the queue's writes go through the shared document statements, not a second
   );
 });
 
-// A swallowed parameter tag is a malformed call. A `complete` that closes a parameter
-// tag inside a value sends `result_ref` and `evidence` as literal text in
-// `result_summary`. The outcome row cannot be rewritten afterwards, so the only place
-// to catch this is before the write.
-//
-// The string below is a real stored summary tail, read back from the database rather
-// than reconstructed.
+// A `complete` that closes a parameter tag inside a value sends result_ref and evidence as literal text
+// in result_summary, and the outcome row cannot be rewritten, so catch it before the write. The string
+// below is a real stored summary tail.
 const SWALLOWED_REAL =
   "up.test.ts derives from migrations/ both ways.</result_summary>\n" +
   "<result_ref>https://github.com/DrDustinEdwards/capsid-mcp/pull/21</result_ref>\n" +
@@ -240,9 +233,8 @@ test("every parameter name the guard knows is one the tool serves, and the note 
   assert.ok(MAX_RESUME_NOTE > MAX_TITLE * 10, "the note is not bounded well above the reason");
 });
 
-// The three call sites, driven: each entry point asks the detector, and nothing reaches
-// the database. fakeEnv has no DB, so a handler that stopped refusing would throw on
-// the missing binding rather than pass quietly.
+// The three call sites, driven: each entry point asks the detector and nothing reaches the database
+// (fakeEnv has no DB, so a handler that stopped refusing would throw).
 test("PLANT: complete, fail and post all refuse a swallowed tag, and write nothing", async () => {
   const agent = grantAgent("write", "agent:capsid-driver");
   const now = new Date("2026-09-11T22:00:00.000Z");
@@ -269,9 +261,6 @@ test("PLANT: complete, fail and post all refuse a swallowed tag, and write nothi
   assert.equal(posted.ok, false, "post accepted a body with a swallowed parameter tag");
   assert.match(posted.refusal ?? "", /^body contains the literal text '<\/result_ref>'\./);
 });
-
-// The innocent direction, a clean summary driven to a completed row, is in
-// test-integration/jobs.test.ts ("the tag guard is not a wall").
 
 test("a jobs refusal comes back with isError set, and a caller still reads the refusal", async () => {
   // A client keying on isError must not read a refusal as success.
@@ -304,10 +293,8 @@ test("a jobs refusal comes back with isError set, and a caller still reads the r
   }
 });
 
-// Marking a job failed checks that the row did not move. The UPDATE rides in one batch
-// with its records behind requireJobUnchanged, so this fake aborts any batch that opens
-// with that guard, as D1 does when the row no longer matches what was read.
-// `attempted` is every batch sent, `committed` every batch that landed.
+// Marking a job failed checks that the row did not move: the UPDATE rides in one batch behind
+// requireJobUnchanged, so this fake aborts a batch opening with that guard, as D1 does.
 function movedJobDb(before: Record<string, unknown>, after: Record<string, unknown>) {
   const attempted: string[][] = [];
   const committed: string[][] = [];
@@ -342,7 +329,6 @@ function movedJobDb(before: Record<string, unknown>, after: Record<string, unkno
   return { db: db as unknown as D1Database, attempted, committed };
 }
 
-// The one batch markJobFailed sends: the guard, then the UPDATE, then its records.
 function assertGuardedFailBatch(attempted: string[][]) {
   assert.equal(attempted.length, 1, "the job was never offered the failed UPDATE");
   assert.match(
@@ -468,7 +454,6 @@ test("PLANT: post into a namespace that is not registered is refused and writes 
     "a refused post wrote a row",
   );
 
-  // The innocent direction: a registered namespace still posts.
   const posted = await postJob(env, agent, new Date("2026-09-25T09:00:00Z"), {
     namespace: "capsid",
     title: "a job",

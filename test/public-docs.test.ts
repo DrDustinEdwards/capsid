@@ -3,8 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-// The public docs describe a private store in a public MIT repo. No secret, no key,
-// no hash and no infrastructure identifier may appear in any file under docs/.
+// The docs describe a private store in a public repo: no secret, key, hash or infrastructure identifier may appear.
 
 const ROOT = join(import.meta.dirname, "..");
 const DOCS = join(ROOT, "docs");
@@ -42,7 +41,6 @@ test("PLANT: no public doc carries a secret, a key, a credential or an infrastru
       /\b[0-9a-f]{32}\b/,
       `docs/${file} contains something shaped like a Cloudflare resource id`,
     );
-    // A UUID, which is what a D1 database id looks like.
     assert.doesNotMatch(
       text,
       /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/,

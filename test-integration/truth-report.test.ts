@@ -53,13 +53,11 @@ describe("lint mode report", () => {
       expect(stored!.type).toBe("reference");
       expect(integrityOf(stored!.body)).toBe(payload.integrity);
 
-      // documents_fts is external-content, and the trigger keeps it in step.
       const indexed = await env.DB.prepare(
         "SELECT COUNT(*) AS n FROM documents_fts WHERE documents_fts MATCH 'integrity'",
       ).first<{ n: number }>();
       expect(indexed?.n).toBeGreaterThan(0);
 
-      // And the audit row landed in the same batch (snapshot invariant, test/write-invariants.test.ts).
       const audit = await env.DB.prepare(
         "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'lint_report' AND namespace = 'capsid'",
       ).first<{ n: number }>();
@@ -72,8 +70,7 @@ describe("lint mode report", () => {
   it("PLANT: a second run the same day snapshots the first rather than accumulating", async () => {
     const client = await connect();
     try {
-      // The test above wrote today's report, so this is an overwrite, confirmed the
-      // way `write` confirms one: refused first, then taken with confirm: true.
+      // An overwrite, confirmed as `write` confirms one: refused first, then taken with confirm: true.
       const unconfirmed = await callLint(client, { namespace: "capsid", mode: "report" });
       expect(unconfirmed.isError, "a report overwrote today's report without asking").toBe(true);
       expect(unconfirmed.text).toMatch(/confirmation required/);
@@ -86,7 +83,6 @@ describe("lint mode report", () => {
       ).first<{ n: number }>();
       expect(reports?.n, "one document per namespace per day, not one per invocation").toBe(1);
 
-      // The overwrite went through document_versions (the snapshot rule).
       const versions = await env.DB.prepare(
         "SELECT COUNT(*) AS n FROM document_versions WHERE namespace = 'capsid' AND path LIKE 'reports/lint-%'",
       ).first<{ n: number }>();

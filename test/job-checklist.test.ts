@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { checklistItems, checklistWarning, unchangedItems } from "../src/job-checklist.ts";
 
-// The DONE WHEN checklist: which items name a path, and which of those no pull request changed.
-
 const BODY = [
   "GOAL: fix it.",
   "DO:",

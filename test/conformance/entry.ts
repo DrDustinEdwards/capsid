@@ -1,12 +1,5 @@
-// Test-only entry for `npm run check:conformance` (devkit-conformance, .conformance.json).
-// NEVER DEPLOYED: the deploy target is src/index.ts, and this file is reached only by
-// passing it positionally to `wrangler dev` with test/conformance/wrangler.conformance.jsonc.
-//
-// The official suite cannot complete an OAuth sign-in, so this mounts the REAL protocol
-// layer (src/mcp-handler.ts serveMcp) and the REAL tools (src/server.ts buildServer) with
-// the door's token check replaced by a fixed caller that holds the read grant alone, over
-// an empty local D1, so a write is refused and a read answers empty. The door is certified
-// separately: the auth half runs src/index.ts itself.
+// Test-only entry for `npm run check:conformance`, NEVER DEPLOYED (reached only positionally via `wrangler dev` with wrangler.conformance.jsonc). The suite cannot complete an OAuth sign-in, so this mounts the real
+// protocol layer and tools with the token check replaced by a fixed read-grant caller over an empty D1; the auth half runs src/index.ts itself.
 
 import { grantAgent } from "../../src/agents";
 import type { Env } from "../../src/env";

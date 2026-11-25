@@ -13,10 +13,8 @@ import { agentSummaries } from "../src/status.ts";
 import { d1, migratedDb } from "./sqlite-d1.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// Revoked agents are archived in place and keep their history (job_24e460427d6c). The
-// move is SQL across five tables, so these run every migration with Node's SQLite and
-// drive the real statements through a small D1 shape, rather than the D1 fake, which
-// models no subquery or UNION.
+// Revoked agents are archived in place and keep their history. The move is SQL across five tables, so these drive the real statements
+// through Node's SQLite, not the D1 fake, which models no subquery or UNION.
 
 const NOW = new Date("2026-10-10T12:00:00Z");
 const ACTOR = "agent:watcher";
@@ -103,7 +101,6 @@ test("a revoked agent moves 7 days after revocation with its counts and an audit
     audit.map((a) => [a.actor, a.path]),
     [[ACTOR, "old"]],
   );
-  // A second pass has nothing left to move.
   assert.deepEqual(await archiveRevokedAgents(db, ACTOR, NOW), { archived: [], skipped: [] });
 });
 

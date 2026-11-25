@@ -1,12 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 
-// The source walk, shared by every scanner. Scanning one file would make a guard's
-// scope an assumption about where the next offender will be written, and would
-// blind the guards when a tool moves to another module.
-//
-// Everything reads through here so there is one definition of "the source", one
-// vacuity guard, and one place to change when src/ grows a subdirectory.
+// The source walk shared by every scanner: one definition of "the source" and one vacuity guard, so a guard's scope is
+// not an assumption about where the next offender is written.
 
 const SRC_DIR = join(import.meta.dirname, "..", "src");
 
@@ -15,15 +11,10 @@ export interface SourceFile {
   text: string;
 }
 
-// A floor, not a count: a walk that returns nothing fails loudly instead of making
-// every assertion downstream vacuously true. It is well below the real file count so
-// adding or removing a module is not a test edit.
+// A floor, not a count: an empty walk fails loudly instead of making every downstream assertion vacuously true.
 const MIN_SOURCE_FILES = 10;
 
-// Recursive, so a tool moved into a subdirectory cannot hide from the guards that
-// read through here. The name is the path relative to the root
-// with forward slashes, so a top-level file keeps its basename (env.ts) and a
-// nested one is addressable (tools/documents.ts).
+// Recursive, so a tool moved into a subdirectory cannot hide; names are root-relative with forward slashes (tools/documents.ts).
 function collectSourceFiles(root: string): SourceFile[] {
   const out: SourceFile[] = [];
   const walk = (dir: string) => {
@@ -58,16 +49,13 @@ export function sourceFiles(): SourceFile[] {
   return files;
 }
 
-// Every source file concatenated, with a per-file banner so a match can be traced
-// back. Use this for counts and presence checks; use sourceFiles() when a finding
-// has to name the file it came from.
+// Every source file concatenated with a per-file banner; use sourceFiles() when a finding has to name its file.
 export function allSourceText(): string {
   return sourceFiles()
     .map((f) => `// ===== ${f.name} =====\n${f.text}`)
     .join("\n");
 }
 
-// The text of one named file, for a scanner that is about one module.
 export function sourceFile(name: string): string {
   const found = sourceFiles().find((f) => f.name === name);
   if (!found) throw new Error(`src/${name} not found by the source walk`);
@@ -79,10 +67,7 @@ export interface SourceExport {
   name: string;
 }
 
-// Every exported binding in src/, by name. Functions, consts and classes; types
-// and interfaces are deliberately excluded, because a type has no runtime caller
-// to find and removing one is a compile error rather than a silent hole. Read by
-// test/dead-exports.test.ts and test/lint/dead-exports.lint.ts.
+// Every exported binding in src/, by name; types are excluded because a type has no runtime caller and removing one is a compile error.
 export function exportsOfSrc(): SourceExport[] {
   const out: SourceExport[] = [];
   for (const file of sourceFiles()) {
@@ -101,10 +86,7 @@ export interface ToolBlock {
   file: string;
 }
 
-// Each registerTool call, from its name to the start of the next registration.
-// Scanned per FILE rather than over a concatenation of all of src/, so a block
-// cannot run past the end of its own module and swallow the next file's text, and
-// so a failure names the file the offending tool lives in.
+// Each registerTool call, scanned per FILE so a block cannot run into the next module's text and a failure names its file.
 export function toolBlocks(): ToolBlock[] {
   const marker = "server.registerTool(";
   const blocks: ToolBlock[] = [];
@@ -130,11 +112,8 @@ export function toolBlocks(): ToolBlock[] {
   return blocks;
 }
 
-// Each operation's definition (src/tools/operations.ts), from its name to the start of
-// the next one in the same file. The served tools are one-line registrations in
-// src/tools/surface.ts that dispatch to these, so a property of what a handler DOES (its
-// SQL, its GitHub calls, its scope checks) is read here, and attributed to the tools
-// and actions that run it with servedAs().
+// Each operation's definition (src/tools/operations.ts). The served tools dispatch to these, so what a handler DOES is
+// read here and attributed to its tools and actions with servedAs().
 export function operationBlocks(): ToolBlock[] {
   const marker = "ctx.ops.define(";
   const blocks: ToolBlock[] = [];

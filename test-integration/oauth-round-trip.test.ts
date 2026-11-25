@@ -5,20 +5,14 @@ import { forgetKeys } from "@dustinedwards/site-runtime/access-login";
 import { stubAccess } from "@dustinedwards/devkit/access";
 import { cimdClient, cimdResponse } from "./cimd-stub";
 
-// THE WHOLE OAUTH ROUND TRIP, through the real provider in workerd: a CIMD client, consent,
-// the Access for SaaS sign-in (stubbed, with a real signed ID token), the code exchange with PKCE, an MCP call
-// with the issued token, and a refresh. workers-oauth-provider 1.0 binds every token to
-// the canonical resource and requires the exchange's redirect_uri to equal the
-// authorization request's, so this is the test that says an upgrade changed nothing a
-// client sees. It runs on the canonical host, the one tokens are bound to.
+// The whole OAuth round trip through the real provider in workerd: CIMD client, consent, stubbed Access sign-in with a real signed ID token, PKCE exchange, MCP call, refresh.
+// workers-oauth-provider 1.0 binds tokens to the canonical resource and requires matching redirect_uris, so an upgrade changing what a client sees fails here.
 
-// The MCP endpoint's host (src/mcp-host.ts): the round trip runs through its provider.
 const ORIGIN = "https://mcp.dustinedwards.info";
 const REDIRECT = "https://client.example.com/callback";
 // RFC 7636 appendix B: this verifier's S256 challenge is E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM.
 const VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 const CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
-// The Access for SaaS application the test bindings in vitest.config.ts name.
 const ISSUER = `${env.ACCESS_TEAM_DOMAIN}/cdn-cgi/access/sso/oidc/${env.ACCESS_SAAS_CLIENT_ID}`;
 
 afterEach(() => {
@@ -78,7 +72,6 @@ async function mcpInitialize(accessToken: string): Promise<Response> {
   );
 }
 
-// Runs the flow up to the code, as `login`. Returns the client id and the code.
 async function authorize(
   email: string,
   extra: Record<string, unknown> = {},
@@ -107,8 +100,6 @@ async function authorize(
   const dialog = await call(new Request(url));
   expect(dialog.status).toBe(200);
   const html = await dialog.text();
-  // The consent form as site-runtime's loginHandler renders it: the provider's one-time
-  // handle, and the write box ticked unless this sign-in is read-only.
   const form = new URLSearchParams({ handle: hidden(html, "handle"), decision: "approve" });
   if (write) form.set("allow_write", "1");
   const approved = await call(
@@ -159,8 +150,6 @@ async function authorize(
 describe("the OAuth round trip", () => {
   it("the admin gets a code, a token that opens /mcp, and a refresh that does too", async () => {
     const { clientId, code, callback, tokenBodies, signIn } = await authorize(env.ADMIN_EMAIL!);
-    // The browser went to the Access SaaS app, with PKCE and a nonce, and the callback
-    // exchanged the code with the verifier behind that challenge.
     expect(`${signIn.origin}${signIn.pathname}`).toBe(`${ISSUER}/authorization`);
     expect(signIn.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/callback`);
     expect(signIn.searchParams.get("code_challenge_method")).toBe("S256");
@@ -255,9 +244,7 @@ describe("the OAuth round trip", () => {
   });
 
   it("PLANT: a token issued for this server is refused by another resource (RFC 8707 audience)", async () => {
-    // Rule 12 of capsid/rulings/mcp-2026-10-10.md: reject any token not issued for this
-    // server. Another host on the same Worker reaches the same OAUTH_KV, so the token is
-    // found there and refused only for its audience.
+    // Reject any token not issued for this server: another host on the same Worker reaches the same OAUTH_KV, so the token is found there and refused only for its audience.
     const { clientId, code } = await authorize(env.ADMIN_EMAIL!);
     const exchanged = await tokenRequest({
       grant_type: "authorization_code",
@@ -353,7 +340,7 @@ describe("the OAuth round trip", () => {
       capabilities: {},
       clientInfo: { name: "read-only", version: "1.0.0" },
     });
-    // T7: a write-only tool is not served to a read grant, so a call to it is an unknown tool and never runs.
+    // A write-only tool is not served to a read grant, so a call to it is an unknown tool and never runs.
     const written = await rpc(2, "tools/call", {
       name: "capsid_write_doc",
       arguments: { namespace: "sample", path: "notes/x.md", body: "x" },
@@ -361,7 +348,6 @@ describe("the OAuth round trip", () => {
     expect(await written.text(), "a read-only grant reached the write tool").toMatch(
       /capsid_write_doc not found/,
     );
-    // A served tool's write action still steps up.
     const posted = await rpc(3, "tools/call", {
       name: "capsid_work_jobs",
       arguments: { action: "post", namespace: "sample", title: "x", body: "x" },
@@ -385,7 +371,7 @@ describe("the OAuth round trip", () => {
     expect(response.headers.get("WWW-Authenticate") ?? "").toMatch(/resource_metadata=/);
     expect(response.headers.get("WWW-Authenticate") ?? "").toMatch(/scope="capsid\.read"/);
     expect(response.headers.get("WWW-Authenticate") ?? "").not.toMatch(/error=/);
-    // The challenge asks for the least scope; the metadata lists every scope (area 11, A1).
+    // The challenge asks for the least scope; the metadata lists every scope.
     const metadata = (await (
       await call(new Request(`${ORIGIN}/.well-known/oauth-protected-resource/mcp`))
     ).json()) as { scopes_supported?: string[] };

@@ -4,10 +4,7 @@ import { SCOPE_FLAGS, defaultScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents.ts";
 import { missingForJob, serializeRequiredScopes } from "../src/jobs-schema.ts";
 
-// The queue asks what a driver can do before handing it the work: a job's required
-// scopes are checked at the claim, not discovered when the lease expires. The required
-// flag, the other namespace and the corrupt requirement run against a real D1 in
-// test-integration/job-required-scopes.test.ts.
+// A job's required scopes are checked at the claim, not discovered when the lease expires.
 
 function driver(mutate: (scopes: ReturnType<typeof defaultScopes>) => void = () => {}): Agent {
   const scopes = defaultScopes(["capsid"]);

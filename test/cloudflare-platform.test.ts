@@ -4,13 +4,9 @@ import { test } from "node:test";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Cloudflare platform pins (capsid/references/cloudflare-changes-2026-09.md). Each
-// block guards one platform deadline or contract, so a regression is a failing
-// test rather than an outage on the deadline day.
+// Each block guards one Cloudflare platform deadline or contract, so a regression is a failing test rather than an outage.
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-
-// compatibility date and toolchain pins
 
 test("wrangler.jsonc.example and bindings.mjs agree on the compatibility date", () => {
   const example = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");
@@ -31,8 +27,6 @@ test("wrangler.jsonc.example and bindings.mjs agree on the compatibility date", 
     `compatibility date ${inExample[1]} fell behind the nodejs_compat default threshold`,
   );
 });
-
-// the per-invocation CPU ceiling
 
 test("wrangler.jsonc.example and bindings.mjs agree on limits.cpu_ms", () => {
   // CI writes wrangler.jsonc from the example; the scripts read bindings.mjs. Two

@@ -5,10 +5,8 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { type DocRow, fakeD1, fakeEnv } from "./fakes.ts";
 
-// Closure affects only the brief's task list (capsid_start_session). The lint loop
-// must not filter on it, because the archive/ prefix is the only thing that takes a
-// document out of memory. Driven through the tools: a closed document is still in
-// capsid_lint_namespace gather, and capsid_start_session leaves a closed task out.
+// Closure affects only the brief's task list. The lint loop must not filter on it, because only
+// the archive/ prefix takes a document out of memory.
 async function toolOut(name: string, documents: DocRow[]) {
   const fake = fakeD1({ documents, namespaces: [{ namespace: "capsid", repos: "[]" }] });
   const server = buildServer(fakeEnv({ DB: fake.db }), "write", "test:doc-meta");

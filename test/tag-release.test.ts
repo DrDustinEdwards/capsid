@@ -7,10 +7,8 @@ import { changelogSection, tagRefusal, tagRelease } from "../src/github/releases
 import { buildServer } from "../src/server.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
 
-// Tag and release (src/github/releases.ts), served as capsid_close_pr actions tag and
-// release. A release takes its notes from the CHANGELOG section that names the tag, and
-// one with no section is refused before any ref is created. Both go through guardedWrite
-// and need can_merge, because a tag or a release can start a deploy as a merge can.
+// A tag or a release can start a deploy as a merge can, so both need can_merge; a release with no CHANGELOG section
+// is refused before any ref is created.
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const REPOS = [{ repo: "o/r", label: "primary" }];
@@ -43,7 +41,6 @@ const CHANGELOG = [
   "- An older line that must not appear.",
 ].join("\n");
 
-// GitHub, with the default branch, its head, the CHANGELOG at that head, and the two writes.
 function github(
   changelog: string | null,
   extra: Record<string, Route> = {},
@@ -65,8 +62,6 @@ function github(
     ...extra,
   };
 }
-
-// changelogSection
 
 test("changelogSection finds the section: bracketed or bare heading, with or without the v, lower-level headings kept, a higher one ends it, a pre-release or build tag matched literally", () => {
   const section = changelogSection(CHANGELOG, "v1.4.0");
@@ -96,12 +91,9 @@ test("PLANT: changelogSection answers null for a missing version, a prefix of an
   // 1.4.0 must not match a heading for 1.4.01 or 1.4.0.1.
   assert.equal(changelogSection("## [1.4.01]\n- not this one", "v1.4.0"), null);
   assert.equal(changelogSection("## 1.4.0.1\n- not this one", "v1.4.0"), null);
-  // The dot is literal: 1x4x0 is not 1.4.0.
   assert.equal(changelogSection("## 1x4x0\n- not this one", "v1.4.0"), null);
   assert.equal(changelogSection("## [1.4.0]\n\n## [1.3.0]\n- older", "v1.4.0"), null);
 });
-
-// tagRefusal
 
 test("PLANT: tagRefusal refuses names that are not release versions, and accepts real ones", () => {
   for (const bad of [
@@ -119,13 +111,10 @@ test("PLANT: tagRefusal refuses names that are not release versions, and accepts
   ]) {
     assert.match(tagRefusal(bad) ?? "", /is not a release tag/, `'${bad}' was accepted as a tag`);
   }
-  // THE INNOCENT DIRECTION: plain, v-prefixed, pre-release and build tags pass.
   for (const good of ["v1.4.0", "1.4.0", "v1.4.0-rc.1", "1.4.0+build.7", "v10.20.30"]) {
     assert.equal(tagRefusal(good), null, `'${good}' was refused`);
   }
 });
-
-// tagRelease
 
 test("PLANT: a release whose CHANGELOG has no section for the tag is refused before any ref is created", async () => {
   const { env: e } = env();
@@ -277,8 +266,6 @@ test("an existing tag (422) is refused, saying nothing was changed, and no relea
     },
   );
 });
-
-// Served: capsid_close_pr actions tag and release, through guardedWrite.
 
 function driver(grant: ScopeFlag[] = []): Agent {
   const scopes = defaultScopes(["sample"]);

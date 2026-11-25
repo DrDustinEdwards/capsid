@@ -9,9 +9,7 @@ import {
   type SiteInput,
 } from "../src/ops-sites";
 
-// The Portal's site configuration against a real D1 with every migration applied
-// (migrations/0022_ops_sites.sql, 0051's health routes, 0052's and 0056's further hosts): the seed, the schema's own
-// checks, and the three guarded writes with their audit rows.
+// The Portal's site configuration against a real D1 with every migration applied: the seed, the schema's own CHECKs, and the three guarded writes with their audit rows.
 
 const ACTOR = "access:admin@example.com";
 
@@ -127,7 +125,6 @@ describe("the writes", () => {
     expect(moved.ok, "the origin moved with the token still set").toBe(false);
     expect(moved.ok ? "" : moved.refusal).toMatch(/cannot change while it names an operator token/);
     expect(await auditRows()).toEqual([]);
-    // Clearing the token in the same edit lets the origin move.
     const cleared = await editSite(env.DB, ACTOR, { ...away, operator: null }, 2);
     expect(cleared.ok, cleared.ok ? "" : cleared.refusal).toBe(true);
     expect(cleared.ok && cleared.site.operator).toBeNull();
@@ -142,7 +139,6 @@ describe("the writes", () => {
     const params = JSON.parse(audit?.params ?? "{}");
     expect(params.before.health_path).toBe("/health");
     expect(params.after.health_path).toBe("/healthz");
-    // The same revision a second time is stale now.
     expect((await editSite(env.DB, ACTOR, input({ health_path: "/other" }), 1)).ok).toBe(false);
   });
 

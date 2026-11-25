@@ -6,11 +6,8 @@ import type { Env } from "../src/env";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../src/ops-types/claims";
 import { PORTAL_CLAIMS_PATH } from "../src/portal-claims";
 
-// GET /portal/api/claims through the whole Worker against a real D1: the route reads
-// through the same readers as the claims tool (src/job-claims-read.ts), behind
-// portalGate. The gate itself, a bearer's 403 and an anonymous caller's sign-in, is
-// driven for every Portal route in test-integration/route-gates.test.ts. The tables
-// are append-only, so the rows here live under their own namespace and job id.
+// The tables are append-only, so rows here live under their own namespace and job id; the gate is driven for every
+// Portal route in test-integration/route-gates.test.ts.
 
 const ORIGIN = "https://capsid.test";
 const SECRET = "integration-portal-claims-key";

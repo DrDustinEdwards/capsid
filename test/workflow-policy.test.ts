@@ -3,14 +3,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-// The workflow policy: every text scan of .github/workflows/, with one parser.
-//
-// Every scan reaches a job or a step through jobs(), jobNamed() and stepsOf(),
-// which fail when the thing they look for is missing, so a renamed step cannot leave
-// a scan reading an empty string and passing on nothing.
-//
-// Nothing offline can run these workflows, so the policy is checked as text. This
-// reads only this repository's workflows.
+// Nothing offline can run these workflows, so the policy is checked as text through jobs(), jobNamed() and stepsOf(),
+// which fail when what they look for is missing, so a renamed step cannot leave a scan passing on nothing.
 
 const ROOT = join(import.meta.dirname, "..");
 const WORKFLOWS = join(ROOT, ".github", "workflows");
@@ -31,8 +25,7 @@ function workflowFiles(): Array<{ name: string; text: string }> {
     }));
 }
 
-// Jobs are the two-space keys under `jobs:`. Parsed by indentation because the suite
-// takes no dependencies.
+// Parsed by indentation because the suite takes no dependencies.
 function jobs(): Job[] {
   const found: Job[] = [];
   for (const { name, text } of workflowFiles()) {
@@ -60,7 +53,6 @@ function jobNamed(workflow: string, id: string): Job {
   return job;
 }
 
-// Steps are the six-space list items of a job.
 function stepsOf(job: Job): string[][] {
   const steps: string[][] = [];
   let current: string[] | null = null;
@@ -78,12 +70,8 @@ function stepsOf(job: Job): string[][] {
 
 const stepName = (step: string[]): string => /^ {6}- name:\s*(.+)$/.exec(step[0])?.[1].trim() ?? "";
 
-// Supply chain: pins and timeouts.
-//
-//   pin      a tag is a moving pointer its owner can repoint at any time, and these
-//            jobs sit beside jobs holding Cloudflare and backup credentials.
-//   timeout  a job with no timeout-minutes inherits GitHub's 360-minute default, so
-//            a hung step burns the Actions budget and holds the concurrency group.
+// A tag is a moving pointer its owner can repoint, and a job with no timeout-minutes inherits GitHub's 360-minute default;
+// both matter beside jobs holding Cloudflare and backup credentials.
 
 test("every third-party action is pinned by commit sha, never by tag", () => {
   const offenders: string[] = [];
@@ -113,9 +101,7 @@ test("every third-party action is pinned by commit sha, never by tag", () => {
   );
 });
 
-// A job that calls a reusable workflow (a `uses:` of its own) cannot carry
-// timeout-minutes: GitHub refuses the key there, and the called workflow's jobs declare
-// their own (devkit's ai-author.yml and no-bloat.yml do).
+// A job that calls a reusable workflow cannot carry timeout-minutes (GitHub refuses the key there); the called workflow's jobs declare their own.
 const callsWorkflow = (job: Job): boolean =>
   job.lines.some((l) => /^ {4}uses:\s*\S+\/\.github\/workflows\/\S+\.ya?ml@/.test(l));
 
@@ -131,12 +117,8 @@ test("every job declares timeout-minutes", () => {
   );
 });
 
-// The lints still run in CI.
-//
-// The checks in test/lint/ are not in `npm test`; ci.yml is the only thing that runs
-// them. The step is not on the auto-merge policy's required list, so it must come
-// before the required Tests step: its failure skips Tests, and a skipped required
-// step refuses the merge.
+// The lints are not in `npm test`; ci.yml runs them before the required Tests step, because the lint step is not on the
+// auto-merge required list and a skipped required step refuses the merge.
 
 test("the checks job runs npm run lint and npm run lint:repo, before the Tests step", () => {
   const steps = stepsOf(jobNamed("ci.yml", "checks")).map((s) => ({
@@ -159,8 +141,7 @@ test("the checks job runs npm run lint and npm run lint:repo, before the Tests s
   assert.doesNotMatch(steps[lint].text, /continue-on-error/, "the lint step must fail the job");
 });
 
-// The restore rehearsal (Grok audit 2026-10, P1 and U4). It mints bucket keys and reads
-// a prefix out of the bucket listing, so neither may reach the log or a shell unchecked.
+// The restore rehearsal mints bucket keys and reads a prefix from the bucket listing, so neither may reach the log or a shell unchecked.
 
 function rehearsalStep(name: string): string {
   const [job] = jobs().filter((j) => j.workflow === "restore-rehearsal.yml");

@@ -34,7 +34,6 @@ function table(dir: string, name: string, rows: Record<string, unknown>[]): void
   write(dir, `${name}.json`, { exported_at: "2026-09-07T09:00:00Z", table: name, rows });
 }
 
-// A complete run: three tables, both sidecars and a marker that lists every file.
 function goodDump(): string {
   const dir = mkdtempSync(join(tmpdir(), "dump-invariants-"));
   for (const [name, rows] of Object.entries(ROWS)) table(dir, name, rows);
@@ -47,7 +46,6 @@ function goodDump(): string {
   return dir;
 }
 
-// Rewrites the marker to list exactly what the directory now holds.
 function seal(dir: string): void {
   const keys = readdirSync(dir)
     .filter((f) => f !== "_complete.json")

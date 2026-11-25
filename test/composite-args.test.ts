@@ -5,12 +5,8 @@ import { adminAgentForEmail } from "../src/agents.ts";
 import { buildServer } from "../src/server.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// An action that takes fewer arguments than its operation declares (src/tools/surface-composite.ts
-// ActionSpec.fields) refuses one it does not take, rather than dropping it. A comment
-// silently dropped from a merge is a review nobody posted; a sha dropped from a comment
-// is a check nobody made. An argument NO action of the tool takes is refused by the
-// tool's closed schema (additionalProperties: false), never stripped; one another action
-// takes is refused by the handler, which names what this action takes.
+// An action taking fewer arguments than its operation declares refuses one it does not take rather than dropping it: a comment dropped from a merge is a review nobody posted.
+// An argument no action takes is refused by the tool's closed schema; one another action takes is refused by the handler, naming what this action takes.
 
 async function call(name: string, args: Record<string, unknown>) {
   const server = buildServer(

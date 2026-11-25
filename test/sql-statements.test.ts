@@ -5,9 +5,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { extractStatements } from "../scripts/sql-statements.ts";
 
-// Audit 2026-09-25, E2-30 (finding E2-L23). The statement walk that feeds the query-plan
-// check (vitest.config.ts, test-integration/query-plans.test.ts).
-
 function extractFrom(files: Record<string, string>) {
   const dir = mkdtempSync(join(tmpdir(), "sql-statements-"));
   try {
@@ -19,9 +16,8 @@ function extractFrom(files: Record<string, string>) {
 }
 
 test("a statement after a skipped one still has its hole found", () => {
-  // The hole regex was global, so after a skipped statement its lastIndex sat past the
-  // start of the next one and the next statement's hole could be missed, which kept
-  // `${...}` in SQL handed to the plan check as if it were plannable.
+  // The hole regex was global, so after a skipped statement its lastIndex sat past the next one's start and its `${...}`
+  // could be handed to the plan check as plannable SQL.
   const { statements, skipped } = extractFrom({
     "a.ts": [
       "db.prepare(`UPDATE improve_runs SET ${sets.join(', ')} WHERE id = ?1 AND padding_padding_padding = 1`);",

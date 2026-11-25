@@ -2,12 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sourceFiles } from "./source-files.ts";
 
-// Every line the Worker logs is a JSON object with an `event` token and a `message`
-// holding the human text, written by site-runtime's logEvent
-// (@dustinedwards/site-runtime/log), which also scrubs emails, URL queries and keys.
-// A bare console call would put a free-text, unscrubbed line back into the log that a
-// search on `event` cannot find, so this scans all of src/ and names the file and line
-// of any that comes back.
+// A bare console call puts a free-text, unscrubbed line in a log that a search on `event` cannot find, so
+// this scans all of src/ for one and names its file and line.
 
 // Comments are blanked first (keeping the line count) so a sentence that mentions
 // console.error does not count as a call.
@@ -31,7 +27,6 @@ function directCalls(): string[] {
   return found;
 }
 
-// The text of every logEvent call in src/, from `logEvent(` to its closing `);`.
 function calls(): Array<{ file: string; text: string }> {
   const out: Array<{ file: string; text: string }> = [];
   for (const file of sourceFiles()) {
@@ -44,9 +39,8 @@ function calls(): Array<{ file: string; text: string }> {
   return out;
 }
 
-// A floor read from the code when this was written (86 sites converted). It is
-// below the real count so removing a log line is not a test edit, and above zero by
-// enough that a scan which matches nothing cannot pass.
+// A floor below the real count, so removing a log line is not a test edit, and above zero so a scan that
+// matches nothing cannot pass.
 const MIN_LOG_EVENT_SITES = 80;
 
 test("no file in src/ calls console.log, warn or error directly", () => {
@@ -66,7 +60,6 @@ test("every logEvent call names an upper-case event token and carries a message"
   const bad: string[] = [];
   for (const { file, text } of calls()) {
     const arg = /^logEvent\(\s*([^,]+),/.exec(text)?.[1].trim() ?? "";
-    // A string literal must be ALL_CAPS; a variable or a template is allowed where the token is built.
     if (arg.startsWith('"') && !/^"[A-Z][A-Z0-9_]*"$/.test(arg)) bad.push(`src/${file}: ${arg}`);
     if (!/\bmessage\b/.test(text)) bad.push(`src/${file}: ${arg} has no message`);
   }

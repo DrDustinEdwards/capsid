@@ -28,10 +28,6 @@ import type { OpsSnapshot, SiteSnapshot } from "../src/ops-types/sites.ts";
 import type { Env } from "../src/env.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// The daily maintenance pass's pure rules (job_549550d73d4e). Each rule is seen firing on a
-// planted case and staying quiet on a clean one. The queries that feed them run against a
-// real D1 in test-integration/maintenance.test.ts.
-
 test("a queued LATER job is listed once its date has passed, and not before", () => {
   const jobs = [
     { id: "job_a", namespace: "sample", title: "LATER 2026-10-01: move the cron" },
@@ -79,9 +75,6 @@ test("a promise of follow-up jobs is recognized in the ways drivers write it", (
   );
   assert.equal(promisesFollowUps(null), false);
 });
-
-// The pull request rules (piece 2). A fake reader stands in for GitHub; the real readers
-// make the auto-merge tick's reads (src/maintenance-prs.ts).
 
 const NOW = new Date("2026-10-08T12:00:00.000Z");
 const check = (over: Partial<PrCheck> = {}): PrCheck => ({
@@ -215,10 +208,6 @@ test("a GitHub read that fails is listed as not checked, never read as clean", a
   assert.match(part.items[0].line, /#3 check runs/);
 });
 
-// The branch rules (piece 3). GitHub is faked at fetch, so delete_branch merged's own plan
-// and delete step (src/github/prune.ts) run unchanged: what the tool refuses, the pass
-// refuses.
-
 const ONE_REPO = [{ repo: "o/r", label: "primary" }];
 const SAME_REPO = { full_name: "o/r" };
 const ghPr = (number: number, ref: string, sha: string, state = "closed", merged = true) => ({
@@ -328,7 +317,6 @@ test("with the auto-prune on, the merged branch is deleted and audit-logged, and
   await withFetch(branchRoutes(), async (calls) => {
     const { env, audits } = branchEnv({ [PRUNE_SWITCH_KEY]: "on", [BRANCH_KEEP_KEY]: KEEP });
     const got = await gatherBranchItems(env, ["sample"], githubBranchReaders(env), NOW);
-    // The two orphans (no pull request, 39 and 7 days without a commit) go too, oldest first.
     assert.deepEqual(
       deletes(calls),
       ["feat/merged-clean", "feat/old-orphan", "feat/new-orphan"],
@@ -500,9 +488,6 @@ test("a failed branch read or an unreadable keep list is listed as not checked, 
     );
   });
 });
-
-// The undeployed-merge rule (piece 5): the watcher snapshot's newest deployment against
-// the default branch's head.
 
 function site(
   namespace: string,

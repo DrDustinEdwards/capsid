@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { externalFence, externalFenceProblem } from "../src/provenance.ts";
 
-// Provenance tags (capsid/decisions.md, 2026-10-03, OWASP hardening item 1): relayed text is
-// fenced as external, and post refuses a malformed fence. Each refusal below was planted
-// as a body that a looser check would have let through.
+// Each refusal below was planted as a body that a looser check would have let through.
 
 test("a fence labels its source and ref, and a well formed body passes", () => {
   const fenced = externalFence("review", "reviewer", "looks fine");

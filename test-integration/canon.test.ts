@@ -5,10 +5,8 @@ import { buildServer } from "../src/server";
 import { defaultScopes } from "../src/agents-schema";
 import type { Agent } from "../src/agents";
 
-// Canon write-protection (src/canon.ts) against real SQLite: an agent key is refused
-// every change to a canon document or a ruling, the portfolio-wide key (namespaces "*",
-// the key unattended routine sessions use) included, and the seat writes it like any
-// document.
+// Canon write-protection (src/canon.ts) against real SQLite: an agent key, even the portfolio-wide one, is
+// refused every canon or ruling change; the seat writes it like any document.
 
 const NS = "sample";
 

@@ -4,7 +4,6 @@ import { DatabaseSync } from "node:sqlite";
 
 const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
 
-/** An in-memory SQLite database with every migration applied. */
 export function migratedDb(): DatabaseSync {
   const raw = new DatabaseSync(":memory:");
   for (const name of readdirSync(MIGRATIONS)
@@ -14,7 +13,6 @@ export function migratedDb(): DatabaseSync {
   return raw;
 }
 
-/** The slice of D1 the readers and writers call (prepare, bind, first, all, run, batch) over Node's SQLite. */
 export function d1(db: DatabaseSync): D1Database {
   const statement = (sql: string, params: unknown[] = []) => {
     const s = db.prepare(sql);

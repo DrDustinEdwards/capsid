@@ -3,10 +3,8 @@ import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
 
-// BRIEF'S GROUPED PROVENANCE, AGAINST REAL SQLITE. test/brief.test.ts proves brief
-// issues one audit_log query; its fake answers that query by pattern, so it cannot
-// tell whether SQLite accepts json_each over a bound parameter, or whether the
-// correlated subquery returns the NEWEST actor per document. This can.
+// Brief's grouped provenance against real SQLite: test/brief.test.ts's fake answers by pattern, so it cannot
+// tell whether SQLite accepts json_each over a bound parameter or returns the NEWEST actor per document.
 
 async function brief(namespace: string) {
   const server = buildServer(env as never, "read", "test:integration");

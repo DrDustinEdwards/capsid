@@ -2,12 +2,8 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { runBackup, TABLES } from "../src/backup";
 
-// THE NIGHTLY DUMP AGAINST A REAL D1, through @dustinedwards/d1-dump.
-//
-// The unit tests drive a fake whose sqlite_master is written by hand. Only a real
-// database, migrated the way production is, shows what the package discovers:
-// D1's own _cf_ tables, wrangler's d1_migrations ledger, documents_fts and its shadow
-// tables. The run must dump exactly TABLES, or it is refused as tables-mismatch.
+// The nightly dump against a real D1, through d1-dump: only a migrated database shows what the package discovers
+// (_cf_ tables, d1_migrations, documents_fts shadow tables); the run must dump exactly TABLES.
 
 type Env = Parameters<typeof runBackup>[0];
 const ENV = env as unknown as Env;

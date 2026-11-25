@@ -19,7 +19,6 @@ import { SITE_CASES } from "./portal-actions-site-cases";
 
 export const JOB_CASES: Record<string, Case> = {
   overnight: {
-    // The subscription, so the real KV shows the decision record written with the mode.
     params: async () => ({ value: "subscription", reason: "first supervised night" }),
     after: async () => {
       expect(await env.APP_KV.get(OVERNIGHT_MODE_KEY)).toBe("subscription");
@@ -30,7 +29,6 @@ export const JOB_CASES: Record<string, Case> = {
     },
   },
   resume_job: {
-    // With a note (stale jobs D6): the control hands it to the resume, which records it.
     params: async () => ({
       id: await blockedJob("a blocked job"),
       reason: "I ran the push myself",
@@ -63,8 +61,6 @@ export const JOB_CASES: Record<string, Case> = {
     },
   },
   close_shipped: {
-    // The seat's admin complete (stale jobs D4, ruled 2026-10-09): done, credited to the
-    // driver that blocked it, with an admin_complete touch naming the seat.
     params: async () => ({
       id: await blockedJob("a job whose work shipped"),
       reason: "merged and live",
@@ -90,7 +86,6 @@ export const JOB_CASES: Record<string, Case> = {
     },
   },
   supersede_job: {
-    // A queued job nobody worked: superseded, with no outcome row against anybody.
     params: async () => ({
       id: await postedJob("a duplicate job"),
       reason: "a duplicate of the other one",
@@ -151,8 +146,6 @@ export const JOB_CASES: Record<string, Case> = {
     },
   },
   approve_pr: {
-    // A pull request the tick classed approve: an approval row at the head reviewed, and
-    // nothing merged (no PUT to GitHub's merge).
     params: async () => {
       githubCalls.length = 0;
       await seedAwaitingPr();

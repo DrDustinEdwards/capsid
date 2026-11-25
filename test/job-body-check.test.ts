@@ -5,9 +5,6 @@ import { editJob } from "../src/jobs-edit.ts";
 import { missingPartsWarning, placeholderRefusal } from "../src/job-body-check.ts";
 import { fakeEnv } from "./fakes.ts";
 
-// job_9a8d13d2d926: post and edit refuse an unfilled placeholder and warn on a body
-// missing the five headed parts. The tool-level wiring is asserted in the second half.
-
 const FULL = ["GOAL: x", "DO:", "1. y", "OUT OF SCOPE: z", "DONE WHEN: w", "RULES: r"].join("\n");
 
 test("an unfilled placeholder in a body or a title is refused, naming it", () => {

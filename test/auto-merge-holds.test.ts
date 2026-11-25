@@ -15,9 +15,8 @@ import {
   type Env,
 } from "./auto-merge-fixtures.ts";
 
-// The executor: an approved PR the policy leaves open merges on Dustin's approval. The
-// approvals live in pr_approvals, which the fake D1 does not model, so they are answered
-// here and each state move the executor batches is applied to them.
+// An approved PR the policy leaves open merges on Dustin's approval. pr_approvals is not modeled by the fake D1, so it is
+// answered here and each state move the executor batches is applied to it.
 
 type ApprovalRow = {
   id: number;
@@ -108,7 +107,6 @@ const approval = (over: Partial<ApprovalRow> = {}): ApprovalRow => ({
   ...over,
 });
 
-// A src change: the capsid policy does not merge it, so only an approval can.
 const SRC = ["src/merge-class.ts"];
 const checkRuns = (status: string, conclusion: string | null) => ({
   [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: {
@@ -183,9 +181,6 @@ test("with the approvals table missing the tick runs as the policy alone", async
   assert.equal(merges, 0);
 });
 
-// Suspended merge units and paused namespaces only narrow: they hold back what the policy
-// would merge, as class approve, and a list that cannot be read holds everything.
-
 const SINCE = "2026-09-24T00:00:00Z";
 const DOCS = ["docs/autonomy.md"];
 
@@ -246,8 +241,6 @@ test("an approval still merges a PR in a paused namespace", async () => {
   assert.equal(a.moves.length, 1);
 });
 
-// A unit the signed policy lists under ## Auto units widens its namespace's allowed paths, and only those.
-
 const unitPolicy = (units: string[]) =>
   `${GOOD_POLICY}\n\n## Auto units\n\n${units.map((u) => `- unit \`${u}\``).join("\n")}\n`;
 
@@ -275,8 +268,6 @@ test("a promoted unit merges what the namespace's paths held back; another unit'
   assert.equal(suspended.merges, 0);
   assert.equal(suspended.outcome.failed, "unit_suspended");
 });
-
-// An existing test, changed, always waits for Dustin, even in a promoted unit.
 
 const testFilesTick = async (
   files: Array<Record<string, unknown>>,
@@ -358,8 +349,6 @@ test("a PR that only adds tests merges in a promoted tests unit; any change to a
   const approved = await testFilesTick([edit], [approval()]);
   assert.equal(approved.outcome.merged, true, approved.outcome.why ?? "");
 });
-
-// A pull request labeled visual waits for Dustin's look, and a draft is never sent to the merge API.
 
 function visualRoutes(body: string) {
   const routes = tickRoutes(DOCS);

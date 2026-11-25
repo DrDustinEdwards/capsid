@@ -13,11 +13,8 @@ import { PORTAL_STALE_PATH } from "../src/portal-stale";
 import { buildServer } from "../src/server";
 import { STALE_PRS_KEY, staleJobs, type StalePrCache } from "../src/stale-jobs";
 
-// The stale view (stale jobs D5) against a real D1 and KV: each rule's row is planted
-// beside a clean job that rule must leave out, rows are aged by direct SQL, and the
-// merge-resume step's cache is read back from APP_KV. job_touches is append-only, so its
-// rows are inserted and never deleted; every read joins them to jobs, which is emptied
-// before each test. Fake data only: namespaces "sample" and "other", example.com repos.
+// Each rule's row is planted beside a clean job it must leave out, rows aged by direct SQL, merge-resume cache read from APP_KV. job_touches
+// is append-only, so its rows are never deleted; every read joins them to jobs, which is emptied before each test.
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -109,20 +106,17 @@ beforeEach(async () => {
 
 describe("staleJobs", () => {
   it("lists each rule's job with its reason, and leaves out the clean job beside each", async () => {
-    // unchanged
     const blockedOld = await plant("blocked", 4 * DAY);
     const claimedOld = await plant("claimed", 3 * DAY + HOUR);
     const blockedFresh = await plant("blocked", 2 * DAY);
     const queuedOld = await plant("queued", 10 * DAY);
     const doneOld = await plant("done", 10 * DAY);
-    // resumed-not-completed
     const resumedOld = await plant("claimed", 30 * HOUR);
     await autoResumedAt(resumedOld, ago(30 * HOUR));
     const resumedFresh = await plant("claimed", 2 * HOUR);
     await autoResumedAt(resumedFresh, ago(2 * HOUR));
     const resumedDone = await plant("done", 30 * HOUR);
     await autoResumedAt(resumedDone, ago(40 * HOUR));
-    // prs-settled
     const settled = await plant("blocked", HOUR);
     const stillOpen = await plant("blocked", HOUR);
     const readBeforeChange = await plant("blocked", HOUR);
@@ -252,8 +246,6 @@ describe("jobs list stale: true, through the tool", () => {
 });
 
 describe("GET /portal/api/stale, through the Worker", () => {
-  // The gate itself (a bearer's 403, an anonymous caller's sign-in) is driven for every
-  // Portal route in test-integration/route-gates.test.ts.
   it("answers the stale rows of every namespace to the admin's session, uncached", async () => {
     const SECRET = "integration-portal-stale-key";
     const mine = await plant("blocked", 4 * DAY);

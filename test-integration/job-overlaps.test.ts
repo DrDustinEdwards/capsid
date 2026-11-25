@@ -6,9 +6,8 @@ import { grantAgent } from "../src/agents";
 import { OTHER_PRS_READ } from "../src/job-overlaps";
 import { dropSampleToken, jobsEnv, seedSampleRepo } from "./jobs-fixture";
 
-// Overlap warnings (Track A D1) against real D1, with GitHub as a fetch stub: block and
-// complete name a pull request, the Worker reads the files of every other open pull request
-// in the repo, and a shared file becomes one line in the summary the seat reads.
+// Overlap warnings against real D1, with GitHub as a fetch stub: block and complete name a pull request, the Worker reads the files of
+// every other open PR in the repo, and a shared file becomes one line in the summary the seat reads.
 
 const NS = "sample";
 const PR = (n: number) => `https://github.com/example/sample/pull/${n}`;

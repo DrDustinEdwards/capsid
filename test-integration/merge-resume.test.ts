@@ -15,16 +15,12 @@ import {
   seedCapsidNamespace,
 } from "./jobs-fixture";
 
-// The stale-jobs step (capsid/decisions.md, 2026-10-03, D1 to D3): a blocked job whose
-// pull requests merged goes back to its holder, or to the queue when the holder cannot
-// act, and is never completed. GitHub is not reachable from the test runtime, so the
-// merge read is exercised by what happens when it fails; autoResumeJob takes the fact
-// the read produces.
+// The stale-jobs step: a blocked job whose PRs merged goes back to its holder, or to the queue when the holder cannot act, and is never completed.
+// GitHub is unreachable from the test runtime, so the merge read is exercised by its failure; autoResumeJob takes the fact the read produces.
 
 const ADMIN = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-10-08T06:00:00.000Z");
 const LATER = new Date("2026-10-08T07:00:00.000Z");
-// How a job blocks on its merge.
 const MERGE_BLOCK = { reason: "waiting on the merge", command: "Merge PR 9" };
 const NOTE = "PR #9 merged at abc1234; confirm the deploy and complete with your claim";
 

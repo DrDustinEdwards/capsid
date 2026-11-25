@@ -19,13 +19,8 @@ import { WATCHER_CHECKS } from "../src/watcher-checks.ts";
 import { type Finding } from "../src/watcher-detect.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// The watcher's pass, kept for the operations dashboard (PR 1 of the Watch Floor
-// build, capsid/research/design-ops-console.md).
-
 const NOW = new Date("2026-09-28T12:10:00.000Z");
 const SLOT = ringSlot(NOW);
-
-// The ring
 
 test("the ring starts with this pass and advances one slot per half hour", () => {
   const first = advanceRing(undefined, SLOT, true);
@@ -61,8 +56,6 @@ test("the ring holds 7 days of half-hour slots and no more, even after a long ga
   const afterGap = advanceRing(full, SLOT + 10_000, true);
   assert.equal(afterGap.ring, "-".repeat(RING_SLOTS - 1) + "1");
 });
-
-// The probe
 
 type Answer = number | "throw" | { status: number; body: string };
 function fetchFor(answers: Record<string, Answer>) {
@@ -263,10 +256,6 @@ test("Capsid itself is read in-process, never fetched", async () => {
   assert.deepEqual(f.asked, []);
 });
 
-// The site map is compared with the registered namespaces in test/ops-sites.test.ts.
-
-// Check states
-
 test("each check is clear, a finding, or could not run, and only a check that ran can be clear", () => {
   const found: Finding[] = [
     {
@@ -290,8 +279,6 @@ test("each check is clear, a finding, or could not run, and only a check that ra
   assert.equal(byId.health.state, "clear");
   assert.equal(byId.offaccount.state, "could-not-run");
 });
-
-// The snapshot
 
 const probe = (namespace: string, state: SiteProbe["state"]): SiteProbe => ({
   namespace,
@@ -357,8 +344,6 @@ test("an unreadable snapshot is logged and the rings start again", async () => {
   assert.equal(errors.length, 1);
   assert.match(errors[0], /OPS_SNAPSHOT_UNREADABLE/);
 });
-
-// The tick
 
 function tickEnv(kv: ReturnType<typeof fakeKv>) {
   const noRows = {

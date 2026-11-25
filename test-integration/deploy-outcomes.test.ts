@@ -4,9 +4,8 @@ import type { Env } from "../src/env";
 import { readDeployOutcomes } from "../src/deploy-outcomes";
 import { seedCapsidNamespace } from "./jobs-fixture";
 
-// The deploy-outcome reader against a real D1 with migrations/0038 applied, and GitHub
-// answered here: a rolled-back run is recorded once with where production went, its pull
-// request found from the commit and its time to restore, and a second pass reads it from D1 instead of GitHub.
+// The deploy-outcome reader against real D1 (migrations/0038) with GitHub stubbed: a rolled-back run is recorded once with where
+// production went, its PR and time to restore, and a second pass reads D1, not GitHub.
 
 const A = "a".repeat(40);
 const B = "b".repeat(40);

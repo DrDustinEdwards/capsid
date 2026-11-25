@@ -1,16 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-// Capsid Portal's relative times (dashboard/src/lib/format.ts), in a browser time zone
-// behind UTC. Reported 2026-09-29: the newest Activity rows read "in 16s" and "in 8s"
-// for actions that had just happened.
-//
-// Two causes, each reproduced here before it was fixed:
-// - The app compared server timestamps with its own clock, ticked every 15 s. A row
-//   written after the last tick, or on a server whose clock is ahead of the browser's,
-//   is in the future of that clock.
-// - A zone-less D1 timestamp ("YYYY-MM-DD HH:MM:SS") handed to Date.parse is read as
-//   local time. Behind UTC that puts it hours in the future.
+// Reported 2026-09-29: new Activity rows read "in 16s". Two causes: the app compared server timestamps with its own
+// clock, and a zone-less D1 timestamp handed to Date.parse is read as local time, hours ahead behind UTC.
 process.env.TZ = "America/Chicago";
 const { ago } = await import("../dashboard/src/lib/format.ts");
 const { parse: ms, serverNow: portalNow } = await import("capsomer/behavior/time");
@@ -28,7 +20,6 @@ test("PLANT: a zone-less server timestamp is read as UTC, in either spelling D1 
   assert.equal(ms("2026-09-29 13:00:00"), utc);
   assert.equal(ms("2026-09-29T13:00:00"), utc);
   assert.equal(ms("2026-09-29T13:00:00.250"), utc + 250);
-  // Anything with a zone is left to Date.parse.
   assert.equal(ms("2026-09-29T13:00:00Z"), utc);
   assert.equal(ms("2026-09-29T08:00:00-05:00"), utc);
 });
@@ -43,6 +34,5 @@ test("PLANT: a row the server wrote just now never reads as in the future", () =
   const generated = Date.parse("2026-09-29T13:00:45Z");
   const now = portalNow(tickedAt, skew, generated);
   assert.equal(ago(row, now), "1s ago");
-  // Measured against the browser's tick alone, the same row is 29 s in the future.
   assert.equal(ago(row, tickedAt), "in 29s");
 });

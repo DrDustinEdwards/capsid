@@ -17,15 +17,11 @@ import { toolListed } from "../src/scope-guard.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { breaking, type Handler, healthy, NON_HTML, run } from "./verify-live-stub.ts";
 
-// Live gate 8 (scripts/mcp-probe-lib.mjs, job_bb06c9be24c4): a real MCP call after every
-// deploy. The script is run against the stub Worker of ./verify-live-stub.ts with its
-// /ops/mcp bridged to the REAL handler (src/mcp-handler.ts and buildServer), as the
-// live-probe agent. Each plant breaks the handler a different way and must make the
-// script exit 1, which is the exit ci.yml rolls the deploy back on.
+// A real MCP call after every deploy: the script runs against the stub Worker with /ops/mcp bridged to the real
+// handler, and each plant breaks it a different way and must exit 1, the exit ci.yml rolls the deploy back on.
 
 const KEY = "live-probe-test-key";
 
-// The live-probe role, as an agent: its scopes from scripts/roles.ts, not restated.
 function probeAgent(): Agent {
   const role = ROLES.find((r) => r.name === "live-probe");
   assert.ok(role, "no live-probe role in scripts/roles.ts");
@@ -63,7 +59,6 @@ const ctx = () =>
 
 type Serve = (request: Request) => Promise<Response>;
 
-// The real handler, as /ops/mcp serves it behind its key check (src/routes.ts).
 const realHandler =
   (env = probeEnv(), build = () => buildServer(env, probeAgent())): Serve =>
   (request) =>
@@ -135,8 +130,6 @@ test("a 2026-07-28 tools/list without its cache fields is a refusal", () => {
   );
 });
 
-// The script, end to end.
-
 test("gate 8 passes against the real handler, and the run exits 0", async () => {
   const { code, out } = await run(bridge(realHandler()), () => false, withKey);
   assert.equal(code, 0, out);
@@ -148,9 +141,6 @@ test("with no key the gate says it asserted nothing, and does not fail the run",
   assert.equal(code, 0, out);
   assert.match(out, /PASS {2}8 MCP call through \/ops\/mcp\n.*SKIPPED: no CAPSID_LIVE_PROBE_KEY/);
 });
-
-// The plants. Each is a deploy whose sign-in gates all pass and whose connection is
-// broken; each must be a refusal (exit 1), the exit the rollback runs on.
 
 async function refused(serve: Serve, pattern: RegExp, extraEnv: Record<string, string> = withKey) {
   const { code, out } = await run(bridge(serve), () => false, extraEnv);

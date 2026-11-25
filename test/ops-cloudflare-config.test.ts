@@ -7,11 +7,8 @@ import { CF_PERMISSION, readCloudflareConfig } from "../src/ops-cloudflare-confi
 import { buildAdminServer } from "../src/server.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// The capsid_admin_read_ops tool's Cloudflare reads (src/ops-cloudflare-config.ts):
-// Access apps and policies, Email Routing rules and addresses. What matters is what does NOT come
-// back: every reader copies named fields, so a secret Cloudflare keeps beside the
-// settings (an Access for SaaS client secret, a SCIM credential, an aud tag) never
-// reaches the caller.
+// What matters is what does NOT come back: every reader copies named fields, so a secret Cloudflare keeps beside the
+// settings (SaaS client secret, SCIM credential, aud tag) never reaches the caller.
 
 const ACCOUNT = "0123456789abcdef0123456789abcdef";
 const TOKEN = "sample-token-0000";
@@ -131,8 +128,6 @@ const read = (
   env: Record<string, string> = CREDS,
 ) => readCloudflareConfig(env, action, zone, cf.impl);
 
-// access_apps
-
 test("access_apps returns each app's allowlisted fields and nothing else", async () => {
   const cf = cloudflare({ [`${ACCT}/access/apps`]: [listPage([SELF_HOSTED, SAAS])] });
   const out = await read("access_apps", cf);
@@ -190,8 +185,6 @@ test("PLANT: no secret Cloudflare keeps beside an Access app, known or added und
   );
 });
 
-// access_policies
-
 test("access_policies returns rule types, with a value only for email, email_domain, group and service_token", async () => {
   const policy = {
     id: "pol-1",
@@ -241,8 +234,6 @@ test("access_policies returns rule types, with a value only for email, email_dom
   );
 });
 
-// paging
-
 test("a list follows result_info.total_pages and asks for every page with the same per_page", async () => {
   const cf = cloudflare({
     [`${ACCT}/access/policies`]: [
@@ -280,8 +271,6 @@ test("a list longer than CF_MAX_PAGES fails with the count rather than answering
   );
   assert.equal(cf.calls.length, CF_MAX_PAGES);
 });
-
-// email_rules
 
 const ZONES = [
   { id: "zone-1", name: "example.com", status: "active", account: { id: ACCOUNT } },
@@ -369,8 +358,6 @@ test("email_rules with a zone reads that zone only, and a zone the token cannot 
   );
 });
 
-// email_addresses
-
 test("email_addresses returns each address and a verified boolean, never the timestamps or ids", async () => {
   const cf = cloudflare({
     [`${ACCT}/email/routing/addresses`]: [
@@ -403,8 +390,6 @@ test("email_addresses returns each address and a verified boolean, never the tim
     ],
   });
 });
-
-// failures
 
 test("a 403 names the permission CF_OPS_TOKEN lacks, for every action", async () => {
   const cases: Array<[Parameters<typeof readCloudflareConfig>[1], Record<string, Page[]>, string]> =
@@ -468,8 +453,6 @@ test("with no token or no account, the read says exactly what is unset and fetch
     assert.equal(cf.calls.length, 0, "a read with no credentials still called Cloudflare");
   }
 });
-
-// the tool
 
 interface ToolResult {
   isError?: boolean;

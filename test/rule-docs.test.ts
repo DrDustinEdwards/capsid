@@ -14,10 +14,6 @@ import { buildTruthReport, type ReportDoc } from "../src/truth-report.ts";
 import { TOOL_GRANTS } from "../src/scope.ts";
 import { fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 
-// The rule documents' two checks (src/rule-docs.ts, job_c13dc0d4f22f): the cap
-// and stale tool names. Each is planted and seen red here; the
-// maintenance query runs against real D1 in test-integration/maintenance.test.ts.
-
 test("which documents are rule documents, and their caps", () => {
   const rules: Array<[string, string, number]> = [
     ["sample", "core.md", CORE_CAP_BYTES],
@@ -32,11 +28,9 @@ test("which documents are rule documents, and their caps", () => {
     ["capsid", "audits/CLOSED-2026-09.md"],
     ["capsid", "jobs/job_0123456789ab.md"],
     ["capsid", "rulings/old/one.md"],
-    // Dustin's rulings are records, not rules.
     ["capsid", "rulings/testing-2026-10-04.md"],
     ["sample", "conventions.md"],
     ["sample", "schema.md"],
-    // Reference notes, not rules (Dustin, 2026-10-18: conventions and each repo's CLAUDE.md only).
     ["capsid", "repo-structure.md"],
     ["capsid", "schema.md"],
     ["capsid", "seat-operations.md"],
@@ -95,7 +89,6 @@ test("PLANT: each stale tool reference is found, and served names are not", () =
     2,
     "a call and a bare name are two references, not three",
   );
-  // Derived both ways: every served tool reads clean, and each one with a typo does not.
   for (const tool of Object.keys(TOOL_GRANTS)) {
     assert.deepEqual(staleToolNames(`call \`${tool}\``), [], tool);
     assert.equal(staleToolNames(`call \`${tool}x\``).length, 1, `${tool}x read as served`);
@@ -177,8 +170,6 @@ test("the truth report names both checks, judged over the rule documents only", 
     ["capsid/conventions-sample.md"],
   );
 });
-
-// The write tool, over a real MCP connection.
 
 async function connect(opts: FakeD1Options) {
   const { db, recorded } = fakeD1(opts);

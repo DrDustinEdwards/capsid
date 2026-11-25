@@ -6,14 +6,8 @@ import { GATHER_BUDGET, MAX_ROWS, SEARCH_ROWS } from "../src/limits.ts";
 import { type DocRow, fakeD1, fakeEnv, type FakeD1Options, type Recorded } from "./fakes.ts";
 import { allSourceText, sourceFile } from "./source-files.ts";
 
-// Every read is bounded, and says so when it cut, so a caller cannot mistake the
-// first page for the whole answer.
-//
-// Two things are asserted at every site:
-//   1. the response reports the truncation, and
-//   2. the query asked the store for a bounded page.
-// Only the second protects the isolate: a handler that fetched every row and then
-// sliced would satisfy (1), so the bound is asserted on the bound parameter.
+// Every read says when it cut. Two assertions per site: the response reports truncation, and the query asked the store for a bounded page; only the
+// second protects the isolate, since a handler fetching every row then slicing satisfies the first.
 
 async function connect(opts: FakeD1Options = {}) {
   const { db, reads } = fakeD1(opts);
@@ -32,9 +26,7 @@ const call = async (client: Client, name: string, args: Record<string, unknown> 
 
 const parse = (result: { content: Array<{ text: string }> }) => JSON.parse(result.content[0].text);
 
-// The bound is enforced in SQL, so the proof is the value bound to the LIMIT, read
-// by the index the LIMIT names rather than by position (a parameter can be bound
-// after it).
+// The bound is enforced in SQL, so the proof is the value bound to the LIMIT, read by the index the LIMIT names rather than by position.
 const limitBoundTo = (recorded: Recorded[], match: RegExp): unknown => {
   const stmt = recorded.find((r) => match.test(r.sql.replace(/\s+/g, " ")));
   assert.ok(stmt, `no statement matched ${match}`);
@@ -62,7 +54,6 @@ test("list returns a bounded page and says it was cut", async () => {
   // The advice must be actionable and must fit the call that was made: this one
   // passed no namespace, so naming the namespace filter is the useful next step.
   assert.match(out.note, /Narrow with namespace/);
-  // One more row than it returns, which is the cheapest way to know there are more.
   assert.equal(
     limitBoundTo(reads, /FROM documents WHERE \(\?1 IS NULL OR namespace/),
     MAX_ROWS + 1,
@@ -135,8 +126,6 @@ test("search returns its top page and says when more matched", async () => {
   assert.equal(limitBoundTo(reads, /FROM documents_fts/), SEARCH_ROWS + 1);
 });
 
-// gather
-
 // A packet that trims must still be usable: core and the rules survive whatever
 // else goes, because they are the instructions for the job.
 const BIG = "x".repeat(40_000);
@@ -179,7 +168,6 @@ test("gather trims an oversized packet and names what it dropped", async () => {
   assert.equal(out.budget, GATHER_BUDGET);
   assert.ok(Array.isArray(out.trimmed) && out.trimmed.length > 0, "nothing was named as trimmed");
 
-  // The wiki stubs first, and every stub says where to read the real thing.
   assert.match(out.trimmed.join(" | "), /wiki bodies/);
   assert.ok(
     out.wiki.length > 0,
@@ -244,17 +232,13 @@ test("a gather that fits is not trimmed at all", async () => {
   assert.equal(out.unconsolidated[0].body, "small");
 });
 
-// resources/list
-
 test("resources/list is bounded, and hands back a cursor to the rest", async () => {
   const { client, reads, close } = await connect({ documents: docs(MAX_ROWS + 7) });
-  // An explicit cursor asks the v2 client for one page; without one it walks every page.
   const first = await client.listResources({ cursor: "" });
   assert.equal(first.resources.length, MAX_ROWS, "the resource listing is unbounded");
   assert.ok(first.nextCursor, "the listing was capped with no way to reach the rest");
   assert.equal(limitBoundTo(reads, /SELECT namespace, path, title FROM documents/), MAX_ROWS + 1);
 
-  // The cap is only safe because page 2 is reachable, so prove it is.
   const second = await client.listResources({ cursor: first.nextCursor });
   await close();
   assert.equal(second.resources.length, 7, "the second page did not return the remainder");
@@ -290,7 +274,7 @@ test("resources/list paginates across namespaces without skipping a boundary", a
   );
 });
 
-// scanner-rule: bounded reads (audit 9.2), the paginating list override serves only the template. A resource registered later cannot be exercised by a test written now
+// scanner-rule: bounded reads, the paginating list override serves only the template. A resource registered later cannot be exercised by a test written now
 test("the resources/list override cannot silently drop a statically registered resource", async () => {
   // The handler below replaces the one McpServer installs, which also serves
   // resources registered by URI rather than by template. This notices if one is added.

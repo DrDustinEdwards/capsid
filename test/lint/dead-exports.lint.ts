@@ -4,13 +4,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { exportsOfSrc, sourceFiles } from "../source-files.ts";
 
-// The dead-export lint. Run by `npm run lint:dead-exports` (and `npm run lint:repo`), in
-// the checks job of .github/workflows/ci.yml; not part of `npm test`. It fails when
-// an export has no caller, which is a review prompt about the code as a whole rather
-// than a behavior of the Worker, so it runs beside the suite instead of inside it.
-//
-// An export is dead only when it has no caller in src/, test/, test-integration/ or
-// scripts/.
+// Runs beside the suite (`npm run lint:dead-exports`, CI's checks job), not in `npm test`: a dead export is
+// a review prompt about the code as a whole, not a behavior of the Worker.
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
@@ -18,8 +13,6 @@ const ROOT = join(import.meta.dirname, "..", "..");
 // itself would make each one look used and the set would collapse to empty.
 const SELF = "test/lint/dead-exports.lint.ts";
 
-// Everything that could be a caller: the rest of src/, both test suites, the lints,
-// and scripts/.
 function otherReaders(): Array<{ name: string; text: string }> {
   const out: Array<{ name: string; text: string }> = [];
   for (const dir of ["test", "test/lint", "test-integration", "scripts"]) {
@@ -40,21 +33,8 @@ function otherReaders(): Array<{ name: string; text: string }> {
 
 const READERS = otherReaders();
 
-// A barrel re-export is not a caller. `export { x } from "./y"` names x to forward
-// it, not to use it, so counting it would make every symbol behind a barrel look
-// called. A plain `import { x } from` is left alone, because importing a name to
-// use it is what a caller does.
-//
-// A comment is not a caller either. `hasCallerElsewhere` looks for the bare name,
-// so one comment naming a function elsewhere would make it look called.
-//
-// String literals are kept. A name inside a string can be a real reference (a
-// registry keyed by name, a dynamic import), and a false positive here is only a
-// red build asking for a reviewed name.
-//
-// Scanned character by character rather than by regex, because a regex that cuts
-// from `//` to end of line also cuts the middle out of "https://example.com" and
-// would hide a real caller sitting after a URL on the same line.
+// A caller is not a barrel re-export, which names x to forward it, nor a comment. Scanning is character by
+// character, so a regex cutting at `//` cannot hide a caller after a URL; strings are kept (registries, dynamic imports).
 function stripComments(text: string): string {
   let out = "";
   let i = 0;
@@ -98,15 +78,12 @@ function stripComments(text: string): string {
 
 const RE_EXPORT_FROM = /export\s+(?:type\s+)?\{[^}]*\}\s*from\s*["'][^"']+["'];?/g;
 const RE_EXPORT_STAR = /export\s+\*(?:\s+as\s+[A-Za-z0-9_]+)?\s+from\s*["'][^"']+["'];?/g;
-// What a caller can look like, once prose and forwarding are removed.
 function callableText(text: string): string {
   return stripComments(text).replace(RE_EXPORT_FROM, "").replace(RE_EXPORT_STAR, "");
 }
 
-// Every identifier in a file's callable text, computed once per file. An export name
-// is word characters only, so `\bname\b` matches exactly when some maximal run of
-// word characters equals the name, which is a set lookup and much cheaper than a
-// regex per reader per export.
+// Identifiers per file, computed once: `\bname\b` matches exactly when some word-character run equals the
+// name, a set lookup far cheaper than a regex per reader per export.
 function identifiers(text: string): Set<string> {
   return new Set(callableText(text).match(/\w+/g) ?? []);
 }
@@ -139,12 +116,8 @@ test("the scan finds the exports at all, so nothing here can pass by reading not
   assert.ok(sourceFiles().length > 20, "src/ walk returned too few files");
 });
 
-// The suspects: exports with no caller in src/, test/, test-integration/ or
-// scripts/. Each is a candidate for removal that someone looked at and kept.
-//
-// Listed rather than counted, so a new suspect fails the build the day it appears
-// and removing one means editing this list.
-// Keyed by export name, not by file, so a module move does not change the set.
+// The suspects are listed, not counted, so a new one fails the build the day it appears; keyed by export
+// name, not file, so a module move does not change the set.
 const KNOWN_SUSPECTS = [
   "HEALTH_PROBE_NS",
   "HEALTH_PROBE_PATH",
@@ -152,12 +125,8 @@ const KNOWN_SUSPECTS = [
   "ToolCallLog",
 ];
 
-// Two checks, and neither is "the set still matches exactly": splitting a module
-// turns intra-file usage into cross-file usage, so a suspect can gain a caller
-// without a line of its own changing, and that is not a defect.
-//
-//   (a) A reviewed name must still be exported, or the list is stale.
-//   (b) No new no-caller export may appear unreviewed.
+// Neither check is "the set still matches exactly": splitting a module turns intra-file usage into cross-file
+// usage, so a suspect can gain a caller with no line of its own changing. (a) A reviewed name must still be exported; (b) no new no-caller export may appear unreviewed.
 // scanner-rule: capsid/conventions-verification.md 2026-09-08, an export is dead only with no caller in src/, test/ or scripts/
 test("every reviewed suspect is still exported from src/", () => {
   const names = new Set(exportsOfSrc().map((e) => e.name));
@@ -196,9 +165,8 @@ test("no new no-caller export appears without review", () => {
       `(${examined.length} exports examined against ${READERS.length} reader files; comments and barrel re-exports do not count as callers.)`,
   );
 });
-// The stripper itself. stripComments decides what counts as a caller, so a bug in
-// it either hides a dead export (too little stripped) or hides a live caller (too
-// much stripped).
+// stripComments decides what counts as a caller: stripping too little hides a dead export, too much
+// hides a live caller.
 test("a comment does not vouch for an export, and a URL in a string is not a comment", () => {
   assert.equal(stripComments("const a = 1; // mentions ghostName").includes("ghostName"), false);
   assert.equal(stripComments("/* ghostName */ const a = 1;").includes("ghostName"), false);

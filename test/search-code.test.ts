@@ -3,12 +3,8 @@ import { test } from "node:test";
 import { searchCode } from "../src/github.ts";
 import { fakeEnv, fakeKv, withFetch, type FetchCall, type Route } from "./fakes.ts";
 
-// search_code walks a repo tree and greps every blob, one HTTP request per
-// candidate file, so it is the tool most likely to run out of GitHub quota
-// mid-scan. A skipped blob must not turn into total_results 0 over a repository it
-// did not read: "not found" and "could not check" are different answers.
-
-// Env and the HTTP stub come from ./fakes.ts.
+// search_code greps every blob, one request each, so it most often runs out of quota mid-scan. A skipped blob must not
+// become total_results 0: "not found" and "could not check" are different answers.
 
 function makeEnv() {
   return fakeEnv({
@@ -39,11 +35,7 @@ function blob(text: string) {
   return { encoding: "base64", content: Buffer.from(text, "utf8").toString("base64") };
 }
 
-// Builds the route map the shared stub takes. The list of blob paths requested is
-// derived from the recorded calls.
-//
-// blobsOf is how a cap is proven. files_scanned is the tool's own account of itself,
-// and a cap reporting 1 while fetching 3 still burns three requests of quota.
+// blobsOf proves a cap: files_scanned is the tool's own account, and a cap reporting 1 while fetching 3 still burns three requests.
 const blobsOf = (calls: FetchCall[], paths: string[]) =>
   calls
     .filter((c) => c.path.includes("/git/blobs/sha"))
@@ -71,7 +63,6 @@ test("rate-limited blob fetch ABORTS the scan instead of returning empty", async
     {
       paths: ["a.ts", "b.ts"],
       contents: { "a.ts": "const EMAIL_QUEUE = 1;", "b.ts": "x" },
-      // The tree resolves, then every blob fetch is refused for quota.
       blobStatus: { "a.ts": 403, "b.ts": 403 },
     },
     async () => {
@@ -108,9 +99,7 @@ test("429 and 401 abort too: a revoked token is not an empty repository", async 
 });
 
 test("a survivable per-file error does NOT abort, but is reported", async () => {
-  // A 404 on one blob (a raced deletion) is genuinely per-file, so the scan
-  // continues. It must still be visible: "0 results over 2 files" and "0 results
-  // over 2 files, 1 unreadable" are different claims.
+  // A 404 on one blob (a raced deletion) is per-file, so the scan continues, but "0 results over 2 files" and "... 1 unreadable" are different claims.
   await withTree(
     {
       paths: ["gone.ts", "here.ts"],
@@ -130,10 +119,7 @@ test("a survivable per-file error does NOT abort, but is reported", async () => 
   );
 });
 
-// The quota cap. max_files bounds one search_code call's cost against the App
-// installation's hourly quota, one HTTP request per candidate file fetched. The
-// 5,000-entry tree refusal does not cover it. An off-by-one here shows up as quota
-// exhaustion for every later call by any tool, not a wrong answer.
+// max_files bounds one call's cost against the installation's hourly quota; an off-by-one shows up as quota exhaustion for later calls.
 
 const THREE = ["a.ts", "b.ts", "c.ts"];
 const CONTENTS = { "a.ts": "needle here", "b.ts": "needle again", "c.ts": "needle third" };
@@ -172,9 +158,7 @@ test("resuming at next_start scans the next file and nothing before it", async (
 });
 
 test("the last page is not reported as truncated", async () => {
-  // The boundary the off-by-one lives at: after the third file there is nothing
-  // left, so truncated must be false and next_start must be absent. A cap that
-  // reports more work when there is none sends a caller into an endless resume.
+  // After the third file nothing is left, so truncated must be false and next_start absent; a cap that reports more work sends a caller into an endless resume.
   await withTree({ paths: THREE, contents: CONTENTS }, async (calls) => {
     const result = await searchCode(makeEnv(), "ns", "needle", { maxFiles: 1, start: 2 });
     assert.deepEqual(blobsOf(calls, THREE), ["c.ts"]);
@@ -199,7 +183,6 @@ test("max_results stops the scan too, and says more may exist", async () => {
 });
 
 test("an uncapped scan of the same tree reads everything, so the caps are what stopped it", async () => {
-  // The negative control: the fixture really has more than one readable file.
   await withTree({ paths: THREE, contents: CONTENTS }, async (calls) => {
     const result = await searchCode(makeEnv(), "ns", "needle", {});
     assert.deepEqual(blobsOf(calls, THREE), THREE);

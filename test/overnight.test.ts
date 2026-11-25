@@ -26,13 +26,8 @@ import {
 import { digestSinceFrom, pullRequestsIn, readOvernightDigest } from "../src/overnight-digest.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// The overnight run's switch, plan and digest (src/overnight.ts, src/overnight-plan.ts, src/overnight-digest.ts).
-// What reads a real D1 (the json_extract and the joins) is in test-integration/overnight.test.ts.
-
 const NOW = new Date("2026-10-04T22:00:00.000Z");
 const ACTOR = "access:admin@example.com";
-
-// the switch
 
 function envWith(seed: Record<string, string> = {}) {
   const kv = fakeKv({ seed });
@@ -166,8 +161,6 @@ test("PLANT: setOvernight refuses a bad value or a missing reason and writes not
   }
 });
 
-// the policy document
-
 test("parseOvernightPolicy reads heavy, budget-minutes and estimate lines and ignores prose", () => {
   const parsed = parseOvernightPolicy(
     [
@@ -209,8 +202,6 @@ test("a document that names no heavy repo means every repo is heavy", () => {
   assert.ok("policy" in parsed);
   assert.equal(parsed.policy.heavy, "all");
 });
-
-// the plan
 
 const job = (id: string, namespace: string, over: Partial<PlanJobRow> = {}): PlanJobRow => ({
   id,
@@ -281,7 +272,7 @@ test("PLANT: a job that needs a flag or a track record, or is deferred by its ti
 });
 
 test("PLANT: a gated job is planned and marked gated, in its priority place, and an ungated one is not marked", () => {
-  // Conventions 2.3 (Dustin 2026-10-07): gates apply to risky steps, not whole jobs.
+  // Gates apply to risky steps, not whole jobs.
   const out = plan([
     job("gate", "a", { gate_required: 1, priority: 90 }),
     job("plain", "a", { priority: 10 }),
@@ -391,8 +382,6 @@ test("estimateFromDurations: the p75 of unblocked jobs, floored, and null until 
   assert.equal(estimateFromDurations([1, 2, 3, 4, 5, 6, 7, 8]), FLOOR_ESTIMATE_MINUTES);
 });
 
-// reading the plan through a stubbed D1
-
 function planDb(opts: {
   jobs: PlanJobRow[];
   doc: string | null;
@@ -500,8 +489,6 @@ test("readOvernightPlan: a named namespace sees only its own lane and skips, tho
   assert.equal(out.heavy_planned_minutes, 120, "the shared budget still counted both repos");
 });
 
-// the digest
-
 test("pullRequestsIn finds pull request URLs and nothing else, once each", () => {
   assert.deepEqual(
     pullRequestsIn(
@@ -593,7 +580,6 @@ test("the digest lists finished jobs with the usage their agent reported, and to
   assert.equal(by.n.usage.cost_usd, null, "no usage is null, not 0");
   assert.deepEqual([out.totals.usage.jobs, out.totals.usage.cost_usd], [2, 1.75]);
   assert.equal(out.totals.jobs_without_usage, 1);
-  // Every read is bounded, binds its filter and does not write.
   for (const c of calls) {
     assert.ok(/LIMIT \?3/.test(c.sql), c.sql);
     assert.doesNotMatch(c.sql, /\b(INSERT|UPDATE|DELETE)\b/i);

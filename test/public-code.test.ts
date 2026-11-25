@@ -15,9 +15,6 @@ import { bundledModel } from "../src/public-data.ts";
 import type { StatsRows } from "../src/public-stats.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// The public code maps (docs/public-data.md, "The code maps"): which repos are read, what
-// passes the parse, and how a broken map leaves the rest of the daily build alone.
-
 const NOW = new Date("2026-10-17T00:05:00Z");
 const PRIVATE_REPOS = new Set(["germomics", "foxing", "foxhound", "txasm", "julieedwards-info"]);
 const ALL = [

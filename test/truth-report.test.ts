@@ -15,12 +15,6 @@ import {
 } from "../src/truth-report.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// The truth report. No repo gate can check a number that lives only in Capsid, so
-// report mode writes a document and the trend is kept as documents.
-//
-// The pure function is tested against hand-built inputs, where every judgment
-// lives; the handler is driven over a real MCP connection, where the write path lives.
-
 const NOW = new Date("2026-09-07T12:00:00Z");
 const daysAgo = (n: number) =>
   new Date(NOW.getTime() - n * 86_400_000).toISOString().replace("T", " ").slice(0, 19);
@@ -43,8 +37,6 @@ const base = {
   countClaims: [] as never[],
 };
 
-// Integrity is a ratio, and an unrun check is excluded.
-
 test("integrity is null when nothing was checkable, not 100 percent", () => {
   const report = buildTruthReport({ ...base });
   // Every check has zero subjects. Reporting 100 would make an empty store score
@@ -54,7 +46,6 @@ test("integrity is null when nothing was checkable, not 100 percent", () => {
 
 test("PLANT: a check that could not run is EXCLUDED from integrity, never counted as clean", () => {
   const docs = [doc({ path: "core.md", type: "core", body: "see src/gone.ts" })];
-  // repoPaths absent: the tree could not be read.
   const unrun = buildTruthReport({ ...base, docs });
   const drift = unrun.checks.find((c) => c.check === "doc_vs_code_drift")!;
   assert.equal(drift.subjects, 0, "an unrun check contributes no subjects");
@@ -64,8 +55,6 @@ test("PLANT: a check that could not run is EXCLUDED from integrity, never counte
     "and it says so, rather than reporting zero findings",
   );
 
-  // The same store with a readable tree that does NOT contain the path: now the
-  // check runs and the finding is real.
   const ran = buildTruthReport({ ...base, docs, repoPaths: new Set(["src/server.ts"]) });
   const ranDrift = ran.checks.find((c) => c.check === "doc_vs_code_drift")!;
   assert.equal(ranDrift.subjects, 1);
@@ -110,8 +99,6 @@ test("a backlog at or under the lint cadence neither finds nor lowers integrity;
   );
   assert.ok(over.integrity! < 100, "a real backlog finding must move the number");
 });
-
-// The report is an observation of the store, not a member of it.
 
 test("PLANT: a stored report is not a subject of the next report", () => {
   // `report` stores its result as a document. If the next run read it back, every
@@ -168,8 +155,6 @@ test("PLANT: a stored report is not a subject of the next report", () => {
   );
 });
 
-// What counts as a repo path.
-
 test("PLANT: a dotfile that exists is not reported missing, and one that does not is still drift", () => {
   // A word-boundary match would capture `.github/workflows/ci.yml` as
   // `github/workflows/ci.yml` and report it absent.
@@ -190,7 +175,6 @@ test("PLANT: a dotfile that exists is not reported missing, and one that does no
 });
 
 test("a Capsid document path is not a repo path", () => {
-  // Canon documents cite `capsid/conventions.md` and similar store paths.
   const docs = [
     doc({
       path: "core.md",
@@ -204,9 +188,7 @@ test("a Capsid document path is not a repo path", () => {
 });
 
 test("PLANT: an UNPREFIXED document in this namespace is not a repo file", () => {
-  // A document in the namespace being linted is cited by its bare store path. The
-  // Worker writes `jobs/<id>.md` itself, and `improve/` is both a store prefix and a
-  // real directory in this repo, so the root check alone would not catch it.
+  // A document in the linted namespace is cited by its bare store path; `improve/` is both a store prefix and a real directory here, so the root check alone would miss it.
   const docs = [
     doc({ path: "core.md", body: "mirrors at jobs/job_cf19ede44f34.md and improve/scores.md" }),
     doc({ path: "jobs/job_cf19ede44f34.md", type: "task" }),
@@ -223,11 +205,8 @@ test("PLANT: an UNPREFIXED document in this namespace is not a repo file", () =>
 });
 
 test("PLANT: another repo's path and a section number are not repo paths", () => {
-  // A candidate counts only when it resolves against THIS namespace's mapped repo,
-  // which means its first segment is a real top-level entry of that tree. That is
-  // what separates `src/gone.ts` (ours, and missing: drift) from `apps/web/x.tsx`
-  // (foxing's) and `capsid-backups/.github/workflows/mirror.yml` (another repo).
-  // A section number is thrown out one step earlier, on having no file extension.
+  // A candidate counts only when its first segment is a real top-level entry of THIS namespace's mapped repo; that separates
+  // `src/gone.ts` (ours, missing: drift) from `apps/web/x.tsx` (foxing's). A section number has no file extension.
   const docs = [
     doc({
       path: "audit.md",
@@ -242,8 +221,6 @@ test("PLANT: another repo's path and a section number are not repo paths", () =>
     "one subject survives, and it is the one this repo could actually be missing",
   );
 });
-
-// The individual checks.
 
 test("a decision older than the threshold is stale, and one inside it is not", () => {
   const docs = [
@@ -329,8 +306,6 @@ test("a broken link is counted against the whole edge population", () => {
   assert.match(check.findings[0].detail, /target document no longer exists/);
 });
 
-// The stored document.
-
 test("PLANT: the integrity number survives a render and a read-back", () => {
   // improve_status parses this line out of the stored body, so the line has a fixed
   // shape and both directions are asserted.
@@ -354,8 +329,6 @@ test("the report path is one document per namespace per day, and sorts by date",
   );
   assert.deepEqual([...dates].sort(), dates);
 });
-
-// The handler.
 
 async function connect(grant: "read" | "write") {
   const rows = {
@@ -437,9 +410,7 @@ test("report mode STORES the report, so the trend is a document", async () => {
       "unconsolidated",
     ]);
 
-    // The write path, from the statements the handler issued. The fake records SQL
-    // rather than applying it; that the document lands in a database is
-    // test-integration/truth-report.test.ts.
+    // The write path, from the statements the handler issued: the fake records SQL rather than applying it.
     const flat = batches.flat().map((s) => s.replace(/\s+/g, " "));
     assert.ok(
       flat.some((s) =>
@@ -452,7 +423,6 @@ test("report mode STORES the report, so the trend is a document", async () => {
       "snapshot rule: no write path skips the audit log, and a report is not an exception",
     );
 
-    // The body it wrote carries the number it returned, taken from the bound params.
     const upsert = recorded.find((r) =>
       /INSERT INTO documents \(namespace, path, title, body/.test(r.sql),
     );

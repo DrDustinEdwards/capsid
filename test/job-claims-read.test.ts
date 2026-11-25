@@ -13,11 +13,6 @@ import {
   exportClaimsPage,
 } from "../src/job-claims-export.ts";
 
-// The read side of claims apart from verified outcomes (src/job-claims-read.ts). These
-// are the statement-shape and folding tests; the rows a real job_claims returns, the
-// export's paging over a real table and the tool's refusals through a real D1 are in
-// test-integration/claims-tool.test.ts.
-
 interface Call {
   sql: string;
   params: unknown[];
@@ -51,8 +46,6 @@ function limitOf(call: Call): unknown {
   return call.params[Number(m[1]) - 1];
 }
 
-// the filter
-
 test("the filter trims, normalizes since and until to the stored ISO shape, and refuses a non-ISO time or a window that matches nothing", () => {
   const trimmed = claimsFilterFrom({
     namespace: " sample ",
@@ -75,8 +68,6 @@ test("the filter trims, normalizes since and until to the stored ISO shape, and 
   }
   assert.equal(claimsFilterFrom({ since: "2026-09-02", until: "2026-09-01" }).ok, false);
 });
-
-// the aggregate
 
 test("every aggregate filter value is BOUND, never interpolated, and every read is bounded", async () => {
   const { db, calls } = stubDb();
@@ -167,8 +158,6 @@ test("an agreement outside the table's vocabulary is an error, never a silent dr
   );
 });
 
-// one job
-
 test("a job that does not exist reads as null, and one job's rows are bound to its id, bounded, and cut at CLAIMS_JOB_ROWS with the cut named", async () => {
   const { db, calls } = stubDb((sql, params) => {
     if (sql.startsWith("SELECT id, namespace, title, status, claimed_by FROM jobs")) {
@@ -202,8 +191,6 @@ test("a job that does not exist reads as null, and one job's rows are bound to i
   }
 });
 
-// export
-
 test("export reads each table through its own statement, and never names a table from input", async () => {
   const { db, calls } = stubDb();
   for (const table of CLAIMS_EXPORT_TABLES) await exportClaimsPage(db, table, 0, 10);
@@ -230,8 +217,6 @@ test("export reads each table through its own statement, and never names a table
   await assert.rejects(exportClaimsPage(db, "job_claims", -1, 10), /after must be/);
   assert.equal(calls.length, CLAIMS_EXPORT_TABLES.length, "a refused export reached the store");
 });
-
-// waits by gate class, and usage by source (PR 1 of capsid/research/design-automation-for-speed.md)
 
 const gate = (command: unknown) => JSON.stringify({ reason: "r", command });
 

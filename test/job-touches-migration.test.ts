@@ -5,9 +5,8 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { TOUCH_KINDS } from "../src/job-touches.ts";
 
-// job_touches.kind is a CHECK, and SQLite cannot alter a CHECK, so adding a kind is a table
-// rebuild (as migrations/0031 was). This runs the real migrations in order with Node's SQLite
-// and keeps TOUCH_KINDS equal to the CHECK the schema ends with.
+// job_touches.kind is a CHECK and SQLite cannot alter one, so adding a kind is a table rebuild; this runs
+// the real migrations and keeps TOUCH_KINDS equal to the CHECK the schema ends with.
 
 const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
 

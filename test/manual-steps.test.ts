@@ -17,11 +17,6 @@ import { npmVersions } from "../src/ops-packages.ts";
 import type { StoredSecrets } from "../src/secret-presence.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// Dustin's manual steps as tracked items (improvement list item 14): the "check:" forms, the
-// state each read gives a step, and how a job whose steps are all seen is settled in the
-// inbox and listed in the stale view. Every form is driven to seen and to not seen, and
-// every failed read to unread, so no check is only ever seen passing.
-
 const BLOCKED_AT = "2026-10-10T10:00:00.000Z";
 const READ_AT = "2026-10-10T11:00:00.000Z";
 const job = { namespace: "sample", updated_at: BLOCKED_AT };

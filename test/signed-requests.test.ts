@@ -3,9 +3,6 @@ import { test } from "node:test";
 import { claimJti, MAX_REPORT_BYTES, readBoundedText } from "../src/signed-requests.ts";
 import { fakeD1 } from "./fakes.ts";
 
-// The shared pieces of the signed endpoints (/backup/credential and /bench/*): the
-// bounded body read and the jti replay cache.
-
 test("readBoundedText refuses a body over the cap before it is fully buffered", async () => {
   const oversized = "x".repeat(MAX_REPORT_BYTES + 100);
   const stream = new Response(oversized).body;
@@ -13,9 +10,8 @@ test("readBoundedText refuses a body over the cap before it is fully buffered", 
   assert.equal(result.ok, false);
 });
 
-// The replay cache is an INSERT against a PRIMARY KEY, so the database decides who
-// claimed a nonce. The concurrency property is driven against a real D1 in
-// test-integration/scheduled.test.ts.
+// The replay cache is an INSERT against a PRIMARY KEY, so the database decides who claimed a nonce; the concurrency
+// property runs against real D1 in test-integration/scheduled.test.ts.
 test("claimJti admits a nonce once, then refuses the replay", async () => {
   const d1 = fakeD1({});
   const first = await claimJti(d1.db, "backup", "nonce-abc");
@@ -23,7 +19,6 @@ test("claimJti admits a nonce once, then refuses the replay", async () => {
   const replay = await claimJti(d1.db, "backup", "nonce-abc");
   assert.equal(replay.ok, false);
   assert.equal(replay.ok === false && replay.status, 409);
-  // A different nonce, or the same nonce in another scope, is not a replay.
   assert.equal((await claimJti(d1.db, "backup", "nonce-xyz")).ok, true);
   assert.equal((await claimJti(d1.db, "bench:capsid", "nonce-abc")).ok, true);
 });

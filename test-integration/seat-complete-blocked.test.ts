@@ -5,10 +5,8 @@ import { blockJob, claimJob, completeAsCaller, postJob, resumeJob } from "../src
 import { grantAgent } from "../src/agents";
 import { dropSampleToken, jobRow, jobsEnv, seedSampleRepo } from "./jobs-fixture";
 
-// The seat completing a blocked job it does not hold (job_85b8ac3e0c7e), the way it can
-// already fail one. The job stays held by the driver that did the work, so the outcome
-// row credits that driver, where resume with take then complete credits the seat. Real
-// D1; GitHub is a fetch stub, as in test-integration/outcome-result-ref.test.ts.
+// The seat completing a blocked job it does not hold, as it can already fail one: the driver keeps the hold, so the outcome
+// row credits that driver, where resume with take then complete credits the seat.
 
 const NS = "sample";
 const PR = "https://github.com/example/sample/pull/3";
@@ -114,7 +112,6 @@ async function post(title: string, over: Record<string, unknown> = {}) {
   return posted.job!.id;
 }
 
-// A job the driver holds and then blocks on a gate, which is the state the seat completes.
 async function blocked(title: string, over: Record<string, unknown> = {}) {
   const id = await post(title, over);
   const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id });
@@ -174,7 +171,6 @@ describe("the seat completes a blocked job it does not hold", () => {
       held_by: DRIVER_ACTOR,
       result_ref: PR,
     });
-    // The claim is the seat's account of the call, recorded under the seat, not the driver.
     const claim = await env.DB.prepare(
       "SELECT agent FROM job_claims WHERE job_id = ?1 AND action = 'complete'",
     )
@@ -189,14 +185,12 @@ describe("the seat completes a blocked job it does not hold", () => {
     expect(mirror?.body).toContain("status: **done**");
     expect(mirror?.status).toBe("closed");
 
-    // One admin_complete touch ends the gate's wait and names the holder.
     const rows = await touches(id);
     expect(rows.map((t) => t.kind)).toEqual(["gate", "admin_complete"]);
     const close = rows[1];
     expect(close.actor).toBe(SEAT_ACTOR);
     // access: is the administrator's own login, a person; any other seat credential is "seat".
     expect(close.actor_kind).toBe("human");
-    // The driver blocked at NOW and the seat closed at LATER, one hour on.
     expect(close.waited_ms).toBe(3_600_000);
     expect(JSON.parse(String(close.detail))).toEqual({ held_by: DRIVER_ACTOR, result_ref: PR });
   });
@@ -227,10 +221,8 @@ describe("the seat completes a blocked job it does not hold", () => {
 
   it("refuses a queued job with no pull request, a job still held, and a job already finished, each saying what to do instead", async () => {
     stubGitHub();
-    // A queued job is not the seat's close: since job_e68de044f8a4 the pull request is the
-    // claim, so a queued job completed with no pull request is refused, and one completed
-    // with its pull request is closed without a claim and credits the caller, with no
-    // admin_complete touch.
+    // A queued job is not the seat's close: the pull request is the claim, so a queued job completed without one is refused
+    // and one with it is closed claimless and credits the caller.
     const queued = await post("queued");
     // The claimless close reads the pull request's body, which must name the job.
     stubGitHub((url) =>
@@ -285,7 +277,6 @@ describe("the seat completes a blocked job it does not hold", () => {
     });
     expect(again.ok).toBe(false);
     expect(again.refusal).toMatch(/already done/);
-    // One for the queued job closed with its pull request, one for the finished job.
     expect(await outcomeCount()).toBe(2);
   });
 

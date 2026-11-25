@@ -5,10 +5,8 @@ import { buildServer } from "../src/server.ts";
 import { BRIEF_BUDGET } from "../src/limits.ts";
 import { type DocRow, fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 
-// The brief returns open tasks as stubs, keeps episodics (the handoff) whole until the
-// packet is over budget, and reports only a cut it made. It cuts nothing when the
-// documents it never trims are over budget on their own, because then no trim can
-// bring the packet under the budget.
+// Open tasks come back as stubs and episodics (the handoff) stay whole until the packet is over budget; nothing is cut when the documents it never
+// trims are over budget on their own, since no trim could help.
 
 async function brief(opts: FakeD1Options) {
   const fake = fakeD1(opts);
@@ -87,7 +85,6 @@ test("episodics, which carry the handoff, stay whole under budget and are cut on
 });
 
 test("provenance costs ONE audit_log query however many documents the brief carries", async () => {
-  // One query, not one per document.
   const tasks = Array.from({ length: 6 }, (_, i) => task(i, 10));
   const { out, reads } = await brief({
     documents: [...floor(10), ...tasks, episodic(0, 10), episodic(1, 10)],

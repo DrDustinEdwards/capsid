@@ -1,39 +1,15 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// The adversarial corpus: one directory of hostile text that every surface
-// returning stored content is driven against. Indirect prompt injection has no
-// gate: a document body, a README, a PR body, a commit message and a CI log are
-// all attacker-writable, and all five reach a model that also holds tools.
-//
-// A test cannot assert what a model will do. It can assert the three properties
-// that decide whether resisting is possible:
-//
-//   1. the payload comes back verbatim, so nothing is mangled into a shape that
-//      looks safe while a different client sees the original;
-//   2. it comes back as data, in a field or an embedded resource, never as the
-//      envelope the protocol reserves for the operator speaking;
-//   3. provenance survives beside it, so a reader can tell whose words these are.
-//
-// And one property about the Worker: handling the payload issues no statement the
-// same request would not have issued for innocent text.
-//
-// Each injection finding adds a fixture here with a MANIFEST entry naming its
-// source. test/adversarial.test.ts fails in both directions: a file with no
-// manifest entry and an entry with no file are both build failures.
+// One directory of hostile text that every surface returning stored content is driven against. Each injection finding adds a fixture with a MANIFEST
+// entry naming its source; test/adversarial.test.ts fails on a file with no entry and an entry with no file.
 
 export interface CorpusEntry {
-  // The file under test/adversarial/corpus/.
   file: string;
-  // Which surface this fixture is aimed at.
   surface: "document" | "repo" | "github" | "ci" | "prompt";
-  // What the payload tries to do, in one line.
   attack: string;
-  // Where it came from. An audit finding, an incident, or the date it was written.
   source: string;
-  // A substring that must survive the round trip byte-for-byte. Chosen to be the
-  // sharpest part of the payload, so a partial escape is a failure rather than a
-  // pass.
+  // Must survive the round trip byte-for-byte; the payload's sharpest part, so a partial escape fails rather than passes.
   canary: string;
 }
 
@@ -96,8 +72,7 @@ export function corpusFiles(): string[] {
 }
 
 export function corpusText(file: string): string {
-  // Read as bytes and decode explicitly: every assertion in the adversarial suite
-  // is an encoding-sensitive comparison.
+  // Read as bytes and decode explicitly: every assertion here is an encoding-sensitive comparison.
   return new TextDecoder("utf-8").decode(readFileSync(join(DIR, file)));
 }
 

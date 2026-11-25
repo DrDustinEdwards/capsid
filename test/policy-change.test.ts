@@ -15,11 +15,6 @@ import { performPolicyChange, planPolicyChange } from "../src/policy-sign-change
 import { SHIPPED_VERSION } from "./policy-version.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// The merge units in the signed policy (docs/design/design-merge-pipeline.md section 7,
-// PR 10; DECIDE 9 of 2026-10-09). Proves: a document naming an unknown class is refused
-// at load; a missing typed version is refused. Also: what a promoted unit widens and what
-// it never does, and the Undo of a suspension.
-
 const SECRET = "policy-change-test-secret";
 const NOW = new Date("2026-10-11T12:00:00.000Z");
 const SHIPPED = readFileSync(
@@ -54,8 +49,6 @@ async function world(body = SHIPPED) {
 }
 const storedBody = (rows: { documents: Array<{ path: string; body?: string | null }> }) =>
   rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)!.body!;
-
-// A unit in the document
 
 test("a unit under ## Auto units is read", () => {
   const listed = parseMergePolicy(
@@ -107,8 +100,6 @@ test("money, a migration or a workflow is never a unit, and neither is a namespa
   );
 });
 
-// What a promoted unit widens
-
 const capsidPr = (paths: string[]): PrFacts =>
   ({
     number: 23,
@@ -150,8 +141,6 @@ test("a promoted unit never opens a refused path or a money path", () => {
   });
   assert.equal(money.merge, false);
 });
-
-// sign_policy_change
 
 test("PLANT: a missing typed version is refused, and nothing is signed or written", async () => {
   const w = await world();
@@ -205,7 +194,6 @@ test("typing the new version signs the next version with the unit, and the Worke
   assert.equal(loaded.policy.version, `${V + 1}`);
   assert.deepEqual(loaded.policy.units, ["capsid / tests"]);
   assert.ok(w.rows.versions.length >= 1, "the prior version was not snapshotted");
-  // Removing it is the same control, the next version, the same typed confirm.
   assert.equal(
     (
       await performPolicyChange(
@@ -254,8 +242,6 @@ test("a change that would not load, or changes nothing, is refused at the previe
     /<namespace>\/<path class>/,
   );
 });
-
-// unit_resume: the Undo of a suspension
 
 test("lifting a suspension clears it, and only a rollback after the lift suspends the unit again", async () => {
   const kv = fakeKv({

@@ -3,10 +3,8 @@ import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
 
-// write AND restore REPORT `snapshotted` FROM THE SNAPSHOT'S OWN RESULT (audit
-// 2026-09-25, item E1-20, finding F3-8), against real SQLite. The node test in
-// test/snapshotted.test.ts drives the same race through the fake; this one shows that
-// D1 answers RETURNING on the INSERT ... SELECT inside a batch, which the fake cannot.
+// write and restore report `snapshotted` from the snapshot's own result. Real SQLite shows D1 answers RETURNING on the INSERT ... SELECT
+// inside a batch, which the fake in test/snapshotted.test.ts cannot.
 
 const NS = "sample";
 

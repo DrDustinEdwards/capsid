@@ -19,7 +19,6 @@ import {
   Case,
 } from "./portal-actions-fixtures";
 
-/** The Worker's signed policy body, after checking its signature is there. */
 async function signedPolicyBody(): Promise<string> {
   const row = await env.DB.prepare(
     "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
@@ -31,7 +30,6 @@ async function signedPolicyBody(): Promise<string> {
   return body;
 }
 
-/** The newest snapshot of the policy: the version a signing replaced. */
 async function previousPolicyBody(): Promise<string | undefined> {
   const version = await env.DB.prepare(
     "SELECT body FROM document_versions WHERE namespace = 'capsid' AND path = ?1 ORDER BY id DESC LIMIT 1",
@@ -41,7 +39,6 @@ async function previousPolicyBody(): Promise<string | undefined> {
   return version?.body;
 }
 
-/** The one call the Portal action made to dustinedwards.info's operator API, with the token. */
 function expectOperatorCall(tool: string, args: Record<string, unknown>) {
   expect(operatorCalls.map((c) => [c.url, c.auth, JSON.parse(c.body)])).toEqual([
     ["https://dustinedwards.info/api/operator", `Bearer ${OPERATOR_TOKEN}`, { tool, args }],
@@ -130,8 +127,6 @@ export const SITE_CASES: Record<string, Case> = {
     after: async () => expect(await packageRow("sample-pkg")).toBeNull(),
   },
   sign_policy_change: {
-    // Version 8, signed, with the unit, snapshotting version 7, and loading as the Worker's
-    // copy: the typed version is what lets it through.
     params: async () => {
       await signedPolicy();
       return { change: "promote", unit: "capsid/tests", confirm: "8" };
@@ -146,11 +141,8 @@ export const SITE_CASES: Record<string, Case> = {
     },
   },
   sign_policy_from_repo: {
-    // The repo's file, version 8, written over version 7 and signed, snapshotting version 7,
-    // and loading as the Worker's copy. The preview binds the file's hash.
     params: async () => {
       await signedPolicy();
-      // The App's token for the repo, as pr_close seeds it, and the file the repo holds.
       await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
       repo.policy = policyDocument("8");
       return { confirm: "8" };
@@ -235,7 +227,6 @@ export const SITE_CASES: Record<string, Case> = {
     },
   },
   namespace_remove: {
-    // A registered project with a live document: cascade deletes it, snapshotted first.
     params: async () => {
       await env.DB.prepare("INSERT INTO namespaces (namespace, repos) VALUES ('sample-gone', ?1)")
         .bind(JSON.stringify([{ repo: "example/sample-gone", label: "primary" }]))
@@ -269,14 +260,12 @@ export const SITE_CASES: Record<string, Case> = {
       return { namespace: "sample" };
     },
     after: async () => {
-      // The site's Worker first, then Carrel, with one value.
       expect(secretPuts.map((p) => [p.script, p.name])).toEqual([
         ["sample-site", "CARREL_SITE_KEY"],
         ["carrel-desk", "SITE_SAMPLE_KEY"],
       ]);
       expect(secretPuts[0].text).toHaveLength(43);
       expect(secretPuts[1].text).toBe(secretPuts[0].text);
-      // The value is in no audit row, the mutator's or the click's.
       for (const row of await auditRows())
         expect(row.params, `${row.action} recorded the key`).not.toContain(secretPuts[0].text);
     },

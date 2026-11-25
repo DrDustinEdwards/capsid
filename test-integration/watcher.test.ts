@@ -66,7 +66,6 @@ describe("clearFinding", () => {
   it("closes the watcher's own queued job as cleared", async () => {
     await seed("job_000000000001");
     expect(await clearFinding(env_, "job_000000000001", NOW)).toBe(true);
-    // "cleared": nobody did the work, the finding stopped being true.
     expect(await row("job_000000000001")).toEqual({ status: "failed", result_summary: "cleared" });
   });
 
@@ -109,9 +108,7 @@ describe("clearFinding", () => {
 
 describe("a job blocked on a human is not a watcher finding", () => {
   it("a job blocked for two days produces no blocked- finding and no job", async () => {
-    // Every blocked job waits on a person by construction, so a reminder per blocked
-    // job was noise. The Portal lists blocked jobs with their
-    // commands; alerting is a separate item.
+    // Every blocked job waits on a person by construction, so a reminder per blocked job was noise.
     await seed("job_longblocked0", {
       status: "blocked",
       posted_by: "github:DrDustinEdwards",

@@ -4,13 +4,9 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
 import { HISTORY_ROWS } from "../src/limits";
 
-// write, delete and restore snapshot the live row inside their batch, and the history
-// listing is bounded. These run against real D1 because the node fake neither
-// evaluates INSERT ... SELECT nor honors the listing's LIMIT.
-//
-// The race is staged by wrapping the real D1: the first batch() call rewrites the body
-// and then runs the handler's batch unchanged. That is after the handler's pre-read, so
-// a snapshot that bound the pre-read body would hold "lorem read body" here.
+// Write, delete and restore snapshot the live row inside their batch, and the history listing is bounded: real D1, because the node fake
+// neither evaluates INSERT ... SELECT nor honors LIMIT. The race is staged by wrapping D1 so the first batch() rewrites the body after
+// the handler's pre-read; a snapshot that bound the pre-read body would hold "lorem read body".
 
 const NS = "sample";
 const RACED = "lorem written in the gap";

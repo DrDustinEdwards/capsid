@@ -8,11 +8,8 @@ import { readOvernightDigest } from "../src/overnight-digest";
 import { readOvernightPlan } from "../src/overnight-plan";
 import { buildServer } from "../src/server";
 
-// The overnight plan and digest against a real D1: the statements run on SQLite, the
-// json_extract over job_claims.raw and the UNION subquery are real, and the plan is built
-// over rows the queue wrote. The pure rules are in test/overnight.test.ts. job_claims
-// refuses DELETE once it holds a row, so nothing here empties tables: every assertion is
-// scoped to the namespaces and job ids this file plants.
+// Real D1 for the json_extract over job_claims.raw and the UNION subquery. job_claims refuses DELETE once it holds a row,
+// so assertions are scoped to the namespaces and job ids this file plants.
 
 const ADMIN = adminAgentForEmail("admin@example.com");
 const NOW = new Date("2026-10-05T12:00:00.000Z");
@@ -57,14 +54,12 @@ describe("the overnight plan on a real D1", () => {
     expect(plan.for_namespace).toBe(ns);
     expect(plan.lanes).toHaveLength(1);
     expect(plan.lanes[0].repo).toBe("example/night");
-    // The gated job is planned at its priority (50), between the other two, and marked.
     expect(plan.lanes[0].jobs.map((j) => [j.id, j.gated])).toEqual([
       [id(2), false],
       [id(3), true],
       [id(1), false],
     ]);
     expect(plan.skipped.map((s) => s.id)).toEqual([id(4)]);
-    // With no policy document every repo is heavy, said aloud.
     expect(plan.policy).toBe("default");
     expect(plan.queued_read).toBeGreaterThanOrEqual(4);
   });
@@ -148,7 +143,6 @@ describe("the morning digest on a real D1", () => {
       outcome(3),
       claim(2, { cost_usd: 1.25, active_seconds: 90 }),
       claim(3, null),
-      // The blocked job's two sessions reported usage; claims on a job are summed.
       claim(4, { cost_usd: 0.5 }, "block"),
       env.DB.prepare(
         `INSERT INTO job_outcome_prs (job_id, pr_url, merged) VALUES (?1, 'https://github.com/example/sample/pull/40', 0)`,

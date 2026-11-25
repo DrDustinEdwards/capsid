@@ -106,7 +106,6 @@ describe("revert tracking", () => {
       path_class: "docs",
       merged_at: closed[0] && (closed[0] as { merged_at: string }).merged_at,
     });
-    // A second pass over the same list writes nothing.
     expect(await recordReverts(env as unknown as Env, "capsid", NOW)).toEqual([]);
     expect((await revertRows()).results).toHaveLength(2);
   });
@@ -169,7 +168,6 @@ describe("the shutoff against D1", () => {
         paused: expect.objectContaining({ since: NOW.toISOString() }),
       }),
     ]);
-    // The next pass changes nothing and audits nothing more.
     expect(
       (await safetyTick(env as unknown as Env, new Date(NOW.getTime() + 300_000), ["capsid"])).ran,
     ).toBe(false);

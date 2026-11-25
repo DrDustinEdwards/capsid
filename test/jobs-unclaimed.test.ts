@@ -8,18 +8,13 @@ import { signTaskBody } from "../src/signed-docs.ts";
 import { fakeKv, withFetch } from "./fakes.ts";
 import { queuedJobStore } from "./queued-job-store.ts";
 
-// The pull request is the claim (job_e68de044f8a4; Dustin, 2026-10-10, plan step 2).
-// A cloud session signs in as the admin login, which may hold one claim, so it works a
-// job without claiming it. Two things make that work: complete takes a QUEUED job from
-// any caller holding write on its namespace when it names the job's pull request
-// (src/jobs-seat.ts completeUnclaimed), and begin marks a queued job started, a label
-// and not a lease (src/jobs-begin.ts).
+// A cloud session signs in as the admin login and may hold one claim, so it completes a queued job by
+// naming its pull request (completeUnclaimed); begin marks it started, a label and not a lease.
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
 const LATER = new Date("2026-10-11T12:30:00.000Z");
 const ID = "job_0123456789ab";
 const PR = "https://github.com/o/r/pull/7";
-// A cloud session: the admin login, as every cloud session signs in.
 const CLOUD = adminAgentForEmail("admin@example.com");
 const SECRET = "test-improve-secret";
 // The body as post leaves it: signed, so begin verifies it as claim does.
@@ -45,7 +40,6 @@ function store(jobs: Array<Record<string, unknown>>) {
   });
 }
 
-// A driver with read and write on the namespace and no seat flag.
 function driver(namespaces = ["sample"], name = "sample-driver"): Agent {
   const scopes = defaultScopes(namespaces);
   scopes.grants = ["read", "write"];
@@ -77,8 +71,6 @@ async function offline<T>(fn: () => Promise<T>, prBody = `Closes ${ID}.`): Promi
   });
   return out as T;
 }
-
-// claimless complete
 
 test("a cloud session completes a queued job it never claimed by naming its pull request, and is credited", async () => {
   const { d1, env } = store([job()]);
@@ -202,8 +194,6 @@ test("a claimed job is still its holder's: another caller cannot complete it wit
   assert.equal(d1.rows.jobs[0].claimed_by, "agent:sample-driver");
 });
 
-// the started label
-
 test("begin marks a queued job started, a second session is told who and when, and the mirror and Portal Queue show it", async () => {
   const { d1, env } = store([job()]);
   const r = await beginJob(env, CLOUD, NOW, ID);
@@ -217,7 +207,6 @@ test("begin marks a queued job started, a second session is told who and when, a
     "no job-started audit row",
   );
 
-  // A second session lists the job and learns who started it and when.
   const listed = await listJobs(env, { id: ID });
   assert.equal(listed.started?.by, CLOUD.actor);
   assert.equal(listed.started?.at, NOW.toISOString());
@@ -227,7 +216,6 @@ test("begin marks a queued job started, a second session is told who and when, a
   );
   assert.equal((listed.jobs?.[0] as { started_by?: string } | undefined)?.started_by, CLOUD.actor);
 
-  // Its own begin writes nothing and is told the same.
   const writes = d1.recorded.length;
   const second = await beginJob(env, driver(), LATER, ID);
   assert.equal(second.ok, true, "a started job refused a second begin");
@@ -235,7 +223,6 @@ test("begin marks a queued job started, a second session is told who and when, a
   assert.equal(d1.rows.jobs[0].started_by, CLOUD.actor, "the second begin took the label");
   assert.equal(d1.recorded.length, writes, "the second begin wrote");
 
-  // The mirror document and the Portal Queue show who started it.
   const doc = d1.rows.documents.find((d) => d.path === `jobs/${ID}.md`);
   assert.match(
     String(doc?.body),
