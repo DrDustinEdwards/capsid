@@ -13,17 +13,7 @@ import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";
 import { MINUTE_MS, DAY_MS } from "./time";
 
-// ONE REPAIR, from the Portal, capsid_admin_run_controls or the watcher. The
-// site_repair control and the watcher's repair step both come here, so the allowlist, the
-// rate limit and the record are one implementation: an audit_log row (site-repair) and a
-// task_runs row (site-repair) for every call that left the Worker, and none for one
-// refused before it.
-//
-// The rate limit is per site and tool, in APP_KV, so a stuck check cannot loop:
-//   - any call waits MIN_GAP_MS after the last one, whoever made it (a double click, or the
-//     watcher and a person at once);
-//   - the watcher makes at most AUTO_PER_DAY calls per site and tool in a rolling day, and
-//     after that only a person can run it. The finding says so.
+// ONE REPAIR, from the Portal, capsid_admin_run_controls or the watcher.
 
 export const REPAIR_AUDIT_ACTION = "site-repair";
 const LIMIT_PREFIX = "site-repair-limit:";
@@ -103,9 +93,9 @@ async function writeLimit(
   });
 }
 
-/** Take one call of the rate limit for a person's or the watcher's call: why it must wait,
- *  or null after writing the call into the record. Shared with the backups
- *  (src/site-backup.ts), so a site's operator calls have one limit. */
+// Take one call of the rate limit for a person's or the watcher's call: why it must wait, or null
+// after writing the call into the record. Shared with the backups (src/site-backup.ts), so a site's
+// operator calls have one limit.
 export async function takeLimit(
   env: Pick<Env, "APP_KV">,
   namespace: string,
@@ -127,8 +117,8 @@ export type RepairOutcome =
   | { ran: false; refusal: string }
   | { ran: true; call: OperatorCall; line: string; recorded: boolean };
 
-/** Run one repair on one site. Refused, with nothing sent, when the site has no usable
- *  operator configuration, the tool is not allowed, or the rate limit holds. */
+// Run one repair on one site. Refused, with nothing sent, when the site has no usable operator
+// configuration, the tool is not allowed, or the rate limit holds.
 export async function runSiteRepair(
   env: Env,
   args: { namespace: string; tool: string; actor: string; auto: boolean; via: string },

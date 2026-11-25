@@ -36,8 +36,8 @@ const dumpTime = (run: string | null): string | null =>
 
 const basename = (path: string): string => path.split("/").filter(Boolean).pop() ?? "";
 
-/** The newest migration filename on master, compared against the live schema_version.
- *  Sorted by name: the files are zero-padded. */
+// The newest migration filename on master, compared against the live schema_version. Sorted by
+// name: the files are zero-padded.
 export function newestMigration(names: string[]): string | null {
   const sql = names.filter((n) => n.endsWith(".sql")).sort();
   return sql.length ? sql[sql.length - 1] : null;
@@ -80,10 +80,8 @@ export async function gatherPlatform({ env, now, out, ran, observed }: Pass) {
     out.push(...statusFindings(status));
   }
 
-  // The Amazon copy, as capsid-backups' watch.yml last reported it (src/offaccount.ts).
-  // An unreadable report skips the check: "cannot see the copy" is not "the copy is dead".
-  // The copy workflow's runs, read through the capsid namespace's "backups" mapping, are
-  // evidence only; a failed read leaves them out and the age findings still fire.
+  // The Amazon copy, as capsid-backups' watch.yml last reported it (src/offaccount.ts). An
+  // unreadable report skips the check: "cannot see the copy" is not "the copy is dead".
   const report = await attempt("offaccount report", async () => ({
     value: await env.APP_KV.get<OffaccountReport>(OFFACCOUNT_REPORT_KEY, "json"),
   }));
@@ -170,9 +168,6 @@ export async function gatherPlatform({ env, now, out, ran, observed }: Pass) {
   });
   if (ciRead === APP_ROSTER.length) ran.add("ci");
 
-  // What became of each roster repo's newest deploys (src/deploy-outcomes.ts, the merge
-  // pipeline's PR 6): recorded in deploy_outcomes, and a rollback is a finding. The check
-  // counts as run only when every repo was read, so a failed read never clears one.
   let deploysRead = 0;
   const deployReads = await mapLimit(
     DEPLOY_ROSTER,

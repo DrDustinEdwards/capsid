@@ -8,10 +8,6 @@ import { Field } from "capsomer/react/field";
 import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
 
-// The package configuration (live.packages, the ops_packages table): one row per npm
-// package Packages' Published tab shows, added and changed there. Every change goes through the confirm dialog, which
-// previews it first; the server validates every field.
-
 interface Draft {
   name: string;
   repo: string;

@@ -4,20 +4,9 @@ import { callSignal } from "./call-signal";
 import { parse } from "tldts";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// DOMAIN REGISTRATION EXPIRY, BY RDAP (design-portal-insight.md section 5): auto-renew being on
-// is no reason to go without the alert.
-//
-// The domains are the registrable names of the configured sites' origins (ops_sites), so nothing
-// here is a list in code. Hosting suffixes a site borrows (workers.dev and the like) are left out.
-//
-// RDAP (RFC 9224 bootstrap, RFC 9083 responses): the IANA bootstrap maps a TLD to its registry's
-// RDAP base; `{base}domain/{name}` answers with an `expiration` event. Both are public, no key.
-// The bootstrap is kept a week and each domain's answer a day in KV, so a half-hourly watcher
-// pass makes about one RDAP call per domain per day.
-//
 // A finding at EARLY_DAYS before expiry, and a second, new fingerprint at LATE_DAYS, so the last
-// week posts again even if the first was dismissed. A domain whose expiry could not be read is
-// not a finding, and the check counts as not run, so a failed read does not clear an open finding.
+// week posts again even if the first was dismissed. A domain whose expiry could not be read is not
+// a finding, and the check counts as not run, so a failed read does not clear an open finding.
 
 export const BOOTSTRAP_URL = "https://data.iana.org/rdap/dns.json";
 const BOOTSTRAP_KEY = "rdap:bootstrap:v1";
@@ -28,10 +17,11 @@ const EARLY_DAYS = 30;
 const LATE_DAYS = 7;
 const FETCH_TIMEOUT_MS = 8000;
 
-/** The registrable domain of a site origin, or null for a hosting suffix or an IP. It reads
- *  the Public Suffix List (tldts), so a name under a multi-label suffix such as co.uk keeps
- *  its third label, and a host under a suffix in the list's private section (workers.dev,
- *  pages.dev, vercel.app, github.io and the like) is a host's, not a registration of ours. */
+/**
+ * It reads the Public Suffix List (tldts), so a name under a multi-label suffix such as co.uk
+ * keeps its third label, and a host under a suffix in the list's private section (workers.dev,
+ * pages.dev, vercel.app, github.io and the like) is a host's, not a registration of ours.
+ */
 export function registrableDomain(origin: string): string | null {
   let host: string;
   try {
@@ -45,7 +35,6 @@ export function registrableDomain(origin: string): string | null {
   return parsed.domain;
 }
 
-/** The RDAP base for a domain's TLD from the IANA bootstrap, or null. */
 export function rdapBase(bootstrap: unknown, domain: string): string | null {
   const tld = domain.split(".").pop() ?? "";
   const services = (bootstrap as { services?: unknown })?.services;
@@ -62,7 +51,6 @@ export function rdapBase(bootstrap: unknown, domain: string): string | null {
   return null;
 }
 
-/** The `expiration` event's date from an RDAP domain answer, ISO, or null. */
 export function expirationOf(rdap: unknown): string | null {
   const events = (rdap as { events?: unknown })?.events;
   if (!Array.isArray(events)) return null;
@@ -78,7 +66,6 @@ export function expirationOf(rdap: unknown): string | null {
   return null;
 }
 
-/** The findings for domains whose expiry is known. */
 export function expiryFindings(
   expiries: ReadonlyArray<{ domain: string; expires: string }>,
   now: Date,
@@ -111,9 +98,11 @@ export function expiryFindings(
   return out;
 }
 
-/** The pushes the last read stands behind (U5): each domain once at 30 days out and once at
- *  7, keyed by the date, so a renewal that moves it clears the alert and a new near date
- *  alerts again. The findings above stay; this is the phone line beside them. */
+/**
+ * The pushes the last read stands behind (U5): each domain once at 30 days out and once at 7,
+ * keyed by the date, so a renewal that moves it clears the alert and a new near date alerts again.
+ * The findings above stay; this is the phone line beside them.
+ */
 export function domainAlerts(
   read:
     | { read_at: string; domains: ReadonlyArray<{ domain: string; expires: string }> }
@@ -149,8 +138,8 @@ async function fetchJson(fetchImpl: typeof fetch, url: string): Promise<unknown>
 }
 
 /**
- * Each domain's expiry, from KV when read in the last day, otherwise from RDAP. Returns
- * the expiries it has and the domains it could not read, with why.
+ * Each domain's expiry, from KV when read in the last day, otherwise from RDAP. Returns the
+ * expiries it has and the domains it could not read, with why.
  */
 export async function readExpiries(
   kv: KVNamespace,

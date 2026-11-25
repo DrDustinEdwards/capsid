@@ -5,17 +5,9 @@ import { textResponse as text } from "@dustinedwards/site-runtime/http";
 import { pageHeaders, serveFile } from "./portal-app";
 import { isPortalHost } from "./portal-host";
 
-// The Portal's chart demo (devkit live/areas.json, area 10): the same pages, rendered here at /demos/
-// on portal.dustinedwards.info with sample data and NO sign-in, so a live check and a visitor see the
-// charts a signed-in owner sees. It is the one public path on the Portal host besides its hashed files,
-// /admin/access-drift and security.txt. It reads nothing from D1, KV or GitHub and takes no write: its
-// data is dev/sample-feed.json and the dev mock's other fake answers (example.com sites, "sample"
-// namespaces), captured at build time into the build's /demos/api/*.json, and the pages and the browser
-// both read those files (dashboard/src/lib/demo.ts). The Portal itself (/ and everything else on this
-// host) stays behind its gate, and so do its own files.
-//
-// The Portal signs in through Access for SaaS, so no Access application stands in front of this host
-// (src/index.ts, /admin/access-drift) and no Access change is needed for this path.
+// The Portal's chart demo (devkit live/areas.json, area 10): the same pages, rendered here at
+// /demos/ on portal.dustinedwards.info with sample data and NO sign-in, so a live check and a
+// visitor see the charts a signed-in owner sees.
 
 const DEMO_PATH = "/demos";
 const DEMO_PREFIX = "/demos/";

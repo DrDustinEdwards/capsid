@@ -25,25 +25,10 @@ import { warningHeaders } from "./http";
 import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 import { MINUTE_MS, DAY_MS } from "./time";
 
-// The Watch Floor's one read (capsid/research/design-ops-console.md): GET /portal/api/ops returns OpsFeed (src/ops-types/feed.ts), the watcher's last pass from KV plus what changes between passes, read live. POST /portal/api/ops/refresh runs one watcher pass now and returns the new feed. Both answer to portalGate; they are routes, not tools, so no grant is checked here (src/scope.ts lists them among the routes gated some other way).
-//
-// READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 13 statements plus one per TASKS entry (18 today, so 31):
-//     1  jobs: every open job and every job that ended in the last 24 hours
-//     3  agentSummaries: the inventory, then loadRecordRows' two grouped reads
-//     1  job_outcome_prs in the last 7 days
-//     1  ops_sites, 1  ops_packages: the configuration, every row
-//    18  task_runs: each task's newest runs, one keyed read per task in one batch
-//     1  watcher_findings: the open findings that post no job (src/watcher-digest.ts)
-//     1  ops_uptime_daily: each site's last 90 days, by month (siteUptime below)
-//     4  gatherInbox (src/inbox.ts): the blocked jobs, the claimed and due parked jobs
-//        with their newest audit rows, the applied migrations and the site configuration
-//        again, so Needs you counts exactly what GET /ops/inbox answers with
-//   KV, 10 gets: gatherInbox's own reads (stale pull request cache, manual steps cache,
-//     ops:snapshot, the awaiting-seat set, the merge units' report), then ops:snapshot,
-//     the awaiting-seat set, the auto-merge safety report, the refresh stamp, and the
-//     overnight switch's mode (its decision record only while the mode is subscription).
-// They run concurrently; the longest chain is agentSummaries' two steps.
+// The Watch Floor's one read (capsid/research/design-ops-console.md): GET /portal/api/ops returns
+// OpsFeed (src/ops-types/feed.ts), the watcher's last pass from KV plus what changes between
+// passes, read live. POST /portal/api/ops/refresh runs one watcher pass now and returns the new
+// feed.
 
 export const OPS_FEED_PATH = "/portal/api/ops";
 export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
@@ -56,8 +41,8 @@ export const OPS_FEED_READS = { d1: 14 + TASKS.length, kv: 10 } as const;
 // The uptime target the Portal shows each site against.
 const UPTIME_TARGET = 0.999;
 
-/** Each site's probes and up probes over the retention window, and the days under the
- *  target. Null, logged, when the table cannot be read (before migrations/0054). */
+// Each site's probes and up probes over the retention window, and the days under the target. Null,
+// logged, when the table cannot be read (before migrations/0054).
 async function siteUptime(env: Env, now: Date): Promise<OpsUptime | null> {
   const since = new Date(now.getTime() - (DAILY_RETENTION_DAYS - 1) * DAY_MS)
     .toISOString()
@@ -126,8 +111,8 @@ const OPS_REFRESH_INTERVAL_MS = 2 * MINUTE_MS;
 export const OPS_REFRESH_HEADER = "X-Capsid-Ops";
 const OPS_REFRESH_HEADER_VALUE = "refresh";
 
-/** When the next on-demand pass is allowed, or null when one is allowed now. A stamp
- *  that does not parse allows one: the limiter's put writes a fresh stamp. */
+// When the next on-demand pass is allowed, or null when one is allowed now. A stamp that does not
+// parse allows one: the limiter's put writes a fresh stamp.
 export function refreshAllowedAt(last: string | null, now: Date): string | null {
   if (last === null) return null;
   const at = Date.parse(last);
@@ -140,8 +125,8 @@ export function refreshAllowedAt(last: string | null, now: Date): string | null 
 // the handler, so opsFeed reads storage only.
 export type OpsFeedData = Omit<OpsFeed, "csrf" | "user">;
 
-/** The run ledger as the feed shows it. A failed read is said in the panel, not
- *  turned into a failure of the whole feed. */
+// The run ledger as the feed shows it. A failed read is said in the panel, not turned into a
+// failure of the whole feed.
 async function scheduled(
   env: Env,
 ): Promise<{ read: Awaited<ReturnType<typeof readTaskRuns>> } | { error: string }> {

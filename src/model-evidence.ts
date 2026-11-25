@@ -1,25 +1,17 @@
 import { JOB_KINDS, MODELS, ROUTING_RULES, TRIAL_ARMS, type RoutedModel } from "./model-routing";
 
-// What the outcomes say about the routing rules (src/model-routing.ts). Reads only.
-
-// A cell (kind, model) is read only from this many outcomes. Below it a rate is noise: a
-// single merged job reads as 100 percent.
+// Below this many outcomes a rate is noise: one merged job reads as 100 percent.
 export const MIN_SAMPLE = 10;
-// A model whose merged-with-green rate for a kind is under this, with enough outcomes,
-// is a reason to propose a more capable one.
 export const RATE_FLOOR = 0.6;
-// How much better a more capable model's rate must be before it is proposed.
 export const RATE_GAIN = 0.1;
 
 export interface OutcomeFact {
   kind: string | null;
-  // The model Capsid chose (job_outcomes.model_chosen). The session's own model_id only
-  // leaves an outcome out when it names another model (src/model-learning.ts).
+  // The model Capsid chose; the session's own model_id only drops an outcome when it names another model (src/model-learning.ts).
   model: string | null;
   prs_merged: number | null;
   ci_green: number | null;
   corrections: number | null;
-  // Its pull request was later reverted, or its deploy rolled back (src/model-learning.ts).
   undone?: boolean;
 }
 
@@ -27,16 +19,12 @@ export interface Cell {
   kind: string;
   model: string;
   n: number;
-  // Jobs with a verified merge and green CI that was not later reverted or rolled back, over n.
   merged_green: number;
   rate: number;
   corrections_mean: number | null;
-  // Below MIN_SAMPLE: shown, never acted on.
   enough: boolean;
 }
 
-/** The alias a model id reduces to: "claude-opus-5-5" and "opus" are both opus. A
- *  model it does not recognize is kept as reported, so it shows as its own cell. */
 export function modelAlias(id: string | null): string | null {
   if (!id) return null;
   const lower = id.toLowerCase();
@@ -88,10 +76,8 @@ export interface Proposal {
 
 const rank = (model: string): number => MODELS.indexOf(model as RoutedModel);
 
-/** Rule changes the evidence supports, never applied: the seat approves each. Only cells
- *  with MIN_SAMPLE outcomes count. A cheaper model is proposed when it did as well as the
- *  current one (the one the kind's routine rule names); a more capable one when the current
- *  is under the floor and the other is clearly better. */
+// Never applied: the seat approves each. A cheaper model is proposed when it did as well as the current one;
+// a more capable one when the current is under the floor and the other clearly better.
 export function proposeRuleChanges(cells: readonly Cell[]): Proposal[] {
   const out: Proposal[] = [];
   for (const kind of JOB_KINDS) {
@@ -136,15 +122,12 @@ export interface TrialStatus {
   percent: number;
   n: number;
   against_n: number;
-  // "collecting" until both cells hold MIN_SAMPLE outcomes; then whether the evidence
-  // supports moving the kind's rule to the arm's model. Never applied here.
+  // "collecting" until both cells hold MIN_SAMPLE outcomes; never applied here.
   verdict: "collecting" | "supports" | "does not support";
   why: string;
 }
 
-/** Each trial arm read against its kind's rule: what it has collected and whether the
- *  evidence supports the rule change. "supports" holds exactly when proposeRuleChanges
- *  proposes that change; the seat makes the edit. */
+// "supports" holds exactly when proposeRuleChanges proposes that change.
 export function trialStatus(cells: readonly Cell[]): TrialStatus[] {
   const proposals = proposeRuleChanges(cells);
   return TRIAL_ARMS.map((arm) => {

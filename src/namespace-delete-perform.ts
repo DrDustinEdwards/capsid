@@ -22,8 +22,10 @@ import {
 } from "./namespace-delete";
 
 const DELETE_TOKEN_TTL_SECONDS = 5 * 60;
-/** The delete confirmation's key label (auth.ts confirmKeys): its own, so a Portal control's token never performs a
- *  delete here. A new label retires every outstanding token. */
+/**
+ * The delete confirmation's key label (auth.ts confirmKeys): its own, so a Portal control's token
+ * never performs a delete here. A new label retires every outstanding token.
+ */
 const DELETE_CONFIRM_LABEL = "capsid-namespace-delete:v1";
 
 export type ToolAnswer = { ok: true; data: unknown } | { ok: false; refusal: string };
@@ -95,7 +97,10 @@ export async function previewNamespaceDelete(
   };
 }
 
-// The batch's first statement: an INSERT that violates NOT NULL (the same abort as requireExists in src/store-guards.ts), fired unless the store is still what the plan read. The preview's reads are another transaction, so this is what makes the refusals and counts hold at commit. The live set is pinned exactly: the count equals the plan's and no live path lies outside the plan's list (?6, JSON).
+// The batch's first statement: an INSERT that violates NOT NULL (the same abort as requireExists
+// in src/store-guards.ts), fired unless the store is still what the plan read. The live set is
+// pinned exactly: the count equals the plan's and no live path lies outside the plan's list (?6,
+// JSON).
 function planGuard(db: D1Database, plan: DeletePlan, pathsJson: string): D1PreparedStatement {
   return db
     .prepare(
@@ -129,10 +134,9 @@ function planGuard(db: D1Database, plan: DeletePlan, pathsJson: string): D1Prepa
 }
 
 /**
- * The perform: the token, the plan read again, then one batch. Each live document is
- * deleted by pathMutation(db, namespace, path, null), the one site that deletes a
- * documents row (path mutation invariant, test/path-mutation.test.ts), so the batch is FIXED_STATEMENTS plus
- * two per document and the cap refuses anything larger before it is built.
+ * Each live document is deleted by pathMutation(db, namespace, path, null), the one site that
+ * deletes a documents row (path mutation invariant, test/path-mutation.test.ts), so the batch is
+ * FIXED_STATEMENTS plus two per document and the cap refuses anything larger before it is built.
  */
 export async function performNamespaceDelete(
   env: Env,
@@ -181,11 +185,8 @@ export async function performNamespaceDelete(
 }
 
 /**
- * The commit behind both doors, once a confirmation is verified: capsid_admin_manage_namespaces
- * action delete_perform (its own token, above) and the namespace_remove control (the
- * controls' token, src/controls.ts, which binds the same fingerprint). The plan is read
- * again, every refusal applies again, and the fingerprint the confirmation signed must
- * match it exactly.
+ * The plan is read again, every refusal applies again, and the fingerprint the confirmation signed
+ * must match it exactly.
  */
 export async function deleteAsPlanned(
   env: Env,
@@ -218,9 +219,8 @@ export async function deleteAsPlanned(
       refusal: `delete_namespace refused, nothing changed: the namespace changed since the preview (${changed.join("; ")}). Preview again.`,
     };
   }
-  // The cap is in deleteRefusals, so this holds already; checked again because the
-  // batch below is sized from this list, and a list the read truncated would delete
-  // part of the namespace.
+  // The cap is in deleteRefusals, so this holds already; checked again because the batch below is
+  // sized from this list, and a list the read truncated would delete part of the namespace.
   const paths = plan.live_paths;
   if (
     paths.length !== plan.counts.documents_live ||
@@ -246,8 +246,8 @@ export async function deleteAsPlanned(
   try {
     results = await db.batch([
       planGuard(db, plan, pathsJson),
-      // Exactly the paths pathMutation deletes below, bound, from the rows the table
-      // holds when the batch runs. The guard has pinned the live set to this list.
+      // Exactly the paths pathMutation deletes below, bound, from the rows the table holds when the
+      // batch runs. The guard has pinned the live set to this list.
       db
         .prepare(
           `INSERT INTO document_versions (document_id, namespace, path, title, body)
@@ -256,10 +256,9 @@ export async function deleteAsPlanned(
            RETURNING id`,
         )
         .bind(namespace, pathsJson),
-      // The one audit row, read inside the batch before anything is removed: the
-      // edges, the whole ops_sites row and the namespaces row are recorded here and
-      // nowhere else afterwards; the deleted paths ride in the plan. The aggregate
-      // always yields a row.
+      // The one audit row, read inside the batch before anything is removed: the edges, the whole
+      // ops_sites row and the namespaces row are recorded here and nowhere else afterwards; the deleted
+      // paths ride in the plan. The aggregate always yields a row.
       db
         .prepare(
           `INSERT INTO audit_log (actor, action, namespace, path, params)
@@ -293,9 +292,9 @@ export async function deleteAsPlanned(
     };
   }
 
-  // Counted from RETURNING, never meta.changes (path mutation invariant, test/path-mutation.test.ts). The
-  // batch committed, so the guard held: the live set was exactly `paths`, and
-  // pathMutation deleted each of them.
+  // Counted from RETURNING, never meta.changes (path mutation invariant,
+  // test/path-mutation.test.ts). The batch committed, so the guard held: the live set was exactly
+  // `paths`, and pathMutation deleted each of them.
   const snapshots = rows(results[1]).length;
   const auditParams = rows<{ params: string }>(results[2])[0]?.params;
   let edgesRemoved = 0;

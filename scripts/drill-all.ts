@@ -1,15 +1,6 @@
-// Proves every site's backups at once, from the seat's machine.
-//
-//   node scripts/drill-all.ts [--site <name>]...
-//
-// For each site it opens the site's backup bucket with the caller's own wrangler login
-// (npx wrangler login; no token is read, passed or printed), downloads the newest
-// COMPLETE run, restores it with d1-dump's drill into a local SQLite file, and prints
-// one line: `<site> run=<id> age_hours=<n> tables=<n> rows=<n> PASS`, or the same with
-// `FAIL (<reason>)`. Exit code 1 when any site failed, 2 for a bad argument. docs/backups.md, "Drill every site".
-//
-// `wrangler r2 object` has no list command, so the bucket is opened through wrangler's
-// getPlatformProxy with a temporary config declaring one remote R2 binding.
+// Proves every site's backups at once, from the seat's machine: node scripts/drill-all.ts [--site <name>]...
+// Per site: opens the backup bucket with the caller's own wrangler login (no token is read or printed), downloads the newest complete run, restores it with d1-dump's drill into a local SQLite file, and prints `<site> run=<id> age_hours=<n> tables=<n> rows=<n> PASS` or `FAIL (<reason>)`. Exit 1 when any site failed, 2 for a bad argument (docs/backups.md, "Drill every site").
+// `wrangler r2 object` has no list command, so the bucket is opened through getPlatformProxy with a temporary config declaring one remote R2 binding.
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -29,9 +20,7 @@ export interface DrillRun {
   output: string;
 }
 
-// foxing joins this list when its backup job lands (job_d087b66eef22). txasm's bucket is txasm-books (binding BOOKS).
-// A site with no FTS5 table (txasm) passes d1-dump's own `search` check since d1-dump 0.8
-// ("no FTS5 tables in this database"), so the drill needs no flag for it.
+// foxing joins this list when its backup job lands (job_d087b66eef22). txasm's bucket is txasm-books (binding BOOKS); with no FTS5 table it passes d1-dump's search check since 0.8, so it needs no flag.
 export const SITES: Site[] = [
   { name: "foxhound", bucket: "foxhound-backups" },
   { name: "carrel", bucket: "carrel-backups" },
@@ -40,9 +29,7 @@ export const SITES: Site[] = [
   { name: "dustinedwards", bucket: "dustinedwards-backups" },
 ];
 
-// The drill's own freshness threshold (d1-dump DEFAULT_STALE_HOURS). Checked here against
-// `now`, and the drill runs with --max-age-hours off, so the line's age and its verdict
-// read one clock.
+// d1-dump's DEFAULT_STALE_HOURS, checked against `now` with --max-age-hours off, so the line's age and verdict read one clock.
 const MAX_AGE_HOURS = 26;
 // A drill that runs longer than this is a FAIL line, not a hang of every later site.
 const DRILL_TIMEOUT_MS = 15 * 60_000;
@@ -57,7 +44,6 @@ const CLI = join(
   "cli.js",
 );
 
-/** The real drill: d1-dump's CLI on the sqlite backend, as a child process. */
 export function runDrillCli(dir: string, prefix: string): DrillRun {
   const r = spawnSync(
     process.execPath,
@@ -87,7 +73,6 @@ export function runDrillCli(dir: string, prefix: string): DrillRun {
   };
 }
 
-/** The first failing check of a drill's output, or its first line when none is named. */
 export function firstFailure(output: string): string {
   const lines = output
     .split("\n")
@@ -111,8 +96,7 @@ async function listAll(bucket: R2Like, prefix: string): Promise<string[]> {
 }
 
 /**
- * Drills one site's bucket. Never throws: a bucket that cannot be read, or no complete
- * run, is a FAIL line. Returns { line, ok }.
+ * Drills one site's bucket. Never throws: an unreadable bucket or no complete run is a FAIL line. Returns { line, ok }.
  */
 export async function drillSite(
   site: string,
@@ -171,7 +155,6 @@ export async function drillSite(
   }
 }
 
-/** The sites named by --site flags, or all of them; an unknown name or argument is an error. */
 export function selectSites(argv: string[], sites: Site[] = SITES): Site[] {
   const wanted: string[] = [];
   for (let i = 0; i < argv.length; i++) {
@@ -192,7 +175,6 @@ export function selectSites(argv: string[], sites: Site[] = SITES): Site[] {
   return sites.filter((s) => wanted.includes(s.name));
 }
 
-// Opens the site's bucket through the caller's wrangler login. Returns the bucket and a dispose.
 async function openBucket(site: Site): Promise<{ bucket: R2Like; dispose: () => Promise<void> }> {
   const { getPlatformProxy } = await import("wrangler");
   const cfgDir = mkdtempSync(join(tmpdir(), `drill-cfg-${site.name}-`));

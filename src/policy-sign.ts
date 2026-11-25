@@ -17,15 +17,8 @@ import {
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Signing a policy document: the one path that mints the signature the auto-merge and gate policies are verified against. Its constraints:
-//
-//   1. Admin only, enforced at the tool layer: an agent that could sign a policy could widen itself.
-//   2. capsid/policy/ only, checked here as well as at the tool, so no second caller can point it elsewhere.
-//   3. It signs what is already stored: no body argument, so it cannot sign arbitrary bytes.
-//   4. It re-signs rather than nesting: existing frontmatter is stripped first.
-//   5. The raw switch (capsid_admin_manage_switches action sign_policy) signs only the bytes its caller read: it names their sha256, and a differing body is refused. It never signs the auto-merge policy, whose author allowlist and Auto units widen unattended merging: that is signed only by sign_policy_change and sign_policy_from_repo, which show the change first (Capsid security review, round 4, finding 5).
-//
-// The write snapshots the prior row and appends to audit_log in one batch (test/write-invariants.test.ts).
+// Signing a policy document: the one path that mints the signature the auto-merge and gate policies
+// are verified against. Its constraints: 1.
 
 export interface PolicySignResult {
   ok: true;
@@ -140,10 +133,9 @@ export async function signPolicyDocument(
   };
 }
 
-/** Sign `body` and write it over the stored policy at `path`: the anti-rollback pin first,
- *  then one batch that refuses if the stored body changed since `prior` was read,
- *  snapshots the prior row, writes the signed body and the audit row
- *  (test/write-invariants.test.ts). */
+// Sign `body` and write it over the stored policy at `path`: the anti-rollback pin first, then one
+// batch that refuses if the stored body changed since `prior` was read, snapshots the prior row,
+// writes the signed body and the audit row (test/write-invariants.test.ts).
 export async function commitSigned(
   env: Env,
   caller: string,

@@ -42,8 +42,8 @@ import { APP_ROSTER } from "./roster";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { plural } from "@drdustinedwards/site-helpers/text";
-// A control's preview (src/controls.ts is the core): reads the current state, writes
-// nothing, and returns what will change and the audit rows it will write.
+// A control's preview (src/controls.ts is the core): reads the current state, writes nothing, and
+// returns what will change and the audit rows it will write.
 
 function rosterRefusal(action: "reset_breaker", namespace: string | undefined): string | null {
   if (!namespace) return `${action} needs a namespace.`;
@@ -55,8 +55,10 @@ function rosterRefusal(action: "reset_breaker", namespace: string | undefined): 
   return null;
 }
 
-/** What the action will change, read from the state now. Reads only: no D1 write and
- *  no KV put, which test/portal-actions.test.ts asserts for every action. */
+/**
+ * What the action will change, read from the state now. Reads only: no D1 write and no KV put,
+ * which test/portal-actions.test.ts asserts for every action.
+ */
 export async function planAction(
   env: Env,
   email: string,
@@ -213,7 +215,6 @@ export async function planAction(
       if (bad) return refused(bad);
       const options = deleteOptionsFrom(p);
       if (!options.ok) return refused(options.refusal);
-      // Every refusal of capsid_admin_manage_namespaces action delete_preview, from the same reader.
       const plan = await readDeletePlan(env.DB, p.namespace);
       const refusals = deleteRefusals(plan, options.opts);
       if (refusals.length) return refused(refusals.join(" "));

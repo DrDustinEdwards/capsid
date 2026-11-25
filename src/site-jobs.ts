@@ -12,23 +12,8 @@ import { auditStatement } from "./store-guards";
 import { supersedePass } from "./supersede";
 import { runTask, taskRunStatements, type TaskId, type TaskResult } from "./task-runs";
 
-// RUN A SCHEDULED JOB NOW, ON ANY SITE One
-// control, run_job { namespace, name }, in place of a "run now" copy of a job's work on each
-// site. Capsid never runs a site's work: it
-// asks the site to run its own job through the code its cron runs.
-//
-//   a site     POST run_job { job: name } to its operator API, which runs the job through
-//              site-runtime's runJobTool: the same runJobs path, cron_runs record and
-//              timeout as its trigger, so /health's cron check sees the run. An admin MCP
-//              server is its own site row (dustinedwards-admin-mcp, ...): its job is the
-//              tool-call log's copy, tool-call-log-export, on its own /api/operator.
-//   capsid     one of this Worker's own BACKUP_CRON jobs (CAPSID_JOBS), through runTask as
-//              the cron runs it: the dump under the cron's lease, the tool-call log's copy
-//              and the supersede pass, each with its task_runs row.
-//
-// Each call that leaves the Worker is an audit_log row (site-job) and a task_runs row
-// (site-job). The rate limit is the repairs' one (src/site-repair.ts), keyed per job: two
-// minutes between runs of a job on a site.
+// RUN A SCHEDULED JOB NOW, ON ANY SITE One control, run_job { namespace, name }, in place of a "run
+// now" copy of a job's work on each site.
 
 const JOB_AUDIT_ACTION = "site-job";
 const JOB_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -86,11 +71,9 @@ export type CapsidJob = keyof typeof CAPSID_JOB_BODIES;
 export const CAPSID_JOBS = Object.keys(CAPSID_JOB_BODIES) as CapsidJob[];
 const isCapsidJob = (name: string): name is CapsidJob => Object.hasOwn(CAPSID_JOB_BODIES, name);
 
-/**
- * One of Capsid's own BACKUP_CRON jobs through runTask, as the cron runs it: the nightly
- * trigger passes rethrow, so a throw fails the invocation; a run now does not, and reads the
- * line. Each writes its own task_runs row.
- */
+// One of Capsid's own BACKUP_CRON jobs through runTask, as the cron runs it: the nightly trigger
+// passes rethrow, so a throw fails the invocation; a run now does not, and reads the line. Each
+// writes its own task_runs row. /
 export async function runCapsidJob(env: Env, name: CapsidJob, rethrow: boolean): Promise<Judged> {
   const job = CAPSID_JOB_BODIES[name];
   let judged: TaskResult = null;
@@ -127,9 +110,9 @@ export async function jobRefusal(
   return operatorRefusal(env, namespace);
 }
 
-/** Why nothing can be called on `namespace`'s operator API, or null: it is not a configured
- *  site, has no operator API, `also` refuses (a caller's own condition on the operator), or
- *  the operator's secret is not set. Reads only. */
+// Why nothing can be called on `namespace`'s operator API, or null: it is not a configured site,
+// has no operator API, `also` refuses (a caller's own condition on the operator), or the operator's
+// secret is not set. Reads only.
 export async function operatorRefusal(
   env: Env,
   namespace: string,

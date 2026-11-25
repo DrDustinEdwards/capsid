@@ -5,18 +5,14 @@ import { fail, ok, type ToolCtx } from "./docs";
 import { bounded } from "../limits";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// A zone name as Cloudflare lists it: labels of letters, digits and hyphens.
 const ZONE_NAME = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 
 export function defineCloudflareOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
 
-  // Cloudflare Access and Email Routing, read. Admin only in whole: it reads the
-  // account's login gates and mail routes, which span every namespace. TOOL_GRANTS in
-  // src/scope.ts states it and the registrar refuses anyone else before this handler
-  // runs. It reads only, through src/ops-cloudflare-config.ts, which copies named
-  // fields and never passes a Cloudflare object through, so no client secret, SCIM
-  // credential or aud tag reaches the caller.
+  // Admin only in whole: reads login gates and mail routes across every namespace.
+  // ops-cloudflare-config.ts copies named fields, so no client secret, SCIM credential or aud tag
+  // reaches the caller.
   ctx.ops.define(
     "cloudflare_config",
     {

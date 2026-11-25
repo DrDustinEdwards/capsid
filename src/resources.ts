@@ -10,12 +10,9 @@ import { checkScope } from "./scope";
 import { MAX_ROWS } from "./limits";
 import { base64url, fromBase64urlText } from "@dustinedwards/site-runtime/encoding";
 
-// Scopes for resources and prompts. guardRegistrations wraps registerTool only, and
-// a raw request handler is not a registration, so these handlers check scope here.
-// Without it, an agent bearer on /ops/mcp could read every document by URI and list
-// every prompt while capsid_read_doc refused it.
-// They are checked as capsid_read_doc action read, so an agent narrowed away from it loses
-// both and the two surfaces cannot disagree.
+// Scopes for resources and prompts. guardRegistrations wraps registerTool only, and a raw request
+// handler is not a registration, so these handlers check scope here. Without it, an agent bearer on
+// /ops/mcp could read every document by URI and list every prompt while capsid_read_doc refused it.
 export function resourceRefusal(agent: Agent, namespace: string): string | null {
   return checkScope(agent, { tool: "capsid_read_doc", action: "read", grant: "read", namespace });
 }
@@ -58,14 +55,9 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
     },
   );
 
-  // resources/list, served directly because the request carries the cursor and the
-  // McpServer wrapper does not pass it through.
-  //
-  // Keyset pagination compared as a tuple: a concatenated key would skip rows ('-'
-  // sorts below '/').
-  //
-  // This overrides McpServer's handler, which is safe only while every resource is
-  // served by the one template above. test/bounded-reads.test.ts pins that.
+  // resources/list, served directly because the request carries the cursor and the McpServer
+  // wrapper does not pass it through. Keyset pagination compared as a tuple: a concatenated key
+  // would skip rows ('-' sorts below '/').
   server.server.setRequestHandler("resources/list", async (request) => {
     // The grant, before the query.
     // Every result is filtered to the caller's namespaces, so its cache hint is private
@@ -94,14 +86,10 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
         );
       }
     }
-    // Filtered in the query, so the LIMIT bounds what this caller can see rather than
-    // what the store holds. A filter after the LIMIT gives a caller scoped to a
-    // namespace that sorts late a page of rows it may not see, an empty page after
-    // filtering and no cursor, so its own documents are unreachable. The keyset
-    // cursor names the last row returned, which keeps the walk correct.
-    //
-    // One bound parameter rather than a spliced clause, so the statement text is fixed
-    // and test-integration/query-plans.test.ts can plan it. Null is the unscoped caller.
+    // Filtered in the query, so the LIMIT bounds what this caller can see rather than what the
+    // store holds. A filter after the LIMIT gives a caller scoped to a namespace that sorts late a
+    // page of rows it may not see, an empty page after filtering and no cursor, so its own
+    // documents are unreachable.
     const visible = visibleNamespaces === "*" ? null : JSON.stringify(visibleNamespaces);
     const { results } = await db
       .prepare(

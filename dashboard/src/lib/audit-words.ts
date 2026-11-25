@@ -1,6 +1,3 @@
-// What an audit row's action code means, in words (the UX audit's M5: Activity showed raw
-// codes such as "jobs.block" and "portal-overnight"). The code stays beside the words and
-// in the row's panel, so nothing is lost; an action not listed here shows its code.
 const WORDS: Record<string, string> = {
   write: "Wrote a document",
   read: "Read a document",

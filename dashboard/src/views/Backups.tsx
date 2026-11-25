@@ -19,10 +19,8 @@ import type { SiteBackupRow } from "../types";
 import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
 
-// Chart 10, the retention slots, from GET /portal/api/trends; Enarratio loads with it.
 const BackupSlots = trendChart("BackupSlots");
 
-// Health's Backups tab.
 export function Backups() {
   const { feed, now } = useApp();
   const snap = feed.snapshot;
@@ -181,8 +179,6 @@ export function Backups() {
   );
 }
 
-// Every site's own backups, read live (GET /portal/api/backups), and Back up now: the
-// site_backup control, previewed and performed like every control.
 function SiteBackups() {
   const { now, confirm } = useApp();
   const load = useAnswer(["backups"], fetchBackups);
@@ -258,7 +254,6 @@ function SiteBackups() {
   );
 }
 
-// A workflow run of the Amazon copy (its last copy, its last drill): how it ended, and a link.
 function RunOutcome({ run }: { run: { conclusion: string | null; url: string | null } | null }) {
   if (!run) return <Status tone="nodata">none</Status>;
   return (

@@ -1,7 +1,8 @@
 // The HTTP routes checkScope covers and the ones it does not.
 import type { ToolRequirement } from "./scope";
 
-// HTTP routes, which guardRegistrations never sees (it wraps MCP tools). A route checked only for the write grant would let a driver minted for one namespace act across all of them. Every route in defaultHandler is in exactly one of these two tables, and test/route-gates.test.ts fails when one is in neither.
+// HTTP routes, which guardRegistrations never sees (it wraps MCP tools). A route checked only for
+// the write grant would let a driver minted for one namespace act across all of them.
 
 // A route that goes through checkScope, and what it requires.
 export const ROUTE_GRANTS: Record<string, ToolRequirement> = {};

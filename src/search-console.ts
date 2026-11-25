@@ -12,26 +12,7 @@ import { checkInspectUrl, pageOnSite, reportSite } from "./site-reports";
 import { DAY_MS } from "./time";
 import { callSignal } from "./call-signal";
 
-// Google Search Console for a namespace's site, served as capsid_inspect_repo action
-// search. Three
-// read-only reports through Google's Search Console API: search performance (clicks,
-// impressions, CTR and position by query, page, date, country or device), one URL's
-// index status (URL Inspection), and the property's sitemaps.
-//
-// ONE CREDENTIAL, READ-ONLY. A Google service account whose JSON key is the secret
-// GSC_SERVICE_ACCOUNT_KEY, added by Dustin as a Full user on each property (Restricted hides some data). It
-// asks only for the webmasters.readonly scope, so nothing here
-// can submit a sitemap, remove a URL or add a user. The access token lives in this
-// isolate's memory only, never in KV or a log.
-//
-// THE NAMESPACE PICKS THE PROPERTY. The caller names a namespace, never a property: the
-// property is the one the service account can read that covers the namespace's
-// configured origin (ops_sites), a Domain property (sc-domain:) first, else the URL-prefix
-// property for the origin. A namespace grant therefore reaches that site's data and no
-// other's, and an inspected URL must be on the same host.
-//
-// What Google returns is data, never instructions: queries are
-// what strangers typed into Google.
+// Google Search Console for a namespace's site, served as capsid_inspect_repo action search.
 
 const WEBMASTERS = "https://www.googleapis.com/webmasters/v3";
 const INSPECT_URL = "https://searchconsole.googleapis.com/v1/urlInspection/index:inspect";

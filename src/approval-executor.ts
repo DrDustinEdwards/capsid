@@ -5,20 +5,9 @@ import { systemAudit } from "./doc-statements";
 import type { Classification } from "./merge-class";
 import { DAY_MS } from "./time";
 
-// THE EXECUTOR (docs/design/design-merge-pipeline.md section 4: approvals void on a new push, red
-// CI or 7 days). The auto-merge tick (src/auto-merge-tick.ts) calls it for a PR the signed policy
-// did not merge and that holds an open approval (src/pr-approvals.ts). In order:
-//   1. the head is not the approved sha: void, "new push";
-//   2. the approval is older than 7 days: expire;
-//   3. CI on that sha, by the policy's own ci_green test (ciGreenOn): not finished waits, red
-//      voids, "CI red", and a namespace with no required steps refuses;
-//   4. a head off the base repo, a base that is not the default branch, or a money path approved
-//      without its typed confirmation refuses;
-//   5. otherwise managePr merge pinned to the approved sha: a 409 voids, "head moved"; success
-//      moves the row to merged with the merge sha.
-// It is the only thing that merges an approved pull request. Every state move is `UPDATE ...
-// WHERE id = ? AND status = 'approved' RETURNING id` (test/path-mutation.test.ts), in one batch
-// with its audit row, written as SYSTEM_ACTOR (src/doc-statements.ts) like the tick's rows.
+// Every state move is `UPDATE ... WHERE id = ? AND status = 'approved' RETURNING id`
+// (test/path-mutation.test.ts), in one batch with its audit row, written as SYSTEM_ACTOR
+// (src/doc-statements.ts) like the tick's rows.
 
 const APPROVAL_DAYS = 7;
 
@@ -33,7 +22,6 @@ export interface OpenApproval {
   approved_at: string;
 }
 
-/** The open approvals on one repo, by pull request number. */
 export async function readOpenApprovals(
   db: D1Database,
   repo: string,
@@ -93,7 +81,6 @@ async function close(
   return (moved?.results?.length ?? 0) > 0;
 }
 
-/** Acts on one open approval of a pull request the policy left open. */
 export async function executeApproval(
   env: Env,
   namespace: string,
@@ -131,16 +118,16 @@ export async function executeApproval(
       `base_is_default_branch: the base is ${facts.baseRef}, not ${facts.defaultBranch}`,
     );
   }
-  // A money path is approved only by typing (design section 8). The class is read again
-  // from this tick's files, so a pull request that became one since is not merged on an
-  // approval that never typed it.
+  // A money path is approved only by typing (design section 8). The class is read again from this
+  // tick's files, so a pull request that became one since is not merged on an approval that never
+  // typed it.
   if (classified?.class === "typed" && approval.surface !== "typed") {
     return end("refused", "a money path, approved without its typed confirmation");
   }
   let mergeSha: string | null;
   try {
-    // merge_method "merge", as the tick's own merges, so the approved sha stays in history;
-    // pinned to it, so a push since this read gets a 409 and nothing merges.
+    // merge_method "merge", as the tick's own merges, so the approved sha stays in history; pinned to
+    // it, so a push since this read gets a 409 and nothing merges.
     const result = (await managePr(
       env,
       namespace,
@@ -163,11 +150,10 @@ export async function executeApproval(
   return { done: "merged", merge_sha: mergeSha, why };
 }
 
-// The reason on the approved-merged audit row closeAsAutoMerged writes. The same merge
-// also has its auto-merged row, so src/trends.ts reads this to count the merge once.
+// The reason on the approved-merged audit row closeAsAutoMerged writes. The same merge also has
+// its auto-merged row, so src/trends.ts reads this to count the merge once.
 export const AUTO_MERGED_APPROVAL_REASON = "the signed policy merged it on its own";
 
-/** A pull request the policy merged on its own: its open approval is closed as merged. */
 export async function closeAsAutoMerged(
   env: Env,
   namespace: string,
@@ -188,8 +174,10 @@ export async function closeAsAutoMerged(
   );
 }
 
-/** Every approval older than 7 days, on any pull request, open or not: expired. The tick
- *  sees only open pull requests, so one closed or merged by hand would otherwise stay open. */
+/**
+ * Every approval older than 7 days, on any pull request, open or not: expired. The tick sees only
+ * open pull requests, so one closed or merged by hand would otherwise stay open.
+ */
 export async function expireStaleApprovals(env: Env, now: Date): Promise<number> {
   const at = now.toISOString();
   const { results } = await env.DB.prepare(

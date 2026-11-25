@@ -3,17 +3,9 @@ import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The queue's circuit breaker. A namespace whose drivers failed N jobs in the last 24 hours stops
-// handing out work until the seat or Dustin resets it. It holds no "open" flag: it is computed at
-// claim time from the audit log, so there is no state to drift, and only a person's reset closes
-// it. The reset is a timestamp; only failures after it count.
-//
-// What counts is the holder's own `fail` (audit `job-fail`). A seat's admin fail is a person
-// cleaning up, and a claim failing a tampered or corrupt body is the Worker refusing, so neither
-// trips it. Nor does a bench run's key: its fail is the honest "not done" its job asks for
-// (src/jobs-seat.ts completeAsCaller), and three a day would stop the study's runs. A holder's
-// fail that Capsid's own complete refusal forced, or that states its remainder item by item
-// against a diff showing the rest done, is left out too (src/fail-exemption.ts).
+// A namespace whose drivers failed N jobs in the last 24 hours stops handing out work until the
+// seat or Dustin resets it. It holds no "open" flag: it is computed at claim time from the audit
+// log, so there is no state to drift, and only a person's reset closes it.
 
 const BREAKER_THRESHOLD_DEFAULT = 3;
 const BREAKER_WINDOW_MS = DAY_MS;
@@ -26,20 +18,17 @@ export interface BreakerState {
   // Holder fails counted since `since`.
   failed: number;
   threshold: number;
-  // The later of 24 hours ago and the last reset, as audit_log writes times.
   since: string;
   reset_at: string | null;
-  // Why a setting could not be read, when one could not. The breaker then uses the
-  // stricter value, so an outage never lets a failing namespace keep claiming.
+  // Why a setting could not be read, when one could not. The breaker then uses the stricter value,
+  // so an outage never lets a failing namespace keep claiming.
   note?: string;
 }
 
-// audit_log.at is datetime('now'): "YYYY-MM-DD HH:MM:SS", UTC.
 function sqlTime(d: Date): string {
   return d.toISOString().slice(0, 19).replace("T", " ");
 }
 
-/** The threshold, 1 to 50; the default when unset. An unreadable key uses the default and says so. */
 async function readBreakerThreshold(
   kv: KVNamespace,
 ): Promise<{ threshold: number; note?: string }> {
@@ -71,7 +60,6 @@ export async function breakerState(env: Env, namespace: string, now: Date): Prom
   try {
     resetAt = await env.APP_KV.get(breakerResetKey(namespace));
   } catch (err) {
-    // No reset read means every failure in the window counts: the stricter reading.
     notes.push(`could not read the reset for ${namespace}: ${errorMessage(err)}`);
   }
   const windowStart = new Date(now.getTime() - BREAKER_WINDOW_MS);
@@ -80,9 +68,9 @@ export async function breakerState(env: Env, namespace: string, now: Date): Prom
   if (resetAt && (!reset || Number.isNaN(reset.getTime())))
     notes.push(`the reset for ${namespace} holds ${JSON.stringify(resetAt)}, not a time; ignored`);
   const since = sqlTime(from);
-  // A transition writes two audit rows with this action, one for the job and one for
-  // its mirror document, both on the job's path; counting paths counts each job once.
-  // A fail exempted when it was written leaves out both of its rows (src/fail-exemption.ts).
+  // A transition writes two audit rows with this action, one for the job and one for its mirror
+  // document, both on the job's path; counting paths counts each job once. A fail exempted when it
+  // was written leaves out both of its rows (src/fail-exemption.ts).
   const row = await env.DB.prepare(
     `SELECT COUNT(DISTINCT path) AS n FROM audit_log WHERE action = 'job-fail' AND namespace = ?1 AND at >= ?2 AND actor NOT LIKE 'agent:bench-run-%'
      AND path NOT IN (SELECT path FROM audit_log WHERE action = 'job-fail' AND namespace = ?1 AND at >= ?2 AND json_extract(params, '$.breaker_exempt') IS NOT NULL)`,
@@ -101,7 +89,6 @@ export async function breakerState(env: Env, namespace: string, now: Date): Prom
   };
 }
 
-/** The refusal a claim returns while the breaker is open. */
 export function breakerRefusal(state: BreakerState): string {
   return (
     `the circuit breaker for ${state.namespace} is open: ${state.failed} jobs failed by their holders since ${state.since} UTC, ` +
@@ -112,8 +99,9 @@ export function breakerRefusal(state: BreakerState): string {
 
 /**
  * The seat's or Dustin's control (capsid_admin_manage_switches action breaker_reset, admin only,
- * and the Portal's reset_breaker): close one namespace's breaker so earlier failures stop counting,
- * and optionally set the threshold, which applies to every namespace. Audited under the caller.
+ * and the Portal's reset_breaker): close one namespace's breaker so earlier failures stop
+ * counting, and optionally set the threshold, which applies to every namespace. Audited under the
+ * caller.
  */
 export async function resetBreaker(
   env: Env,

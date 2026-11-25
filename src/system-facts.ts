@@ -24,16 +24,7 @@ import {
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { utcDay } from "./time";
-// THE NIGHTLY SYSTEM FACTS BUILD. Once a UTC day after 06:00 (the
-// small hours in Chicago, so the 11:00 maintenance pass lists its drift) the tick reads:
-//   the versions model: every model repo's pins of the network's packages, from their
-//     lockfiles (src/shared-code.ts), published per system at /public/versions/v1.json
-//     (src/system-versions.ts);
-//   the secrets and data model: every Worker's bindings, D1 tables, KV namespaces and R2
-//     buckets from Cloudflare (src/system-resources.ts), kept private in APP_KV.
-// Each half stands alone: one that fails keeps its last good document and says so in the
-// drift list, and the other is still built. The drift lines are stored for the maintenance
-// pass (src/maintenance.ts), which lists them with the model's own drift.
+// THE NIGHTLY SYSTEM FACTS BUILD.
 
 const AFTER_UTC_HOUR = 6;
 

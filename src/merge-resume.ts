@@ -14,12 +14,6 @@ import {
 } from "./stale-jobs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The stale-jobs step on the five-minute tick. A merge is not completion, so this never closes
-// anything: it returns a BLOCKED job to its holder (or the queue) once EVERY pull request the job
-// names has merged, with a note per PR. A PR closed without merging, unreadable or open leaves the
-// job blocked. A job is resumed by this step once: one that blocks again on the same merged PRs is
-// waiting on something else.
-//
 // Every state it reads is also written, as counts per job, to the stale:prs cache the stale view
 // reads (src/stale-jobs.ts, D5), so that view costs no GitHub reads.
 
@@ -67,8 +61,6 @@ async function prState(env: Env, namespace: string, url: string): Promise<PrRead
   }
 }
 
-// Replaces each read job's entry and drops every job no longer blocked, including one
-// this tick just resumed. Returns the problem, or null.
 async function writeStaleCache(env: Env, reads: StalePrCache): Promise<string | null> {
   try {
     const prior = await readStaleCache(env.APP_KV);

@@ -3,32 +3,21 @@ import { assertRepoArg, getDefaultBranch, getRefSha, ghFetch, resolveRepo } from
 import { readRepoFile } from "./contents";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Tag a commit, and publish its release with the notes from the repo's CHANGELOG.
-// Served as capsid_close_pr actions tag and release, which need can_merge
-// (src/scope.ts repoWriteFlags): a tag or a release can start a deploy as a merge can.
-//
-// A release is refused before anything is written when its CHANGELOG has no section for
-// the tag, so a release never goes out with empty or guessed notes.
+// Served as capsid_close_pr actions tag and release, which need can_merge (src/scope.ts
+// repoWriteFlags): a tag or release can start a deploy. A release is refused when its CHANGELOG has
+// no section for the tag.
 
-// A tag name as GitHub and semver tooling read it: a v, then a version, optionally a
-// pre-release or build suffix. Narrower than git allows, on purpose.
+// Narrower than git allows, on purpose.
 const TAG = /^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]{1,40})?$/;
 const SHA = /^[0-9a-f]{40}$/;
 const NOTES_MAX = 50_000;
 
-/** Why a tag name is refused, or null. */
 export function tagRefusal(tag: string): string | null {
   return TAG.test(tag)
     ? null
     : `'${tag}' is not a release tag: use a version such as v1.4.0 or 1.4.0-rc.1.`;
 }
 
-/**
- * The CHANGELOG section for a version: the lines under the first heading that names it
- * (with or without a leading v, bare or in brackets, as "## [1.4.0] - 2026-10-10" or
- * "## v1.4.0"), up to the next heading of the same or a higher level. Null when no
- * heading names it, or the section is empty.
- */
 export function changelogSection(markdown: string, tag: string): string | null {
   const version = tag.replace(/^v/, "");
   const escaped = version.replace(/[.+]/g, (c) => `\\${c}`);
@@ -52,8 +41,6 @@ export function changelogSection(markdown: string, tag: string): string | null {
 
 export interface TagReleaseArgs {
   tag: string;
-  // The commit: a full sha, or a ref (a branch) resolved to its head now. Default: the
-  // default branch.
   sha?: string;
   ref?: string;
   publishRelease: boolean;
@@ -111,12 +98,9 @@ export async function tagRelease(
   };
 }
 
-// The two writes, shared with the maintenance pass's release-tag rule
-// (src/maintenance-releases.ts). That rule tags a shared package's own repo, which need
-// not be any namespace's, so it cannot go through tagRelease's namespace lookup; it
-// calls these with the repo it read, and writes its own audit row for each tag.
+// Shared with the maintenance pass's release-tag rule (src/maintenance-releases.ts), which tags a
+// repo that is no namespace's and so skips tagRelease's lookup.
 
-/** The CHANGELOG section for a tag as release notes, capped at NOTES_MAX; null when there is none. */
 export function releaseNotes(markdown: string, tag: string): string | null {
   const notes = changelogSection(markdown, tag);
   if (!notes) return null;
@@ -125,8 +109,7 @@ export function releaseNotes(markdown: string, tag: string): string | null {
     : notes;
 }
 
-/** Create the tag's ref at `sha`. Never moves a tag: GitHub refuses a ref that already
- *  exists (422), and that refusal is thrown saying nothing was changed. */
+/** Never moves a tag: GitHub's 422 for an existing ref is thrown saying nothing changed. */
 export async function createTag(
   env: Env,
   owner: string,
@@ -152,7 +135,6 @@ export async function createTag(
   }
 }
 
-/** Publish the release of an existing tag with these notes. Throws with GitHub's answer. */
 export async function publishRelease(
   env: Env,
   owner: string,

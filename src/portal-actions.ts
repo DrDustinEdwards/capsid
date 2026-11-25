@@ -27,25 +27,9 @@ import type { PortalActivity, PortalNamespaces, PortalPerformed } from "./ops-ty
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { warningHeaders } from "./http";
 import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
-// The Portal's routes for the controls (src/controls.ts holds the controls): the eight actions, what each will do, the one dispatch to the
-// shared mutators, and the routes the app calls (the contract is the bottom of
-// src/ops-types/). They replaced the old /console page's forms, which called this
-// same dispatch (capsid/research/design-portal-unify.md), so no transition is
-// implemented twice.
-//
-// No merge (it can start a CI deploy, so it stays behind can_merge) and no mint (a
-// mint hands out a key). test/portal-actions.test.ts asserts both absences.
-//
-// Two requests per action. The preview reads the current state,
-// writes nothing, and returns what will change with a signed token that carries the
-// action, its params, the administrator's email and a five-minute expiry. The perform
-// carries only that token. A replay inside the five minutes is allowed: every
-// transition is guarded on the state it moves from, so a second perform is refused by
-// the mutator or changes nothing.
-//
-// Every route answers to portalGate, as the feed does. They are routes, not tools, so
-// no grant is checked here (one enforcement point, test/route-gates.test.ts); src/scope.ts lists
-// them among the routes gated some other way.
+// The Portal's routes for the controls (src/controls.ts holds the controls): the eight actions,
+// what each will do, the one dispatch to the shared mutators, and the routes the app calls (the
+// contract is the bottom of src/ops-types/).
 
 export const PORTAL_PREVIEW_PATH = "/portal/api/actions/preview";
 export const PORTAL_PERFORM_PATH = "/portal/api/actions/perform";
@@ -69,8 +53,8 @@ type Gated =
   | { ok: true; email: string; user: PortalUser; csrf: string; body: Record<string, unknown> }
   | { ok: false; response: Response };
 
-/** The checks both POSTs run, in order: the session, the fetch metadata, the content type, the body cap,
- *  the CSRF pair, then the JSON. Nothing here reads or writes state. */
+// The checks both POSTs run, in order: the session, the fetch metadata, the content type, the body
+// cap, the CSRF pair, then the JSON. Nothing here reads or writes state.
 export async function gateActionRequest(request: Request, env: Env, now: Date): Promise<Gated> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate;
@@ -121,8 +105,8 @@ export async function gateActionRequest(request: Request, env: Env, now: Date): 
   };
 }
 
-/** POST /portal/api/actions/preview: what the action will change, and a token to
- *  perform it. Writes nothing. */
+// POST /portal/api/actions/preview: what the action will change, and a token to perform it. Writes
+// nothing.
 export async function handlePortalPreview(
   request: Request,
   env: Env,
@@ -147,8 +131,8 @@ export interface PortalDeps {
   feed?: (env: Env, now: Date) => Promise<OpsFeedData>;
 }
 
-/** POST /portal/api/actions/perform: the action a preview signed, run through the
- *  shared mutator, then the fresh feed. */
+// POST /portal/api/actions/perform: the action a preview signed, run through the shared mutator,
+// then the fresh feed.
 export async function handlePortalPerform(
   request: Request,
   env: Env,
@@ -202,8 +186,8 @@ export async function handlePortalPerform(
   return jsonResponse(performed, 200, warningHeaders(result.warning));
 }
 
-/** GET /portal/api/namespaces: every roster namespace as capsid_read_status action status reports it,
- *  from the same function, so the Portal and the tool agree. */
+// GET /portal/api/namespaces: every roster namespace as capsid_read_status action status reports
+// it, from the same function, so the Portal and the tool agree.
 export const handlePortalNamespaces = behindGate(async (_request, env, now) => {
   const status = await capsidStatus(env);
   // Each project's repo mapping, so the Projects page can show it and edit it in place.
@@ -246,8 +230,8 @@ export const handlePortalNamespaces = behindGate(async (_request, env, now) => {
   return jsonResponse(body);
 });
 
-/** GET /portal/api/activity?namespace=&actor=: the last audit rows, filtered. ?id=:
- *  that one row, for the Activity drawer. */
+// GET /portal/api/activity?namespace=&actor=: the last audit rows, filtered. ?id=: that one row,
+// for the Activity drawer.
 export const handlePortalActivity = behindGate(async (request, env, now) => {
   const parsed = activityFilterFrom(new URL(request.url));
   if (!parsed.ok) return textResponse(parsed.refusal, 400);
@@ -262,12 +246,9 @@ export const handlePortalActivity = behindGate(async (request, env, now) => {
   return jsonResponse(body);
 });
 
-/** POST /portal/api/sign-out, body {}: end this Portal session on the server
- *  (endPortalSession, so a copied cookie ends too, and other sessions do not) and expire the session and CSRF
- *  cookies in this browser. The same checks as an action (the session, Sec-Fetch-Site,
- *  the body cap, the CSRF pair), so a cross-site page cannot sign the administrator out.
- *  The Access session at the team domain is Cloudflare's, so the next visit to /portal
- *  may sign in again without a prompt. */
+// POST /portal/api/sign-out, body {}: end this Portal session on the server (endPortalSession, so a
+// copied cookie ends too, and other sessions do not) and expire the session and CSRF cookies in
+// this browser.
 export async function handlePortalSignOut(
   request: Request,
   env: Env,
@@ -285,8 +266,8 @@ export async function handlePortalSignOut(
   return new Response(null, { status: 204, headers });
 }
 
-/** Any other path under /portal/api/, any method: behind the gate like every Portal
- *  route, then a JSON 404, so a typo in the app never reads the app's own page as data. */
+// Any other path under /portal/api/, any method: behind the gate like every Portal route, then a
+// JSON 404, so a typo in the app never reads the app's own page as data.
 export const handlePortalApiNotFound = behindGate(async (request) => {
   const path = new URL(request.url).pathname;
   return jsonResponse({ error: `no Portal route at ${request.method} ${path}` }, 404);

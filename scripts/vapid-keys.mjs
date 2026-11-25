@@ -1,16 +1,8 @@
 #!/usr/bin/env node
-// Makes the VAPID key that signs phone alerts (site-runtime ./web-push) and puts it on the Worker
-// as the secret VAPID_PRIVATE_KEY, without printing it (CLAUDE.md, public repo rule: never
-// print a token). Run once by the seat, from the repo root with wrangler signed in:
-//
-//   node scripts/vapid-keys.mjs
-//
-// The Worker is named explicitly (--name capsid-mcp) because the seat's clones hold no
-// wrangler.jsonc, and npx runs through the shell on Windows, where it is npx.cmd.
-//
-// Running it again replaces the key, and every device must then turn alerts on again in
-// the Portal's Settings, because a browser's subscription is bound to the key it was
-// made with. It prints only the public half, which is not secret.
+// Makes the VAPID key that signs phone alerts (site-runtime ./web-push) and sets it as the Worker secret VAPID_PRIVATE_KEY without printing it (CLAUDE.md, public repo rule).
+// Run once by the seat from the repo root with wrangler signed in: node scripts/vapid-keys.mjs
+// The Worker is named (--name capsid-mcp) because the seat's clones hold no wrangler.jsonc; npx runs through the shell on Windows (npx.cmd).
+// Rerunning replaces the key and every device must turn alerts on again, since a subscription is bound to its key. Prints only the public half.
 
 import { spawnSync } from "node:child_process";
 import { webcrypto } from "node:crypto";

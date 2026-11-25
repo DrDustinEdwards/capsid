@@ -4,13 +4,11 @@ import { resolveRepo } from "./github/client";
 import { readAllPages, readPrFiles } from "./github/pr-files";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Overlap warnings (Track A D1, capsid/research/design-track-a.md section 1). When block or complete
-// names a pull request, say which other open PRs in the same repo change the same files (GitHub's
-// file lists): stacked and parallel PRs that rewrote the same function cost the seat a rebase.
-// It informs and never refuses; a failed read is reported as "not checked", never as clean.
+// Overlap warnings (Track A D1, capsid/research/design-track-a.md section 1). It informs and never
+// refuses;
 
-// Other open pull requests read per transition. A repo with more is reported, not silently
-// cut: the warning says how many it did not read.
+// Other open pull requests read per transition. A repo with more is reported, not silently cut:
+// the warning says how many it did not read.
 export const OTHER_PRS_READ = 20;
 const OPEN_LIST_MAX_PAGES = 5;
 const FILES_SHOWN = 3;
@@ -23,7 +21,6 @@ export interface PrOverlap {
 
 export interface OverlapReport {
   overlaps: PrOverlap[];
-  // Why the comparison is not the whole of it, or null when every list was read.
   problem: string | null;
 }
 
@@ -32,9 +29,11 @@ interface PrPaths {
   paths: string[];
 }
 
-/** The files each named pull request shares with each other pull request, the older
- *  (lower-numbered) first. A pull request named by the job is never compared with itself or
- *  with another named one: a job's own stack is not a collision. */
+/**
+ * The files each named pull request shares with each other pull request, the older
+ * (lower-numbered) first. A pull request named by the job is never compared with itself or with
+ * another named one: a job's own stack is not a collision.
+ */
 export function overlapsOf(named: PrPaths[], others: PrPaths[]): PrOverlap[] {
   const namedNumbers = new Set(named.map((n) => n.number));
   const found: PrOverlap[] = [];
@@ -51,7 +50,6 @@ export function overlapsOf(named: PrPaths[], others: PrPaths[]): PrOverlap[] {
   );
 }
 
-/** The line appended to a summary, or null when there is nothing to say. */
 export function overlapLine(report: OverlapReport): string | null {
   if (report.overlaps.length === 0)
     return report.problem ? `Overlaps: not checked (${report.problem}).` : null;
@@ -64,15 +62,15 @@ export function overlapLine(report: OverlapReport): string | null {
   return `Overlaps: ${parts.join(", ")}. Merge in PR order, oldest first, and rebase the later.${partial}`;
 }
 
-/** The pull request URLs in free text, such as a block command: `gh pr merge` takes a
- *  number, but a command that carries the URL names the pull request all the same. */
 export function prUrlsIn(text: string | null | undefined): string[] {
   return [...new Set(text?.match(new RegExp(PR_URL_SOURCE, "g")) ?? [])];
 }
 
-/** Compare the named pull requests with every other open pull request in the namespace's
- *  repo. Null when none of `urls` is a pull request of that repo, which is the normal case
- *  for a job that opened nothing. Never throws: a failure is the report's `problem`. */
+/**
+ * Compare the named pull requests with every other open pull request in the namespace's repo. Null
+ * when none of `urls` is a pull request of that repo, which is the normal case for a job that
+ * opened nothing. Never throws: a failure is the report's `problem`.
+ */
 export async function checkOverlaps(
   env: Env,
   namespace: string,

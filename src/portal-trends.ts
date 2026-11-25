@@ -4,9 +4,6 @@ import { readTrends } from "./trends";
 
 // The Portal's trends: GET /portal/api/trends?weeks= (design-portal-evaluation.md, DECIDE 5:
 // "admin, read-only"). The series behind the charts, from src/trends.ts.
-// A route, not a tool, so no grant is checked here (one enforcement point, test/route-gates.test.ts):
-// it answers to portalGate, and src/scope.ts lists it among the routes gated some other
-// way. It writes only its own hour-long CI cache.
 
 export const PORTAL_TRENDS_PATH = "/portal/api/trends";
 const DEFAULT_WEEKS = 8;

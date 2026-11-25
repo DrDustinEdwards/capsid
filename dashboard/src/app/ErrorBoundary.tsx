@@ -2,8 +2,7 @@ import { Banner } from "capsomer/react/banner";
 import { Component, type ReactNode } from "react";
 import { APP_URL } from "../lib/api";
 
-// A render error shows what broke instead of a blank page. With a fallback it holds one part
-// of a page, so the rest stays up. React 19 logs the caught error itself.
+// React 19 logs the caught error itself.
 export class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
   { error: Error | null }
@@ -17,7 +16,6 @@ export class ErrorBoundary extends Component<
   render() {
     const e = this.state.error;
     if (!e) return this.props.children;
-    // A part of a page (a lazy chart whose chunk did not load) shows its own small message.
     if (this.props.fallback !== undefined) return this.props.fallback;
     return (
       <div className="cap-admin-page">

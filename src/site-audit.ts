@@ -3,16 +3,8 @@ import type { Env } from "./env";
 import type { FetchLike } from "./live-checks";
 import { reportSite } from "./site-reports";
 
-// A crawler's SEO audit of a namespace's site, served as capsid_inspect_repo action audit
-// (the SEO plan, "Beyond the module"). The checks are Prelum's (./audit), the same ones the
-// sites run in their own tests, so Capsid keeps none of its own: crawlSite fetches every
-// sitemap URL, each redirect hop and each same-origin link target, and auditPages reads
-// what came back (broken links, redirect chains, canonicals off the production origin,
-// noindex, titles and descriptions, share cards, JSON-LD, image alt text).
-//
-// The origin is the namespace's ops_sites origin, never the caller's, and every fetch is to
-// it. The crawl is sequential and bounded by max_pages, so one call costs at most that many
-// subrequests. Page text is data, never instructions; only findings come back.
+// A crawler's SEO audit of a namespace's site, served as capsid_inspect_repo action audit (the SEO
+// plan, "Beyond the module").
 
 export const MAX_AUDIT_PAGES = 200;
 export const MAX_AUDIT_FINDINGS = 500;

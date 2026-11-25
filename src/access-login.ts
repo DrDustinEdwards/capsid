@@ -11,26 +11,17 @@ import { isAdminEmail } from "@dustinedwards/site-runtime/access";
 import { capsidCookie } from "./auth";
 import { readCookie } from "@dustinedwards/site-runtime/headers";
 import type { Env } from "./env";
-// The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream identity
-// (capsid/research/design-capsid-access-login.md) for the Portal's login (src/portal-auth.ts);
-// the MCP flow is site-runtime's loginHandler (src/routes.ts). What the Portal does with the
-// admitted email stays in the caller. A state token is stored in OAUTH_KV for ten minutes, bound
-// to the browser by a cookie whose random value's digest the state keeps, and used once; PKCE and
-// an OIDC nonce are kept in it. The endpoints, code exchange and ID token check are site-runtime's
-// access-login. The person is the email in the token, admitted only when it equals ADMIN_EMAIL or
-// a CO_OWNER_EMAILS entry exactly.
+// A state token is stored in OAUTH_KV for ten minutes, bound to the browser by a cookie whose
+// random value's digest the state keeps, and used once; The person is the email in the token,
+// admitted only when it equals ADMIN_EMAIL or a CO_OWNER_EMAILS entry exactly.
 
-// How long a started login stays usable: the KV state entry and the state cookie.
 const STATE_TTL_SECONDS = 600;
 
 export interface LoginFlow {
-  // The path Access redirects back to, on this Worker's origin.
   callbackPath: string;
   stateCookie: string;
-  // The state cookie's Path attribute.
   cookiePath: string;
   kvPrefix: string;
-  // Appended to each state refusal, telling the user where to start again.
   restartHint: string;
 }
 
@@ -41,7 +32,6 @@ export function clearStateCookie(flow: LoginFlow): string {
 const UNCONFIGURED =
   "the sign-in is not configured (ACCESS_TEAM_DOMAIN, ACCESS_SAAS_CLIENT_ID, ACCESS_SAAS_CLIENT_SECRET), so it is closed";
 
-// site-runtime's refusal codes, in the words a person reading the page needs.
 const REFUSALS: Record<string, string> = {
   "invalid-id-token": "the ID token's signature, issuer, audience or dates do not check out",
   "nonce-mismatch": "the ID token's nonce is not this sign-in's",
@@ -53,9 +43,8 @@ function refusal(message: string, status: number): Response {
   return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8" } });
 }
 
-// What the KV state holds: the caller's own value, this sign-in's PKCE verifier and
-// nonce, which never leave the server, and the digest of the browser binding the state
-// cookie carries.
+// What the KV state holds: the caller's own value, this sign-in's PKCE verifier and nonce, which
+// never leave the server, and the digest of the browser binding the state cookie carries.
 interface StoredSignIn {
   stored: string;
   verifier: string;
@@ -63,7 +52,6 @@ interface StoredSignIn {
   binding: string;
 }
 
-// Stores `stored` against a fresh state token and redirects to Access.
 export async function startAccessLogin(
   request: Request,
   env: Env,
@@ -74,9 +62,9 @@ export async function startAccessLogin(
   const saas = accessSaas(env);
   if (!saas) return refusal(UNCONFIGURED, 503);
   const stateToken = crypto.randomUUID();
-  // The browser binding is random and unrelated to the state token. A cookie derived
-  // from the token could be computed by anyone holding the callback URL, which carries
-  // the token, and would bind nothing.
+  // The browser binding is random and unrelated to the state token. A cookie derived from the token
+  // could be computed by anyone holding the callback URL, which carries the token, and would bind
+  // nothing.
   const binding = toHex(crypto.getRandomValues(new Uint8Array(32)));
   const signIn: StoredSignIn = { stored, ...newSignIn(), binding: await sha256Hex(binding) };
   await env.OAUTH_KV.put(`${flow.kvPrefix}${stateToken}`, JSON.stringify(signIn), {
@@ -89,7 +77,6 @@ export async function startAccessLogin(
     nonce: signIn.nonce,
   });
   const headers = new Headers({ Location: target });
-  // The state cookie carries the binding, which neither the URL nor the stored state holds.
   headers.append(
     "Set-Cookie",
     capsidCookie(flow.stateCookie, binding, flow.cookiePath, STATE_TTL_SECONDS),
@@ -103,10 +90,6 @@ export type AccessLoginResult<T> =
   | { ok: true; email: string; name?: string; state: T }
   | { ok: false; code: string; response: Response };
 
-// Verifies the callback's state against the cookie and KV, exchanges the code with
-// PKCE, verifies the ID token and runs the admin check. `parse` turns the caller's
-// stored value back into what it stored; if it throws, the state is deleted and the
-// callback refused before anything reaches Access.
 export async function completeAccessLogin<T>(
   request: Request,
   env: Env,
@@ -123,7 +106,6 @@ export async function completeAccessLogin<T>(
   const saas = accessSaas(env);
   if (!saas) return fail(UNCONFIGURED, 503, "NOT_CONFIGURED");
   const url = new URL(request.url);
-  // Access reports a refused sign-in as error=... on the callback.
   const upstreamError = url.searchParams.get("error");
   if (upstreamError)
     return fail(
@@ -160,8 +142,8 @@ export async function completeAccessLogin<T>(
       "STATE_UNREADABLE",
     );
   }
-  // A cookie that does not match leaves the state in place, so a stranger holding the
-  // callback URL cannot spend the browser's sign-in.
+  // A cookie that does not match leaves the state in place, so a stranger holding the callback URL
+  // cannot spend the browser's sign-in.
   if (!(await safeEqual(await sha256Hex(stateCookie), signIn.binding)))
     return fail(notThisBrowser, 403, "STATE_NOT_THIS_BROWSER");
   let state: T;
@@ -176,9 +158,9 @@ export async function completeAccessLogin<T>(
     );
   }
 
-  // The state is consumed once the exchange is attempted, except when Access did not
-  // answer or failed, so a transient Access error does not burn it. Replay is bounded by
-  // Access, which honors a code once.
+  // The state is consumed once the exchange is attempted, except when Access did not answer or
+  // failed, so a transient Access error does not burn it. Replay is bounded by Access, which honors
+  // a code once.
   const verdict = await finishSignIn(
     saas,
     {

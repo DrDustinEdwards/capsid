@@ -55,14 +55,7 @@ export function owningCheck(fingerprint: string): WatcherCheck | null {
   return OWNERS.find(([pattern]) => pattern.test(fingerprint))?.[1] ?? null;
 }
 
-// WHAT A FINDING IS FOR (every alert actionable, the rest to a
-// digest). One class per OWNERS pattern, the same patterns in the same order:
-//   job        a person must act now: it posts a job.
-//   digest     a hygiene or drift finding: kept in finding memory and shown on the Portal's
-//              weekly digest per site and in the Monday email; posts no job.
-//   attention  shown on the Portal's attention list only; posts no job.
-// test/watcher-classes.test.ts fails when OWNERS and this table disagree in either
-// direction. A fingerprint no pattern names is a job, so an unclassed finding is loud.
+// WHAT A FINDING IS FOR (every alert actionable, the rest to a digest).
 export type FindingClass = "job" | "digest" | "attention";
 const CLASSES: ReadonlyArray<readonly [RegExp, FindingClass]> = [
   [/^(health-degraded|backup-stale|backup-never)$/, "job"],

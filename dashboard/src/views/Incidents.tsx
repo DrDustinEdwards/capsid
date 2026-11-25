@@ -12,7 +12,6 @@ import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, useNsFilter } from "./s
 import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
 
-// Health's Problems tab: the watcher's findings and its last pass.
 export function Incidents() {
   const { feed, now } = useApp();
   const [ns, setNs] = useNsFilter();
@@ -114,9 +113,6 @@ const FLAG: Record<NonNullable<OpsTask["flag"]>, string> = {
   never: "No run yet",
 };
 
-// The run ledger (src/task-runs.ts): every scheduled task, its newest run, and the
-// runs before it. A task is flagged when its newest run threw or was refused, or when
-// a periodic task has had no run in twice its period.
 export function ScheduledTasks() {
   const { feed, now } = useApp();
   const s = feed.scheduled;

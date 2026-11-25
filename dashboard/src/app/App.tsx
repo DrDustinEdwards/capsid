@@ -56,31 +56,20 @@ import {
 import type { OpsFeed, PortalPerformed } from "../types";
 import { MessageProvider, MessageRegion, useMessage } from "capsomer/react/message";
 
-// Loaded the first time a panel opens or Ctrl K is pressed, then kept, so the initial bundle
-// carries neither (the size budget, after Capsomer 0.9.0's header joined the entry).
+// Loaded on first use so the initial bundle carries neither (the size budget).
 const Drawer = lazy(() => import("./Drawer").then((m) => ({ default: m.Drawer })));
 const CommandPalette = lazy(() =>
   import("./CommandMenu").then((m) => ({ default: m.CommandPalette })),
 );
-// Loaded on the first control a person opens.
 const ConfirmDialog = lazy(() =>
   import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })),
 );
-// Capsomer's "?" sheet, which lists every shortcut registered below. Loaded the first time it
-// is opened, then kept: the initial bundle does not carry it.
 const ShortcutSheet = lazy(() =>
   import("./ShortcutSheet").then((m) => ({ default: m.ShortcutSheet })),
 );
 
-// The phone tab bar (the Portal UX audit's sitemap, 2026-10): Needs you, Health and Pull
-// requests, the three pages a person opens most. The header's menu button opens every page
-// (Capsomer has no Menu tab yet), Settings among them.
 const TABS: ViewId[] = ["needs", "health", "prs"];
 
-// The menu's groups (the Portal audit's new map, 2026-11-06; Jobs under Records since the
-// reorganization of 2026-11-23, the job runner retired): Now, Sites, Work, Records, then
-// Settings at the foot, with no heading of its own. It is also in the avatar's menu, with its
-// g then e shortcut and its command-menu entry.
 const GROUPS: Array<{ label?: string; views: ViewId[] }> = [
   { label: "Now", views: ["needs", "health"] },
   { label: "Sites", views: ["sites"] },
@@ -89,7 +78,6 @@ const GROUPS: Array<{ label?: string; views: ViewId[] }> = [
   { views: ["settings"] },
 ];
 
-// The header's freshness line: the feed's age and the watcher pass, on Capsomer's Freshness.
 function FeedFreshness({
   feed,
   nextPollAt,
@@ -101,8 +89,7 @@ function FeedFreshness({
 }) {
   const clientNow = useNow(1000);
   if (!feed) return <Freshness pending="Reading the feed..." />;
-  // Server times against the server's clock; the next poll against the browser's,
-  // since the browser schedules it.
+  // Server times against the server's clock; the next poll against the browser's, which schedules it.
   const now = serverNow(clientNow, skew, parse(feed.live.generated));
   const snap = feed.snapshot;
   const title = snap
@@ -123,11 +110,8 @@ function FeedFreshness({
   );
 }
 
-// The newest feed's CSRF token, for an Undo run after later feeds arrived; one page, one value.
 let latestCsrf = "";
 
-// The results and failures of the page are Capsomer's Message region; its z key for the newest
-// Undo follows the single-key shortcuts switch.
 export function App() {
   const singleKeys = useSingleKeys();
   return (
@@ -141,17 +125,12 @@ function PortalApp() {
   const { feed, error, signedOut, nextPollAt, accept, signOut } = useOpsFeed();
   const demo = useDemo();
   const [location, navigate] = useLocation();
-  // A view's own filters live in its query string (?ns=, say); opening and closing a
-  // drawer over the view keeps them.
   const search = useSearch();
   const qs = search ? `?${search}` : "";
   const views = VIEWS;
   const route = parseRoute(location);
-  // A page opened with a section's anchor scrolls to it once the section is drawn: the
-  // sections load after the page does.
   useScrollToHash();
-  // Relative times are measured on the server's clock (serverNow): the skew is taken
-  // when each feed arrives, and now never falls behind the feed's own read time.
+  // The skew is taken when each feed arrives, so now never falls behind the feed's own read time.
   const tick = useNow(15_000);
   const [skew, setSkew] = useState(0);
   useEffect(() => {
@@ -162,13 +141,11 @@ function PortalApp() {
   const [filters, setFiltersState] = useState<Filters>({ q: "", range: "7d" });
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
-  // Set on the first open and never cleared, so the sheet mounts once and keeps its state.
   const [helpUsed, setHelpUsed] = useState(false);
   if (help && !helpUsed) setHelpUsed(true);
   const singleKeys = useSingleKeys();
   const { say, fail } = useMessage();
-  // Read after the first paint: the server renders the menu open, and the browser's saved choice
-  // then closes it, so the HTML and the first render agree.
+  // Read after the first paint: the server renders the menu open, and the saved choice then closes it, so the HTML and first render agree.
   const [railPref, rememberRail] = useRemembered(RAIL_PREF);
   const railCollapsed = railPref === "collapsed";
   const [spinning, setSpinning] = useState(false);
@@ -178,9 +155,7 @@ function PortalApp() {
 
   const confirm = useCallback((r: ConfirmRequest) => setConfirmReq(r), [setConfirmReq]);
 
-  // Undo sends the reverse change as its own action (params.undo "true"), which the
-  // Worker records as portal-undo-<action>. A refusal throws, so the message keeps its Undo
-  // and says why; focus goes back to the switch it undid.
+  // Undo is the reverse change as its own action (params.undo "true", recorded as portal-undo-<action>); a refusal throws so the message keeps its Undo.
   useEffect(() => {
     latestCsrf = feed?.csrf ?? "";
   }, [feed]);
@@ -201,7 +176,6 @@ function PortalApp() {
             : `Undo was refused: ${r.message}`,
         );
       accept(r.value.feed);
-      // The undo's own warning stays beside it, as any warning does.
       if (r.value.warning) say(`Undone. ${r.value.summary}`, { warning: r.value.warning });
     },
     [accept, say, signOut],
@@ -226,8 +200,6 @@ function PortalApp() {
     [navigate],
   );
 
-  // The address a row opens: a page, a site's page, or the drawer over this page, keeping
-  // its filters.
   const href = useCallback(
     (ref: string) => {
       const type = ref.slice(0, ref.indexOf(":"));
@@ -241,16 +213,13 @@ function PortalApp() {
     (ref: string) => {
       const type = ref.slice(0, ref.indexOf(":"));
       const to = href(ref);
-      // A job, an agent or an audit row opens in the drawer over the page you are on.
       if (type !== "view" && type !== "site") {
         if (to !== routePath(route.view, null, route.site) + qs) navigate(to);
         return;
       }
-      // A page (a retired view id maps to its page and section), or a site's own page.
       navigate(to);
       const anchor = type === "view" ? to.split("#")[1] : undefined;
-      // The location effect above scrolls to a section on another page; on this one,
-      // the location does not change, so it is scrolled to here.
+      // The location does not change here, so the section is scrolled to directly.
       if (anchor) requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView());
       else window.scrollTo(0, 0);
     },
@@ -296,8 +265,6 @@ function PortalApp() {
     fail(`Refresh failed: ${r.message}`);
   }, [accept, feed, say, fail, signOut, spinning]);
 
-  // Sign out: the Worker expires the Portal's cookies, then the signed-out page says
-  // it was a choice, not an expiry.
   const [leaving, setLeaving] = useState(false);
   const [leftByChoice, setLeftByChoice] = useState(false);
   const leave = useCallback(async () => {
@@ -331,11 +298,8 @@ function PortalApp() {
     setFiltersState((p) => ({ ...p, ...f }));
   }, []);
 
-  // j and k move keyboard focus itself among the visible [data-row] elements in main, in
-  // document order, so the selection is the focused row: no index to go stale when the
-  // feed changes, and Enter opens it (onRowActivate). A row that is not in the tab order
-  // is made focusable by script only (tabIndex -1).
-  // Capsomer's row lists (Problems) take part through each row's title link or button.
+  // j and k move focus itself among the visible [data-row] elements, so no index goes stale when the feed changes;
+  // a row outside the tab order is made focusable by script only (tabIndex -1).
   const ROW = "[data-row], .cap-row-title > :is(a, button)";
   const rows = () =>
     Array.from(mainRef.current?.querySelectorAll<HTMLElement>(ROW) ?? []).filter(
@@ -354,10 +318,7 @@ function PortalApp() {
     el.scrollIntoView({ block: "nearest" });
   };
 
-  // Keyboard grammar, in Capsomer's shortcut registry: one listener, single keys that can be
-  // switched off (Settings, Display, and the sheet), and a modal dialog (the drawer, the
-  // confirm dialog, the menu, the sheet) owns every key while it is open. Latest values
-  // through a ref so each shortcut is registered once.
+  // Latest values through a ref so each shortcut is registered once.
   const act = useRef({ go, refresh, theme, toggleRail, step });
   useEffect(() => {
     act.current = { go, refresh, theme, toggleRail, step };
@@ -419,9 +380,6 @@ function PortalApp() {
     };
   }, [views]);
 
-  // A stop from the command menu presses its switch on Namespaces, so the switch's own
-  // reason field opens and the change goes the way a click would send it. It waits for
-  // the switch to render, and says so if it never appears rather than doing nothing.
   const flip = useCallback(
     (id: string) => {
       navigate(placePath("settings#automation"));
@@ -462,20 +420,16 @@ function PortalApp() {
     if (target.closest("a, button, input")) return;
     const el = target.closest<HTMLElement>("[data-open]");
     if (el?.dataset.open) {
-      // Enter on a focused row: the drawer focuses its Close button as it opens, inside
-      // this keydown; without this the browser activates that button with the same Enter.
+      // The drawer focuses its Close button as it opens, inside this keydown; without this the same Enter activates it.
       if ("key" in e) e.preventDefault();
       open(el.dataset.open);
     }
   };
 
   const waiting = useWaiting(feed);
-  // What waits on you is the header inbox's number (useWaiting, the list Needs you shows) and
-  // nowhere else, so no menu entry counts it. Health counts the critical problems only (derive.ts).
+  // What waits on you is counted by the header inbox only, so no menu entry counts it.
   const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit").length : 0;
 
-  // The page title names the view, and the open panel's subject before it (WCAG 2.4.2):
-  // "Fix the probe · Queue · Capsid Portal".
   const d = route.drawer;
   const subject = !d
     ? ""
@@ -498,7 +452,6 @@ function PortalApp() {
   }, [pageTitle, signedOut]);
 
   const tabs: ViewId[] = TABS;
-  // One menu entry per view, grouped, Settings last.
   const entryFor = (id: ViewId, group?: string): AdminEntry => {
     const v = VIEWS.find((x) => x.id === id)!;
     const health = id === "health";
@@ -571,11 +524,6 @@ function PortalApp() {
     );
   }
 
-  // Capsomer's owner shell in the family letterhead: the header's top row holds Search, the inbox,
-  // the theme button and the avatar, whose menu holds Help; its second row says where you are and
-  // links to the public site. The strip holds the family's apps.
-  // The top bar says how fresh the page is and holds Refresh.
-  // Signed out is its own page (Capsomer's SignedOutPage), with no shell around it.
   const shell = signedOut ? (
     <SignedOutPage app="Capsid Portal" signIn={APP_URL} byChoice={leftByChoice} />
   ) : (
@@ -600,7 +548,6 @@ function PortalApp() {
       onHelp={() => setHelp(true)}
       themePrefKey={THEME_PREF}
       account={{
-        // From the signed-in session; neutral only until the first feed arrives.
         name: feed?.user.name ?? "Account",
         initials: feed?.user.initials ?? "A",
         appLabel: "Capsid Portal",
@@ -634,8 +581,7 @@ function PortalApp() {
       prefKey={RAIL_PREF}
       collapsed={railCollapsed}
       onCollapsedChange={setRail}
-      // Another app's address (the strip, the logo) is another origin: a plain anchor, since
-      // the Portal's Link would put the demo's base in front of it.
+      // Another origin: a plain anchor, since the Portal's Link would put the demo's base in front of it.
       renderLink={(p) => (/^https?:/.test(p.href) ? <a {...p} /> : <Link {...p} />)}
       mainProps={{
         ref: mainRef,

@@ -4,8 +4,6 @@ import { PER_PAGE, readCheckRuns, readPrFiles } from "./github/pr-files";
 import { requiredCiFor } from "./auto-merge-policy";
 import { type PrFacts, jobIdFromBody, ciVerdict } from "./auto-merge-policy-evaluate";
 
-// The open pull requests of a repo and the facts the policy judges each on.
-
 export interface OpenPr {
   number: number;
   title?: string | null;
@@ -25,8 +23,6 @@ interface WorkflowRun {
   path: string;
 }
 
-// The steps of the newest run of each required workflow on this head sha. Only
-// workflows this namespace's required steps name are read.
 async function ciStepsFor(
   env: Env,
   namespace: string,
@@ -46,7 +42,6 @@ async function ciStepsFor(
   const steps: PrFacts["ciSteps"] = [];
   for (const workflow of new Set((requiredCiFor(namespace) ?? []).map((r) => r.workflow))) {
     const newest = runs.filter((r) => r.path === workflow).sort((a, b) => b.id - a.id)[0];
-    // No run of a required workflow leaves its steps absent, which ci_green names.
     if (!newest) continue;
     const jobsResp = await ghFetch(
       env,
@@ -111,7 +106,6 @@ export async function factsForPr(
   ]);
   const filesProblem = files.problem;
   const changedPaths = files.paths;
-  // An incomplete check-run list is not a pass; ci_green refuses it with the reason.
   const ci = checks.problem
     ? {
         conclusion: null,
@@ -147,7 +141,6 @@ export async function factsForPr(
 
 const OPEN_PR_PAGES = 10;
 
-/** Every open PR on the repo, page by page until a short page, or why the list is not whole. */
 export async function listOpenPrs(
   env: Env,
   owner: string,

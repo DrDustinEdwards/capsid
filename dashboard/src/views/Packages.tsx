@@ -19,8 +19,6 @@ import "capsomer/detail-panel.css";
 
 const DownloadsChart = trendChart("DownloadsChart");
 
-// The Shared code and Completeness tabs load when opened, and the add and edit form the first
-// time it opens, so Published's first paint carries neither.
 const SharedCode = lazy(() => import("./SharedCode").then((m) => ({ default: m.SharedCode })));
 const Completeness = lazy(() =>
   import("./Completeness").then((m) => ({ default: m.Completeness })),
@@ -28,11 +26,6 @@ const Completeness = lazy(() =>
 const PackageForm = lazy(() => import("./PackageConfig").then((m) => ({ default: m.PackageForm })));
 import { PACKAGE_TABS, tabOf } from "../app/ctx";
 import { NoSnapshot, PageHead } from "./shared";
-
-// The Packages panels (capsid/decisions.md, 2026-09-29): one panel per package configured
-// here, with Add package above them and Edit on each, as the watcher's last pass read it (src/ops-packages.ts), and
-// the daily download history when asked for. Dependents are counts from deps.dev: no
-// public API lists them, so the lists are links to npmjs.com's and deps.dev's pages.
 
 function Part({
   part,
@@ -52,9 +45,7 @@ function Part({
 }
 
 function HistoryPanel({ name }: { name: string }) {
-  // Read when asked for: the history is a large read the panel does not need. The chart demo reads
-  // it at once (sample data, captured at build time), so its download chart is on the page for a
-  // visitor and the live chart check (devkit live/areas.json, area 10), not behind a button.
+  // Read when asked for: the history is a large read the panel does not need. The chart demo reads it at once.
   const demo = useDemo();
   const [asked, setAsked] = useState(demo);
   const h = useAnswer(["packages", "history", name], () => fetchPackageHistory(name), {
@@ -269,11 +260,6 @@ function PackagePanel({
   );
 }
 
-// One page for one kind of thing (the UX audit's m1; the Portal audit's new map, 2026-11-06):
-// Published, the npm packages, added and changed here; Shared, the git-pinned packages the apps
-// share; and Completeness, devkit's scoreboard of every area of that shared code on every live
-// site. Each Worker's secrets and stores are on its site's Setup tab, and those no site owns on
-// Health's Cloudflare tab. The tab is in the address (?tab=shared).
 export function Packages() {
   const tab = tabOf(PACKAGE_TABS, useTabParam()) ?? PACKAGE_TABS[0].id;
   return (

@@ -14,7 +14,6 @@ import { DAY, HOUR, SLOT_MS, age, ago, hostOf } from "./format";
 import { parse } from "capsomer/behavior/time";
 import { storeAttention } from "./store";
 
-// The status vocabulary: every state is a shape, a word and a color.
 export type Kind =
   | "ok"
   | "warn"
@@ -26,9 +25,7 @@ export type Kind =
   | "blocked"
   | "done";
 
-// How each state draws as Capsomer's Status or Pill (status.md): done is the ok tone, run is
-// info and running, queued and unknown are muted with their own marks, blocked is warning with
-// its pause mark.
+// Draws as Capsomer's Status or Pill (status.md): done ok, run info and running, queued and unknown muted, blocked warning with a pause mark.
 export const KIND_STATUS: Record<Kind, { tone: Tone; running?: boolean; glyph?: GlyphName }> = {
   ok: { tone: "ok" },
   warn: { tone: "warn" },
@@ -48,19 +45,16 @@ export const PROBE: Record<ProbeState, { kind: Kind; label: string }> = {
   down: { kind: "crit", label: "Down" },
 };
 
-// Site monitoring is optional (capsid/decisions.md, 2026-09-29): with no configured row
-// that has an origin, the Portal shows no Sites view and no site items anywhere else.
-// Read from the configuration, not the snapshot, so a stale pass cannot bring them back.
+// Site monitoring is optional (capsid/decisions.md, 2026-09-29): read from configuration, not the snapshot, so a stale pass cannot bring the Sites view back.
 export function hasSites(feed: OpsFeed): boolean {
   return feed.live.sites.some((s) => s.origin !== null);
 }
 
-// A site is named by its namespace: one ops_sites row each, and its page is /sites/<namespace>.
 export function siteKey(s: SiteSnapshot): string {
   return s.namespace;
 }
 
-// Why a site has no Cloudflare numbers. Every state but "ok" is no data, never zero.
+// Every state but "ok" is no data, never zero.
 export function cfNoData(cf: SiteCloudflare | undefined): string | null {
   if (!cf) return "Not read on this pass (the snapshot predates the Cloudflare read)";
   if (cf.state === "ok") return null;
@@ -68,8 +62,6 @@ export function cfNoData(cf: SiteCloudflare | undefined): string | null {
   return cf.reason;
 }
 
-// The same, in a few words for a table cell; the full sentence is in the site's panel
-// (design D18).
 export function cfShort(cf: SiteCloudflare | undefined): string | null {
   if (!cf) return "not read on this pass";
   switch (cf.state) {
@@ -90,8 +82,6 @@ export function cfOk(s: SiteSnapshot) {
   return s.cloudflare?.state === "ok" ? s.cloudflare : null;
 }
 
-/** The Worker scripts the sites run: each settings row's script, or the one the watcher found
- *  from the account's custom domains. One site's when a namespace is named. */
 export function siteScripts(feed: OpsFeed, ns?: string): string[] {
   const out = new Set<string>();
   for (const r of feed.live.sites)
@@ -105,7 +95,6 @@ export function siteScripts(feed: OpsFeed, ns?: string): string[] {
 
 export const RING_SLOTS = 336;
 
-// Start time of slot i (0 oldest) of the ring padded to RING_SLOTS (capsomer padRing).
 export function slotStart(s: SiteSnapshot, i: number): number {
   return (s.ring_slot - (RING_SLOTS - 1 - i)) * SLOT_MS;
 }
@@ -120,8 +109,7 @@ export const JOB: Record<OpsJob["status"], { kind: Kind; label: string }> = {
   parked: { kind: "nodata", label: "Parked" },
 };
 
-// A claim never expires, so a claimed job nobody has touched for the Worker's stale
-// window (src/stale-jobs.ts, 3 days) is shown as Stalled rather than Running.
+// A claim never expires, so a claimed job untouched for the stale window (src/stale-jobs.ts, 3 days) shows as Stalled, not Running.
 const STALE_CLAIM_MS = 3 * DAY;
 export function jobBadge(j: OpsJob, now: number): { kind: Kind; label: string } {
   if (j.status === "claimed" && now - parse(j.updated_at) > STALE_CLAIM_MS)
@@ -139,16 +127,13 @@ export function ciState(c: CiObservation): { kind: Kind; label: string; red: boo
   const l = c.latest;
   if (!l) return { kind: "nodata", label: "Could not read", red: false };
   if (l.conclusion == null) return { kind: "run", label: l.status.replace(/_/g, " "), red: false };
-  // Capsomer's one reading of a conclusion: skipped is no data, canceled and timed out warn.
-  // An empty conclusion reads as still running (the info tone), so it is the run state here.
-  // A finished run is never muted today; if Capsomer ever says so, it shows as no data.
+  // Capsomer's one reading of a conclusion: skipped is no data, canceled and timed out warn; empty reads as still running.
   const o = outcomeStatus(l.conclusion, { success: "Green" });
   if (o.running) return { kind: "run", label: o.label, red: false };
   const kind: Kind = o.tone === "info" || o.tone === "muted" ? "nodata" : o.tone;
   return { kind, label: o.label, red: kind === "crit" };
 }
 
-// A run's outcome in the run ledger (src/task-runs.ts), as the Portal shows it.
 export const TASK_OUTCOME: Record<OpsTaskRun["outcome"], { kind: Kind; label: string }> = {
   ok: { kind: "ok", label: "Ok" },
   skipped: { kind: "nodata", label: "Skipped" },
@@ -170,8 +155,7 @@ export interface Attention {
   sub: string;
   at: number;
   open: OpenRef;
-  // Rows with the same key are one kind with one cause, and fold into one row on the
-  // Overview (attentionGroups). The facet is what tells them apart: a repo, an agent.
+  // Rows with the same key are one kind with one cause and fold into one row (attentionGroups); the facet tells them apart.
   group?: { key: GroupKey; facet: string };
 }
 
@@ -330,10 +314,8 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       });
     }
   }
-  // The run ledger (src/task-runs.ts): a scheduled task whose newest run threw or was
-  // refused, or a periodic one with no run in twice its period. A failing or quiet
-  // backup is critical, as a stale backup is above. A task with no run yet is shown on
-  // Incidents only: after the ledger's first deploy every task starts there.
+  // The run ledger (src/task-runs.ts): a task whose newest run threw or was refused, or a periodic one with no run in twice its period.
+  // Critical like a stale backup. A task with no run yet shows on Incidents only (after the ledger's first deploy every task starts there).
   if (feed.scheduled.error !== null) {
     out.push({
       sev: "nodata",
@@ -379,11 +361,8 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       at: parse(live.generated),
       open: "view:health#backups",
     });
-  // The watcher's attention-class findings about an agent acting out of its usual pattern
-  // (src/anomaly.ts, OWASP item 6; Dustin ruled a hit is a finding plus an attention item and
-  // nothing more, D4, 2026-10-03). Warnings, never critical. An open queue breaker, blocked
-  // jobs and pull requests waiting for you are listed on Needs you with their buttons, so they
-  // are no problem rows (UX audit m2: one count, in one place).
+  // Watcher findings about an agent acting out of pattern (src/anomaly.ts, OWASP item 6; D4, 2026-10-03: a finding plus an attention item, nothing
+  // more). Warnings only. The queue breaker, blocked jobs and waiting PRs live on Needs you (UX audit m2: one count, one place).
   for (const f of live.findings) {
     if (f.class !== "attention" || !f.fingerprint.startsWith("anomaly-")) continue;
     out.push({
@@ -416,12 +395,8 @@ function worstFirst(a: { sev: Sev; at: number }, b: { sev: Sev; at: number }): n
   return RANK[a.sev] - RANK[b.sev] || b.at - a.at;
 }
 
-// Two tiers. A problem (critical or warning) needs a person; a notice (missing data, a
-// check that could not run, CI that could not be read, site map drift, a silent
-// driver) is a fact with nothing to do now. Session incidents join as problems when
-// attentionItems lists them: a failure is critical, a session waiting on input a
-// warning. The tier follows from the severity (Capsomer's arrange), so any new row lands
-// in the right one, and rows with one cause fold into one row there.
+// Two tiers: a problem (critical or warning) needs a person; a notice (missing data, a check that could not run, a silent driver) is a
+// fact with nothing to do now. The tier follows from severity (Capsomer's arrange), so a new row lands right and same-cause rows fold.
 
 type GroupKey = "silent";
 
@@ -433,8 +408,7 @@ const GROUPS: Record<GroupKey, { title: (n: number) => string; view: string; lab
   },
 };
 
-// The attention rows as Capsomer's attention list takes them, worst first. `href` turns a row's OpenRef into the address it opens. The row's
-// kind ("Backup", "CI") leads its detail; the status says how bad it is.
+// `href` turns a row's OpenRef into the address it opens.
 export function attentionList(
   feed: OpsFeed,
   now: number,
@@ -467,8 +441,7 @@ export function attentionList(
   return { items, groups };
 }
 
-// Priority first (high first), then the newest update first. A job blocked for more than
-// 7 days goes after the rest. all is the two in that order.
+// Priority first, then newest update; a job blocked over 7 days goes after the rest.
 
 const STALE_BLOCKED_MS = 7 * DAY;
 
@@ -484,9 +457,7 @@ export function blockedOrder(
   return { blocked, stale, all: [...blocked, ...stale] };
 }
 
-// The Amazon backup copy at a glance (src/watcher-detect.ts holds the same windows: a
-// warning at 30 hours and a job at 36 for a copy, 13 hours for the report, 35 days for the
-// restore drill). worst is the oldest of the sites' newest copies.
+// Windows match src/watcher-detect.ts (warning at 30 hours, job at 36 for a copy; 13 hours report; 35 days restore drill). worst is the oldest of the sites' newest copies.
 export const OFFACCOUNT_LATE = 30 * HOUR;
 export const OFFACCOUNT_STALE = 36 * HOUR;
 const OFFACCOUNT_REPORT_STALE = 13 * HOUR;
@@ -506,8 +477,7 @@ export function offaccountState(o: NonNullable<OpsSnapshot["offaccount"]>, now: 
   const worst = ages.length ? Math.max(...ages) : null;
   const reportAge = o.reported_at ? now - parse(o.reported_at) : null;
   const silent = reportAge == null || reportAge >= OFFACCOUNT_REPORT_STALE;
-  // The latest passing drill; undefined on a snapshot written before the field, which says
-  // nothing either way until the next pass.
+  // undefined on a snapshot written before the field: says nothing until the next pass.
   const drill = o.last_drill;
   const drillOk =
     drill === undefined || (drill?.at != null && now - parse(drill.at) < OFFACCOUNT_DRILL_STALE);

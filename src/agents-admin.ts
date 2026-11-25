@@ -17,12 +17,8 @@ import { parseMappedRepos } from "./github/client";
 import { auditStatement, clientOf } from "./store-guards";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// The control plane for credentials: mint, list, revoke, re-scope. Admin only (see
-// ADMIN_REASON in src/scope.ts): an agent that could mint another could widen itself.
-//
-// Separate from src/agents.ts, the resolver. The resolver runs on every request and
-// reads; this runs when a human changes the credential inventory and writes. Keeping
-// them apart lets the resolver stay a read.
+// Control plane for credentials, admin only (ADMIN_REASON in src/scope.ts): an agent that could mint
+// another could widen itself. Kept apart from the resolver (src/agents.ts) so that stays a read.
 
 export interface AgentResult {
   ok: boolean;
@@ -35,9 +31,7 @@ export interface AgentResult {
   refusal?: string;
 }
 
-// What an agent looks like to a reader. The stored hash never appears, only its
-// first twelve hex, so an agent can be
-// matched against an audit row without handing out what it authenticates with.
+// The stored hash never appears, only its first twelve hex: enough to match an audit row.
 interface PublicAgent {
   id: string;
   name: string;
@@ -48,7 +42,6 @@ interface PublicAgent {
   created_at: string;
   revoked_at: string | null;
   last_seen: string | null;
-  // Minted and not yet activated in the Portal: its key resolves nothing.
   pending: boolean;
 }
 
@@ -78,15 +71,12 @@ function agentAudit(
   name: string,
   params: Record<string, unknown>,
 ) {
-  // An agent is not a document, so its name goes in the path slot under a fixed
-  // "agents" namespace: one audit table rather than a second log nobody reads.
+  // The name goes in the path slot under a fixed "agents" namespace: one audit table, no second log.
   return auditStatement(db, actor, action, "agents", name, params);
 }
 
-/** The state change and its audit row in one batch, so neither lands without the other.
- *  Both fire only while the agent still matches `guard`, the audit INSERT first and the
- *  UPDATE (`set`, with `extra` as ?2) inside the same transaction. False: the agent
- *  changed after the caller read it, and neither statement wrote. */
+// State change and audit row in one batch. Both write only while the agent still matches `guard`;
+// false means it changed after the caller read it and neither wrote.
 async function changeWithAudit(
   db: D1Database,
   actor: string,
@@ -132,16 +122,12 @@ export interface ScopeArgs {
   flags?: Record<string, unknown>;
 }
 
-// A list of exactly ["*"] is the wildcard; anything else is a list of names. Shared
-// by mint and re-scope, because a disagreement would mean one of them silently
-// narrowing a caller to a namespace literally named "*".
+// Exactly ["*"] is the wildcard. Shared by mint and re-scope so neither narrows a caller to a namespace named "*".
 function scopeList(names: string[]): "*" | string[] {
   return names.length === 1 && names[0] === "*" ? "*" : [...names];
 }
 
-// Applies the narrowing asked for on top of a base. An omitted axis keeps its base
-// value, so naming one flag does not clear the others, and a call naming none
-// cannot widen anything.
+// An omitted axis keeps its base, so naming one flag does not clear the others and nothing can widen.
 function applyScopes(base: AgentScopes, args: ScopeArgs): AgentScopes {
   const scopes: AgentScopes = { ...base, flags: { ...base.flags } };
   if (args.namespaces) scopes.namespaces = scopeList(args.namespaces);
@@ -159,12 +145,8 @@ function applyScopes(base: AgentScopes, args: ScopeArgs): AgentScopes {
   return scopes;
 }
 
-// The repos axis a mint gets when the caller names none: every repo the named namespaces map
-// (defaultScopes' repos "*" would give every MCP-minted agent every repo). Derived from the live
-// namespaces mapping, the table resolveRepo reads, so the two cannot drift.
-//
-// A namespace scope of "*" derives "*": enumerating today's mapping would exclude a namespace
-// registered later. A namespace with no mapped repo refuses rather than falling back to "*".
+// Default repos for a mint: every repo the named namespaces map (defaultScopes' "*" would give every agent every
+// repo), derived from the live mapping. A "*" namespace derives "*"; one with no mapped repo refuses.
 async function reposForNamespaces(
   db: D1Database,
   namespaces: "*" | string[],
@@ -230,9 +212,7 @@ export async function mintAgent(
       "mint needs at least one namespace. A new agent is scoped to the namespaces it was named for, so minting one with none creates a credential that reaches nothing and says nothing about what it was for. Pass the single entry * deliberately if every namespace is what you mean.",
     );
   }
-  // Names are never reused, revoked and archived ones included, so the check is over
-  // every row. An audit actor has to mean one credential forever, or the log cannot
-  // answer who did something.
+  // Names are never reused, revoked and archived included: an audit actor must mean one credential forever.
   const existing = await db
     .prepare("SELECT id FROM agents WHERE name = ?1")
     .bind(name)
@@ -244,7 +224,6 @@ export async function mintAgent(
     );
   }
   const named = scopeList(args.namespaces);
-  // Derived only when the caller named none; an explicit list, "*" included, is kept.
   let derived: "*" | string[] | undefined;
   if (!args.repos) {
     const answer = await reposForNamespaces(db, named);
@@ -259,7 +238,6 @@ export async function mintAgent(
     },
     { ...args, namespaces: undefined },
   );
-  // The key is returned once; only its sha256 is stored or logged.
   const key = mintAgentKey();
   const keyHash = await sha256Hex(key);
   const row: AgentRow = {
@@ -298,10 +276,7 @@ export async function mintAgent(
 }
 
 export async function listAgents(db: D1Database): Promise<AgentResult> {
-  // Revoked rows are included until the watcher pass archives them
-  // (src/agents-archive.ts): a revoked credential is exactly what an inventory is read
-  // for, and hiding it would make "revoked" and "never existed" look the same. The
-  // archive is the list action's archived: true.
+  // Revoked rows are included until the watcher archives them: hiding them would make "revoked" and "never existed" look the same.
   const { results } = await db
     .prepare("SELECT * FROM agents WHERE archived_at IS NULL ORDER BY created_at DESC, name")
     .all<AgentRow>();
@@ -341,7 +316,6 @@ export async function revokeAgent(
   };
 }
 
-/** Activation (the activate_agent control, Portal only): the minted key starts resolving. */
 export async function activateAgent(
   db: D1Database,
   actor: string,
@@ -384,8 +358,7 @@ export async function updateAgentScopes(
     );
   const before = parseScopes(row.scopes);
   const scopes = applyScopes(before, args);
-  // Both sides go in the audit row. The current scopes are answerable from the table;
-  // what they were before, and who widened them, only from the row that changed them.
+  // Both sides go in the audit row: only the row that changed them says what they were and who widened them.
   const won = await changeWithAudit(
     db,
     actor,

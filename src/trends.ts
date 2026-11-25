@@ -12,31 +12,16 @@ import type {
 } from "./ops-types/views";
 import { MINUTE_MS, isoWeek, timeMs, utcDay } from "./time";
 
-// The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3). The feed
-// carries no series longer than 7 days, so these are read on demand by GET
-// /portal/api/trends (src/portal-trends.ts), read-only:
-//
-//   minutes    visual 1: minutes of Dustin per week, an estimate, and his decisions
-//   queue      visual 3: per day, jobs posted, jobs ended, and jobs open at the day's end
-//   merges     visual 7: per week, merged by the policy, by an approval, by the seat, closed;
-//              and each rollback as an event
-//   backups    visual 10: the retention slots, 14 daily, 4 weekly, 3 monthly, filled or not
-//   ci         visual 11: per roster repo and day, the default branch green, red or not run
-//
-// Visuals 2 and 5 (waits, claim agreement) come from GET /portal/api/claims, which already
-// serves them; 4, 8 and 9 from the plan and the feed. Every time here is UTC.
+// The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3): the feed carries nothing
+// longer than 7 days, so GET /portal/api/trends (src/portal-trends.ts) reads them on demand. Visuals 2 and 5 come from
+// /portal/api/claims; 4, 8 and 9 from the plan and the feed. Every time is UTC.
 
 const TRENDS_QUEUE_DAYS = 14;
-// A human's activity rows read for the minutes, at most. Far above a real week's count;
-// past it the series says it is cut rather than undercounting quietly. The newest rows
-// are the ones kept, so a cut costs the oldest week, not this one.
+// At most this many activity rows; past it the series says it is cut. Newest are kept, so a cut costs the oldest week.
 const MINUTES_ROW_CAP = 20_000;
-// A gap longer than this starts a new session (the experience review's section 8).
 const SESSION_GAP_MS = 5 * MINUTE_MS;
 
-/** Minutes and sessions per week from activity times: a session ends after a gap over
- *  five minutes and counts its span plus one minute, so a single click is a minute. A
- *  session is credited to the week it starts in. */
+// A session ends after a gap over five minutes and counts its span plus one minute, credited to its start week.
 export function sessionMinutes(
   times: number[],
   mondays: string[],
@@ -64,8 +49,7 @@ async function readMinutes(
 ): Promise<{ weeks: TrendMinutesWeek[]; truncated: boolean }> {
   const from = `${mondays[0]} 00:00:00`;
   const [audit, touches, decisions, approvals] = await Promise.all([
-    // A write by the administrator's own login. The Portal's reads are not audited, so
-    // looking without acting is not counted: the figure is a floor, and says so.
+    // A write by the administrator's login; the Portal's reads are not audited, so the figure is a floor.
     db
       .prepare(
         "SELECT at FROM audit_log WHERE at >= ?1 AND actor LIKE 'access:%' ORDER BY at DESC LIMIT ?2",
@@ -78,7 +62,6 @@ async function readMinutes(
       )
       .bind(mondays[0], MINUTES_ROW_CAP + 1)
       .all<{ at: string }>(),
-    // A decision is a human touch that ended a wait or closed a job, not a note.
     db
       .prepare(
         "SELECT substr(at, 1, 10) AS day, COUNT(*) AS n FROM job_touches WHERE at >= ?1 AND actor_kind = 'human' AND kind <> 'note' GROUP BY day",
@@ -119,8 +102,7 @@ async function readMinutes(
 async function readQueue(db: D1Database, days: string[]): Promise<TrendQueueDay[]> {
   const from = days[0]!;
   const [before, posted, ended] = await Promise.all([
-    // Open when the window starts: posted before it and not yet ended by then. A job
-    // that ended (done, failed, superseded) never moves again, so its updated_at is when.
+    // Open at window start: posted before and not yet ended. Ended jobs never move again, so updated_at is when.
     db
       .prepare(
         "SELECT COUNT(*) AS n FROM jobs WHERE created_at < ?1 AND NOT (status IN ('done', 'failed', 'superseded') AND updated_at < ?1)",
@@ -157,11 +139,8 @@ async function readMerges(
 ): Promise<{ weeks: TrendMergeWeek[]; rollbacks: PortalTrends["merges"]["rollbacks"] }> {
   const from = `${mondays[0]} 00:00:00`;
   const [rows, rollbacks] = await Promise.all([
-    // auto-merged: the policy merged on its own (src/auto-merge-tick.ts). approved-merged:
-    // the executor merged an approval (src/approval-executor.ts). manage_pr: the seat's
-    // own merge or close through capsid_close_pr. pr-closed: a close from the Portal. A
-    // policy merge of a pull request that held an approval also closes the approval with an
-    // approved-merged row (closeAsAutoMerged); that row is the same merge, so it is skipped.
+    // auto-merged is the policy (src/auto-merge-tick.ts), approved-merged the executor (src/approval-executor.ts), manage_pr the seat,
+    // pr-closed the Portal. A policy merge also closes its approval with an approved-merged row (closeAsAutoMerged): same merge, skipped.
     db
       .prepare(
         `SELECT substr(at, 1, 10) AS day,
@@ -178,7 +157,6 @@ async function readMerges(
            AND NOT (action = 'approved-merged' AND instr(COALESCE(params, ''), ?2) > 0)
          GROUP BY day, kind`,
       )
-      // instr, not LIKE: D1 refuses a LIKE pattern this long.
       .bind(from, `"reason":${JSON.stringify(AUTO_MERGED_APPROVAL_REASON)}`)
       .all<{ day: string; kind: "auto" | "approved" | "seat" | "closed"; n: number }>(),
     db
@@ -228,11 +206,8 @@ type DeployOutcomeName =
   | "rollback_skipped"
   | "unverified";
 
-/** DORA's deploy measures per repository (checklist F4) from its deploy_outcomes rows in the
- *  window: deploy frequency (gated deploys per week), change failure rate (deploys the live
- *  gate refused, over every deploy whose gate decided) and median time to restore (over the
- *  rolled-back deploys that recorded one). A gate that could not run ("unverified") is
- *  counted apart: it neither shipped nor failed as far as anyone knows. */
+// DORA measures per repository (checklist F4) from deploy_outcomes. An "unverified" gate (could not run) is counted
+// apart: it neither shipped nor failed as far as anyone knows.
 function deployStats(
   rows: ReadonlyArray<{ repo: string; outcome: DeployOutcomeName; restore_seconds: number | null }>,
   weeks: number,
@@ -292,7 +267,6 @@ async function readDeploys(db: D1Database, mondays: string[]): Promise<TrendDepl
   return deployStats(rows.results, mondays.length);
 }
 
-/** Every series, for `weeks` weeks of the weekly ones. */
 export async function readTrends(env: Env, now: Date, weeks: number): Promise<PortalTrends> {
   const mondays = weekStarts(now, weeks);
   const [minutes, queue, merges, deploys, backups, ci] = await Promise.all([

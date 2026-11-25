@@ -9,11 +9,6 @@ import { driverMintInstruction } from "../agents-schema";
 import { bounded, MAX_CONFIRM_TOKEN, MAX_REPO_SELECTOR, MAX_REPOS_JSON, nsName } from "../limits";
 import { ok, fail, type ToolCtx } from "./docs";
 
-// The namespace operations: namespaces (capsid_find_docs action namespaces), and
-// register_namespace, update_namespace and delete_namespace (capsid_admin_manage_namespaces
-// actions register, update, delete_preview and delete_perform).
-// defineDocOperations in ./docs registers them after the document tools.
-
 export function defineNamespaceOperations(server: McpServer, ctx: ToolCtx): void {
   const { env, db, actor } = ctx;
 
@@ -25,9 +20,8 @@ export function defineNamespaceOperations(server: McpServer, ctx: ToolCtx): void
       inputSchema: {},
     },
     async () => {
-      // unconsolidated = episodic and source docs not yet archived by the lint loop,
-      // surfaced so every session sees which namespaces need a run. Not filtered on
-      // status: the archive/ prefix is the only thing that takes a doc out of the loop.
+      // unconsolidated: episodic and source docs the lint loop has not archived, so every session
+      // sees which namespaces need a run.
       const { results } = await db
         .prepare(
           `SELECT n.namespace, n.repos, n.created_at,
@@ -37,11 +31,9 @@ export function defineNamespaceOperations(server: McpServer, ctx: ToolCtx): void
            FROM namespaces n ORDER BY n.namespace`,
         )
         .all();
-      // Filtered to the caller's own namespaces. This tool takes no arguments, so
-      // namespaceRefusal at the registrar has nothing to fire on. The mapping is what
-      // a mint uses to set the repos axis and what resolveRepo
-      // resolves through, so handing it to a narrowed caller hands it the shape of the
-      // boundary it sits behind.
+      // Filtered to the caller's own namespaces: this tool takes no arguments, so the registrar's
+      // namespaceRefusal has nothing to fire on, and the mapping is the shape of the boundary the
+      // caller sits behind.
       const scoped = ctx.agent.scopes.namespaces;
       const visible =
         scoped === "*"
@@ -53,10 +45,8 @@ export function defineNamespaceOperations(server: McpServer, ctx: ToolCtx): void
     },
   );
 
-  // Register a namespace: the one row in the namespaces table that repo tools and the
-  // namespaces list read. Writing documents to a new namespace label does not create
-  // it. Create-only: it will not overwrite an existing mapping. Admin only (TOOL_GRANTS in src/scope.ts): an OAuth
-  // session qualifies, a minted agent holding the write grant does not.
+  // Create-only: it will not overwrite a mapping. Admin only (TOOL_GRANTS in src/scope.ts); writing
+  // documents to a new label does not register it.
   ctx.ops.define(
     "register_namespace",
     {
@@ -72,7 +62,6 @@ export function defineNamespaceOperations(server: McpServer, ctx: ToolCtx): void
     async ({ namespace, repo, label, repos }) => {
       const ns = namespace.trim();
       if (!ns) return fail("namespace is required");
-      // The rules and the write are shared with the namespace_add control (src/namespace-admin.ts).
       const mapped = registerRepos({ repo, label, repos });
       if (!mapped.ok) return fail(mapped.refusal);
       const list = mapped.list;
@@ -88,9 +77,7 @@ export function defineNamespaceOperations(server: McpServer, ctx: ToolCtx): void
     },
   );
 
-  // Remap an existing namespace's repos; register_namespace is the create path.
-  // Snapshots the prior mapping to the audit log. It does not rename the namespace: a
-  // rename touches document keys, versions and audit history.
+  // Does not rename the namespace: a rename touches document keys, versions and audit history.
   ctx.ops.define(
     "update_namespace",
     {
@@ -101,7 +88,6 @@ export function defineNamespaceOperations(server: McpServer, ctx: ToolCtx): void
     async ({ namespace, repos }) => {
       const ns = namespace.trim();
       if (!ns) return fail("namespace is required");
-      // Shared with the namespace_edit control (src/namespace-admin.ts).
       const mapped = updateRepos(repos);
       if (!mapped.ok) return fail(mapped.refusal);
       const updated = await updateNamespace(db, actor, ns, mapped.list);
@@ -114,10 +100,8 @@ export function defineNamespaceOperations(server: McpServer, ctx: ToolCtx): void
       });
     },
   );
-  // Delete a namespace: a preview that counts everything naming it and signs a token,
-  // then a perform that re-plans, requires the token to match and commits one guarded
-  // batch. The rules and what is kept are in src/namespace-delete.ts. Admin only
-  // (TOOL_GRANTS in src/scope.ts), like the other two tools that edit the mapping.
+  // Preview counts everything naming the namespace and signs a token; perform re-plans and commits
+  // one guarded batch. Admin only (TOOL_GRANTS in src/scope.ts).
   ctx.ops.define(
     "delete_namespace",
     {

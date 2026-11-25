@@ -6,31 +6,18 @@ import type { SearchFilter, SearchRow } from "./doc-reads";
 // The meaning index: every document, in a Cloudflare AI Search instance whose data source is this
 // Worker's own D1 database (AI Search D1 data source, beta:
 // https://developers.cloudflare.com/ai-search/configuration/data-source/d1/), so search can match
-// by meaning as well as keyword (capsid/research/design-hybrid-search.md, step 1). D1 stays the
-// source of truth.
-//
-// AI Search runs INDEX_QUERY itself on each sync: new rows indexed, changed rows re-indexed,
-// unchanged skipped, and a row the query no longer returns removed once the whole result has been
-// read. The tick only starts a sync when the store has changed since the last; the instance's
-// daily schedule is the backstop. Search re-checks every hit against D1, so a row a sync has not
-// caught up with is never served. Unbound (tests, local dev), it does nothing and says so.
+// by meaning as well as keyword (capsid/research/design-hybrid-search.md, step 1).
 
 export const INDEX_INSTANCE = "capsid-documents";
 
-// The last store watermark a sync was started for.
 const SYNCED_KEY = "doc-index:synced";
 const READY_KEY = "doc-index:instance";
-// The AI Gateway id the instance was last pointed at (routeThroughGateway).
 const GATEWAY_KEY = "doc-index:gateway";
-// A hybrid query that has not answered by then falls back to keyword search (AI Search's search() takes no timeout or signal of its own.
 const SEARCH_TIMEOUT_MS = 8_000;
 
-// One row per document. id is the primary key, so each page AI Search reads is an index seek. The
-// body is cut to fit the 64 KiB a rendered row may take (d1_document_too_large); keyword search
-// (FTS5) still reads every byte. meta_canon is the current canon (the documents a ruling or
-// convention lives in), which search boosts over a session log quoting an old ruling (design 3.3).
-// AI Search allows five meta_ columns and puts each row's id on every chunk as `row_id`, so the id
-// needs none. The query may not hold a semicolon, "--" or slash-star, even in a literal.
+// meta_canon is the current canon (the documents a ruling or convention lives in), which search
+// boosts over a session log quoting an old ruling (design 3.3). AI Search allows five meta_
+// columns and puts each row's id on every chunk as `row_id`, so the id needs none.
 export const INDEX_QUERY = `SELECT id, title, substr(body, 1, 63000) AS content,
   namespace AS meta_namespace, coalesce(type, 'note') AS meta_type,
   coalesce(status, 'published') AS meta_status,
@@ -39,8 +26,8 @@ export const INDEX_QUERY = `SELECT id, title, substr(body, 1, 63000) AS content,
     OR substr(path, 1, 8) = 'rulings/')) THEN 1 ELSE 0 END AS meta_canon
 FROM documents`;
 
-// Title and content only: the default labeled template also writes every meta_ column
-// into the text, where it would be embedded and matched as if it were the document's.
+// Title and content only: the default labeled template also writes every meta_ column into the
+// text, where it would be embedded and matched as if it were the document's.
 const INDEX_TEMPLATE = "content_only";
 
 export interface IndexReport {
@@ -51,12 +38,8 @@ export interface IndexReport {
 
 const idle = (note: string): IndexReport => ({ ran: false, note, failed: 0 });
 
-// The instance was created once through the API (type "d1", source the `capsid` database in
-// scripts/bindings.mjs, token_id the account's AI Search service token, custom_metadata derived
-// from the meta_ columns (add on update, never remove or retype), index_method vector and keyword,
-// fusion rrf). Its query is this file's: a changed INDEX_QUERY is sent on the next tick, which also
-// starts a sync. A missing instance is refused, never silently re-created, because creating one
-// needs the token the API call names.
+// A missing instance is refused, never silently re-created, because creating one needs the token
+// the API call names.
 async function ensureInstance(env: Env, ns: AiSearchNamespace): Promise<AiSearchInstance> {
   const instance = ns.get(INDEX_INSTANCE);
   if ((await env.APP_KV.get(READY_KEY)) === INDEX_QUERY) return instance;
@@ -69,11 +52,9 @@ async function ensureInstance(env: Env, ns: AiSearchNamespace): Promise<AiSearch
   return instance;
 }
 
-// The reranker and the embedding model run inside AI Search, so a search call has no
-// gateway of its own to name: the instance names it (`ai_gateway_id`), and every model
-// call it makes then goes through that gateway's logs, rate limits and spend limits.
-// AI_GATEWAY_ID is a dashboard var (kept by keep_vars); unset, the
-// instance is left as it is. A refusal is logged and retried on the next tick.
+// The reranker and the embedding model run inside AI Search, so a search call has no gateway of
+// its own to name: the instance names it (`ai_gateway_id`), and every model call it makes then
+// goes through that gateway's logs, rate limits and spend limits.
 async function routeThroughGateway(env: Env, instance: AiSearchInstance): Promise<void> {
   const id = env.AI_GATEWAY_ID?.trim();
   if (!id || (await env.APP_KV.get(GATEWAY_KEY)) === id) return;
@@ -92,8 +73,6 @@ async function routeThroughGateway(env: Env, instance: AiSearchInstance): Promis
   }
 }
 
-// Every writer of `documents` sets updated_at, and a delete lowers the count, so this
-// changes whenever what INDEX_QUERY returns can have changed.
 async function watermark(db: D1Database): Promise<string> {
   const row = await db
     .prepare("SELECT count(*) AS n, max(updated_at) AS at, max(id) AS top FROM documents")
@@ -101,10 +80,11 @@ async function watermark(db: D1Database): Promise<string> {
   return `${row?.n ?? 0}|${row?.at ?? ""}|${row?.top ?? 0}`;
 }
 
-/** Start a sync when the store changed since the last one started. A sync already running
- *  answers the request with itself, and it may have read past this change, so the
- *  watermark is kept only for a sync that began after the store was read; otherwise the next tick
- *  asks again. */
+/**
+ * Start a sync when the store changed since the last one started. A sync already running answers
+ * the request with itself, and it may have read past this change, so the watermark is kept only
+ * for a sync that began after the store was read; otherwise the next tick asks again.
+ */
 export async function docIndexTick(env: Env): Promise<IndexReport> {
   const ns = env.AI_SEARCH;
   if (!ns) return idle("AI_SEARCH is not bound");
@@ -115,7 +95,6 @@ export async function docIndexTick(env: Env): Promise<IndexReport> {
     return { ran: true, note: `the instance refused its query: ${errorMessage(err)}`, failed: 1 };
   }
   await routeThroughGateway(env, instance);
-  // Workers' clock moves only across I/O, so this is the moment before the store is read.
   const asked = Math.floor(Date.now() / 1000) * 1000;
   const mark = await watermark(env.DB);
   if ((await env.APP_KV.get(SYNCED_KEY)) === mark) return idle("nothing changed");
@@ -133,22 +112,15 @@ export async function docIndexTick(env: Env): Promise<IndexReport> {
   return idle(`sync ${job.id} already running`);
 }
 
-// Hybrid search (step 2 of the design): meaning plus keyword, through the index. The index decides
-// only the order: every hit is read back from D1 with the caller's filters, so a document the
-// caller may not see, or one deleted or moved since indexing, is never returned. Anything that
-// keeps the index from answering returns a reason instead of rows, and the caller falls back to
-// FTS5. Queries are counted per month in KV: the account's free 1,000 a month is shared with the
-// site's Ask, and a paid hybrid query costs $0.00075, so the cap holds the worst case near $4.
+// The index decides only the order: every hit is read back from D1 with the caller's filters, so a
+// document the caller may not see, or one deleted or moved since indexing, is never returned.
 export const HYBRID_MONTHLY_CAP = 5000;
 const RERANK_MODEL = "@cf/baai/bge-reranker-base";
 const SNIPPET_CHARS = 240;
-// Closed tasks and superseded rulings stay searchable on request but are hidden by
-// default, so an old answer does not sit beside the current one (design 3.2).
 const RETIRED = ["closed", "superseded"];
 
 const countKey = (now: Date) => `doc-index:queries:${now.toISOString().slice(0, 7)}`;
 
-/** This month's hybrid queries, for /health (design 3.5). */
 export async function aiSearchUsage(
   env: Env,
   now: Date = new Date(),
@@ -192,8 +164,8 @@ export async function hybridSearch(
   if (filter.type) filters.type = { $eq: filter.type };
   if (!filter.includeRetired) filters.status = { $nin: RETIRED };
   let chunks: AiSearchSearchResponse["chunks"];
-  // AI Search's binding takes no signal, so the search and its reranker are raced against
-  // a deadline.
+  // AI Search's binding takes no signal, so the search and its reranker are raced against a
+  // deadline.
   let timer: number | null = null;
   const late = new Promise<never>((_, reject) => {
     timer = setTimeout(
@@ -213,16 +185,16 @@ export async function hybridSearch(
           // The current canon ranks above a session log that quotes an old ruling (3.3).
           boost_by: [{ field: "canon", direction: "desc" }],
         },
-        // A cross-encoder reorders the fused candidates by how well each answers the
-        // query, the step the usual hybrid pipeline adds after fusion. Threshold 0: it
-        // reorders, it never drops a candidate the fusion found.
+        // A cross-encoder reorders the fused candidates by how well each answers the query, the step the
+        // usual hybrid pipeline adds after fusion. Threshold 0: it reorders, it never drops a candidate
+        // the fusion found.
         reranking: { enabled: true, model: RERANK_MODEL, match_threshold: 0 },
       },
     });
     ({ chunks } = await Promise.race([search, late]));
   } catch (err) {
-    // The upstream error goes to the log only; the caller is told what happened, never
-    // the raw text of another service's answer.
+    // The upstream error goes to the log only; the caller is told what happened, never the raw text of
+    // another service's answer.
     const message = errorMessage(err);
     logEvent(
       "DOC_INDEX_SEARCH_FAILED",
@@ -234,8 +206,8 @@ export async function hybridSearch(
     clearTimeout(timer);
   }
 
-  // Best chunk first, so a document's first chunk sets its rank and its snippet; every
-  // chunk of it adds to how it matched.
+  // Best chunk first, so a document's first chunk sets its rank and its snippet; every chunk of it
+  // adds to how it matched.
   const ranked = new Map<number, { snippet: string; match: Match }>();
   for (const chunk of chunks) {
     const id = Number(chunk.item.metadata?.row_id);

@@ -6,21 +6,9 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 import { callSignal } from "./call-signal";
 
-// The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never per dashboard request. Two modules import it (test/ops-cloudflare.test.ts): src/watcher-gather.ts, and src/ops-cloudflare-config.ts, the admin-only capsid_admin_read_ops tool's Access and Email Routing reads, which reuse this envelope and paging.
-//
-// The token, CF_OPS_TOKEN, is read-only and holds these permissions:
-//   Workers Scripts Read              GET /accounts/{id}/workers/domains and
-//                                     GET /accounts/{id}/workers/scripts/{script}/deployments
-//   Account Analytics Read            POST /graphql (workersInvocationsAdaptive)
-//   Access: Apps and Policies Read    GET /accounts/{id}/access/apps and /access/policies
-//   Email Routing Addresses Read      GET /accounts/{id}/email/routing/addresses
-//   Zone Read                         GET /zones
-//   Email Routing Rules Read          GET /zones/{zone}/email/routing/rules
-//   Account Settings Read             GET /accounts/{id}/rum/site_info/list (the live checks'
-//                                     Web Analytics setting)
-// The Access, Email Routing and Zone permissions are capsid_admin_read_ops's; Access is also the watcher's, for a blocked job's "check: access app" line (src/manual-steps.ts). To add them: dash.cloudflare.com/profile/api-tokens, the token capsid-portal-read, Edit; add Account / Access: Apps and Policies / Read, Account / Email Routing Addresses / Read, Zone / Email Routing Rules / Read and Zone / Zone / Read; Zone Resources: All zones. The secret value does not change.
-//
-// What this read cannot see: a failed deploy. Cloudflare's deployments list records only deployments that happened, so a deploy that failed before reaching Cloudflare leaves nothing here. No finding is invented for it; a failed deploy workflow is already the watcher's ci-red finding.
+// The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns
+// (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never per
+// dashboard request.
 
 export const CF_API = "https://api.cloudflare.com/client/v4";
 export const CF_GRAPHQL = `${CF_API}/graphql`;
@@ -40,9 +28,8 @@ export type CfCredentials =
   | { ok: true; token: string; account: string }
   | { ok: false; reason: string };
 
-/** The token and the account it reads. The account is CF_ACCOUNT_ID, or R2_ACCOUNT_ID
- *  where that is unset: R2 lives in the same Cloudflare account. The reason names
- *  exactly what is unset. */
+// The token and the account it reads. The account is CF_ACCOUNT_ID, or R2_ACCOUNT_ID where that is
+// unset: R2 lives in the same Cloudflare account. The reason names exactly what is unset.
 export function cloudflareCredentials(
   env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
 ): CfCredentials {
@@ -57,8 +44,8 @@ export function cloudflareCredentials(
 
 const hostOf = (origin: string): string => new URL(origin).hostname.toLowerCase();
 
-/** A failed Cloudflare read, carrying the HTTP status so a caller can say what a 403
- *  means for its endpoint (the permission the token lacks). */
+// A failed Cloudflare read, carrying the HTTP status so a caller can say what a 403 means for its
+// endpoint (the permission the token lacks).
 export class CfReadError extends Error {
   readonly status: number;
   constructor(message: string, status: number) {
@@ -125,9 +112,9 @@ async function cfEnvelope(
 // A list read stops here rather than returning part of a list as if it were the whole.
 export const CF_MAX_PAGES = 20;
 
-/** Every item of a paged Cloudflare list, following result_info.total_pages. `url`
- *  carries no page or per_page; both are set here. A list with more than CF_MAX_PAGES
- *  pages fails with the count, never a truncated answer. */
+// Every item of a paged Cloudflare list, following result_info.total_pages. `url` carries no page
+// or per_page; both are set here. A list with more than CF_MAX_PAGES pages fails with the count,
+// never a truncated answer.
 export async function cfGetAll(
   fetchImpl: FetchLike,
   token: string,
@@ -177,8 +164,8 @@ function messagesOf(errors: unknown): string {
 
 const reasonOf = (err: unknown): string => errorMessage(err).slice(0, 300);
 
-/** GET /accounts/{id}/workers/domains: every Workers custom domain on the account, as
- *  hostname to the script (`service`) it serves. */
+// GET /accounts/{id}/workers/domains: every Workers custom domain on the account, as hostname to
+// the script (`service`) it serves.
 async function readCustomDomains(
   fetchImpl: FetchLike,
   token: string,
@@ -202,8 +189,8 @@ async function readCustomDomains(
 
 export const WEB_ANALYTICS_PERMISSION = "Account / Account Settings / Read";
 
-/** GET /accounts/{id}/rum/site_info/list: every Web Analytics site in the account. A 403
- *  is turned into the permission the token lacks. */
+// GET /accounts/{id}/rum/site_info/list: every Web Analytics site in the account. A 403 is turned
+// into the permission the token lacks.
 export async function readWebAnalyticsSites(
   fetchImpl: FetchLike,
   token: string,
@@ -253,8 +240,8 @@ interface RawDeploy {
 
 const str = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);
 
-/** One deployment as the dashboard shows it. version_id is the version serving the
- *  largest percentage of traffic. */
+// One deployment as the dashboard shows it. version_id is the version serving the largest
+// percentage of traffic.
 function toCfDeploy(raw: RawDeploy): CfDeploy {
   let version_id: string | null = null;
   let best = -1;
@@ -281,9 +268,9 @@ function toCfDeploy(raw: RawDeploy): CfDeploy {
   };
 }
 
-/** GET /accounts/{id}/workers/scripts/{script}/deployments. Cloudflare lists the
- *  newest first ("the first deployment in the list is the latest deployment actively
- *  serving traffic"); sorted again on created_on so the order does not rest on that. */
+// GET /accounts/{id}/workers/scripts/{script}/deployments. Cloudflare lists the newest first ("the
+// first deployment in the list is the latest deployment actively serving traffic"); sorted again on
+// created_on so the order does not rest on that.
 async function readDeploys(
   fetchImpl: FetchLike,
   token: string,
@@ -301,8 +288,8 @@ async function readDeploys(
     .slice(0, DEPLOYS_KEPT);
 }
 
-/** The 24 complete hours before `now`, oldest first. The last is the most recent
- *  complete hour, the one the error-rate finding reads. */
+// The 24 complete hours before `now`, oldest first. The last is the most recent complete hour, the
+// one the error-rate finding reads.
 export function errorWindow(now: Date): { start: Date; end: Date; hours: string[] } {
   const end = new Date(Math.floor(now.getTime() / HOUR_MS) * HOUR_MS);
   const start = new Date(end.getTime() - ERROR_HOURS * HOUR_MS);
@@ -334,10 +321,9 @@ function errorsQuery(scripts: string[]): string {
 // The name Cloudflare gives invocations it does not attribute to a script.
 const UNATTRIBUTED_SCRIPT = "__unknown__";
 
-/** ONE GraphQL Analytics query for every script, hourly, over errorWindow. A script
- *  with no row in an hour had no invocations then, which is a real zero from a query
- *  that succeeded. A query that failed throws, and the caller records no data with the
- *  reason, never zeros. */
+// ONE GraphQL Analytics query for every script, hourly, over errorWindow. A script with no row in
+// an hour had no invocations then, which is a real zero from a query that succeeded. A query that
+// failed throws, and the caller records no data with the reason, never zeros.
 async function readErrors(
   fetchImpl: FetchLike,
   token: string,
@@ -408,10 +394,8 @@ async function readErrors(
         "the analytics query returned a row without scriptName, datetimeHour, requests, errors and cpuTimeUs",
       );
     }
-    // Cloudflare answered a row named "__unknown__" for 2026-10-31 15:00 although the filter
-    // names only our scripts; failing on it left every site's error and CPU checks blind for
-    // hours. It is no script this pass asked for, so it is skipped by that exact name; any
-    // other stray name still fails the read below.
+    // Cloudflare answered a row named "__unknown__" for 2026-10-31 15:00 although the filter names
+    // only our scripts; failing on it left every site's error and CPU checks blind for hours.
     if (script === UNATTRIBUTED_SCRIPT) continue;
     const at = Date.parse(hourRaw);
     const i = Number.isNaN(at) ? undefined : index.get(new Date(at).toISOString());
@@ -437,8 +421,8 @@ export interface CloudflareRead {
   ran: boolean;
 }
 
-/** Every mapped site's Cloudflare state for this pass. Each failed read is logged and
- *  recorded on the sites it affects with its reason; nothing is reported as zero. */
+// Every mapped site's Cloudflare state for this pass. Each failed read is logged and recorded on
+// the sites it affects with its reason; nothing is reported as zero.
 export async function readCloudflare(
   env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
   sites: readonly OpsSite[],
@@ -546,8 +530,8 @@ export async function readCloudflare(
 // THE SECRET-PRESENCE READ (shared with the credentials inventory): which secrets a Worker has, by NAME. Cloudflare's secrets list has no way to return a value, so none can reach Capsid. Read on the watcher's pass only; the Portal shows what the last pass stored (src/secret-presence.ts).
 const SECRETS_PERMISSION = "Account / Workers Scripts / Read";
 
-/** The `name` of every row of a Cloudflare list, nothing else: whatever else a row carries
- *  is dropped here, unread. A 403 names the permission the token lacks. */
+// The `name` of every row of a Cloudflare list, nothing else: whatever else a row carries is
+// dropped here, unread. A 403 names the permission the token lacks.
 async function readNames(
   fetchImpl: FetchLike,
   token: string,
@@ -572,8 +556,8 @@ async function readNames(
     .filter((n): n is string => typeof n === "string" && n.length > 0);
 }
 
-/** GET /accounts/{id}/workers/scripts/{script}/secrets: the names. A 403 names the
- *  permission the token lacks. */
+// GET /accounts/{id}/workers/scripts/{script}/secrets: the names. A 403 names the permission the
+// token lacks.
 export async function readSecretNames(
   fetchImpl: FetchLike,
   token: string,

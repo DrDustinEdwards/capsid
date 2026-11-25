@@ -1,13 +1,9 @@
-/* Colors, fonts, shadows: Capsomer's tokens, loaded before this file (root.tsx). Only the
-   app's own dimensions live here. */
 :root {
   --top: 44px;
-  /* Two even panes split once the row holds two 480 px charts with their panel padding. */
   --panes-break: 64rem;
 }
 
-/* After Capsomer's base.css (root.tsx) in the same layer, so the Portal's denser type wins. Margin,
-   ground, ink, links, the pointer on buttons and the focus ring are Capsomer's (base.css). */
+/* After Capsomer's base.css in the same layer, so the Portal's denser type wins. */
 @layer cap.base {
   html,
   body {
@@ -16,19 +12,12 @@
   body {
     font: var(--weight-regular) var(--fs-detail)/var(--leading-compact) var(--ui);
   }
-  /* A link in running text is underlined, since color alone can't set it apart from the words
-     around it (WCAG 1.4.1). */
+  /* Underlined: color alone cannot set a link in running text apart (WCAG 1.4.1). */
   a:hover,
   main a:not([class]) {
     text-decoration: underline;
   }
 }
-/* Text roles are Capsomer's: .cap-mono for identifiers only (ids, shas, fingerprints, commands,
-   agent and namespace names, paths), .cap-num for times, counts, percentages and hostnames, and
-   .cap-text for size and tone (capsomer/text.css). Nothing is set below 11 px, and nothing
-   below 13 px on a phone (the capsid-portal site entry). */
-/* The shell is Capsomer's AdminShell (capsomer/admin-shell.css); the freshness line is Capsomer's
-   Freshness; only the page's own controls are styled here. */
 .sample {
   font-family: var(--mono);
   font-size: var(--fs-label);
@@ -48,15 +37,11 @@ kbd {
   color: var(--muted);
 }
 
-/* main is the containing block for anything absolutely positioned inside it (.cap-sr-only
-   text in a table header, say). Without it such an element is placed against the whole
-   document, past the scrolling table, and a mobile browser widens its layout viewport to
-   reach it: at 390 px the document was 1189 px wide and a centered dialog sat off screen. */
+/* main is the containing block for absolutely positioned children (.cap-sr-only in a table header): otherwise they sit against the document, past the scrolling table, and a mobile browser widens its layout. */
 main {
   min-width: 0;
   position: relative;
 }
-/* The heading alone: what a view is for is in the shortcut sheet (design D13). */
 .pagehead {
   display: flex;
   align-items: end;
@@ -104,12 +89,10 @@ summary.cap-btn::-webkit-details-marker {
 details[open] > summary .chev {
   transform: rotate(45deg);
 }
-/* The buttons a disclosure opens sit a row's gap under its summary. */
 details > summary + .cap-cluster {
   margin-block-start: var(--space-3);
 }
 
-/* Shared code: the read line, each package's users, and its local copies. */
 .shared-read {
   margin: var(--space-4) 0 0;
   font-size: var(--fs-detail);
@@ -161,7 +144,6 @@ table.workers-stores .cap-status {
   gap: var(--space-2);
 }
 
-/* fleet table */
 .fleet .site b {
   font-weight: var(--weight-bold);
   display: block;
@@ -171,9 +153,6 @@ table.workers-stores .cap-status {
   color: var(--muted);
   white-space: nowrap;
 }
-/* Charts are themed by capsomer/enarratio.css alone (root.tsx); a chart whose colors mean a
-   status passes them as Enarratio's colors option (views/TrendCharts.tsx). */
-/* Two charts side by side, each half the row, stacked when the row is narrow. */
 .chart-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
@@ -188,14 +167,11 @@ table.workers-stores .cap-status {
   margin-top: var(--space-1-5);
 }
 
-/* queue */
-/* A quiet line at the foot of a list or in place of an empty group (Maintenance, the queue). */
 .mt-read {
   padding: var(--space-2-5) var(--space-5) var(--space-3-5);
   font-size: var(--fs-detail);
 }
 
-/* feed */
 .feed {
   display: grid;
 }
@@ -237,7 +213,6 @@ table.workers-stores .cap-status {
   white-space: nowrap;
 }
 
-/* A table row that opens its item (Capsomer's table draws its hover). */
 tr.click {
   cursor: pointer;
 }
@@ -263,23 +238,18 @@ tr.click {
   margin: 0 0 var(--space-3);
 }
 
-/* app additions: utilities that replace the prototype's inline styles (CSP style-src 'self') */
 #root {
   height: 100%;
 }
-/* The uptime ticks take a third of the fleet table, so a run of ticks reads as a strip. */
 .uptime-cell {
   width: 30%;
 }
-/* The space around a small note (.cap-text data-size="small"): a hint under a control has 6px
-   above it, a note in a stack none. */
 .hint {
   margin: var(--space-2-5) 0 0;
 }
 .note {
   margin: 0;
 }
-/* The padded block inside a flush Capsomer Panel, beside a table or feed that runs to its edges. */
 .body {
   padding: var(--space-4-5) var(--space-5);
 }
@@ -318,9 +288,7 @@ ul.plain {
 [data-open] {
   cursor: pointer;
 }
-/* Selection is keyboard focus: j and k move focus among the rows (App.tsx), and the
-   focused row wears the selected look, a changed background and a ring at 3:1. */
-/* One rule for every kind of row; a critical row keeps its red edge. */
+/* Selection is keyboard focus (j and k, App.tsx): the focused row wears the selected look, a ring at 3:1. */
 main [data-row]:focus-visible {
   outline-offset: calc(-1 * var(--focus-offset));
   background: var(--sel);
@@ -368,7 +336,6 @@ main .sev-crit[data-row]:focus-visible {
   }
 }
 
-/* A visual pull request's preview and screenshots in Awaiting the seat (Ci.tsx). */
 .visual-look {
   display: flex;
   flex-wrap: wrap;
@@ -383,7 +350,6 @@ main .sev-crit[data-row]:focus-visible {
   white-space: nowrap;
 }
 
-/* The menu's icons are Capsomer's Icon (1.25em by default); the menu's own sizes. */
 .navicon {
   --icon-size: var(--title-6);
 }

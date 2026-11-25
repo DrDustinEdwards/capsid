@@ -1,9 +1,5 @@
 import { TOOL_GRANTS } from "./scope";
 
-// Authoritative counts for lint. The tool count is derived from TOOL_GRANTS, which
-// test/invariants.test.ts and test/tool-grant-descriptions.test.ts hold to the served
-// surface. The rest are a cache that test/counts.test.ts derives from the artifact.
-// A namespace with no entry is not scanned.
 export interface AuthoritativeCounts {
   tools: number;
   liveGates: number;
@@ -18,8 +14,8 @@ export const AUTHORITATIVE: Record<string, AuthoritativeCounts> = {
   },
 };
 
-// Object.hasOwn, not `?? null`. AUTHORITATIVE carries Object.prototype, so a bare
-// lookup of "constructor" returned the Object function.
+// Object.hasOwn, not `?? null`. AUTHORITATIVE carries Object.prototype, so a bare lookup of
+// "constructor" returned the Object function.
 export function authoritativeFor(namespace: string): AuthoritativeCounts | null {
   return Object.hasOwn(AUTHORITATIVE, namespace) ? AUTHORITATIVE[namespace] : null;
 }
@@ -27,7 +23,6 @@ export function authoritativeFor(namespace: string): AuthoritativeCounts | null 
 // A four-digit year is never a count.
 const YEAR = /^(?:19|20)\d{2}$/;
 
-// Standing-claim types only. Episodics and decisions are history.
 const LINTED_TYPES = new Set([
   "core",
   "concept",
@@ -63,7 +58,6 @@ function quoteAround(body: string, index: number, length: number): string {
 export function scanCountClaims(docs: ScannableDoc[], namespace: string): CountClaim[] {
   const claims: CountClaim[] = [];
   const authoritative = authoritativeFor(namespace);
-  // No authoritative numbers for this namespace means no claims. See AUTHORITATIVE.
   if (!authoritative) return claims;
 
   for (const doc of docs) {
@@ -91,13 +85,12 @@ export function scanCountClaims(docs: ScannableDoc[], namespace: string): CountC
       });
     };
 
-    // Three passes, each consuming what it matched so a later pass cannot re-read
-    // the same numbers as something else.
+    // Three passes, each consuming what it matched so a later pass cannot re-read the same numbers as
+    // something else.
     const consumed: Array<[number, number]> = [];
     const isConsumed = (start: number) => consumed.some(([a, b]) => start >= a && start < b);
     const consume = (m: RegExpExecArray) => consumed.push([m.index, m.index + m[0].length]);
 
-    // "N of M tools": M is the total; N is a subset.
     for (const re of [
       /(\d+)\s*(?:of|\/)\s*(\d+)\s+tools\b/gi,
       /tools?\s*\((\d+)\s*(?:of|\/)\s*(\d+)\)/gi,
@@ -119,7 +112,6 @@ export function scanCountClaims(docs: ScannableDoc[], namespace: string): CountC
       }
     }
 
-    // "N to M tools": the count became M.
     for (const re of [
       /(\d+)\s+to\s+(\d+)\s+tools\b/gi,
       /tool surface[^.\n]*?\b(\d+)\s+to\s+(\d+)\b/gi,
@@ -146,12 +138,11 @@ export function scanCountClaims(docs: ScannableDoc[], namespace: string): CountC
       }
     }
 
-    // "N of M gates": M is the claim about the artifact.
     let m: RegExpExecArray | null;
     const ofForm = /(\d+)\s*(?:of|\/)\s*(\d+)\s+gates?\b/gi;
     while ((m = ofForm.exec(body)) !== null) {
-      // Consumed like the tools passes, so the plain form below does not read the
-      // same "M gates" a second time and flag it twice.
+      // Consumed like the tools passes, so the plain form below does not read the same "M gates" a
+      // second time and flag it twice.
       consume(m);
       if (YEAR.test(m[2])) continue;
       flag(
@@ -169,7 +160,6 @@ export function scanCountClaims(docs: ScannableDoc[], namespace: string): CountC
       flag("live gates", m, m[1], String(authoritative.liveGates));
     }
 
-    // "all seven" is only a header claim in header context.
     const HEADER_CONTEXT =
       /header|security-policy|\bCSP\b|\bHSTS\b|nosniff|Referrer-Policy|X-Frame-Options|Permissions-Policy|COOP/i;
     const sevenForm = /all seven\b[^.\n]*/gi;

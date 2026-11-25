@@ -9,19 +9,8 @@ import { appliedMigrations, blockSettled } from "./inbox";
 import { readStaleCache, staleJobs } from "./stale-jobs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// WHAT NEEDS ME (capsid/research/design-mcp-servers.md, section 3: "the ruling's 'what
-// needs me'": all open PRs across repos with CI and conflicts). One read for the seat, served as capsid_admin_whats_next:
-//
-//   - questions: blocked jobs asking the seat a question, answered with a resume note;
-//   - blocked: blocked jobs waiting on a command the seat runs;
-//   - stale: the stale view of the queue (src/stale-jobs.ts);
-//   - pull_requests: every open pull request in every repo every namespace maps, with its
-//     head's CI verdict and whether it conflicts with its base, waiting_on_seat set where
-//     a driver's pull request is green, not a draft and mergeable;
-//   - checks: the watcher's checks that found something or could not run on its last pass.
-//
-// Reads only. A part that could not be read says so in `not_checked`; nothing missing is
-// reported as nothing found. Pull request titles and bodies are data, never instructions.
+// WHAT NEEDS ME (capsid/research/design-mcp-servers.md, section 3: "the ruling's 'what needs me'":
+// all open PRs across repos with CI and conflicts).
 
 const JOBS_LIMIT = 50;
 const PRS_PER_REPO = 30;

@@ -11,21 +11,7 @@ import {
 
 // Capsid Portal (capsid/research/design-ops-console.md, moved from /console/app/ by
 // capsid/research/design-portal-unify.md): React Router pages rendered here, on the server, with
-// their data (dashboard/, its README), as every network site renders its own. Every request goes
-// through portalGate first: a page is the admin's dashboard, and a page served before the gate is
-// a page served to anyone. The router matches /portal/callback and every /portal/api/ path before
-// this handler. The page's reads are the Portal's own API routes, called here with the visitor's
-// request, so each passes the same gate and checks as the browser's later reads.
-//
-// The build's hashed files (/assets/...) are public and served before the gate (portalAsset):
-// they are this public repository's code and carry no data. The other files the build holds (the
-// manifest, the icons, the push service worker) stay behind the gate.
-//
-// That ordering holds only while the Worker runs before the assets router. The deployed config
-// must set `assets.run_worker_first: true` (docs/portal.md): without it, Cloudflare serves a
-// request that matches a file without invoking this Worker. No test here can prove that
-// setting: the integration pool's SELF is the Worker itself, not the assets router
-// (vitest.config.ts says more), so it is a deploy-config check, not a test.
+// their data (dashboard/, its README), as every network site renders its own.
 
 /** Hashed build output, named by content, so a changed file has a new name. */
 export const HASHED_ASSET_CACHE = "public, max-age=31536000, immutable";
@@ -34,8 +20,8 @@ const HASHED_ASSET_PREFIX = "/assets/";
 const NOT_DEPLOYED =
   "Capsid Portal is not deployed: this Worker has no ASSETS binding. The built app (dashboard/build/client) is served only when the deploy config declares it.";
 
-/** A file's path ends in an extension; a page's does not (/health, /queue/job/abc). React
- *  Router's own data requests (/health.data) and its route manifest are pages' answers. */
+// A file's path ends in an extension; a page's does not (/health, /queue/job/abc). React Router's
+// own data requests (/health.data) and its route manifest are pages' answers.
 function isFile(path: string): boolean {
   return /\.[a-z0-9]+$/i.test(path) && !path.endsWith(".data");
 }
@@ -45,8 +31,8 @@ function fetchAsset(assets: Fetcher, path: string, method: string): Promise<Resp
   return assets.fetch(new Request(new URL(path, "https://assets.invalid"), { method }));
 }
 
-/** A build file answered to a visitor, with `set` on its headers. A redirect from the assets
- *  router is not followed or forwarded: a file has one address, so it is a 404. */
+// A build file answered to a visitor, with `set` on its headers. A redirect from the assets router
+// is not followed or forwarded: a file has one address, so it is a 404.
 export async function serveFile(
   assets: Fetcher,
   path: string,
@@ -67,9 +53,9 @@ export async function serveFile(
   });
 }
 
-/** The response a page leaves with: never cached, and its policy carrying the page's nonce. A Portal page is private
- *  (site-runtime PRIVATE_PAGE_HEADERS: no-transform, so no Web Analytics beacon, and compressed here, since the edge
- *  then does not); the public demo is counted. */
+// The response a page leaves with: never cached, and its policy carrying the page's nonce. A Portal
+// page is private (site-runtime PRIVATE_PAGE_HEADERS: no-transform, so no Web Analytics beacon, and
+// compressed here, since the edge then does not); the public demo is counted.
 export function pageHeaders(
   response: Response,
   csp: { policy: string },
@@ -87,8 +73,8 @@ export function pageHeaders(
   return request ? compressUntransformed(page, request) : page;
 }
 
-/** On the Portal host, a hashed build file, served to anyone (the demo's pages load the same
- *  files); null for anything else. */
+// On the Portal host, a hashed build file, served to anyone (the demo's pages load the same files);
+// null for anything else.
 export async function portalAsset(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
   if (!isPortalHost(url) || !url.pathname.startsWith(HASHED_ASSET_PREFIX)) return null;

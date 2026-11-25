@@ -145,7 +145,8 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "OFFACCOUNT_DISPATCH_THREW:", rethrow: false },
   );
 
-  // The daily maintenance pass (src/maintenance.ts): once a UTC day after 11:00, it lists what has gone stale for the seat's morning read. Its writes are pruning merged branches (off until the seat turns it on) and tagging a shared package's merged version bump (src/maintenance-releases.ts, on until turned off). Each delete and tag is audit-logged before the next, so a broken pass costs a missing list, not an unrecorded write. Not due is not a run.
+  // The daily maintenance pass (src/maintenance.ts): once a UTC day after 11:00, it lists what has
+  // gone stale for the seat's morning read.
   await runTask(
     env,
     "maintenance",
@@ -158,7 +159,9 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "MAINTENANCE_THREW:", rethrow: false },
   );
 
-  // The public system model (src/public-data.ts): once a UTC day, repo visibility read from GitHub, the model filtered by toPublic and stored for /public/model/v1.json, and the public repos' code maps for /public/code/v1.json, rebuilt hourly. A failed read throws before anything is written, so the last good document stays served. Not due is not a run.
+  // The public system model (src/public-data.ts): once a UTC day, repo visibility read from GitHub,
+  // the model filtered by toPublic and stored for /public/model/v1.json, and the public repos' code
+  // maps for /public/code/v1.json, rebuilt hourly.
   await runTask(
     env,
     "public-build",
@@ -213,7 +216,10 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "DOC_INDEX_THREW:", rethrow: false },
   );
 
-  // The daily merge-state sweep. Outcome rows record a pull request as unmerged when written, because the driver blocks and the seat merges afterwards. The merge path corrects the rows it can see; this catches the rest (a merge done with gh, and rows from before the join table existed). Bounded per sweep.
+  // The daily merge-state sweep. Outcome rows record a pull request as unmerged when written,
+  // because the driver blocks and the seat merges afterwards. The merge path corrects the rows it
+  // can see; this catches the rest (a merge done with gh, and rows from before the join table
+  // existed).
   await runTask(
     env,
     "outcome-sweep",

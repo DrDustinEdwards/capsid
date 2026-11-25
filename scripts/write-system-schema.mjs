@@ -1,6 +1,4 @@
-// Writes system/model.schema.json from the Zod schema in src/system-model.ts, so the
-// file editors read and the schema the Worker enforces cannot differ.
-// test/system-model.test.ts fails when the committed file is stale.
+// Writes system/model.schema.json from the Zod schema in src/system-model.ts (test/system-model.test.ts fails when the committed file is stale).
 // Run: node --import ./test/resolve-ts.mjs scripts/write-system-schema.mjs
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";

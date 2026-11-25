@@ -3,8 +3,6 @@ import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useCallback, type ReactNode } from "react";
 import { rowLink, useLocation, useSearch } from "../lib/router";
-// Row-list's stylesheet comes with the view that draws QueueRows (Queue), not with this
-// module, which every page imports.
 import { Group } from "capsomer/react/disclosure";
 import { Row, RowList } from "capsomer/react/row-list";
 import type { OpsJob } from "../types";
@@ -16,10 +14,8 @@ import { parse } from "capsomer/behavior/time";
 import { Glyph, Status } from "capsomer/react/status";
 import { ChartSlot } from "../ui/ChartSlot";
 
-// The deploys timeline loads with the tab that shows it, in the charts' lazy chunk.
 const DeployTimeline = trendChart("DeployTimeline");
 
-// The heading only: what a view is for is one line in the shortcut sheet (design D13).
 export function PageHead({ title }: { title: string }) {
   return (
     <div className="pagehead">
@@ -28,9 +24,6 @@ export function PageHead({ title }: { title: string }) {
   );
 }
 
-// A view's namespace filter: its own, in the address as ?ns=<namespace>, so picking one
-// on Incidents leaves Sites alone, and a filtered view can be reloaded or shared. "all"
-// when absent. Other query parameters are kept.
 export function useNsFilter(): [string, (ns: string) => void] {
   const search = useSearch();
   const [location, navigate] = useLocation();
@@ -51,7 +44,6 @@ export function useNsFilter(): [string, (ns: string) => void] {
 export function NsChips({ list }: { list: string[] }) {
   const [ns, setNs] = useNsFilter();
   const all = ["all", ...new Set(list)];
-  // A namespace from the address that this list does not carry still shows, pressed.
   if (!all.includes(ns)) all.push(ns);
   return (
     <div className="cap-cluster" data-gap="3" role="group" aria-label="Filter by namespace">
@@ -70,8 +62,6 @@ export function NsChips({ list }: { list: string[] }) {
   );
 }
 
-// The project filter of Activity and Claims: every roster project, and the applied one even when
-// the roster no longer has it.
 export function ProjectSelect({
   id,
   value,
@@ -109,8 +99,6 @@ export function ProjectSelect({
   );
 }
 
-// What a filtered list says when the filter leaves it empty: which filter, and a way back
-// (pattern catalog, N-empty).
 export function FilterEmpty({
   children,
   onShowAll,
@@ -137,11 +125,6 @@ export function NoSnapshot() {
   return <Empty kind="nothing-yet" title={<Status tone="nodata">No watcher pass yet</Status>} />;
 }
 
-// The Queue's groups, in order. Blocked jobs are ordered by priority, then the newest
-// update first, with those blocked over 7 days after them (audit ruling 10, lib/derive.ts
-// blockedOrder). Stale jobs have no group here: the Queue's Stale jobs panel holds them
-// and the list leaves them out (2026-10-09). Done and Failed start collapsed: nothing in
-// them needs a person.
 type QueueGroup = {
   id: string;
   label: string;
@@ -170,9 +153,7 @@ const GROUPS: QueueGroup[] = [
         .filter((j) => j.status === "queued")
         .sort((a, b) => b.priority - a.priority || parse(a.updated_at) - parse(b.updated_at)),
   },
-  // Wanted, but not now (src/jobs-park.ts): never claimed or planned until unparked. A
-  // row opens the drawer, which holds Unpark; a button in the row would break its height
-  // (design D2).
+  // A button in the row would break its height (design D2).
   {
     id: "parked",
     label: "Parked",
@@ -211,8 +192,6 @@ export function jobMeta(j: OpsJob, now: number): string {
   }
 }
 
-// A job's row: its status, title and detail, then its namespace over one last fact. It opens
-// the job's drawer.
 export function JobRow({
   job,
   status,
@@ -255,8 +234,6 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
       {GROUPS.map((g) => {
         const list = g.pick(jobs, now);
         if (g.hideEmpty && !list.length) return null;
-        // Each group is a Capsomer group row in a heading: live ones open, the last day's
-        // finished and failed ones folded away.
         return (
           <div key={g.id} data-group={g.id}>
             <Group
@@ -270,7 +247,6 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                 <RowList label={g.label}>
                   {list.map((j) => {
                     const pr = feed.live.prs.find((p) => p.job_id === j.id);
-                    // Plain English in the row; the job id is in the drawer (D11).
                     const sub =
                       j.status === "blocked" && j.question
                         ? `Asks: ${(j.waits_on ?? "no question recorded").replace(/^QUESTION:\s*/, "")}`
@@ -283,8 +259,6 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                               : j.status === "queued"
                                 ? `${j.finding ? "Watcher finding · " : ""}${j.started_by && j.started_at ? `Started by ${agentLabel(j.started_by)} ${ago(parse(j.started_at), now)} · ` : ""}priority ${j.priority}`
                                 : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
-                    // A blocked job that asks something is marked as a question: it waits on
-                    // an answer, not on a command (design-portal-evaluation.md, the question row).
                     const k =
                       j.status === "blocked" && j.question
                         ? { kind: JOB.blocked.kind, label: "Question" }
@@ -323,8 +297,6 @@ export function IncidentFeed({ ns }: { ns?: string }) {
     <div className="feed">
       {items.map((it) => {
         const kind = it.open ? it.sev : "ok";
-        // The fingerprint is raw detail: in the job's drawer when the finding has a job,
-        // and on hover when it has none to open (D11).
         return (
           <div
             className={kind === "crit" ? "frow sev-crit" : "frow"}

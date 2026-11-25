@@ -2,8 +2,6 @@ import type { Agent } from "./agents";
 import type { ActionParams, Surface } from "./controls-base";
 import type { Env } from "./env";
 
-// What performAction shares with its group performers (src/controls-perform.ts).
-
 export function required(params: ActionParams, field: string): string | null {
   const value = params[field];
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -13,9 +11,11 @@ export type ActionResult =
   | { ok: true; summary: string; warning: string | null }
   | { ok: false; refusal: string };
 
-/** One action in flight: the caller, the click's audit writer, and `state`, which a mutator
- *  sets once it has run so the catch knows whether the action happened. `warning` is a done
- *  action's caveat the Portal shows beside the success. */
+/**
+ * One action in flight: the caller, the click's audit writer, and `state`, which a mutator sets
+ * once it has run so the catch knows whether the action happened. `warning` is a done action's
+ * caveat the Portal shows beside the success.
+ */
 export type PerformContext = {
   env: Env;
   agent: Agent;

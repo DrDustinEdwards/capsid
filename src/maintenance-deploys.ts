@@ -7,15 +7,7 @@ import { HOUR_MS, days } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The daily maintenance pass's undeployed-merge rule (Carrel once sat four days behind its default
-// branch unnoticed). A site's live Worker is behind when its newest Cloudflare deployment is older
-// than the last commit on its repo's default branch, and that commit is more than GRACE_HOURS old
-// (so a deploy still running is not listed). A site whose health route reports the default
-// branch's head sha is deployed, whatever the dates say.
-//
-// The deployments come from the watcher's last snapshot (src/ops-cloudflare.ts), so the pass costs
-// no Cloudflare read; the default branch costs two GitHub reads per site. A site the snapshot could
-// not read is listed as not checked; no snapshot at all is listed under capsid, whose watcher
-// writes it. A site not on Cloudflare (a Vercel site) has no Worker and is left out.
+// branch unnoticed).
 
 const GRACE_HOURS = 2;
 const MAX_ITEMS = 50;
@@ -28,20 +20,16 @@ interface DefaultHead {
 }
 
 export interface DeployReaders {
-  /** The watcher's last snapshot, or null when there is none. */
   snapshot(): Promise<OpsSnapshot | null>;
-  /** The head commit of the namespace's repo's default branch. Throws when not read. */
   defaultHead(namespace: string): Promise<DefaultHead>;
 }
 
-/** Whether two shas name the same commit, when either may be abbreviated. */
 function sameSha(a: string, b: string): boolean {
   const x = a.toLowerCase();
   const y = b.toLowerCase();
   return x.length >= 7 && y.length >= 7 && (x.startsWith(y) || y.startsWith(x));
 }
 
-/** The line for a site whose newest deployment predates its default branch's head, or null. */
 function behind(
   site: { namespace: string; script: string; deployed_on: string; live_sha: string | null },
   head: DefaultHead,
@@ -121,8 +109,6 @@ function notChecked(namespace: string, problem: string): MaintenanceItem {
   };
 }
 
-/** The readers: the watcher's snapshot from APP_KV, and the default branch's head commit
- *  through the App. */
 export function githubDeployReaders(env: Env): DeployReaders {
   return {
     snapshot: () => readSnapshot(env),

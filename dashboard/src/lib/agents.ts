@@ -3,14 +3,10 @@ import type { OpsAgent, OpsFeed } from "../types";
 import { DAY, HOUR } from "./format";
 import { parse } from "capsomer/behavior/time";
 
-// The roster is the live credentials only. A revoked agent leaves it at once, and its row
-// leaves the live table 7 days later (docs/auth.md); both are the Archive tab's.
 export function rosterAgents(agents: readonly OpsAgent[]): OpsAgent[] {
   return agents.filter((a) => !a.revoked_at && !a.archived_at);
 }
 
-/** The Archive tab's rows: revoked and still in the live table, oldest revocation first
- *  (the next to move), then archived, newest move first. */
 export function archiveAgents(agents: readonly OpsAgent[]): OpsAgent[] {
   const waiting = agents
     .filter((a) => a.revoked_at && !a.archived_at)
@@ -36,7 +32,6 @@ export function nsList(a: OpsAgent): string {
   return a.namespaces === "*" ? "*" : a.namespaces.join(", ");
 }
 
-// A namespace's driver is the agent named <ns>-driver.
 export function driverOf(feed: OpsFeed, ns: string): OpsAgent | null {
   return feed.live.agents.find((a) => a.name === `${ns}-driver`) ?? null;
 }

@@ -13,8 +13,8 @@ import { whatsNext } from "../whats-next";
 import { fail, ok, type ToolCtx } from "./docs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The operations Capsid Admin added: what needs the seat, and Workers Builds. Each is served on the admin
-// server only (src/tools/surface.ts), and each tool is admin only in TOOL_GRANTS.
+// Each tool here is served on the admin server only (src/tools/surface.ts) and is admin only in
+// TOOL_GRANTS.
 
 const run = async (fn: () => Promise<unknown>) => {
   try {

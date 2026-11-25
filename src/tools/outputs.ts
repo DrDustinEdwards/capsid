@@ -3,14 +3,9 @@ import type { Shape } from "./operations";
 import { ADMIN_OUTPUTS } from "./outputs-admin";
 import { bool, mergeOutputs, nullable, num, obj, rows, str, strs } from "./outputs-shapes";
 
-// What each operation answers on success, as its handler builds it (the `ok(...)` calls in
-// this folder and the functions they return). A served tool's outputSchema is its
-// operations' shapes merged (src/tools/surface.ts): a key is required only where every
-// action always returns it. The SDK checks each successful result against it, so a key a
-// handler leaves out on some path is optional here, and every object stays loose: rows
-// and GitHub or Cloudflare answers carry fields this file does not name.
+// A key is required only where every action always returns it; every object stays loose, since rows
+// and GitHub or Cloudflare answers carry fields not named here.
 
-// A served tool's outputSchema: its actions' operations, merged.
 export function toolOutput(ops: readonly string[]) {
   const shapes = [...new Set(ops)].map((op) => {
     const shape = OUTPUTS[op];
@@ -50,7 +45,6 @@ const bing = { namespace: str, origin: str, site: str, report: str };
 const traffic = { namespace: str, origin: str, report: str, since: str };
 
 const OUTPUTS: Record<string, Shape> = {
-  // Documents (./docs-read, ./docs-write, ./docs-lifecycle).
   list: listed,
   find: listed,
   search: mergeOutputs([listed, { ...listed, mode: str }, { ...listed, mode: str, fallback: str }]),
@@ -199,7 +193,6 @@ const OUTPUTS: Record<string, Shape> = {
     { mode: str, namespace: str, consolidated: num, archived: rows },
   ]),
 
-  // Repos (./repo).
   list_repo_tree: { repo: str, path: str, entries: rows },
   read_repo_file: mergeOutputs([
     { repo: str, path: str, size: num, sha: str, content: str },
@@ -364,7 +357,6 @@ const OUTPUTS: Record<string, Shape> = {
     truncated: bool,
   },
 
-  // Jobs and status (./jobs, ./status).
   jobs: mergeOutputs([
     jobResult,
     { ok: bool, action: str, stale: rows, truncated: bool.optional(), note: str.optional() },

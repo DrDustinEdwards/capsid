@@ -37,8 +37,8 @@ const ModuleSchema = z.object({
   functions: z.array(FunctionSchema).max(5000),
 });
 
-/** code-map.json v1 as devkit writes it. Parsing strips any key not named here, so a
- *  field nobody listed cannot reach the public document. */
+// code-map.json v1 as devkit writes it. Parsing strips any key not named here, so a field nobody
+// listed cannot reach the public document.
 export const CodeMapSchema = z.object({
   version: z.literal(1),
   repo: bounded(200).regex(REPO),

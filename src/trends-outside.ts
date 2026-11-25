@@ -16,8 +16,8 @@ const CI_CACHE_KEY = "portal:trends-ci:v1";
 const CI_CACHE_SECONDS = 60 * 60;
 const BACKUP_PREFIX = "backups/json/";
 
-/** The retention slots d1-dump keeps (14 daily, 4 weekly, 3 monthly), each filled when a
- *  complete run falls in it. Run ids begin with their ISO day. */
+// The retention slots d1-dump keeps (14 daily, 4 weekly, 3 monthly), each filled when a complete
+// run falls in it. Run ids begin with their ISO day.
 export function backupSlots(
   completeRunIds: string[],
   now: Date,
@@ -75,9 +75,9 @@ interface RunLite {
   workflow_id?: number;
 }
 
-/** A repo's default branch per day: "red" when any workflow's last completed run up to
- *  the day's end failed, "green" when every one passed, carried forward over a day with
- *  none, and "none" before the first run seen. */
+// A repo's default branch per day: "red" when any workflow's last completed run up to the day's end
+// failed, "green" when every one passed, carried forward over a day with none, and "none" before
+// the first run seen.
 export function ciDays(runs: RunLite[], days: string[]): TrendCiDay[] {
   const done = runs.filter(
     (r) =>

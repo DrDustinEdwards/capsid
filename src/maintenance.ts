@@ -16,35 +16,22 @@ import { gatherRuleDocItems } from "./rule-docs";
 import { DAY_MS } from "./time";
 import { MERGE_RESUME_ACTOR } from "./jobs-seat-auto";
 
-// THE DAILY MAINTENANCE PASS (routine maintenance, so no stale thing waits to be asked about).
-// One pass a day on the five-minute tick, reusing its stamp pattern. Every finding either was
-// acted on by a step that already audit-logs (the merge-resume step) or lands in one short list,
-// served by capsid_read_status action status, that the seat reads at the start of a session.
-// This pass lists; it acts twice: it prunes merged branches (off until the seat turns it on,
-// audit-logging each delete, src/maintenance-branches.ts), and it tags a shared package's
-// merged version bump (on until the seat turns it off, audit-logging each tag,
-// src/maintenance-releases.ts).
-//
-// The job rules need only the database. The pull request rules (src/maintenance-prs.ts) and
-// branch rules read GitHub for every roster namespace; the undeployed-merge rule
-// (src/maintenance-deploys.ts) reads the watcher's snapshot and each site's default branch; the
-// release-tag rule reads each shared package's repo. The tags ride this daily pass, not the
-// five-minute tick: tagging within a day is soon enough for the bump pull requests they start,
-// and the pass already has the switch, the cap, the audit pattern and the list where a version
-// it would not tag belongs.
+// The tags ride this daily pass, not the five-minute tick: tagging within a day is soon enough for
+// the bump pull requests they start, and the pass already has the switch, the cap, the audit
+// pattern and the list where a version it would not tag belongs.
 
 const MAINTENANCE_KEY = "maintenance:list";
 export const MAINTENANCE_LAST_KEY = "maintenance:last";
 
-// The pass runs once per UTC day, after this hour, so the list is fresh when the seat
-// starts a session in the morning (06:00 in Chicago is 11:00 or 12:00 UTC).
+// The pass runs once per UTC day, after this hour, so the list is fresh when the seat starts a
+// session in the morning (06:00 in Chicago is 11:00 or 12:00 UTC).
 const DAILY_AFTER_UTC_HOUR = 11;
 const MAX_ITEMS_PER_RULE = 50;
 const FOLLOWUP_PROMISE = /follow(?:[- ]?ups?)?\b[^.]{0,60}\bseparate jobs?/i;
 const LATER_DATE = /\bLATER\b[^0-9]{0,40}(\d{4}-\d{2}-\d{2})/i;
 
-// The item is the Portal's contract too (GET /portal/api/maintenance), so it lives with the
-// other Portal types in src/ops-types/.
+// The item is the Portal's contract too (GET /portal/api/maintenance), so it lives with the other
+// Portal types in src/ops-types/.
 /** The model drift check, injected so a test can run the pass without GitHub. */
 export type DriftReader = (env: Env) => Promise<{ items: MaintenanceItem[]; read: number }>;
 
@@ -53,19 +40,12 @@ export type MaintenanceItem = OpsMaintenanceItem;
 interface MaintenanceList {
   generated: string;
   items: MaintenanceItem[];
-  /** Open pull requests read per namespace. A namespace missing here was not read, and
-   *  has a prs-not-checked item saying why. */
   prs_read: Record<string, number>;
-  /** Branches read per namespace, the same way: missing means not read, and a
-   *  branches-not-checked item says why. */
   branches_read: Record<string, number>;
-  /** Sites whose live deploy was compared with their default branch, per namespace. */
   deploys_read: Record<string, number>;
-  /** Facts compared with system/model.json: mapped repos, App repos and watched sites. */
   model_read: number;
   /** Rule documents checked for their cap and for stale tool names (src/rule-docs.ts). */
   rule_docs_read: number;
-  /** Shared packages whose version was compared with their tags (src/maintenance-releases.ts). */
   releases_read: number;
 }
 
@@ -73,7 +53,6 @@ type MaintenanceReport =
   | { ran: false; note: string }
   | { ran: true; note: string; list: MaintenanceList };
 
-/** A queued job whose title carries "LATER <date>" with the date already past. */
 export function laterPassed(
   jobs: Array<{ id: string; namespace: string; title: string }>,
   today: string,
@@ -93,8 +72,10 @@ export function laterPassed(
   return out;
 }
 
-/** Whether `body` names the pull request `url` as a whole, not as the prefix of a longer
- *  number (".../pull/1" must not match ".../pull/12"). */
+/**
+ * Whether `body` names the pull request `url` as a whole, not as the prefix of a longer number
+ * (".../pull/1" must not match ".../pull/12").
+ */
 export function namesPullRequest(body: string, url: string): boolean {
   let from = body.indexOf(url);
   while (from !== -1) {
@@ -105,7 +86,6 @@ export function namesPullRequest(body: string, url: string): boolean {
   return false;
 }
 
-/** A job that promised follow-up jobs ("follow as separate jobs") in its summary. */
 export function promisesFollowUps(summary: string | null): boolean {
   return summary !== null && FOLLOWUP_PROMISE.test(summary);
 }
@@ -136,9 +116,9 @@ export async function gatherMaintenance(
     .all<{ id: string; namespace: string; title: string }>();
   items.push(...laterPassed(queuedLater.results ?? [], today));
 
-  // A queued job whose body names a pull request that merged under ANOTHER job: the work
-  // it asks for has probably shipped. The instr() is a prefilter; namesPullRequest is the
-  // check, because a short number is the prefix of a longer one.
+  // A queued job whose body names a pull request that merged under ANOTHER job: the work it asks for
+  // has probably shipped. The instr() is a prefilter; namesPullRequest is the check, because a short
+  // number is the prefix of a longer one.
   const shipped = await env.DB.prepare(
     `SELECT j.id, j.namespace, j.body, p.pr_url, p.job_id AS shipped_by
        FROM jobs j JOIN job_outcome_prs p ON p.merged = 1 AND p.job_id != j.id AND instr(j.body, p.pr_url) > 0
@@ -158,8 +138,8 @@ export async function gatherMaintenance(
     });
   }
 
-  // A finished or blocked job that said follow-ups would be posted as separate jobs, with
-  // no job created in its namespace since it last moved. A heuristic that lists, never acts.
+  // A finished or blocked job that said follow-ups would be posted as separate jobs, with no job
+  // created in its namespace since it last moved. A heuristic that lists, never acts.
   const promised = await env.DB.prepare(
     "SELECT id, namespace, result_summary, updated_at FROM jobs WHERE status IN ('done', 'blocked') AND result_summary LIKE '%separate job%' LIMIT ?1",
   )
@@ -199,15 +179,12 @@ export async function gatherMaintenance(
     });
   }
 
-  // Green driver pull requests waiting for the seat, and pull requests red for days.
   const prs = await gatherPrItems(ROSTER, prReaders, now);
   items.push(...prs.items);
 
-  // Merged branches (listed, or pruned when the seat has turned that on), and old ones.
   const branches = await gatherBranchItems(env, ROSTER, branchReaders, now);
   items.push(...branches.items);
 
-  // A live Worker older than its default branch's last commit.
   const deploys = await gatherDeployItems(deployReaders, now);
   items.push(...deploys.items);
 
@@ -219,7 +196,6 @@ export async function gatherMaintenance(
   const ruleDocs = await gatherRuleDocItems(env.DB);
   items.push(...ruleDocs.items);
 
-  // A shared package's version with no tag: tagged (on by default), or listed.
   const releases = await gatherReleaseItems(env, releaseReaders);
   items.push(...releases.items);
 
@@ -235,9 +211,11 @@ export async function gatherMaintenance(
   };
 }
 
-/** The daily pass. Not due returns a note and records nothing; due gathers the list, keeps
- *  it in KV for capsid_read_status action status, and stamps the day. The stamp is written after the list,
- *  so a pass that threw runs again on the next tick. */
+/**
+ * The daily pass. Not due returns a note and records nothing; due gathers the list, keeps it in KV
+ * for capsid_read_status action status, and stamps the day. The stamp is written after the list,
+ * so a pass that threw runs again on the next tick.
+ */
 export async function maintenanceTick(
   env: Env,
   now: Date,

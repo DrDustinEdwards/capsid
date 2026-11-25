@@ -6,16 +6,9 @@ import type { RepoPrivacy, SystemModel } from "./system-model";
 import { cmp, semver } from "./shared-code";
 import { DAY_MS } from "./time";
 
-// THE VERSIONS MODEL, per system. src/shared-code.ts reads, from every
-// repo the system model names, which version of each network package it installs; this
-// module turns that per-package view into the published per-system document and the
-// nightly drift lines. Versions may be public (the coordinator's plan Dustin said go to):
-// the document is served at /public/versions/v1.json beside the model, and read through
-// capsid_read_status action versions.
-//
-// Like toPublic, the document is built by picking named fields into new objects. A
-// private system's pins are published without the paths they were read from, the same
-// rule as its code map: its file layout is not public.
+// THE VERSIONS MODEL, per system. src/shared-code.ts reads, from every repo the system model names,
+// which version of each network package it installs; this module turns that per-package view into
+// the published per-system document and the nightly drift lines.
 
 const Id = bounded(64);
 const Version = bounded(64);
@@ -92,14 +85,7 @@ const BEHIND_GRACE_MS = 3 * DAY_MS;
 /** When each pin behind was first seen behind, keyed by repo, package, where and pin. */
 export type BehindSince = Record<string, string>;
 
-/** The drift lines, and the carried first-seen map for tomorrow. Pure.
- *  - A repo that installs two versions of one package, in two of its manifests.
- *  - A pin behind the newest release for longer than BEHIND_GRACE_MS.
- *  - A pin older than the one read the night before, at once: a pin moved back runs an older devkit's check, and devkit's
- *    own bin cannot refuse the pull request that does it, since that pull request runs the old check (the two-PR
- *    rollback, capsid handoff/no-bloat-gaps-verify-0.41.md F). Carried as "pin|repo|package|where" keys in `since`.
- *  - A repo that runs no no-bloat check (no_bloat_off), at once.
- *  - A repo, or a package's releases, that could not be read. */
+/** The drift lines, and the carried first-seen map for tomorrow. */
 export function versionDrift(
   view: SharedCodeView,
   prior: BehindSince,

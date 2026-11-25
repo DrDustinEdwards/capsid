@@ -1,15 +1,10 @@
-// VISUAL PULL REQUESTS A pull request labeled `visual` waits for Dustin's yes on
-// every roster repo. The auto-merge tick holds it for him (src/auto-merge-tick.ts), reads
-// what he needs to look at from the pull request itself, and the phone alert
-// (src/push.ts), the inbox (src/inbox.ts) and the Portal's Pull requests page carry it.
-// His Approve in the Portal merges it on green CI through the approval executor, as any
-// approved pull request.
+// VISUAL PULL REQUESTS A pull request labeled `visual` waits for Dustin's yes on every roster repo.
 
 const VISUAL_LABEL = "visual";
 const MAX_SHOTS = 12;
 
-/** What Dustin needs to look at a visual change: its title, a live preview when the
- *  pull request names one, and the screenshots in its description. */
+// What Dustin needs to look at a visual change: its title, a live preview when the pull request
+// names one, and the screenshots in its description.
 export interface VisualPr {
   title: string;
   preview: string | null;
@@ -29,8 +24,8 @@ const URL_RE = /https:\/\/[^\s)<>"'\]]+/g;
 // Hosts that serve a pull request's own build: Cloudflare Worker and Pages previews.
 const PREVIEW_HOST = /^https:\/\/[^/]*\.(workers\.dev|pages\.dev)(\/|$)/i;
 
-/** The live preview a pull request names: a URL on a line that says "preview", else the
- *  first Worker or Pages preview URL in its description. Images are never previews. */
+// The live preview a pull request names: a URL on a line that says "preview", else the first Worker
+// or Pages preview URL in its description. Images are never previews.
 export function previewUrl(body: string): string | null {
   const urls = (line: string) =>
     [...line.matchAll(URL_RE)].map((m) => m[0]).filter((u) => !isImage(u));
@@ -47,8 +42,8 @@ function isImage(url: string): boolean {
   return /\.(png|jpe?g|gif|webp|svg)(\?|#|$)/i.test(url) || /user-attachments\/assets\//i.test(url);
 }
 
-/** The screenshots in a pull request's description: markdown images and <img> tags, in
- *  order, each once, at most MAX_SHOTS. */
+// The screenshots in a pull request's description: markdown images and <img> tags, in order, each
+// once, at most MAX_SHOTS.
 export function screenshotUrls(body: string): string[] {
   const found: string[] = [];
   for (const m of body.matchAll(

@@ -5,39 +5,18 @@ import { auditStatement } from "./store-guards";
 import { readLifted } from "./merge-safety";
 import { DAY_MS } from "./time";
 
-// EARNED PROMOTION AND DEMOTION (docs/design/design-merge-pipeline.md section 7, PR 9;
-// Dustin's DECIDE 9 and 10 of 2026-10-09). A unit is (namespace, path class). REPORT-ONLY: it
-// proposes and never widens anything (conventions 11.3). The one thing it changes on its own
-// only narrows: a rollback of a PR the tick merged unattended suspends that unit at once, so
-// its pull requests fall to class approve (src/auto-merge-tick.ts reads the suspensions).
-//
-// Evidence per unit, over 90 days:
-//   - approved merges, from pr_approvals (migrations/0043), never a chat one: any admin
-//     session can write that row with any claude.ai link, so it is the session's word, not
-//     Dustin's (Capsid security review, round 4, finding 6);
-//   - approvals voided for anything but a new push (an undo, red CI);
-//   - rollbacks, from deploy_outcomes, joined to the unit through the tick's auto-merged
-//     audit row or its approval;
-//   - reverts of a PR the tick merged (auto-merge-reverted rows, src/merge-safety.ts), which
-//     count as a rollback: they suspend the unit and block its promotion.
-// The CI-green share joins in with the signed unit list (PR 10).
-//
-// Promotion proposal: at least 20 approved merges over at least 14 days, no rollback or
-// revert, and at most one approval voided for anything but a new push. Demotion: a rollback
-// of an unattended merge suspends its unit and proposes removing it from the signed list.
-// Both reach Dustin as inbox items of kind "proposal". Acting on one is a signed policy
-// change (sign_policy_change, src/policy-sign.ts); a suspension is lifted with unit_resume.
+// - approvals voided for anything but a new push (an undo, red CI); - rollbacks, from
+// deploy_outcomes, joined to the unit through the tick's auto-merged audit row or its approval;
 
 export const SUSPENDED_KEY = "merge-units:suspended";
 export const REPORT_KEY = "merge-units:report";
-// When Dustin lifted each unit's suspension (the unit_resume control): a rollback from
-// before then is answered and suspends the unit no more.
+// When Dustin lifted each unit's suspension (the unit_resume control): a rollback from before then
+// is answered and suspends the unit no more.
 export const LIFTED_KEY = "merge-units:lifted";
 const WINDOW_MS = 90 * DAY_MS;
 const PROMOTE_MERGES = 20;
 const PROMOTE_SPAN_MS = 14 * DAY_MS;
 const PROMOTE_MAX_BAD_VOIDS = 1;
-// A void that only says the PR changed after approval is not evidence against the unit.
 const NOT_AGAINST = /^(new push|head moved|replaced)\b/;
 
 export const unitKey = (namespace: string, pathClass: string) => `${namespace}/${pathClass}`;
@@ -51,9 +30,6 @@ export interface ApprovalEvidence {
 }
 
 export interface RollbackEvidence {
-  // A deploy the gate rolled back, or a merged pull request that reverts an unattended
-  // merge (src/merge-safety.ts). For a revert, run_at is when the revert merged, run_id
-  // is 0 and head_sha is the reverted merge's (zeros when the row has none), and `reverted_by` is the revert's number.
   kind: "rollback" | "revert";
   reverted_by?: number | null;
   namespace: string;
@@ -89,7 +65,6 @@ export interface UnitsReport {
 const happened = (r: RollbackEvidence) =>
   r.kind === "revert" ? `was reverted by ${r.repo}#${r.reverted_by}` : "was rolled back";
 
-/** The proposals and the suspensions, from the evidence. Pure. */
 export function judgeUnits(
   approvals: readonly ApprovalEvidence[],
   rollbacks: readonly RollbackEvidence[],
@@ -169,8 +144,10 @@ export function judgeUnits(
   };
 }
 
-/** The suspended units, as the tick reads them. An unreadable list reads as none
- *  suspended is not safe, so it throws and the caller decides. */
+/**
+ * The suspended units, as the tick reads them. An unreadable list reads as none suspended is not
+ * safe, so it throws and the caller decides.
+ */
 export async function readSuspended(kv: KVNamespace): Promise<Suspension[]> {
   const raw = await kv.get(SUSPENDED_KEY);
   return raw ? (JSON.parse(raw) as Suspension[]) : [];
@@ -194,8 +171,6 @@ export async function planLift(
   return { ok: true, unit, suspension };
 }
 
-/** Lift a unit's suspension: the tick may merge its pull requests unattended again, and
- *  the rollbacks before now suspend it no more. Audited. */
 export async function liftSuspension(
   env: Env,
   actor: string,
@@ -246,13 +221,11 @@ export async function readUnitEvidence(
       run_at: string;
     }>();
   const rollbacks: RollbackEvidence[] = [];
-  // Newest first: a burst keeps the latest rollbacks, the ones that matter to a suspension.
   const rolledRows = rolled.results ?? [];
   for (const r of rolledRows.slice(0, 50)) {
     let merged_by: RollbackEvidence["merged_by"] = "unknown";
     let path_class: string | null = null;
     if (r.pr !== null) {
-      // The tick's own record of an unattended merge carries the unit since PR 9.
       const auto = await env.DB.prepare(
         `SELECT params FROM audit_log WHERE action = 'auto-merged' AND namespace = ?1 AND json_extract(params, '$.repo') = ?2 AND json_extract(params, '$.pr') = ?3 ORDER BY id DESC LIMIT 1`,
       )
@@ -278,8 +251,8 @@ export async function readUnitEvidence(
     }
     rollbacks.push({ ...r, kind: "rollback", merged_by, path_class });
   }
-  // The reverts of pull requests the tick merged (src/merge-safety.ts): the audit row
-  // carries the unit, so a revert places itself.
+  // The reverts of pull requests the tick merged (src/merge-safety.ts): the audit row carries the
+  // unit, so a revert places itself.
   const reverted = await env.DB.prepare(
     `SELECT namespace, params FROM audit_log WHERE action = 'auto-merge-reverted' AND at >= ?1 ORDER BY id DESC LIMIT 50`,
   )
@@ -329,7 +302,6 @@ export interface UnitsTickReport {
   newly_suspended: string[];
 }
 
-/** One pass: judge the units, store the report, and suspend a unit a rollback hit. */
 export async function unitsTick(
   env: Env,
   now: Date,
@@ -372,7 +344,6 @@ export async function unitsTick(
   };
 }
 
-/** The proposals and suspensions as inbox items, per namespace. */
 export async function unitInboxItems(
   kv: KVNamespace,
 ): Promise<Array<{ namespace: string; item: InboxItem }>> {

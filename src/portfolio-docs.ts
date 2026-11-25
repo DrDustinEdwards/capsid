@@ -1,15 +1,7 @@
-// The portfolio documents every namespace driver may READ in capsid, and nothing else
-// there.
-//
-// Every repo's CLAUDE.md tells a session to follow capsid/conventions.md, and sessions
-// search Dustin's rulings for the record of what he decided, but a driver minted for one
-// namespace was refused all of them, so it worked from its repo's CLAUDE.md and the job bodies alone. This is the
-// one statement of what crosses that boundary. checkScope (src/scope.ts) admits a read
-// of a path matched here, the list, glob and search handlers drop every other capsid
-// row for such a caller, and the session start names the documents that exist. Nothing else in
-// capsid (research, policy, jobs, reports, episodics) is reachable, and no write is.
-//
-// test/portfolio-docs.test.ts pins this constant.
+// The portfolio documents every namespace driver may READ in capsid, and nothing else there. Every
+// repo's CLAUDE.md tells a session to follow capsid/conventions.md, and sessions search Dustin's
+// rulings for the record of what he decided, but a driver minted for one namespace was refused all
+// of them, so it worked from its repo's CLAUDE.md and the job bodies alone.
 export const PORTFOLIO_DOCS = {
   namespace: "capsid",
   // Exact paths. conventions.md is the one rules file.
@@ -28,11 +20,9 @@ export const PORTFOLIO_DOCS = {
   ],
 } as const;
 
-// A path is matched against this before anything else: lowercase letters, digits, dot,
-// dash, underscore and slash only. So a percent-encoding, a backslash, a space or a
-// capital letter cannot reach a comparison, whatever the database or a later decoder
-// would make of it. Stored paths are case-sensitive, and every portfolio path is
-// lowercase.
+// A path is matched against this before anything else: lowercase letters, digits, dot, dash,
+// underscore and slash only. So a percent-encoding, a backslash, a space or a capital letter cannot
+// reach a comparison, whatever the database or a later decoder would make of it.
 const SAFE_PATH = /^[a-z0-9][a-z0-9._/-]*$/;
 const FOLDER_ENTRY = /^[a-z0-9][a-z0-9._-]*\.md$/;
 
@@ -78,10 +68,9 @@ export interface PortfolioRow {
   updated_at: string;
 }
 
-/** The portfolio documents that exist, metadata only, ordered by path. The query
- *  narrows by the exact paths and a GLOB per folder; isPortfolioPath
- *  then decides, so the GLOB's looser match (a nested rulings path) never reaches a
- *  caller. */
+// The portfolio documents that exist, metadata only, ordered by path. The query narrows by the
+// exact paths and a GLOB per folder; isPortfolioPath then decides, so the GLOB's looser match (a
+// nested rulings path) never reaches a caller.
 export async function portfolioDocuments(db: D1Database): Promise<PortfolioRow[]> {
   const globs = PORTFOLIO_DOCS.folders.map((p) => `${p}*`);
   const { results } = await db

@@ -24,8 +24,7 @@ export const AGREEMENTS: readonly ClaimsAgreement[] = [
   "unchecked",
 ];
 
-// agree and disagree are findings about the agent; unclaimed means it said nothing, and
-// unchecked means the Worker could not verify what it said. Neither of those is a pass.
+// agree and disagree are findings about the agent; unclaimed (said nothing) and unchecked (Worker could not verify) are not a pass.
 const AGREEMENT_KIND: Record<ClaimsAgreement, Kind> = {
   agree: "ok",
   disagree: "crit",
@@ -33,7 +32,7 @@ const AGREEMENT_KIND: Record<ClaimsAgreement, Kind> = {
   unchecked: "warn",
 };
 
-// A wait in milliseconds as "3.2h". Null is no wait measured, never zero.
+// Null is no wait measured, never zero.
 export function wait(msValue: number | null) {
   return msValue === null ? (
     <Missing>no wait</Missing>
@@ -93,8 +92,7 @@ type Said = {
   };
 };
 
-// The claim as the agent sent it, which job_claims.raw keeps whole. A row whose raw does not
-// parse is shown as unreadable, and said so.
+// A row whose raw does not parse is shown as unreadable.
 function saidOf(c: JobClaimRow): Said | string {
   try {
     return JSON.parse(c.raw) as Said;
@@ -103,7 +101,6 @@ function saidOf(c: JobClaimRow): Said | string {
   }
 }
 
-// What a claim states, field by field, skipping what the agent did not state.
 function stated(c: JobClaimRow): string[] {
   const said = saidOf(c);
   if (typeof said === "string") return [said];

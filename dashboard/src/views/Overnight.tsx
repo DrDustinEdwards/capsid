@@ -17,14 +17,6 @@ import { useSinceLastVisit } from "capsomer/react/state-hooks";
 import type { PortalDigest, PortalPlan } from "../types";
 import { Status } from "capsomer/react/status";
 
-// The Tonight plan on the Queue and the "since you last looked" strip on Needs you
-// (docs/design/design-portal-evaluation.md, DECIDE 3, ruled 2026-10-09). Each reads its
-// own route when its page opens and again with each feed: GET /portal/api/plan and
-// GET /portal/api/digest, the readers behind `capsid_work_jobs` list view plan and view digest, so
-// the Portal and chat cannot disagree. Neither changes anything.
-
-// Chart 4, Tonight as a timeline, loads with the Queue that shows it, not with the digest
-// strip Needs you takes from this file.
 const TonightTimeline = trendChart("TonightTimeline");
 
 function Failed({ what, error }: { what: string; error: string | null }) {
@@ -145,14 +137,11 @@ export function Tonight() {
   );
 }
 
-// When this browser last opened Activity. A per-viewer convenience: with no record, or
-// storage blocked, the strip reports the last 24 hours, the digest's own default.
 const LAST_LOOKED_PREF = "wf-last-looked";
 
 export function SinceLastLooked() {
   const { now } = useApp();
-  // The server renders the last 24 hours (server/prefetch.ts reads the same digest, lib/api's digestSince);
-  // this browser's own last look is read after hydration, once, and the next visit reports from now.
+  // The server renders the last 24 hours; this browser's own last look is read once after hydration, so server and first render agree.
   const since = useSinceLastVisit(LAST_LOOKED_PREF, now, DAY);
   const load = useAnswer<PortalDigest>([LIVE, "digest", since], () => fetchDigest(since));
   const d = load.data;
@@ -171,7 +160,6 @@ export function SinceLastLooked() {
             <b className="cap-num">{d.blocked.length}</b> blocked
           </p>
           {(d.pull_requests_ready.length > 0 || d.blocked.length > 0) && (
-            // One line first (UX audit, the proposed Needs you); the lists behind it.
             <details>
               <summary>Show them</summary>
               {d.pull_requests_ready.length > 0 && (

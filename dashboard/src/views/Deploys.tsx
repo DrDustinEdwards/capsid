@@ -8,14 +8,10 @@ import { ChartSlot } from "../ui/ChartSlot";
 import { trendChart } from "./charts";
 import { NoSnapshot, NsChips, TimelinePanel, useNsFilter } from "./shared";
 
-// DORA's deploy measures per repository, from the trends read, in the charts' lazy chunk.
 const DeploysTable = trendChart("DeploysTable");
 
 const RANGES: Array<Filters["range"]> = ["24h", "7d", "30d"];
 
-// Sites' Deploys tab: every site's deploys over the range, as Cloudflare recorded them (so a
-// hand-run wrangler deploy shows up too), on the timeline and in one table, then the sites with
-// no deploy data and each repository's deploy measures. One site's deploys are on its own page.
 export function Deploys() {
   const { feed, now, filters, setFilters } = useApp();
   const [ns, setNs] = useNsFilter();
