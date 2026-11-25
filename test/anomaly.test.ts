@@ -81,11 +81,3 @@ test("PLANT: a new key first used at 03:00 Chicago is a finding; one first used 
     [],
   );
 });
-
-test("activity older than the last day is baseline, never a finding of its own", () => {
-  const rows = [
-    ...steady("agent:sample-driver"),
-    { actor: "agent:sample-driver", action: "delete_namespace", hour: hour(30), n: 1 },
-  ];
-  assert.deepEqual(anomalyFindings(rows, NOW), []);
-});

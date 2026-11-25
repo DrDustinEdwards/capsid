@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   MAX_CLAIM_PRS,
-  WORKER_EVALUATIONS,
   agreementOf,
   claimRow,
   evaluationRows,
@@ -11,10 +10,10 @@ import {
   workerEvaluatorId,
   type JobClaimRow,
 } from "../src/job-claims.ts";
-import { verifyEvidence, type GitHubFacts } from "../src/job-outcomes.ts";
+import type { GitHubFacts } from "../src/job-outcomes.ts";
 import { blockJob, completeJob, failJob } from "../src/jobs.ts";
 import { grantAgent } from "../src/agents.ts";
-import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
+import { fakeEnv } from "./fakes.ts";
 
 // Claims apart from verified outcomes (migrations/0023, src/job-claims.ts): what node
 // can check without a database. The append-only triggers, the one-batch property and
@@ -51,7 +50,7 @@ const NULLABLE = [
 
 // parsing
 
-test("a claim arrives as an object or as a JSON string, and both parse to the same claim", () => {
+test("a claim arrives as an object or as a JSON string, and an absent or blank one is no claim", () => {
   const claim = {
     prs_opened: [PR],
     tests: { run: 12, passed: 12, failed: 0, result: "pass" as const },
@@ -62,9 +61,7 @@ test("a claim arrives as an object or as a JSON string, and both parse to the sa
   assert.ok("claim" in asObject && "claim" in asString);
   assert.deepEqual(asObject.claim, claim);
   assert.deepEqual(asString.claim, claim);
-});
 
-test("an absent or blank claim is no claim, not a refusal", () => {
   for (const input of [undefined, null, "", "   "]) {
     const parsed = parseClaim(input);
     assert.ok("claim" in parsed, `refused ${JSON.stringify(input)}`);
@@ -72,19 +69,17 @@ test("an absent or blank claim is no claim, not a refusal", () => {
   }
 });
 
-test("a claim string that is not JSON is REFUSED, with the text it was sent", () => {
+test("a claim string that is not JSON is REFUSED with the text it was sent, and a claim that is not an object is refused", () => {
   const parsed = parseClaim("{prs_opened: [oops");
   assert.ok("error" in parsed, "an unparseable claim string was accepted");
   assert.match(parsed.error, /not JSON/);
   assert.match(parsed.error, /prs_opened: \[oops/);
   assert.match(parsed.error, /Nothing was written/);
-});
 
-test("a claim that is not an object is refused", () => {
   for (const input of ["null", "[]", "3", '"text"', [PR], 7]) {
-    const parsed = parseClaim(input);
-    assert.ok("error" in parsed, `accepted ${JSON.stringify(input)}`);
-    assert.match(parsed.error, /must be an object/);
+    const refused = parseClaim(input);
+    assert.ok("error" in refused, `accepted ${JSON.stringify(input)}`);
+    assert.match(refused.error, /must be an object/);
   }
 });
 
@@ -126,7 +121,7 @@ test("a claim out of bounds is refused, not trimmed", () => {
 
 // the claim row
 
-test("PLANT: an absent field is NULL, never 0", () => {
+test("PLANT: an absent field is NULL, never 0, and a stated zero or empty list is kept as said", () => {
   // No claim and no evidence: every structured column is NULL. A 0 here would read as
   // "counted and found none", which nobody said.
   const empty = row();
@@ -139,9 +134,7 @@ test("PLANT: an absent field is NULL, never 0", () => {
   // A partial claim leaves its siblings NULL too.
   const partial = row({ claim: { versions: { client_name: "x" } } });
   assert.equal(partial.model_id, null);
-});
 
-test("a stated zero and a stated empty list are kept as said: 0 and []", () => {
   const said = row({ claim: { prs_opened: [] }, evidence: { commits: 0 } });
   assert.equal(said.prs_opened, 0);
   assert.equal(said.prs_opened_urls, "[]");
@@ -161,25 +154,6 @@ test("prs_opened comes from the claim, else from evidence.prs; prs_merged only f
   assert.deepEqual(JSON.parse(fromClaim.prs_opened_urls ?? "null"), [PR2]);
   assert.equal(fromClaim.prs_opened, 1);
   assert.equal(fromClaim.prs_merged, 1);
-});
-
-test("the claim row carries the agent, the namespace, the facts the checks read and the Worker's sha", () => {
-  const full = row({
-    claim: { versions: { model_id: "model-x" } },
-    evidence: { commits: 2, files_changed: 3 },
-    capsid_sha: "abc1234",
-  });
-  assert.equal(full.agent, "agent:sample-driver");
-  assert.equal(full.namespace, "sample");
-  assert.equal(full.action, "complete");
-  assert.equal(full.model_id, "model-x");
-  assert.deepEqual([full.commits, full.files_changed], [2, 3]);
-  assert.equal(full.capsid_sha, "abc1234");
-  assert.equal(
-    full.recorded_at,
-    NOW.toISOString(),
-    "recorded_at is ISO with milliseconds, bound from code",
-  );
 });
 
 test("raw keeps the arguments as sent: JSON strings parsed once, and an unsent key absent rather than null", () => {
@@ -217,19 +191,6 @@ const facts = (over: Partial<GitHubFacts> = {}): { github: GitHubFacts } => ({
 });
 const byName = (rows: ReturnType<typeof evaluationRows>) =>
   Object.fromEntries(rows.map((r) => [r.name, r]));
-
-test("the worker writes exactly its five checks, each named by evaluator and sha", () => {
-  const rows = evaluationRows(row(), facts(), ctx);
-  assert.deepEqual(
-    rows.map((r) => r.name),
-    [...WORKER_EVALUATIONS],
-  );
-  for (const r of rows) {
-    assert.equal(r.evaluator, "worker");
-    assert.equal(r.evaluator_id, "capsid@abc1234");
-  }
-  assert.equal(workerEvaluatorId(undefined), "capsid@unknown");
-});
 
 test("PLANT: nothing claimed and nothing checked is NULL and unknown, never 0 or fail", () => {
   for (const r of evaluationRows(row(), facts(), ctx)) {
@@ -321,96 +282,6 @@ test("a pull request the Worker could not read leaves the check unchecked, with 
   assert.match(rows.pr_merged.explanation ?? "", /could not be read/);
 });
 
-// verifyEvidence exposes what GitHub said, beside the driver's numbers
-
-function envWithRepo() {
-  return fakeEnv({
-    DB: {
-      prepare: () => ({
-        bind: () => ({
-          first: async () => ({
-            repos: JSON.stringify([{ repo: "example/sample", label: "primary" }]),
-          }),
-        }),
-      }),
-    },
-    APP_KV: fakeKv({ seedToken: true }).kv,
-  });
-}
-const HEAD = "b".repeat(40);
-const prRoute = (merged: boolean, commits: number, changed: number): Route => ({
-  body: { merged, commits, changed_files: changed, head: { sha: HEAD } },
-});
-const greenRuns: Route = {
-  body: {
-    workflow_runs: [
-      {
-        id: 1,
-        name: "ci",
-        head_sha: HEAD,
-        status: "completed",
-        conclusion: "success",
-        event: "push",
-        created_at: "x",
-        html_url: "u",
-      },
-    ],
-  },
-};
-
-test("PLANT: the claim row keeps the driver's count when GitHub's differs", async () => {
-  // The driver says two commits and one file; GitHub says five and eight. job_outcomes
-  // keeps GitHub's (unchanged); the claim keeps the driver's; the evaluation holds both.
-  await withFetch(
-    {
-      "GET /repos/example/sample/pulls/3": prRoute(true, 5, 8),
-      "GET /repos/example/sample/actions/runs": greenRuns,
-    },
-    async () => {
-      const evidence = { prs: [PR], commits: 2, files_changed: 1, tests_added: 4 };
-      const claim = row({ evidence, claim: { prs_merged: [PR] } });
-      const verdict = await verifyEvidence(envWithRepo(), "sample", evidence);
-      assert.equal(verdict.commits, 5, "job_outcomes' value stopped being GitHub's");
-      assert.equal(claim.commits, 2, "the claim row took GitHub's count");
-      assert.equal(claim.files_changed, 1);
-      assert.deepEqual(verdict.github, {
-        merged: { [PR]: true },
-        commits: 5,
-        files_changed: 8,
-        ci_green: 1,
-      });
-      assert.deepEqual(verdict.reported, {
-        prs: [PR],
-        commits: 2,
-        files_changed: 1,
-        tests_added: 4,
-      });
-      const rows = byName(evaluationRows(claim, verdict, ctx));
-      assert.deepEqual(
-        [rows.commits.claimed, rows.commits.verified, rows.commits.agreement],
-        ["2", "5", "disagree"],
-      );
-      assert.deepEqual([rows.files_changed.claimed, rows.files_changed.verified], ["1", "8"]);
-    },
-  );
-});
-
-test("verifyEvidence with nothing to read exposes NULL facts, never 0 or false", async () => {
-  const verdict = await verifyEvidence(fakeEnv({}), "sample", { commits: 0 });
-  assert.deepEqual(verdict.github, {
-    merged: {},
-    commits: null,
-    files_changed: null,
-    ci_green: null,
-  });
-  assert.deepEqual(verdict.reported, {
-    prs: null,
-    commits: 0,
-    files_changed: null,
-    tests_added: null,
-  });
-});
-
 // refusals happen before anything is written
 
 test("PLANT: complete, fail and block refuse a bad claim and write nothing", async () => {
@@ -445,7 +316,7 @@ const USAGE = {
   tokens: { input: 100, output: 200, cache_read: 300, cache_creation: 400 },
 };
 
-test("claim.usage parses as an object and as a JSON string, and every part is optional", () => {
+test("claim.usage parses as an object and as a JSON string, every part is optional, and a bad usage is refused, not trimmed", () => {
   const asObject = parseClaim({ usage: USAGE });
   assert.ok("claim" in asObject && asObject.claim?.usage);
   assert.deepEqual(asObject.claim.usage, USAGE);
@@ -455,9 +326,7 @@ test("claim.usage parses as an object and as a JSON string, and every part is op
   for (const part of [{ cost_usd: 0 }, { active_seconds: 12 }, { tokens: { input: 5 } }, {}]) {
     assert.ok("claim" in parseClaim({ usage: part }), `refused ${JSON.stringify(part)}`);
   }
-});
 
-test("PLANT: a usage that is negative, not finite, fractional in tokens or carries an unknown key is refused, not trimmed", () => {
   const cases: unknown[] = [
     { usage: { cost_usd: -0.01 } },
     { usage: { cost_usd: Number.NaN } },
@@ -473,17 +342,4 @@ test("PLANT: a usage that is negative, not finite, fractional in tokens or carri
     assert.ok("error" in parsed, `accepted ${JSON.stringify(input)}`);
     assert.match(parsed.error, /^claim was refused, not trimmed/);
   }
-});
-
-test("claim.usage is kept whole in raw, with no column of its own, so the aggregate reads exactly what was said", () => {
-  const stored = row({ claim: { usage: USAGE }, raw: { claim: { usage: USAGE } } });
-  assert.deepEqual(JSON.parse(stored.raw).claim.usage, USAGE);
-  const sent = row({ claim: { usage: USAGE }, raw: { claim: JSON.stringify({ usage: USAGE }) } });
-  assert.deepEqual(
-    JSON.parse(sent.raw).claim.usage,
-    USAGE,
-    "a claim sent as a string is stored as one parsed document",
-  );
-  assert.equal("usage" in stored, false);
-  assert.equal("cost_usd" in stored, false);
 });

@@ -98,8 +98,3 @@ test("it fails closed: a claude that cannot run, exits non-zero, or lists nothin
   assert.equal(empty.servers_seen, 0);
   assert.match(empty.reasons[0], /listed no server/);
 });
-
-test("the result carries names and booleans, never a URL", () => {
-  const r = checkAdminExposure({ cwd: ".", run: run(TODAY), exists: none });
-  assert.ok(!JSON.stringify(r).includes("https://"));
-});

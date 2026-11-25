@@ -56,12 +56,9 @@ test("no file in src/ calls console.log, warn or error directly", () => {
     [],
     `log through logEvent (@dustinedwards/site-runtime/log), not console:\n${found.join("\n")}`,
   );
-});
-
-test("the scan sees the logEvent call sites, so an empty scan cannot pass the guards here", () => {
   assert.ok(
     calls().length >= MIN_LOG_EVENT_SITES,
-    `only ${calls().length} logEvent call sites found, expected at least ${MIN_LOG_EVENT_SITES}`,
+    `only ${calls().length} logEvent call sites found, expected at least ${MIN_LOG_EVENT_SITES}: the scan reads nothing`,
   );
 });
 

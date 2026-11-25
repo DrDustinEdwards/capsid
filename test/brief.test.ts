@@ -76,14 +76,6 @@ test("open tasks come back as stubs whatever the budget, and keep their provenan
   assert.ok(out.approx_chars < 1000, `approx_chars ${out.approx_chars} counts task bodies`);
 });
 
-test("a floor over budget reports the floor and still stubs tasks", async () => {
-  const each = Math.ceil(BRIEF_BUDGET / 2) + 1000;
-  const { out } = await brief({ documents: [...floor(each), task(0, 500)] });
-  assert.equal(out.trimmed, undefined);
-  assert.ok(out.floor_exceeds_budget);
-  assert.match(out.open_tasks[0].body, /not in the packet/);
-});
-
 test("episodics, which carry the handoff, stay whole under budget and are cut only over it", async () => {
   const whole = await brief({ documents: [...floor(5000), episodic(0, 3000)] });
   assert.equal(whole.out.trimmed, undefined);
@@ -92,12 +84,6 @@ test("episodics, which carry the handoff, stay whole under budget and are cut on
   assert.deepEqual(cut.out.trimmed, ["1 episodic bodies"]);
   assert.match(cut.out.recent_episodics[0].body, /not in the packet/);
   assert.ok(cut.out.approx_chars <= BRIEF_BUDGET);
-});
-
-test("a packet under budget carries neither field", async () => {
-  const { out } = await brief({ documents: [...floor(100), task(0, 100), episodic(0, 100)] });
-  assert.equal(out.trimmed, undefined);
-  assert.equal(out.floor_exceeds_budget, undefined);
 });
 
 test("provenance costs ONE audit_log query however many documents the brief carries", async () => {

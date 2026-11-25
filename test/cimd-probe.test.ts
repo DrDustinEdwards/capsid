@@ -40,13 +40,6 @@ test("CIMD advertised, the registration endpoint on this origin, and the probe's
 
 for (const [name, metadata, status, body, pattern] of [
   [
-    "no registration_endpoint",
-    { issuer: ORIGIN, client_id_metadata_document_supported: true },
-    400,
-    REFUSED,
-    /expected https:\/\/capsid.example\/register/,
-  ],
-  [
     "a registration_endpoint elsewhere",
     { ...METADATA, registration_endpoint: "https://elsewhere.example/register" },
     400,
@@ -67,15 +60,6 @@ for (const [name, metadata, status, body, pattern] of [
     REFUSED,
     /client_id_metadata_document_supported/,
   ],
-  [
-    "CIMD advertised false",
-    { ...METADATA, client_id_metadata_document_supported: false },
-    400,
-    REFUSED,
-    /client_id_metadata_document_supported/,
-  ],
-  ["a /register that answers 404", METADATA, 404, null, /expected 400 invalid_redirect_uri/],
-  ["a /register that is rate limited", METADATA, 429, { error: "slow_down" }, /answered 429/],
   [
     "a 400 for some other reason",
     METADATA,

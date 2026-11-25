@@ -55,6 +55,8 @@ test("the tick merges a green PR and declines a protected-path one without a mer
   assert.equal(green.outcome.merged, true, green.outcome.why ?? "");
   assert.equal(green.merges, 1);
   assert.deepEqual(green.outcome.passed, [...POLICY_CHECKS]);
+  // Pinned to the judged head: a push between the reads and the merge gets a 409, not a merge.
+  assert.deepEqual(green.calls.find(isMerge)?.body, { merge_method: "merge", sha: HEAD_SHA });
 
   const protectedPr = await tickFiles([".github/workflows/nightly.yml"]);
   assert.equal(protectedPr.outcome.merged, false);
@@ -136,16 +138,6 @@ test("the tick refuses when the Actions run list cannot be read", async () => {
 
 const auditActions = (d1: { recorded: Array<{ sql: string; params: unknown[] }> }) =>
   d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql)).map((r) => r.params[1]);
-
-test("the merge request carries the head sha the policy evaluated", async () => {
-  const { merges, calls, outcome } = await tickFiles(["docs/schema.md"]);
-  assert.equal(outcome.merged, true, outcome.why ?? "");
-  assert.equal(merges, 1);
-  assert.deepEqual(calls.find(isMerge)?.body, {
-    merge_method: "merge",
-    sha: HEAD_SHA,
-  });
-});
 
 test("a head that moved before the merge (GitHub 409) is not merged, audited, and does not abort the tick", async () => {
   const { d1, kv, env } = await enabledEnv();

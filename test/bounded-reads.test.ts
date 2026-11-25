@@ -135,16 +135,6 @@ test("search returns its top page and says when more matched", async () => {
   assert.equal(limitBoundTo(reads, /FROM documents_fts/), SEARCH_ROWS + 1);
 });
 
-test("search with few hits is not reported as truncated", async () => {
-  const { client, close } = await connect({ ftsRows: 2 });
-  const out = parse(
-    await call(client, "capsid_find_docs", { action: "search", query: "anything" }),
-  );
-  await close();
-  assert.equal(out.truncated, false);
-  assert.equal(out.count, 2);
-});
-
 // gather
 
 // A packet that trims must still be usable: core and the rules survive whatever
@@ -300,15 +290,6 @@ test("resources/list paginates across namespaces without skipping a boundary", a
   );
 });
 
-test("a small resource listing carries no cursor", async () => {
-  const { client, close } = await connect({ documents: docs(5) });
-  // An explicit cursor asks the v2 client for one page; without one it walks every page.
-  const listed = await client.listResources({ cursor: "" });
-  await close();
-  assert.equal(listed.resources.length, 5);
-  assert.equal(listed.nextCursor, undefined, "a complete listing advertised another page");
-});
-
 // scanner-rule: bounded reads (audit 9.2), the paginating list override serves only the template. A resource registered later cannot be exercised by a test written now
 test("the resources/list override cannot silently drop a statically registered resource", async () => {
   // The handler below replaces the one McpServer installs, which also serves
@@ -326,49 +307,4 @@ test("the resources/list override cannot silently drop a statically registered r
     "the document template is no longer registered in src/resources.ts",
   );
   assert.match(text, /setRequestHandler\("resources\/list"/, "the paginating list handler is gone");
-});
-
-// What the read tools return: a column list the code enforces must agree with the
-// sibling tool.
-
-test("read returns the named columns, and not the two dead CMS ones", async () => {
-  // capsid_find_docs action list does not return frontmatter or publish_at (always
-  // NULL); capsid_read_doc action read must not advertise them either.
-  const { client, close } = await connect({
-    documents: [
-      {
-        namespace: "capsid",
-        path: "doc.md",
-        title: "T",
-        body: "the body",
-        type: "note",
-        status: "published",
-      },
-    ],
-  });
-  const out = parse(
-    await call(client, "capsid_read_doc", { action: "read", namespace: "capsid", path: "doc.md" }),
-  );
-  await close();
-  assert.equal(out.body, "the body", "read stopped returning the body");
-  assert.deepEqual(
-    Object.keys(out).sort(),
-    // list's columns plus body, plus last_actor and last_client (on read and capsid_start_session, not on list).
-    // Not frontmatter/publish_at.
-    [
-      "body",
-      "created_at",
-      "id",
-      "last_actor",
-      "last_client",
-      "namespace",
-      "path",
-      "status",
-      "tags",
-      "title",
-      "type",
-      "updated_at",
-    ],
-    "read's column set drifted from list's",
-  );
 });

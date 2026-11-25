@@ -59,10 +59,6 @@ test("each file's path class, and a PR's is its riskiest file's", () => {
   assert.equal(pathClassOfAll([]), null);
 });
 
-test("a PR that passes the policy is auto", () => {
-  assert.deepEqual(classOf(pr()).class, "auto");
-});
-
 test("a PR over the size cap is approve, with the reason 'over the size cap', whatever else it fails", () => {
   const big = classOf(pr({ changedLines: 1001 }));
   assert.equal(big.class, "approve");

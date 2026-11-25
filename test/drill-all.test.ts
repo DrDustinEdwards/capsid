@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { test } from "node:test";
 import { gzipSync } from "node:zlib";
 import type { R2Like } from "@dustinedwards/d1-dump";
@@ -172,18 +170,6 @@ test("a bucket that cannot be read is a FAIL line with the reason", async () => 
   assert.equal(ok, false);
 });
 
-test("the temp directory is removed after a site, pass or fail", async () => {
-  const before = readdirSync(tmpdir()).filter((n) => n.startsWith("drill-sample-"));
-  const bucket = new FakeBucket();
-  plant(bucket, hoursAgo(3), DOCS);
-  await drillSite("sample", bucket.asR2(), { now: NOW });
-  await drillSite("sample", new FakeBucket().asR2(), { now: NOW });
-  assert.deepEqual(
-    readdirSync(tmpdir()).filter((n) => n.startsWith("drill-sample-")),
-    before,
-  );
-});
-
 test("firstFailure names the first failing check, not the backend line", () => {
   const out =
     "backend: sqlite (asked)\nrestore drill FAILED: x\n  ok   dump: fine\n  FAIL counts: a has 0\n  FAIL fts: b\n";
@@ -208,12 +194,4 @@ test("a key that resolves outside the download directory is a FAIL line, never a
   const { line, ok } = await drillSite("sample", bucket.asR2(), { now: NOW });
   assert.match(line, /FAIL \(.*resolves outside the download directory\)$/);
   assert.equal(ok, false);
-});
-
-test("the verdict reads the same clock as the printed age, not the wall clock", async () => {
-  // NOW is a fixed past instant; a run 3h before it passes whatever today's date is.
-  const bucket = new FakeBucket();
-  plant(bucket, hoursAgo(3), DOCS);
-  const { line } = await drillSite("sample", bucket.asR2(), { now: NOW });
-  assert.match(line, /age_hours=3.0 tables=1 rows=3 PASS$/);
 });

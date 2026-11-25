@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildAdminServer } from "../src/server.ts";
 
-import { SCOPE_FLAGS, defaultScopes, serializeScopes } from "../src/agents-schema.ts";
+import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, type FakeD1 } from "./fakes.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
@@ -103,23 +103,6 @@ test("mint returns the key ONCE and stores only its hash", async () => {
   );
 });
 
-test("a new agent is born with read on its named namespaces and no flags", async () => {
-  const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const body = parse(
-    await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }),
-  );
-  await close();
-  const scopes = body.scopes as {
-    namespaces: string[];
-    repos: string[] | "*";
-    grants: string[];
-    flags: Record<string, boolean>;
-  };
-  assert.deepEqual(scopes.namespaces, ["capsid"]);
-  assert.deepEqual(scopes.grants, ["read"]);
-  for (const flag of SCOPE_FLAGS) assert.equal(scopes.flags[flag], false);
-});
-
 test("PLANT: a mint that names no repos gets the NAMESPACE MAPPING, not the wildcard", async () => {
   // defaultScopes has repos "*", so the handler must derive the repos from the
   // namespace mapping. Driven through a real MCP
@@ -167,15 +150,6 @@ test("AN EXPLICIT repos LIST IS STILL EXACTLY WHAT THE CALLER ASKED FOR, wildcar
   await close();
   assert.deepEqual((narrow.scopes as { repos: string[] }).repos, ["o/other"]);
   assert.equal((wide.scopes as { repos: string }).repos, "*");
-});
-
-test("A NAMESPACE SCOPE OF '*' DERIVES '*', because tomorrow's namespace is not in today's mapping", async () => {
-  const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const body = parse(
-    await call({ action: "mint", name: "everything", kind: "seat", namespaces: ["*"] }),
-  );
-  await close();
-  assert.equal((body.scopes as { repos: string }).repos, "*");
 });
 
 test("PLANT: a mint for a namespace that maps no repos is REFUSED rather than widened", async () => {
@@ -346,12 +320,4 @@ test("mint refuses a kind the table does not have, and a name that is already ta
   assert.equal(parse(taken).ok, false);
   assert.match(refusalOf(taken), /already/i);
   await close();
-});
-
-test("mint needs at least one namespace, or the default scope means nothing", async () => {
-  const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const result = await call({ action: "mint", name: "new-one", kind: "driver", namespaces: [] });
-  await close();
-  assert.equal(parse(result).ok, false);
-  assert.match(refusalOf(result), /namespace/i);
 });

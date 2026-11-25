@@ -89,7 +89,7 @@ export interface ReleaseReaders {
  * each with the version it carries: the oldest of the leading run that carries it. Null
  * when the newest does not carry it, or the run reaches the end of an incomplete read.
  */
-export function versionCommit(
+function versionCommit(
   history: ReadonlyArray<{ sha: string; version: string | null }>,
   version: string,
   complete: boolean,

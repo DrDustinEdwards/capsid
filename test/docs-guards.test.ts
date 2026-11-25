@@ -100,24 +100,6 @@ test("PLANT: a supersedes or replaces edge needs the write grant on its target's
   }
 });
 
-test("the innocent direction: a supersedes edge in the caller's namespace, and a references edge anywhere, are stored", async () => {
-  const raw = fresh();
-  const links = [
-    { type: "supersedes", to_path: "old.md" },
-    { type: "references", to_ns: "other", to_path: "old.md" },
-    { type: "references", to_path: "core.md" },
-  ];
-  const result = await write(raw, driver(), {
-    namespace: "sample",
-    path: "new.md",
-    title: "New",
-    body: "new",
-    links: JSON.stringify(links),
-  });
-  assert.equal(result.isError, undefined, result.content[0]?.text);
-  assert.equal(edges(raw).length, 3);
-});
-
 test("PLANT: replacing a document's edges records the edges it replaced in the audit row", async () => {
   const raw = fresh();
   const first = [

@@ -295,19 +295,6 @@ test("versions_pruned, audit_pruned and deploys_pruned come from a COUNT, not me
   assert.equal(deleteDeploys.replace(/^DELETE FROM/, "SELECT COUNT(*) AS n FROM"), countDeploys);
 });
 
-test("a clean run stamps backup:last-ok with the run timestamp", async () => {
-  const { env, kv } = makeEnv({ documents: DOCS }, MIRROR);
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-  const stamp = kv.puts.find((p) => p.key === "backup:last-ok");
-  assert.ok(stamp, "a clean run did not stamp backup:last-ok");
-  // The stamp is the same ISO instant the run used for its lease and dump prefix,
-  // so /health's age is measured from when the backup actually ran.
-  assert.match(stamp.value, /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/);
-  assert.equal(kv.store.has("backup:lease"), false, "lease was not released");
-});
-
 // the 1000-key delete ceiling
 //
 // R2's bulk delete throws on the 1001st key; 1001 because a chunker with `<` for `<=` passes at 1000.
@@ -317,6 +304,10 @@ test("no single R2 delete call exceeds R2's 1000-key ceiling", async () => {
   const seed: Record<string, string> = {};
   for (let i = 0; i < 1001; i++) {
     seed[`backups/markdown/capsid/stale-${String(i).padStart(5, "0")}.md`] = "gone";
+  }
+  // The CSP report prune goes through the same bulk delete.
+  for (let i = 0; i < 1200; i++) {
+    seed[`reports/csp/2020-01-01/${String(i).padStart(5, "0")}.json`] = "{}";
   }
   const { env, r2 } = makeEnv({ documents: DOCS }, seed);
   const result = await runBackup(env);
@@ -331,36 +322,9 @@ test("no single R2 delete call exceeds R2's 1000-key ceiling", async () => {
   );
   // A chunker that dropped the tail would satisfy the assertion above.
   assert.equal(result.markdown_pruned, 1001);
+  assert.equal(result.reports_pruned, 1200);
   const leftover = [...r2.objects.keys()].filter((k) => k.includes("/stale-"));
   assert.deepEqual(leftover, [], "chunking lost keys: stale mirror objects survived the prune");
-});
-
-test("the dump prune chunks too, not just the mirror", async () => {
-  // 22 aged runs x 10 tables is under the ceiling, so the dump prune is exercised for
-  // chunk shape; the 1200 CSP reports exercise overflow. Every call must be within the
-  // ceiling and every aged object gone.
-  const seed: Record<string, string> = { ...MIRROR };
-  for (let day = 1; day <= 22; day++) {
-    const id = `2020-01-${String(day).padStart(2, "0")}T00-00-00-000Z`;
-    for (const table of TABLES) seed[`backups/json/${id}/${table}.json`] = "{}";
-  }
-  for (let i = 0; i < 1200; i++) {
-    seed[`reports/csp/2020-01-01/${String(i).padStart(5, "0")}.json`] = "{}";
-  }
-  const { env, r2 } = makeEnv({ documents: DOCS }, seed);
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-
-  assert.deepEqual(
-    r2.deleted.filter((c) => c.length > R2_DELETE_CEILING).map((c) => c.length),
-    [],
-  );
-  assert.equal(result.reports_pruned, 1200);
-  assert.deepEqual(
-    [...r2.objects.keys()].filter((k) => k.startsWith("reports/csp/")),
-    [],
-  );
 });
 
 // one consistent snapshot

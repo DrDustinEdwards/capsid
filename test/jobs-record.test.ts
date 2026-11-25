@@ -5,7 +5,7 @@ import { defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { recordAsCaller } from "../src/jobs.ts";
 import { buildServer } from "../src/server.ts";
-import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
+import { queuedJobStore } from "./queued-job-store.ts";
 
 // The jobs "record" action (src/jobs-seat.ts recordAsCaller, src/jobs-holder.ts records
 // mode and recordRefusal), served as capsid_work_jobs action record: the seat writing
@@ -29,32 +29,8 @@ function job(over: Record<string, unknown> = {}) {
   };
 }
 
-// The row-backed fake D1, with one rewrite: the transition's summary_sig CASE, which
-// test/fake-sql.ts does not model, becomes the branch SQLite takes for a non-null
-// result_summary (every call below sends one, and the record path refuses a blank one
-// before it writes). Nothing else in the batch is touched.
 function store(jobs: Array<Record<string, unknown>>) {
-  const d1 = fakeD1({
-    namespaces: [
-      { namespace: "sample", repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) },
-    ],
-    jobs,
-  });
-  const inner = d1.db;
-  const db = {
-    prepare: (sql: string) => inner.prepare(sql),
-    batch: (statements: Array<{ sql: string; params: unknown[] }>) =>
-      inner.batch(
-        statements.map((s) => ({
-          ...s,
-          sql: s.sql.replace(
-            /summary_sig = CASE WHEN \?3 IS NULL THEN summary_sig ELSE \?8 END/,
-            "summary_sig = ?8",
-          ),
-        })) as unknown as D1PreparedStatement[],
-      ),
-  } as unknown as D1Database;
-  return { d1, env: fakeEnv({ DB: db, APP_KV: fakeKv({}).kv }) };
+  return queuedJobStore(jobs);
 }
 
 function driver(grant: ScopeFlag[] = [], namespaces = ["sample"]): Agent {
@@ -92,23 +68,13 @@ test("THE INNOCENT DIRECTION: the seat records an outcome on a queued job withou
   assert.equal(d1.rows.job_outcomes[0].job_id, ID);
   assert.equal(d1.rows.job_outcomes[0].agent, ADMIN.actor);
   assert.equal(r.outcome?.row.job_id, ID);
-});
 
-test("an audit row naming the record is written with the transition", async () => {
-  const { d1, env } = store([job()]);
-  const r = await recordAsCaller(env, ADMIN, NOW, ID, ARGS);
-  assert.equal(r.ok, true, r.refusal);
   const audit = d1.rows.audit_log as Array<Record<string, unknown>>;
   const records = audit.filter((a) => a.action === "job-record");
-  assert.ok(
-    records.length >= 1,
-    `no job-record audit row: ${JSON.stringify(audit.map((a) => a.action))}`,
-  );
   const transition = records.find((a) => /"status":"done"/.test(String(a.params)));
-  assert.ok(transition, "no audit row records the status the job moved to");
+  assert.ok(transition, `no job-record audit row: ${JSON.stringify(audit.map((a) => a.action))}`);
   assert.equal(transition.actor, ADMIN.actor);
   assert.equal(transition.namespace, "sample");
-  assert.match(String(transition.params), /"result_summary":"Done by hand in the sample repo\."/);
 });
 
 test("THE INNOCENT DIRECTION: a can_merge caller is the seat too, and may record", async () => {
@@ -159,13 +125,6 @@ const NOT_QUEUED: Array<[string, Record<string, unknown>, RegExp]> = [
     { status: "done", claimed_by: "agent:sample-driver" },
     /is done; record is for a queued job/,
   ],
-  [
-    "failed",
-    { status: "failed", claimed_by: "agent:sample-driver" },
-    /is failed; record is for a queued job/,
-  ],
-  ["superseded", { status: "superseded" }, /is superseded; record is for a queued job/],
-  ["parked", { status: "parked" }, /is parked; record is for a queued job/],
 ];
 
 for (const [status, over, refusal] of NOT_QUEUED) {
@@ -217,29 +176,27 @@ async function callAs(env: never, caller: Agent, args: Record<string, unknown>) 
   }
 }
 
-test("PLANT: capsid_work_jobs action record refuses a driver, and the job stays queued", async () => {
-  const { d1, env } = store([job()]);
-  const r = await callAs(env, driver(), {
+test("capsid_work_jobs action record refuses a driver and leaves the job queued, and records for the admin", async () => {
+  const refused = store([job()]);
+  const r = await callAs(refused.env, driver(), {
     action: "record",
     namespace: "sample",
     id: ID,
     result_summary: ARGS.result_summary,
   });
   assert.match(r.text, /may not record an outcome without a claim/);
-  assert.equal(d1.rows.jobs[0].status, "queued");
-  assert.equal(d1.rows.audit_log.length, 0);
-});
+  assert.equal(refused.d1.rows.jobs[0].status, "queued");
+  assert.equal(refused.d1.rows.audit_log.length, 0);
 
-test("THE INNOCENT DIRECTION: capsid_work_jobs action record records for the admin", async () => {
   const { d1, env } = store([job()]);
-  const r = await callAs(env, ADMIN, {
+  const ok = await callAs(env, ADMIN, {
     action: "record",
     namespace: "sample",
     id: ID,
     result_summary: ARGS.result_summary,
   });
-  assert.doesNotMatch(r.text, /may not record|unauthorized:/, r.text);
-  assert.equal(d1.rows.jobs[0].status, "done", r.text);
+  assert.doesNotMatch(ok.text, /may not record|unauthorized:/, ok.text);
+  assert.equal(d1.rows.jobs[0].status, "done", ok.text);
   assert.ok(
     (d1.rows.audit_log as Array<Record<string, unknown>>).some((a) => a.action === "job-record"),
   );

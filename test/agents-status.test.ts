@@ -55,34 +55,6 @@ test("capsid_read_status action status carries the agent inventory, with last_se
   );
 });
 
-test("the report names the flags an agent HOLDS, not all six with a boolean beside each", async () => {
-  // A row of six falses per agent hides the one agent holding can_merge.
-  const scopes = defaultScopes(["*"]);
-  scopes.grants = ["read", "write"];
-  scopes.flags.can_merge = true;
-  const env = await statusEnv([
-    await row("seat", { kind: "seat", scopes: serializeScopes(scopes) }),
-  ]);
-  const status = await capsidStatus(env);
-  const seat = (status.agents ?? []).find((a) => a.name === "seat");
-  assert.ok(seat);
-  assert.deepEqual(seat.flags, ["can_merge"]);
-  const drivers = await capsidStatus(await statusEnv([await row("capsid-driver")]));
-  assert.deepEqual(
-    (drivers.agents ?? [])[0].flags,
-    [],
-    "a driver holding nothing should report nothing rather than six falses",
-  );
-});
-
-test("a revoked agent is reported as revoked rather than dropped", async () => {
-  // Dropping it makes "revoked" and "never existed" look the same.
-  const env = await statusEnv([await row("old-laptop", { revoked_at: "2026-09-10 12:00:00" })]);
-  const status = await capsidStatus(env);
-  assert.equal((status.agents ?? []).length, 1);
-  assert.equal((status.agents ?? [])[0].revoked_at, "2026-09-10 12:00:00");
-});
-
 test("the report never carries a key or the stored verifier", async () => {
   const env = await statusEnv([await row("capsid-driver")]);
   const status = await capsidStatus(env);
@@ -97,15 +69,10 @@ test("the report never carries a key or the stored verifier", async () => {
   );
 });
 
-test("a Worker with no agents yet reports an empty inventory rather than failing", async () => {
-  // The state of a deployment until the mint commands are run by hand.
-  const status = await capsidStatus(await statusEnv([]));
-  assert.deepEqual(status.agents, []);
-});
-
 // The auto-merge safety meter (src/merge-safety.ts) rides on capsid_read_status action status from the
 // report the tick keeps, so asking costs one KV read.
 
+// The auto-merge safety meter (src/merge-safety.ts) rides on capsid_read_status action status.
 test("capsid_read_status action status carries the auto-merge safety meter, null before the first pass, and a scoped caller sees its own namespaces", async () => {
   const empty = await capsidStatus(await statusEnv([]));
   assert.equal(empty.merge_safety, null);

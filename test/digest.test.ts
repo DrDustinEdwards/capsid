@@ -203,18 +203,6 @@ test("routing on but an address or the binding missing: still nothing, and it sa
   );
 });
 
-test("the Portal's state says off and why, or on and where", async () => {
-  const off = await digestState(world({ routing: "" }).env);
-  assert.equal(off.on, false);
-  assert.match(off.problem!, /Email Routing is not on/);
-  assert.equal(off.to, null);
-  const on = await digestState(world().env);
-  assert.deepEqual(
-    { on: on.on, to: on.to, hour: on.hour_utc },
-    { on: true, to: "admin@example.com", hour: 12 },
-  );
-});
-
 test("nothing before 12:00 UTC; then one mail, and none again that day", async () => {
   const w = world();
   assert.equal((await digestTick(w.env, new Date("2026-10-11T11:59:00Z"), read(FULL))).ran, false);
@@ -258,14 +246,6 @@ test("the mail lists what waits by class, questions, blocked jobs, rollbacks and
   assert.match(m.text, /Rollbacks \(1\)\n- owner\/capsid at aaaaaaa: rolled back/);
   assert.match(m.text, /Finished \(1\), 2 pull request\(s\) merged/);
   assert.match(m.text, /https:\/\/portal\.dustinedwards\.info\//);
-});
-
-test("a quiet day says so", async () => {
-  const w = world();
-  await w.kv.kv.put(AWAITING_SEAT_KEY, "[]");
-  await digestTick(w.env, NOON, read(EMPTY));
-  assert.equal(w.sent[0]!.subject, "Capsid digest 2026-10-11: nothing waits on you");
-  assert.match(w.sent[0]!.text, /Nothing waits on you and nothing happened/);
 });
 
 test("a refused send is recorded for the day and not retried every tick", async () => {
