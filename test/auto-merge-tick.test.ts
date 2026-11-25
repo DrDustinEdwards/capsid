@@ -8,9 +8,7 @@ import { withFetch } from "./fakes.ts";
 import {
   GOOD_POLICY,
   HEAD_SHA,
-  MERGED_SHA,
   OWNER,
-  PR_URL,
   SECRET,
   enabledEnv,
   filesRoutes,
