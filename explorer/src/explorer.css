@@ -1,19 +1,12 @@
-/* The explorer's own look on Capsomer's tokens (assets/capsomer.css): a distribution board.
-   Every tool is a circuit and every grant a breaker; the breaker's slot and handle is the one
-   shape, at every scale. Every color is Capsomer's teal family (data-family on <html>; Dustin,
-   2026-10-25): its neutrals are the ground and the ink, and its lighter teals the lamp, which marks what is live and the one action. A lit lamp glows in the
-   ramp's brightest steps. The page is laid out as NASA's own papers (the NASA block at the end):
-   one near-white ground, as the manual bars pale tints, and parts told apart by hairlines.
-   Unlayered, so these win over Capsomer's layers. */
+/* A distribution board on Capsomer's teal family (data-family on <html>). Unlayered, so these rules
+   win over Capsomer's layers. */
 :root {
   --section: clamp(96px, 11vw, 200px);
-  /* The teal ramp's steps, by number: the lamp is light 8, its ink light 12; a lit lamp
-     burns at dark 11 with a halo of dark 10. */
   --lamp: #7db5b7;
   --lamp-ink: #0c1e1f;
   --lamp-glow: 0 0 6px 1px rgb(36 147 152 / 0.9), 0 0 18px 4px rgb(36 147 152 / 0.45);
-  /* A lit lamp on the page: on the near-white ground, the family's accent (light 9), solid, as
-     the pale lamp would wash out; in dark, the lamp with its glow. */
+  /* A lit lamp on the near-white ground is the accent, solid, as the pale lamp would wash out; in dark,
+     the lamp with its glow. */
   --lamp-on: #008489;
   --lamp-on-glow: none;
 }
@@ -47,8 +40,8 @@ body {
   font-weight: var(--weight-semibold);
 }
 
-/* A long name in running text (a file path, an argument) breaks rather than pushing a phone's
-   page sideways; tables keep their columns, since break-word leaves their widths alone. */
+/* A long name in running text breaks rather than pushing a phone's page sideways; tables keep their
+   columns, since break-word leaves their widths alone. */
 main {
   overflow-wrap: break-word;
 }
@@ -160,14 +153,10 @@ h3 {
   font-size: var(--title-2-5);
 }
 
-/* The opening: what Capsid is, beside one claim checked against GitHub. It starts at the top of
-   the page, as every other page does, and the claim is set as a form of the manual's: a title
-   strip and ruled, labeled boxes (NHB 1430.2, 4.1). */
 .front .cap-running-head {
   margin-block-end: var(--space-6);
 }
-/* The first screen is Capsomer's Hero; its look here is its tokens and these. The page's h1 rule
-   above is unlayered, so it sets the heading's size, and the hero keeps only its width. */
+/* The page's h1 rule above is unlayered, so it sets the heading's size, and the hero keeps only its width. */
 .front .cap-hero {
   --hero-gap: var(--space-6) clamp(var(--space-6), 4vw, var(--space-9));
   --hero-lead-size: clamp(1.1875rem, 1.05rem + 0.5vw, var(--title-3));
@@ -252,7 +241,6 @@ h3 {
   letter-spacing: var(--tracking-tighter);
   font-variant-numeric: tabular-nums;
 }
-/* What the agent says, struck through when GitHub reads otherwise; the record lit when they agree. */
 .desk-kept {
   box-shadow: inset 0 var(--line-w-band) 0 var(--line);
   transition: box-shadow var(--dur-base) var(--ease-out);
@@ -284,9 +272,6 @@ html:not(.js) .desk-step,
 html:not(.js) .desk-kinds {
   display: none;
 }
-/* The check playing out: the claim's cell answers as it is sent, a reading line runs across
-   GitHub's while it is read, and the record is stamped, the manual's inspection stamp in the
-   one color when the claim stands and in ink when it is caught. */
 .desk-cell {
   position: relative;
   overflow: hidden;
@@ -406,8 +391,6 @@ html:not(.js) .desk-play {
   }
 }
 
-/* The knowledge base: two forms side by side, the search and the session start, each a title
-   strip over ruled rows, as the claim's form above them. */
 .kb-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -516,8 +499,6 @@ html:not(.js) .kb-actions {
   border-color: var(--text);
   font-weight: var(--weight-bold);
 }
-/* By keyword alone, only the rows that share the question's words, each marked keyword; with
-   meaning too, every row, marked by how it matched. */
 .kb-box[data-mode="keyword"] .kb-results li:not([data-kw]),
 .kb-box[data-mode="keyword"] .kb-how,
 .kb-box[data-mode="keyword"] [data-canon],
@@ -580,9 +561,6 @@ html:not(.js) .kb-actions {
   }
 }
 
-/* The panel: every tool Capsid serves, each a circuit lit by the grants an agent holds, full
-   width so the whole board is in view. An instrument in an outline box (NHB 1430.2, 5.17), its
-   circuits ruled cells, and the lamp's teal the one color, lit only for what is live. */
 .board-panel {
   display: flex;
   flex-direction: column;
@@ -602,7 +580,6 @@ html:not(.js) .kb-actions {
   border-inline-end: var(--line-w) solid var(--line);
   border-block-end: var(--line-w) solid var(--line);
 }
-/* Capsomer's buttons carry a faint shadow; here everything is flat. */
 .cap-btn,
 .cap-site-header-skip {
   box-shadow: none; /* taste-skill-ignore: removes one */
@@ -632,7 +609,6 @@ html:not(.js) .breaker {
   outline: var(--focus-width) solid var(--ring);
   outline-offset: calc(-1 * var(--focus-offset));
 }
-/* The breaker: a slot and its handle, which sits up and lights when the grant is on. */
 .breaker-slot {
   grid-row: span 2;
   position: relative;
@@ -673,8 +649,6 @@ html:not(.js) .breaker {
   font: var(--weight-bold) clamp(var(--fs-h3), 1.4vw, var(--fs-h2)) / var(--leading-tight-5)
     var(--face);
 }
-/* The circuits: a ruled row each, hung under the breaker that feeds them, so a switch lights
-   its own column. */
 .circuits {
   margin: 0;
   padding: 0;
@@ -709,8 +683,6 @@ html:not(.js) .breaker {
   outline: var(--focus-width) solid var(--ring);
   outline-offset: calc(-1 * var(--focus-offset));
 }
-/* The lamp: unlit when the circuit is dead, lit and glowing when live, half lit when only some
-   actions are. */
 .lamp {
   display: flex;
   align-items: end;
@@ -741,7 +713,6 @@ html:not(.js) .breaker {
   font-weight: var(--weight-semibold);
   line-height: var(--leading-tight-5);
 }
-/* On a phone the three columns stack, each breaker over its own tools. */
 @media (max-width: 40rem) {
   .board-cols {
     grid-template-columns: minmax(0, 1fr);
@@ -751,7 +722,6 @@ html:not(.js) .breaker {
   }
 }
 
-/* The tour: the words scroll, the drawing stays. */
 .tour-grid {
   display: grid;
   grid-template-columns: minmax(18rem, 5fr) minmax(0, 7fr);
@@ -784,13 +754,11 @@ html:not(.js) .breaker {
     color var(--dur-slow) var(--ease-out),
     border-color var(--dur-slow) var(--ease-out);
 }
-/* The chapter being told is in full ink with the accent beside it; the others wait in gray,
-   which still reads at 4.5:1. */
+/* The others wait in gray, which still reads at 4.5:1. */
 .chapter.is-on,
 html:not(.js) .chapter {
   color: var(--text);
 }
-/* The step being told carries the lamp's mark at its title, as a flow's current step does. */
 .chapter {
   position: relative;
   padding-inline-start: var(--space-5);
@@ -826,7 +794,6 @@ html:not(.js) .chapter h3::before {
   font-weight: var(--weight-medium);
   font-variant-numeric: tabular-nums;
 }
-/* A chapter's parts are named in the drawing's color, so the words point at what lights. */
 .chapter-parts {
   display: flex;
   flex-wrap: wrap;
@@ -851,8 +818,6 @@ html:not(.js) .chapter h3::before {
   min-width: 0;
 }
 @media (max-width: 64rem) {
-  /* On a narrow screen the opening comes first, then the drawing pins to the top and the
-     chapters pass under it. */
   .tour-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -874,8 +839,7 @@ html:not(.js) .chapter h3::before {
   .tour-map .cap-system-map-head {
     display: none;
   }
-  /* Pinned above the chapters, the drawing keeps one height and shows only the parts the step
-     lights, so it stays small and nothing below it moves as the steps change. */
+  /* The drawing keeps one height and shows only the parts the step lights, so nothing below it moves. */
   .tour-map {
     block-size: 34vh;
     overflow: hidden;
@@ -898,8 +862,6 @@ html:not(.js) .chapter h3::before {
 .cap-tabs-panel {
   padding-block-start: var(--space-5);
 }
-/* A flow's steps, one row a step: its number, its name over what happens, and the parts it
-   touches, told apart from the next by a step in tone. */
 .bands {
   display: grid;
   gap: var(--space-1);
@@ -956,7 +918,6 @@ html:not(.js) .chapter h3::before {
   }
 }
 
-/* Readings set as a page's headline figures, and a system's facts set the same way, smaller. */
 .readings-row {
   margin-block: var(--space-6) var(--space-7);
 }
@@ -965,7 +926,6 @@ html:not(.js) .chapter h3::before {
   flex-wrap: wrap;
   margin-block: var(--space-6) 0;
 }
-/* Each fact grows to fill its row, so no box is left empty at the end of the last. */
 .readings-facts .reading {
   flex: 1 1 10rem;
 }
@@ -989,7 +949,6 @@ html:not(.js) .chapter h3::before {
   gap: var(--space-6);
   align-items: start;
 }
-/* A chart takes the whole row on a phone and two columns on a wider page, its rings beside it. */
 .charts > .cap-chart:not(:has(.enarratio-progress-ring)) {
   grid-column: 1 / -1;
   max-width: 36rem;
@@ -1030,7 +989,6 @@ html:not(.js) .chapter h3::before {
   color: var(--accent-text);
 }
 
-/* The tools page: one row a tool, its name beside what it does. */
 .tool-cards {
   display: grid;
   gap: var(--space-1);
@@ -1080,7 +1038,6 @@ html:not(.js) .chapter h3::before {
     grid-row: auto;
   }
 }
-/* A tool's page. Its hints, each marked on or off by the same left rule a tour chapter uses. */
 .hints {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
@@ -1094,7 +1051,6 @@ html:not(.js) .chapter h3::before {
   gap: var(--space-3);
   color: var(--muted);
 }
-/* A hint the tool carries is a lit lamp; one it lacks is dark. */
 .hints li::before {
   content: "";
   block-size: 1.25rem;
@@ -1308,7 +1264,6 @@ th[aria-sort="ascending"] .sort::after {
      it meets the page title's as it did before the stack. */
   margin-block-start: var(--space-7);
 }
-/* A step reads as a tour chapter does: its number, its name large, then what happens. */
 .flow-stack h2 {
   margin-block: 0;
   color: var(--muted);
@@ -1322,8 +1277,6 @@ th[aria-sort="ascending"] .sort::after {
     var(--prose);
   letter-spacing: var(--tracking-tight);
 }
-/* On a wide screen the step reads beside its drawing, so stepping never sends the eye down the
-   page to see what moved. The card and the drawing's buttons start on one line. */
 @media (min-width: 64rem) {
   .step-layout-drawn {
     display: grid;
@@ -1356,7 +1309,6 @@ th[aria-sort="ascending"] .sort::after {
   padding-block: var(--space-2);
   font-weight: var(--weight-semibold);
 }
-/* Every step, one row each, its name first; the shown one carries the accent rule. */
 .flow-steps {
   display: grid;
   gap: var(--space-1);
@@ -1399,7 +1351,6 @@ th[aria-sort="ascending"] .sort::after {
   color: var(--muted);
 }
 
-/* The code level. A status's number follows its word, a little apart. */
 .code-num {
   margin-inline-start: var(--space-2);
   font-variant-numeric: tabular-nums;
@@ -1414,11 +1365,6 @@ th[aria-sort="ascending"] .sort::after {
   white-space: nowrap;
 }
 
-/* The NASA Graphics Standards Manual (NHB 1430.2, Danne & Blackburn, 1976), from its own pages:
-   the index's bold section label over a hairline (page i), titles small and bold (5.1), forms
-   ruled into labeled boxes (4.1), signs as dark panels of white type with an arrow (6.1, 6.2),
-   the letterhead's logotype beside its address (3.1), and the folio at the foot on the right.
-   Teal is kept as the manual kept NASA Red: one color, for the one action and what is lit. */
 .cap-running-head {
   margin-block-start: var(--space-6);
 }
@@ -1444,8 +1390,6 @@ main h2[data-no]::before {
   font: var(--weight-regular) var(--fs-lead) / var(--leading-none) var(--face);
   letter-spacing: 0;
 }
-/* The title block (Capsomer's form boxes), closing the page as the foot of every page of the
-   Apollo flight plans does (MSC Form 29). */
 .title-block {
   margin: var(--space-8) 0 0;
 }
@@ -1454,8 +1398,6 @@ main.wide > .title-block {
   margin-inline: auto;
 }
 
-/* Each part of a page set as the manual sets a page: its title on the left over a rule across the
-   whole width, what it says beside it, and its figures full width below (5.1, 5.17). */
 @media (min-width: 52rem) {
   main:not(.wide) :is(section, li):has(> h2[data-no]) {
     display: grid;
@@ -1484,8 +1426,8 @@ main.wide > .title-block {
   }
 }
 
-/* The manual boxes every diagram (5.17), but the hexagon map stands unboxed: its cells move
-   and regroup between views, and a frame would cut them off mid-move (Dustin, 2026-10-25). */
+/* The hexagon map stands unboxed: its cells move and regroup between views, and a frame would cut them
+   off mid-move. */
 .hero-play {
   display: flex;
   flex-wrap: wrap;
@@ -1493,19 +1435,16 @@ main.wide > .title-block {
   gap: var(--space-3);
   margin-block-end: 0;
 }
-/* A table's sentences wrap at a reading width, wider than Capsomer's 36ch, as these are the
-   widest column (Capsomer's table, data-wrap). */
+/* A table's sentences wrap at a reading width, wider than Capsomer's 36ch, as these are the widest column. */
 main .cap-table [data-wrap] {
   max-width: 60ch;
 }
-/* Table heads in the mono, as today's nasa.gov sets its small labels (Horizon Design System). */
 main .cap-table thead th {
   font-family: var(--mono);
   font-size: var(--fs-label);
   letter-spacing: var(--tracking-caps);
 }
 
-/* Lists of things set as ruled rows, not tinted cards: a hairline under each, a rule over the first. */
 .bands,
 .tool-cards,
 .search-results {
@@ -1542,7 +1481,6 @@ main .cap-pill {
   font-weight: var(--weight-semibold);
 }
 
-/* The list of every flow names each step alone, a row each, the time line still beside them. */
 .bands-brief a {
   grid-template-columns: 2.5rem minmax(0, 1fr);
   padding-block: var(--space-2);
@@ -1551,8 +1489,6 @@ main .cap-pill {
   inset-block-start: calc(var(--space-2) + 0.7em);
 }
 
-/* A flow's steps on the flight plan's time line: a ruled scale down the left, ticked between
-   steps, each step's number at its mark. */
 .bands {
   margin-inline-start: var(--space-5-5);
   border-inline-start: var(--line-w) solid var(--text);
@@ -1571,7 +1507,6 @@ main .cap-pill {
   border-block-start: var(--line-w) solid var(--text);
 }
 
-/* A system's facts as a form's boxes: each in a ruled box, what it is set small above it. */
 .readings-facts {
   gap: 0;
   border-block-start: var(--line-w) solid var(--text);
@@ -1595,7 +1530,6 @@ main .cap-pill {
   margin: var(--space-5) 0 var(--space-7);
 }
 
-/* The ways on are Capsomer's signs; a tool's name on one keeps the sign's colors. */
 .pager a code {
   min-width: 0;
   background: none;
@@ -1613,15 +1547,11 @@ main .cap-pill {
     padding-inline-start: var(--space-8);
   }
 }
-/* Capsomer's pills, set square and outlined as every other name on these pages. */
 main .cap-pill {
   border-radius: 0;
   color: var(--text);
 }
 
-/* More of NASA's own marks, from capsomer/manual.css: the layout grid behind
-   .page-head, the direction strip for the trail, the livery band at the foot and a length of it on
-   each card, the cue card and its roll blocks. Teal stays the one color. What is Capsid's own: */
 .cap-running-head + .page-head > .crumbs,
 .cap-running-head + .patched > .page-head > .crumbs,
 .cap-running-head + .crumbs {
@@ -1632,7 +1562,6 @@ main .cap-pill {
   padding-block-start: var(--space-4);
 }
 
-/* The cue card's heading over the parts it touches carries the rule, so the lines under it do not. */
 .cap-cue h3 {
   margin-block-start: var(--space-4);
   padding-block-start: var(--space-3);
@@ -1654,7 +1583,6 @@ main .cap-pill {
   font-size: var(--fs-label);
 }
 
-/* A flow's patch (Capsomer's) beside its card and on its page's head. */
 .flow-card {
   position: relative;
 }

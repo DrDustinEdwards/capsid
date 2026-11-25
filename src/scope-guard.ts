@@ -1,4 +1,3 @@
-// The registrar gate: guards every tool registration with checkScope.
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
@@ -27,15 +26,13 @@ import {
   sharedGrantRefusal,
 } from "./scope";
 
-// The same shape as fail() in tools/docs.ts, spelled here so the enforcement point
-// does not import the tool modules it guards (a cycle).
+// Spelled here, not imported from tools/docs.ts, so the enforcement point does not import the modules it guards (a cycle).
 function deny(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true };
 }
 
-// An omitted namespace means "every namespace" on tools such as capsid_find_docs (list, glob,
-// search), capsid_read_status action status and capsid_work_jobs action list. For a narrowed caller
-// that would be an unchecked hole, so a namespace-restricted caller that omits it is refused.
+// An omitted namespace means every namespace on tools such as capsid_find_docs: for a narrowed caller
+// that is an unchecked hole, so it is refused.
 function namespaceRefusal(agent: Agent, tool: string): string | null {
   if (agent.scopes.namespaces === "*") return null;
   return (
@@ -46,8 +43,7 @@ function namespaceRefusal(agent: Agent, tool: string): string | null {
 
 interface RegisteredConfig {
   inputSchema?: Record<string, unknown> | z.ZodObject;
-  // A composite tool's actions whose operation takes a namespace (src/tools/surface.ts). The merged
-  // schema declares `namespace` when any action takes one, and an action that takes none
+  // Actions whose operation takes a namespace (src/tools/surface.ts): one that takes none
   // (capsid_find_docs action namespaces) must not be refused for omitting it.
   namespaceActions?: readonly string[];
 }
@@ -58,9 +54,8 @@ type ScopeChallengeHandler = (context: {
   authInfo?: { scopes: string[]; clientId?: string; extra?: Record<string, unknown> };
 }) => ReturnType<ReturnType<typeof toolScopeChallenge>>;
 
-// Whether a handler's result is a success. An error result is not, and neither is a
-// domain refusal, which the tools return as an ordinary result whose JSON says ok:false
-// (the call was legitimate and the answer was no, so nothing was done).
+// A domain refusal is an ordinary result whose JSON says ok:false: the call was legitimate and
+// nothing was done.
 function toolSucceeded(result: unknown): boolean {
   const r = result as { isError?: boolean; content?: Array<{ text?: unknown }> } | null;
   if (r?.isError === true) return false;
@@ -74,8 +69,7 @@ function toolSucceeded(result: unknown): boolean {
   }
 }
 
-// Which argument names what a tool is asked to do (lint spells it `mode`). The registrar needs it
-// to populate need.action; a tool absent here cannot be narrowed below the tool name.
+// A tool absent here cannot be narrowed below the tool name.
 const ACTION_ARG: Record<string, string> = {
   capsid_find_docs: "action",
   capsid_read_doc: "action",
@@ -94,7 +88,6 @@ const ACTION_ARG: Record<string, string> = {
   capsid_admin_manage_switches: "action",
 };
 
-// The action a tool falls back to when the caller omits an optional one.
 const DEFAULT_ACTION: Record<string, string> = {
   capsid_find_docs: "list",
   capsid_read_doc: "read",
@@ -104,7 +97,6 @@ const DEFAULT_ACTION: Record<string, string> = {
   capsid_admin_read_claims: "aggregate",
 };
 
-/** The action a call means when the caller omits the argument, or undefined. */
 export function defaultActionFor(tool: string): string | undefined {
   return Object.hasOwn(DEFAULT_ACTION, tool) ? DEFAULT_ACTION[tool] : undefined;
 }
@@ -113,8 +105,7 @@ export function actionArgFor(tool: string): string | undefined {
   return Object.hasOwn(ACTION_ARG, tool) ? ACTION_ARG[tool] : undefined;
 }
 
-// The action this call asks for, read off the tool's own declared argument so an unrelated property
-// spelled "action" cannot narrow it.
+// Read off the tool's own declared argument, so an unrelated property spelled "action" cannot narrow it.
 function declaredShape(config: RegisteredConfig): Record<string, unknown> | undefined {
   const schema = config?.inputSchema;
   if (schema instanceof z.ZodObject) return schema.shape as Record<string, unknown>;
@@ -135,9 +126,8 @@ function actionOf(
   return defaultActionFor(tool);
 }
 
-// The registrar gate. Wraps the registration method once, before any tool module runs, so every
-// registration that follows is guarded whether or not its author thought about scopes. A new tool
-// cannot forget it, because a tool has to be registered to exist.
+// Wraps the registration method once, before any tool module runs, so a tool cannot forget the gate:
+// it has to be registered to exist.
 export interface CallLog {
   env: Partial<AuditEnv>;
   server: { name: string; version: string };
@@ -145,15 +135,12 @@ export interface CallLog {
   clientName?: string;
 }
 
-// The tools whose answers carry text written outside Capsid, and its label: a repository's files,
-// code search hits, pull request titles and bodies, review comments and CI logs, all written by
-// whoever can push or comment.
+// Their answers carry text written outside Capsid by whoever can push or comment.
 const OUTSIDE_TOOLS: Record<string, string> = {
   capsid_read_repo: "repo",
   capsid_inspect_repo: "repo",
 };
 
-/** A successful result of a tool in OUTSIDE_TOOLS, marked as outside data; anything else as it is. */
 function markOutside(tool: string, result: unknown): unknown {
   const label = Object.hasOwn(OUTSIDE_TOOLS, tool) ? OUTSIDE_TOOLS[tool] : undefined;
   const r = result as {
@@ -171,11 +158,8 @@ function markOutside(tool: string, result: unknown): unknown {
   );
 }
 
-/** An MCP icon, as serverInfo and tools/list carry it. */
 export type ToolIcon = { src: string; mimeType?: string; sizes?: string[] };
 
-// Whether this caller's grant could ever call the tool, whatever the arguments: the grant
-// TOOL_GRANTS names.
 export function toolListed(agent: Agent, tool: string): boolean {
   const { grant } = needFor(requiredGrant(tool));
   return grant === undefined || agent.scopes.grants.includes(grant);
@@ -200,7 +184,6 @@ export function guardRegistrations(
     const namespaceActions = config?.namespaceActions;
     const takesNamespace = (action: string | undefined): boolean =>
       namespaceActions && action !== undefined ? namespaceActions.includes(action) : declared;
-    // Why this call may not run, or null.
     const refusalFor = async (
       args: Record<string, unknown>,
       action: string | undefined,
@@ -228,8 +211,8 @@ export function guardRegistrations(
               },
             }
           : {}),
-        // An "action" tool outside TOOL_ACTION_GRANTS (jobs, lint) is checked by its
-        // handler, where the namespace is known, so the registrar names no grant.
+        // An "action" tool outside TOOL_ACTION_GRANTS is checked by its handler, where the
+        // namespace is known.
         ...needFor(requiredForAction(name, action)),
       });
       if (refusal) return refusal;
@@ -246,8 +229,6 @@ export function guardRegistrations(
       action: string | undefined,
       signal: AbortSignal | undefined,
     ): Promise<unknown> => {
-      // The request's abort signal reaches every outbound request the handler makes
-      // (src/call-signal.ts).
       const result = markOutside(name, await withCallSignal(signal, () => handler(...callArgs)));
       // A step-up action that succeeded resets the idle clock (STEP_UP). A refused or
       // failed one does not: it proves nothing about the person being there.
@@ -263,9 +244,7 @@ export function guardRegistrations(
       }
       return result;
     };
-    // Every call is logged when the server keeps the log (site-runtime's ToolCallLog), whoever
-    // makes it and whatever it does: one `refused` row, or `started` before the handler and
-    // `finished` after it.
+    // Every call is logged: one `refused` row, or `started` before the handler and `finished` after.
     const guarded: ToolHandler = async (...callArgs: unknown[]) => {
       const args = (callArgs[0] ?? {}) as Record<string, unknown>;
       const action = actionOf(name, config, args);
@@ -302,8 +281,7 @@ export function guardRegistrations(
           );
         }
       }
-      // A client that left before the handler ran gets nothing run; one that leaves during it
-      // is logged canceled (site-runtime's invokeTool does the same).
+      // A client that left before the handler ran gets nothing run; one that leaves during it is logged canceled.
       if (signal?.aborted) {
         const out = deny(
           "canceled: the client closed the call before the tool ran. Nothing was done.",
@@ -346,9 +324,8 @@ export function guardRegistrations(
         });
       return result;
     };
-    // An OAuth token without the scope the call needs is answered 403 insufficient_scope before the
-    // handler runs, naming every scope it needs, so the client can step up instead of the person
-    // reconnecting by hand. A key carries no token and gets the refusal above in words.
+    // An OAuth token without the needed scope is answered 403 insufficient_scope, naming every scope,
+    // so the client can step up instead of the person reconnecting by hand.
     const challenge =
       log &&
       toolScopeChallenge(
@@ -371,7 +348,6 @@ export function guardRegistrations(
           },
         }));
     const { namespaceActions: _namespaceActions, ...declaredConfig } = config ?? {};
-    // Each tool carries the server's icon unless it names its own.
     const served =
       icons && !(declaredConfig as { icons?: unknown }).icons
         ? { ...declaredConfig, icons }

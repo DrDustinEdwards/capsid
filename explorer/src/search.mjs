@@ -1,7 +1,5 @@
-// Search over everything the explorer publishes: systems, parts, flows and their steps, tools,
-// their actions, and each measured repo's code page. The index is one JSON
-// file the search page's script reads from the explorer itself, so no request leaves the site.
-// Each entry is [kind, name, detail, address]. Pure.
+// The index is one JSON file the search page's script reads from the explorer itself, so no request leaves the
+// site. Entries are [kind, name, detail, address]. Pure.
 import { codePath } from "./code.mjs";
 import { flowPath, layout, pageHead, partPath, stepPath, systemPath } from "./pages.mjs";
 import { toolPath } from "./tools.mjs";

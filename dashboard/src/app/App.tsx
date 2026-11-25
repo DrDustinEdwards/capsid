@@ -23,7 +23,7 @@ import { ModeBanner } from "capsomer/react/mode-banner";
 import "capsomer/mode-banner.css";
 import { useScrollToHash } from "capsomer/react/route-hooks";
 import { Outlet } from "react-router";
-import { Link, useDemo, useLocation, useSearch } from "../lib/router";
+import { Link, useDemo, useLocation, useSearchString } from "../lib/router";
 import {
   APP_URL,
   POLL_MS,
@@ -125,7 +125,7 @@ function PortalApp() {
   const { feed, error, signedOut, nextPollAt, accept, signOut } = useOpsFeed();
   const demo = useDemo();
   const [location, navigate] = useLocation();
-  const search = useSearch();
+  const search = useSearchString();
   const qs = search ? `?${search}` : "";
   const views = VIEWS;
   const route = parseRoute(location);

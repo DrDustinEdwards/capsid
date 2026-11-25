@@ -6,9 +6,6 @@ export const PORTFOLIO_DOCS = {
   namespace: "capsid",
   // Exact paths. conventions.md is the one rules file.
   documents: ["conventions.md", "core.md"],
-  // An archived decisions volume: the prefix, then a volume number, then ".md". The
-  // old decisions log is history kept under archive/; new rulings go in rulings/.
-  volumes: ["archive/decisions-vol-"],
   // One document directly inside the folder, no deeper. One ruling per file. Records,
   // not rules: readable, never served as read-first.
   folders: ["rulings/"],
@@ -27,7 +24,6 @@ export const PORTFOLIO_DOCS = {
 // underscore and slash only. So a percent-encoding, a backslash, a space or a capital letter cannot
 // reach a comparison, whatever the database or a later decoder would make of it.
 const SAFE_PATH = /^[a-z0-9][a-z0-9._/-]*$/;
-const VOLUME = /^[1-9][0-9]{0,3}\.md$/;
 const FOLDER_ENTRY = /^[a-z0-9][a-z0-9._-]*\.md$/;
 
 /** Whether a capsid path is one of the portfolio documents. */
@@ -37,9 +33,6 @@ export function isPortfolioPath(path: string): boolean {
   // test is on the string, and "rulings/../policy/gates.md" must not read as rulings/.
   if (path.includes("..") || path.includes("//") || path.endsWith("/")) return false;
   if ((PORTFOLIO_DOCS.documents as readonly string[]).includes(path)) return true;
-  for (const prefix of PORTFOLIO_DOCS.volumes) {
-    if (path.startsWith(prefix) && VOLUME.test(path.slice(prefix.length))) return true;
-  }
   for (const folder of PORTFOLIO_DOCS.folders) {
     if (path.startsWith(folder) && FOLDER_ENTRY.test(path.slice(folder.length))) return true;
   }
@@ -61,11 +54,7 @@ export function isPortfolioTool(tool: string, action: string | undefined): boole
 
 /** The allowlist as a reader sees it, for a refusal and for brief. */
 export function describePortfolioDocs(): string[] {
-  return [
-    ...PORTFOLIO_DOCS.documents,
-    ...PORTFOLIO_DOCS.volumes.map((v) => `${v}<n>.md`),
-    ...PORTFOLIO_DOCS.folders.map((f) => `${f}<name>.md`),
-  ];
+  return [...PORTFOLIO_DOCS.documents, ...PORTFOLIO_DOCS.folders.map((f) => `${f}<name>.md`)];
 }
 
 export interface PortfolioRow {
@@ -80,10 +69,10 @@ export interface PortfolioRow {
 }
 
 // The portfolio documents that exist, metadata only, ordered by path. The query narrows by the
-// exact paths and a GLOB per volume prefix and folder; isPortfolioPath then decides, so the GLOB's
-// looser match (a nested rulings path, a non-numeric volume) never reaches a caller.
+// exact paths and a GLOB per folder; isPortfolioPath then decides, so the GLOB's looser match (a
+// nested rulings path) never reaches a caller.
 export async function portfolioDocuments(db: D1Database): Promise<PortfolioRow[]> {
-  const globs = [...PORTFOLIO_DOCS.volumes, ...PORTFOLIO_DOCS.folders].map((p) => `${p}*`);
+  const globs = PORTFOLIO_DOCS.folders.map((p) => `${p}*`);
   const { results } = await db
     .prepare(
       `SELECT namespace, path, title, type, status, tags, created_at, updated_at

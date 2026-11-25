@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/server";
-import { surfaceOf } from "./surface";
+import { toolSurfaceOf } from "./surface";
 import { z } from "zod";
 import {
   CI_JOBS_MAX,
@@ -307,7 +307,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       guardedRead("ci_status", namespace, repo, () =>
         ciStatus(env, namespace, repo, {
           limit,
-          logTail: ctx.scope({ ...surfaceOf("ci_status"), namespace, grant: "write" }) === null,
+          logTail: ctx.scope({ ...toolSurfaceOf("ci_status"), namespace, grant: "write" }) === null,
           ref,
           runId: run_id,
           jobs,
@@ -468,7 +468,10 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
             },
             repo,
           ),
-        { repo, surface: surfaceOf("tag_release", undefined, publish_release ? "release" : "tag") },
+        {
+          repo,
+          surface: toolSurfaceOf("tag_release", undefined, publish_release ? "release" : "tag"),
+        },
       ),
   );
 }

@@ -10,7 +10,7 @@ export function prAnchor(a: Pick<OpsAwaitingSeat, "repo" | "number">): string {
 }
 
 // A money PR (class typed) is approved by typing its number in chat, never here.
-export function canApprove(a: OpsAwaitingSeat): a is OpsAwaitingSeat & { head_sha: string } {
+export function canApprovePr(a: OpsAwaitingSeat): a is OpsAwaitingSeat & { head_sha: string } {
   return (
     (a.class === "approve" || a.class === "auto") &&
     typeof a.head_sha === "string" &&

@@ -8,7 +8,7 @@ import { Snippet } from "capsomer/react/search-results";
 import "capsomer/search-results.css";
 import "capsomer/filter-bar.css";
 import "./Library.css";
-import { Link, useLocation, useSearch } from "../lib/router";
+import { Link, useLocation, useSearchString } from "../lib/router";
 import { routePath, useApp } from "../app/ctx";
 import { fetchLibrary } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
@@ -56,7 +56,7 @@ function withJobLinks(text: string, back: string): ReactNode[] {
 
 export function Library() {
   const { now } = useApp();
-  const search = useSearch();
+  const search = useSearchString();
   const [, navigate] = useLocation();
   const params = new URLSearchParams(search);
   const q = params.get("q")?.trim() || "";

@@ -26,8 +26,7 @@ test("which documents are rule documents, and their caps", () => {
     ["capsid", "conventions-web.md", RULE_DOC_CAP_BYTES],
   ];
   const records: Array<[string, string]> = [
-    ["capsid", "archive/decisions-vol-7.md"],
-    ["sample", "decisions-vol-2.md"],
+    ["capsid", "archive/decisions-2026.md"],
     ["capsid", "research/design-mcp-servers.md"],
     ["capsid", "reports/lint-2026-09-12.md"],
     ["capsid", "audits/CLOSED-2026-09.md"],
@@ -299,7 +298,7 @@ test("a move of a rule document to the archive, and a restore that recreates one
         action: "move",
         namespace: "capsid",
         path: "decisions.md",
-        new_path: "archive/decisions-vol-9.md",
+        new_path: "archive/decisions-old.md",
         confirm: true,
       },
     })) as { isError?: boolean; content: Array<{ text: string }> };

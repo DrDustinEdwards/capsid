@@ -33,10 +33,6 @@ const LINTED_TYPES = new Set([
   "protocol",
 ]);
 
-// The numbered decision volumes are history too, exempted by path as well as type, because a
-// mistyped volume would report every historical count as stale.
-const DECISION_VOLUME = /^decisions-vol-\d+\.md$/;
-
 export interface CountClaim {
   path: string;
   type: string;
@@ -69,7 +65,6 @@ export function scanCountClaims(docs: ScannableDoc[], namespace: string): CountC
     const type = doc.type ?? "note";
     if (!LINTED_TYPES.has(type)) continue;
     if (doc.path.startsWith("archive/")) continue;
-    if (DECISION_VOLUME.test(doc.path)) continue;
 
     const flag = (
       noun: string,

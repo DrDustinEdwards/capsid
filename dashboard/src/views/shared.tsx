@@ -2,7 +2,7 @@ import { trendChart } from "./charts";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useCallback, type ReactNode } from "react";
-import { rowLink, useLocation, useSearch } from "../lib/router";
+import { rowLink, useLocation, useSearchString } from "../lib/router";
 import { Group } from "capsomer/react/disclosure";
 import { Row, RowList } from "capsomer/react/row-list";
 import type { OpsJob } from "../types";
@@ -25,7 +25,7 @@ export function PageHead({ title }: { title: string }) {
 }
 
 export function useNsFilter(): [string, (ns: string) => void] {
-  const search = useSearch();
+  const search = useSearchString();
   const [location, navigate] = useLocation();
   const ns = new URLSearchParams(search).get("ns") || "all";
   const set = useCallback(

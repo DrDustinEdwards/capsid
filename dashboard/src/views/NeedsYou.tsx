@@ -6,7 +6,7 @@ import { parse } from "capsomer/behavior/time";
 import {
   approveAllRequest,
   approveRequest,
-  canApprove,
+  canApprovePr,
   closeRequest,
   prAnchor,
   prName,
@@ -105,7 +105,7 @@ const newTab = ({ children, ...props }: RowLinkProps) => (
 function PrGroup({ entries }: { entries: Entry[] }) {
   const { feed, confirm } = useApp();
   const rows = entries.map((e) => ({ ...e, seat: seatFor(feed, e.item.link) }));
-  const approvable = rows.flatMap((r) => (r.seat && canApprove(r.seat) ? [r.seat] : []));
+  const approvable = rows.flatMap((r) => (r.seat && canApprovePr(r.seat) ? [r.seat] : []));
   const batch = approvable.length > 1;
   const ticks = useBulkSelection(approvable.map((a) => ({ id: prAnchor(a) })));
   const chosen = approvable.filter((a) => ticks.has(prAnchor(a)));
@@ -159,7 +159,7 @@ function PrRow({
 }) {
   const { now, confirm } = useApp();
   const name = seat ? prName(seat) : item.title;
-  const ok = seat && canApprove(seat) ? seat : null;
+  const ok = seat && canApprovePr(seat) ? seat : null;
   return (
     <Row
       id={seat ? prAnchor(seat) : undefined}

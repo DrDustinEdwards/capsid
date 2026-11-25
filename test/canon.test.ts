@@ -13,7 +13,6 @@ test("canon paths match, and their near misses do not", () => {
     ["capsid", "core.md"],
     ["sample", "core.md"],
     ["capsid", "decisions.md"],
-    ["capsid", "archive/decisions-vol-4.md"],
     ["sample", "archive/decisions.md"],
     ["sample", "decisions.md"],
   ];
@@ -25,8 +24,7 @@ test("canon paths match, and their near misses do not", () => {
     ["capsid", "core.md.bak"],
     ["capsid", "Core.md"],
     ["capsid", "./core.md"],
-    ["capsid", "decisions-vol-5.md"],
-    ["capsid", "decisions-vol-x.md"],
+    ["capsid", "archive/decisions-vol-4.md"],
     ["capsid", "decisions-notes.md"],
     ["capsid", "archive/decisions.md.old"],
     ["capsid", "rulings/testing-2026-10-04.md"],

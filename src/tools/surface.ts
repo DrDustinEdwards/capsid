@@ -224,7 +224,7 @@ export const COMPOSITES: readonly CompositeSpec[] = [
 ];
 
 // The one inverse of the tables above, so a handler cannot name a tool the surface does not serve.
-export function surfaceOf(
+export function toolSurfaceOf(
   op: string,
   opAction?: string,
   toolAction?: string,

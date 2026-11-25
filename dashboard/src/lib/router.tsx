@@ -28,7 +28,7 @@ export function useLocation(): [string, (to: string, opts?: { replace?: boolean 
   return [pathname.slice(base.length) || "/", navigate];
 }
 
-export function useSearch(): string {
+export function useSearchString(): string {
   return useRouterLocation().search.replace(/^\?/, "");
 }
 
