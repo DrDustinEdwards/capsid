@@ -23,9 +23,13 @@ const PUT_CONCURRENCY = 20;
 export const DUMP_RETENTION = { daily: DEFAULT_RETENTION.daily, weekly: 4, monthly: 3 };
 
 // Two runs can both read the key empty, so a run re-reads the lease after its export and refuses
-// destructive steps unless it is still its own. Per-run token; the TTL (1h) exceeds the 15-minute cron wall.
+// destructive steps unless it is still its own. Per-run token; runs are cron-only (src/site-jobs.ts), so the TTL just exceeds the 15-minute wall.
 const LEASE_KEY = "backup:lease";
-const LEASE_TTL_SECONDS = 3600;
+const LEASE_TTL_SECONDS = 16 * 60;
+
+export async function backupLeaseHeld(env: Env): Promise<boolean> {
+  return (await env.APP_KV.get(LEASE_KEY)) !== null;
+}
 
 // Tables page rather than load whole: holding every table in one batch killed the cron once version
 // bodies grew. Only append-only AUTOINCREMENT tables qualify: rows at or below the MAX(id) bound cannot change.

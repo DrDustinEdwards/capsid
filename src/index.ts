@@ -3,7 +3,7 @@ import { adminEmails } from "@dustinedwards/site-runtime/access";
 import { adminGrantEmail } from "./auth";
 import { adminAgentForEmail } from "./agents";
 import { readLastStepUp } from "./scope";
-import { CAPSID_JOBS, runCapsidJob } from "./site-jobs";
+import { CAPSID_JOBS, runCapsidJob, runQueuedCapsidJobs } from "./site-jobs";
 import { defaultHandler } from "./routes";
 import { withSecurityHeaders } from "./security-headers";
 import type { Env, Props } from "./env";
@@ -21,7 +21,7 @@ import { isPortalHost, portalHostRequest } from "./portal-host";
 import { handlePortalDemo, isDemoRequest } from "./portal-demo";
 import { portalAsset } from "./portal-app";
 import { hostRefusal, MCP_HOST, MCP_URL } from "./mcp-host";
-import { logEvent, withRequestLog } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent, withRequestLog } from "@dustinedwards/site-runtime/log";
 import { withSiteSentry } from "@dustinedwards/site-runtime/sentry";
 import { maintenanceOn, maintenanceResponse } from "@dustinedwards/site-runtime/maintenance";
 import { countNotFound } from "@dustinedwards/site-runtime/not-found";
@@ -258,6 +258,15 @@ export default withSiteSentry({
     }
 
     if (cron === TICK_CRON) {
+      ctx.waitUntil(
+        runQueuedCapsidJobs(env).catch((err: unknown) =>
+          logEvent(
+            "RUN_NOW_THREW",
+            { message: `RUN_NOW_THREW ${errorMessage(err)}` },
+            { level: "error" },
+          ),
+        ),
+      );
       ctx.waitUntil(
         runTask(
           env,

@@ -240,7 +240,7 @@ export async function planSiteAction(
         return {
           ok: true,
           changes: [
-            "capsid: run Capsid's own D1 dump now, the same run as the nightly 09:00 UTC cron (d1-dump runCheckedBackup into the backups bucket, then its checks and prunes). It takes the cron's lease, so a run that overlaps the cron skips. One task_runs row (backup) records it.",
+            "capsid: run Capsid's own D1 dump within five minutes, on the next tick, the same run as the nightly 09:00 UTC cron (d1-dump runCheckedBackup into the backups bucket, then its checks and prunes). It waits for the cron's lease, so it never overlaps a run. One task_runs row (backup) records it.",
           ],
           audit: [`site-backup by ${actor}`, click],
         };
