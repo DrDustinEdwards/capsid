@@ -137,7 +137,11 @@ test("PLANT: the 2 hour idle window and the 12 hour cap, measured from sign-in a
   ];
   for (const [signedInAgo, stepUpAgo, allowed] of cases) {
     const refusal = checkScope(signedIn(signedInAgo, stepUpAgo), performNeed);
-    assert.equal(refusal === null, allowed, `sign-in ${signedInAgo / MINUTE}m, step-up ${stepUpAgo}`);
+    assert.equal(
+      refusal === null,
+      allowed,
+      `sign-in ${signedInAgo / MINUTE}m, step-up ${stepUpAgo}`,
+    );
   }
   const idle = checkScope(signedIn(2 * HOUR + MINUTE), performNeed) ?? "";
   assert.match(idle, /step-up required: 'capsid_admin_run_controls\.perform'/);

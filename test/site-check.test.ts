@@ -70,9 +70,7 @@ const SECURITY_HEADERS: Record<string, string> = {
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 };
 
-type Answer =
-  | { status: number; body?: string; headers?: Record<string, string> }
-  | "throw";
+type Answer = { status: number; body?: string; headers?: Record<string, string> } | "throw";
 
 // The fake site: answers by "METHOD url", records every call. An unrouted URL throws,
 // so a fetch to anywhere unexpected fails loudly.
@@ -82,8 +80,7 @@ function site(answers: Record<string, Answer>) {
     const method = init?.method ?? "GET";
     calls.push({ method, url });
     const a = answers[`${method} ${url}`];
-    if (a === undefined || a === "throw")
-      throw new Error(`connect failed for ${url}`);
+    if (a === undefined || a === "throw") throw new Error(`connect failed for ${url}`);
     return new Response(a.body ?? null, {
       status: a.status,
       headers: a.headers,
@@ -214,10 +211,7 @@ test("PLANT: the operator API answering 200 to a caller with no credential is re
   const r = await siteCheck(env, "sample", {}, s.impl, NOW);
   assert.equal(r.probe.status, 200);
   assert.equal(r.probe.refused, false);
-  assert.match(
-    r.probe.note,
-    /^OPEN: answered 200 to a caller with no credential/,
-  );
+  assert.match(r.probe.note, /^OPEN: answered 200 to a caller with no credential/);
 });
 
 test("the probe sends no credential, and a named probe path overrides the operator API with a GET, never a POST", async () => {
@@ -226,8 +220,7 @@ test("the probe sends no credential, and a named probe path overrides the operat
   const seen: Array<Record<string, string>> = [];
   const s = site(answers);
   const impl = async (url: string, init?: RequestInit) => {
-    if (url.endsWith("/admin"))
-      seen.push((init?.headers ?? {}) as Record<string, string>);
+    if (url.endsWith("/admin")) seen.push((init?.headers ?? {}) as Record<string, string>);
     return s.impl(url, init);
   };
   const r = await siteCheck(env, "sample", { probe: "/admin" }, impl, NOW);
@@ -269,11 +262,7 @@ test("a probe with no answer reports null, never refused", async () => {
   const s = site(answers);
   const r = await siteCheck(env, "sample", {}, s.impl, NOW);
   assert.equal(r.probe.status, null);
-  assert.equal(
-    r.probe.refused,
-    null,
-    "a probe that got no answer was reported as refused",
-  );
+  assert.equal(r.probe.refused, null, "a probe that got no answer was reported as refused");
   assert.match(r.probe.note, /^no answer:/);
 });
 
@@ -291,24 +280,11 @@ test("PLANT: only the site's configured origin is fetched, for every read", asyn
   };
   const s2 = site(answers);
   await siteCheck(env, "sample", {}, s.impl, NOW);
-  await siteCheck(
-    env,
-    "sample",
-    { page: "//other.example.net/x" },
-    s2.impl,
-    NOW,
-  );
+  await siteCheck(env, "sample", { page: "//other.example.net/x" }, s2.impl, NOW);
   const all = [...s.calls, ...s2.calls];
-  assert.ok(
-    all.length >= 6,
-    `expected the health, page and probe reads twice, got ${all.length}`,
-  );
+  assert.ok(all.length >= 6, `expected the health, page and probe reads twice, got ${all.length}`);
   for (const c of all) {
-    assert.equal(
-      new URL(c.url).origin,
-      ORIGIN,
-      `${c.method} ${c.url} left the site's origin`,
-    );
+    assert.equal(new URL(c.url).origin, ORIGIN, `${c.method} ${c.url} left the site's origin`);
   }
 });
 
@@ -318,11 +294,7 @@ test("THE INNOCENT DIRECTION: the health route, the page and the probe are each 
   const r = await siteCheck(env, "sample", { page: "/about" }, s.impl, NOW);
   assert.deepEqual(
     s.calls.map((c) => `${c.method} ${c.url}`),
-    [
-      `GET ${ORIGIN}/health`,
-      `GET ${ORIGIN}/about`,
-      `POST ${ORIGIN}/api/operator`,
-    ],
+    [`GET ${ORIGIN}/health`, `GET ${ORIGIN}/about`, `POST ${ORIGIN}/api/operator`],
   );
   assert.equal(r.origin, ORIGIN);
   assert.equal(r.health.state, "ok");

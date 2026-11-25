@@ -48,24 +48,16 @@ describe("loadActivity against a real audit_log", () => {
       actor: null,
       id: null,
     });
-    expect(unfiltered.map((r) => r.path)).toEqual(
-      all.slice(0, ACTIVITY_LIMIT).map((r) => r.path),
-    );
+    expect(unfiltered.map((r) => r.path)).toEqual(all.slice(0, ACTIVITY_LIMIT).map((r) => r.path));
 
     const byNamespace = await loadActivity(env.DB, {
       namespace: "act-b",
       actor: null,
       id: null,
     });
-    expect(all.filter((r) => r.namespace === "act-b").length).toBeGreaterThan(
-      ACTIVITY_LIMIT,
-    );
-    const expectedNs = all
-      .filter((r) => r.namespace === "act-b")
-      .slice(0, ACTIVITY_LIMIT);
-    expect(byNamespace.map((r) => r.path)).toEqual(
-      expectedNs.map((r) => r.path),
-    );
+    expect(all.filter((r) => r.namespace === "act-b").length).toBeGreaterThan(ACTIVITY_LIMIT);
+    const expectedNs = all.filter((r) => r.namespace === "act-b").slice(0, ACTIVITY_LIMIT);
+    expect(byNamespace.map((r) => r.path)).toEqual(expectedNs.map((r) => r.path));
 
     const byActor = await loadActivity(env.DB, {
       namespace: null,
@@ -99,16 +91,11 @@ describe("loadActivity against a real audit_log", () => {
 describe("a job transition's two audit rows", () => {
   it("PLANT: are told apart, the job's row and its mirror document's", async () => {
     await seedCapsidNamespace();
-    const posted = await postJob(
-      env as never,
-      grantAgent("write", "github:sample"),
-      new Date(),
-      {
-        namespace: "capsid",
-        title: "a job whose post is read back from Activity",
-        body: "do the thing",
-      },
-    );
+    const posted = await postJob(env as never, grantAgent("write", "github:sample"), new Date(), {
+      namespace: "capsid",
+      title: "a job whose post is read back from Activity",
+      body: "do the thing",
+    });
     expect(posted.ok, posted.refusal).toBe(true);
     const path = `jobs/${posted.job!.id}.md`;
     const rows = (

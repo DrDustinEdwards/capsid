@@ -15,8 +15,7 @@ import { fakeFindingMemory } from "./fakes.ts";
 // digest and attention classes are remembered and shown, and file nothing.
 
 const NOW = new Date("2026-10-12T12:00:00.000Z");
-const hoursAgo = (h: number) =>
-  new Date(NOW.getTime() - h * 3_600_000).toISOString();
+const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3_600_000).toISOString();
 
 const fake = (fingerprint: string, namespace = "sample"): Finding => ({
   fingerprint,
@@ -26,11 +25,7 @@ const fake = (fingerprint: string, namespace = "sample"): Finding => ({
   evidence: ["line"],
 });
 
-function pass(
-  found: Finding[],
-  open: Map<string, string>,
-  memory = fakeFindingMemory(),
-) {
+function pass(found: Finding[], open: Map<string, string>, memory = fakeFindingMemory()) {
   const posted: string[] = [];
   const closed: Array<{ id: string; summary?: string }> = [];
   const result = runPass(
@@ -57,12 +52,8 @@ test("an unclassed fingerprint is a job", () => {
 });
 
 test("EVERY OWNERS PATTERN HAS A CLASS, and every class names an owner (derived, both ways)", () => {
-  const missingClass = OWNER_PATTERNS.filter(
-    (p) => !CLASS_PATTERNS.includes(p),
-  );
-  const missingOwner = CLASS_PATTERNS.filter(
-    (p) => !OWNER_PATTERNS.includes(p),
-  );
+  const missingClass = OWNER_PATTERNS.filter((p) => !CLASS_PATTERNS.includes(p));
+  const missingOwner = CLASS_PATTERNS.filter((p) => !OWNER_PATTERNS.includes(p));
   assert.deepEqual(missingClass, [], "an OWNERS pattern has no class");
   assert.deepEqual(missingOwner, [], "a class names a pattern OWNERS does not");
   assert.deepEqual(
@@ -80,19 +71,12 @@ test("A DIGEST- OR ATTENTION-CLASS FINDING POSTS NO JOB, and is remembered open 
   const result = await w.result;
   assert.deepEqual(w.posted, []);
   assert.deepEqual(result.posted, []);
-  assert.deepEqual(result.routed, [
-    "live-csp-script-sample-home",
-    "anomaly-rate-sample-driver",
-  ]);
+  assert.deepEqual(result.routed, ["live-csp-script-sample-home", "anomaly-rate-sample-driver"]);
   assert.equal(w.memory.rows.get("anomaly-rate-sample-driver")!.job_id, null);
   const row = w.memory.rows.get("live-csp-script-sample-home")!;
   assert.equal(row.state, "open");
   assert.equal(row.job_id, null);
-  const again = pass(
-    [fake("live-csp-script-sample-home")],
-    new Map(),
-    w.memory,
-  );
+  const again = pass([fake("live-csp-script-sample-home")], new Map(), w.memory);
   await again.result;
   assert.deepEqual(again.posted, [], "a second sighting posted");
   assert.equal(w.memory.rows.get("live-csp-script-sample-home")!.seen_count, 2);
@@ -125,11 +109,7 @@ test("a queued job for a finding that is now digest or attention class is cleare
     { ...row, fingerprint: "anomaly-rate-x", job_id: "job_old2" },
   ]);
   const w = pass(
-    [
-      fake("live-headers-sample-home"),
-      fake("anomaly-rate-x"),
-      fake("ci-red-sample"),
-    ],
+    [fake("live-headers-sample-home"), fake("anomaly-rate-x"), fake("ci-red-sample")],
     new Map([
       ["live-headers-sample-home", "job_old"],
       ["anomaly-rate-x", "job_old2"],
@@ -148,20 +128,13 @@ test("a queued job for a finding that is now digest or attention class is cleare
       summary: "cleared: moved to the Portal's attention list, no job needed",
     },
   ]);
-  assert.deepEqual(result.cleared, [
-    "live-headers-sample-home",
-    "anomaly-rate-x",
-  ]);
+  assert.deepEqual(result.cleared, ["live-headers-sample-home", "anomaly-rate-x"]);
   assert.equal(
     memory.rows.get("live-headers-sample-home")!.job_id,
     null,
     "the row still points at the closed job",
   );
-  assert.deepEqual(
-    w.posted,
-    [],
-    "a job-class finding with an open job was posted again",
-  );
+  assert.deepEqual(w.posted, [], "a job-class finding with an open job was posted again");
 });
 
 const routedRow = (over: Partial<FindingRow>): FindingRow => ({
@@ -185,11 +158,7 @@ test("A DISMISSED DIGEST OR ATTENTION ROW STAYS DISMISSED", async () => {
     routedRow({ state: "dismissed" }),
     routedRow({ fingerprint: "anomaly-rate-x", state: "dismissed" }),
   ]);
-  const w = pass(
-    [fake("live-headers-sample-home"), fake("anomaly-rate-x")],
-    new Map(),
-    memory,
-  );
+  const w = pass([fake("live-headers-sample-home"), fake("anomaly-rate-x")], new Map(), memory);
   await w.result;
   assert.equal(memory.rows.get("live-headers-sample-home")!.state, "dismissed");
   assert.equal(memory.rows.get("anomaly-rate-x")!.state, "dismissed");
@@ -208,11 +177,7 @@ test("A CLEARED DIGEST ROW STAYS CLEARED INSIDE THE QUIET PERIOD and reopens out
     reopen_after: hoursAgo(6),
   });
   const memory = fakeFindingMemory([inside, outside]);
-  await pass(
-    [fake("live-headers-sample-home"), fake("anomaly-rate-x")],
-    new Map(),
-    memory,
-  ).result;
+  await pass([fake("live-headers-sample-home"), fake("anomaly-rate-x")], new Map(), memory).result;
   assert.equal(memory.rows.get("live-headers-sample-home")!.state, "cleared");
   assert.equal(memory.rows.get("anomaly-rate-x")!.state, "open");
   assert.equal(memory.rows.get("anomaly-rate-x")!.job_id, null);

@@ -7,27 +7,11 @@ import {
   AUTO_MERGE_REQUIRED_CI,
   loadMergePolicy,
 } from "../src/auto-merge-policy.ts";
-import {
-  evaluatePolicy,
-  type PrFacts,
-} from "../src/auto-merge-policy-evaluate.ts";
+import { evaluatePolicy, type PrFacts } from "../src/auto-merge-policy-evaluate.ts";
 import { parseMergePolicy } from "../src/auto-merge-policy-parse.ts";
-import {
-  policyPin,
-  policyPinKey,
-  signTaskBody,
-  splitSignedTask,
-} from "../src/signed-docs.ts";
-import {
-  judgeUnits,
-  LIFTED_KEY,
-  liftSuspension,
-  SUSPENDED_KEY,
-} from "../src/merge-units.ts";
-import {
-  performPolicyChange,
-  planPolicyChange,
-} from "../src/policy-sign-change.ts";
+import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/signed-docs.ts";
+import { judgeUnits, LIFTED_KEY, liftSuspension, SUSPENDED_KEY } from "../src/merge-units.ts";
+import { performPolicyChange, planPolicyChange } from "../src/policy-sign-change.ts";
 import { SHIPPED_VERSION } from "./policy-version.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
@@ -59,9 +43,7 @@ async function world(body = SHIPPED) {
   });
   const kv = fakeKv({
     seed: {
-      [policyPinKey(AUTO_MERGE_POLICY_PATH)]: JSON.stringify(
-        await policyPin(body),
-      ),
+      [policyPinKey(AUTO_MERGE_POLICY_PATH)]: JSON.stringify(await policyPin(body)),
     },
   });
   return {
@@ -70,9 +52,8 @@ async function world(body = SHIPPED) {
     kv,
   };
 }
-const storedBody = (rows: {
-  documents: Array<{ path: string; body?: string | null }>;
-}) => rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)!.body!;
+const storedBody = (rows: { documents: Array<{ path: string; body?: string | null }> }) =>
+  rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)!.body!;
 
 // A unit in the document
 
@@ -81,10 +62,7 @@ test("a unit under ## Auto units is read", () => {
     withUnits(["- unit `capsid / tests`", "- unit `carrel/src-routine`"]),
   );
   assert.ok("policy" in listed, "error" in listed ? listed.error : "");
-  assert.deepEqual(listed.policy.units, [
-    "capsid / tests",
-    "carrel / src-routine",
-  ]);
+  assert.deepEqual(listed.policy.units, ["capsid / tests", "carrel / src-routine"]);
 });
 
 test("PLANT: a document naming an unknown class is refused at load", async () => {
@@ -101,11 +79,7 @@ test("PLANT: a document naming an unknown class is refused at load", async () =>
 test("money, a migration or a workflow is never a unit, and neither is a namespace the policy does not cover", () => {
   for (const cls of ["money", "migration", "workflow"]) {
     const parsed = parseMergePolicy(withUnits([`- unit \`capsid / ${cls}\``]));
-    assert.match(
-      "error" in parsed ? parsed.error : "",
-      /never promoted to auto/,
-      cls,
-    );
+    assert.match("error" in parsed ? parsed.error : "", /never promoted to auto/, cls);
   }
   assert.match(
     (
@@ -117,9 +91,7 @@ test("money, a migration or a workflow is never a unit, and neither is a namespa
   );
   assert.match(
     (
-      parseMergePolicy(
-        withUnits(["- unit `capsid / tests`", "- unit `capsid/tests`"]),
-      ) as {
+      parseMergePolicy(withUnits(["- unit `capsid / tests`", "- unit `capsid/tests`"])) as {
         error: string;
       }
     ).error,
@@ -169,10 +141,7 @@ test("a promoted unit lets its namespace's limited paths merge; without it they 
   const tests = capsidPr(["test/jobs.test.ts"]);
   const held = evaluatePolicy(tests, AUTHORS);
   assert.equal(held.merge ? null : held.failed, "paths_allowed_for_namespace");
-  assert.equal(
-    evaluatePolicy(tests, AUTHORS, { unit: "capsid / tests" }).merge,
-    true,
-  );
+  assert.equal(evaluatePolicy(tests, AUTHORS, { unit: "capsid / tests" }).merge, true);
 });
 
 test("a promoted unit never opens a refused path or a money path", () => {
@@ -222,10 +191,7 @@ test("typing the new version signs the next version with the unit, and the Worke
   const w = await world();
   const plan = await planPolicyChange(w.env, "promote", "capsid/tests");
   assert.ok(plan.ok, plan.ok ? "" : plan.error);
-  assert.deepEqual(
-    [plan.from, plan.to, plan.unit],
-    [`${V}`, `${V + 1}`, "capsid / tests"],
-  );
+  assert.deepEqual([plan.from, plan.to, plan.unit], [`${V}`, `${V + 1}`, "capsid / tests"]);
   const done = await performPolicyChange(
     w.env,
     "access:admin@example.com",
@@ -242,10 +208,7 @@ test("typing the new version signs the next version with the unit, and the Worke
   assert.ok("policy" in loaded, "error" in loaded ? loaded.error : "");
   assert.equal(loaded.policy.version, `${V + 1}`);
   assert.deepEqual(loaded.policy.units, ["capsid / tests"]);
-  assert.ok(
-    w.rows.versions.length >= 1,
-    "the prior version was not snapshotted",
-  );
+  assert.ok(w.rows.versions.length >= 1, "the prior version was not snapshotted");
   // Removing it is the same control, the next version, the same typed confirm.
   assert.equal(
     (
@@ -291,8 +254,7 @@ test("a change that would not load, or changes nothing, is refused at the previe
     /promote or demote/,
   );
   assert.match(
-    ((await planPolicyChange(w.env, "promote", "capsid")) as { error: string })
-      .error,
+    ((await planPolicyChange(w.env, "promote", "capsid")) as { error: string }).error,
     /<namespace>\/<path class>/,
   );
 });
@@ -329,10 +291,7 @@ test("lifting a suspension clears it, and only a rollback after the lift suspend
   assert.ok(done.ok);
   assert.deepEqual(JSON.parse(kv.store.get(SUSPENDED_KEY)!), []);
   assert.equal(batches.length, 1, "the lift was not audited");
-  const lifted = JSON.parse(kv.store.get(LIFTED_KEY)!) as Record<
-    string,
-    string
-  >;
+  const lifted = JSON.parse(kv.store.get(LIFTED_KEY)!) as Record<string, string>;
   const rollback = (runAt: string) => ({
     kind: "rollback" as const,
     namespace: "capsid",
@@ -345,8 +304,7 @@ test("lifting a suspension clears it, and only a rollback after the lift suspend
     path_class: "docs",
   });
   assert.deepEqual(
-    judgeUnits([], [rollback("2026-10-10T09:00:00.000Z")], [], NOW, lifted)
-      .suspended,
+    judgeUnits([], [rollback("2026-10-10T09:00:00.000Z")], [], NOW, lifted).suspended,
     [],
     "the answered rollback suspended the unit again",
   );
@@ -361,15 +319,7 @@ test("lifting a suspension clears it, and only a rollback after the lift suspend
     ["capsid/docs"],
   );
   assert.equal(
-    (
-      await liftSuspension(
-        env,
-        "access:admin@example.com",
-        "capsid/docs",
-        "again",
-        NOW,
-      )
-    ).ok,
+    (await liftSuspension(env, "access:admin@example.com", "capsid/docs", "again", NOW)).ok,
     false,
     "a unit not suspended was lifted",
   );

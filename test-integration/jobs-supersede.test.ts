@@ -119,7 +119,9 @@ describe("supersede", () => {
     expect(out.refusal).toMatch(new RegExp(`is held by ${DRIVER_ACTOR}`));
     expect((await jobRow(old.job!.id))?.status).toBe("claimed");
     // The seat may supersede a claimed job it does not hold.
-    const bySeat = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, { reason: "reposted" });
+    const bySeat = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, {
+      reason: "reposted",
+    });
     expect(bySeat.ok, bySeat.refusal).toBe(true);
   });
 

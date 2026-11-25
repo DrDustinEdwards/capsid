@@ -41,7 +41,13 @@ const tool = "capsid_admin_manage_namespaces";
 test(`${tool}.update refuses a minted agent and names why, and admits the admin`, () => {
   // The driver is scoped to the namespace it is asking about and holds write, so
   // every other axis passes. Only the admin check can refuse this call.
-  const need = { tool, action: "update", namespace: "capsid", grant: "write", admin: true } as const;
+  const need = {
+    tool,
+    action: "update",
+    namespace: "capsid",
+    grant: "write",
+    admin: true,
+  } as const;
   const refusal = checkScope(agentWith({}), need);
   assert.ok(refusal, `${tool}.update admitted a minted agent`);
   assert.match(refusal, /admin only/, "the refusal does not say it is an admin tool");

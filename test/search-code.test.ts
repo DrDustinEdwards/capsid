@@ -97,7 +97,11 @@ test("429 and 401 abort too: a revoked token is not an empty repository", async 
     await withTree(
       { paths: ["a.ts"], contents: { "a.ts": "x" }, blobStatus: { "a.ts": status } },
       async () => {
-        await assert.rejects(() => searchCode(makeEnv(), "ns", "anything"), /aborted/i, `${status}`);
+        await assert.rejects(
+          () => searchCode(makeEnv(), "ns", "anything"),
+          /aborted/i,
+          `${status}`,
+        );
       },
     );
   }

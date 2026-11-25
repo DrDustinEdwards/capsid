@@ -12,13 +12,13 @@
     }
   ],
   "baseline": {
-    "measured_at": "49a255c",
+    "measured_at": "c8b37046",
     "knip (Worker)": {},
     "knip (dashboard)": {},
     "jscpd": {
-      "clones": 136,
-      "lines": 1159,
-      "percentage": 0.74,
+      "clones": 131,
+      "lines": 1107,
+      "percentage": 0.72,
       "unread": 5
     },
     "shared copies": {
@@ -42,12 +42,12 @@
     },
     "tests": {
       "files": 273,
-      "cases": 2346
+      "cases": 2188
     },
     "comments": {
-      "lines": 14931,
-      "code": 130540,
-      "percentage": 10.26
+      "lines": 14827,
+      "code": 129215,
+      "percentage": 10.29
     }
   }
 }

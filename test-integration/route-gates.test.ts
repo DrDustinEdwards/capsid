@@ -56,7 +56,9 @@ describe("the route tables are a statement about the Worker that serves them", (
     const portalRoutes = Object.keys(UNGATED_ROUTES).filter(
       (p) => p.startsWith("/portal") && !NOT_GATED.has(p),
     );
-    expect(portalRoutes.length, "no Portal routes found, so this proves nothing").toBeGreaterThan(0);
+    expect(portalRoutes.length, "no Portal routes found, so this proves nothing").toBeGreaterThan(
+      0,
+    );
     for (const path of portalRoutes) {
       for (const method of ["GET", "POST"]) {
         const bearer = await SELF.fetch(`${ORIGIN}${path}`, {

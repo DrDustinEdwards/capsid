@@ -7,25 +7,12 @@ import { PORTAL_CSRF_COOKIE } from "../src/ops-feed.ts";
 import { PORTAL_CSRF_HEADER } from "../src/portal-actions.ts";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { pushTick, type PushPayload } from "../src/push.ts";
-import {
-  handlePortalPushGet,
-  handlePortalPushPost,
-  PORTAL_PUSH_PATH,
-} from "../src/push-portal.ts";
+import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH } from "../src/push-portal.ts";
 import type { PortalPush } from "../src/ops-types/views.ts";
 import type { SiteProbe } from "../src/ops-types/sites.ts";
-import {
-  nextPulse,
-  SITE_PULSE_KEY,
-  type PulseSite,
-} from "../src/site-pulse.ts";
+import { nextPulse, SITE_PULSE_KEY, type PulseSite } from "../src/site-pulse.ts";
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
-import {
-  applyWrite,
-  selectRows,
-  type Row,
-  type TableSpec,
-} from "./fake-sql.ts";
+import { applyWrite, selectRows, type Row, type TableSpec } from "./fake-sql.ts";
 import { fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
 // Phone alerts (docs/design/design-merge-pipeline.md section 5, PR 7; DECIDE 5 and 6 of
@@ -39,19 +26,12 @@ const sqlTime = (ms: number) => iso(ms).replace("T", " ").slice(0, 19);
 
 // A P-256 key pair for VAPID and one for the device, made fresh for the file.
 async function keyPair(): Promise<{ jwk: JsonWebKey; raw: string }> {
-  const pair = (await crypto.subtle.generateKey(
-    { name: "ECDH", namedCurve: "P-256" },
-    true,
-    ["deriveBits"],
-  )) as CryptoKeyPair;
-  const jwk = (await crypto.subtle.exportKey(
-    "jwk",
-    pair.privateKey,
-  )) as JsonWebKey;
+  const pair = (await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, [
+    "deriveBits",
+  ])) as CryptoKeyPair;
+  const jwk = (await crypto.subtle.exportKey("jwk", pair.privateKey)) as JsonWebKey;
   const raw = base64url(
-    new Uint8Array(
-      (await crypto.subtle.exportKey("raw", pair.publicKey)) as ArrayBuffer,
-    ),
+    new Uint8Array((await crypto.subtle.exportKey("raw", pair.publicKey)) as ArrayBuffer),
   );
   return {
     jwk: { kty: "EC", crv: "P-256", d: jwk.d, x: jwk.x, y: jwk.y },
@@ -100,8 +80,7 @@ function db(seed: { jobs?: Row[]; deploys?: Row[]; devices?: Row[] } = {}) {
   };
   const d1 = {
     prepare,
-    batch: async (sts: Array<{ write: () => unknown }>) =>
-      sts.map((s) => s.write()),
+    batch: async (sts: Array<{ write: () => unknown }>) => sts.map((s) => s.write()),
   };
   return { d1, tables, writes };
 }
@@ -160,8 +139,7 @@ function world(
     DB: withPortalSessionEnds(d1).db,
     APP_KV: kv.kv,
     ADMIN_EMAIL: "admin@example.com",
-    VAPID_PRIVATE_KEY:
-      opts.key === false ? undefined : JSON.stringify(VAPID.jwk),
+    VAPID_PRIVATE_KEY: opts.key === false ? undefined : JSON.stringify(VAPID.jwk),
     COOKIE_ENCRYPTION_KEY: SECRET,
     ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
     ACCESS_SAAS_CLIENT_ID: "sample-client",
@@ -174,9 +152,7 @@ function world(
 function service(status = 201) {
   const got: PushPayload[] = [];
   const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
-    got.push(
-      JSON.parse(await decrypt(init!.body as Uint8Array)) as PushPayload,
-    );
+    got.push(JSON.parse(await decrypt(init!.body as Uint8Array)) as PushPayload);
     return new Response(null, { status });
   }) as typeof fetch;
   return { got, fetcher };
@@ -186,9 +162,7 @@ async function decrypt(body: Uint8Array): Promise<string> {
   const salt = body.slice(0, 16);
   const asPublic = body.slice(21, 21 + body[20]!);
   const ecdh = { name: "ECDH", namedCurve: "P-256" } as const;
-  const priv = await crypto.subtle.importKey("jwk", DEVICE.jwk, ecdh, false, [
-    "deriveBits",
-  ]);
+  const priv = await crypto.subtle.importKey("jwk", DEVICE.jwk, ecdh, false, ["deriveBits"]);
   const pub = await crypto.subtle.importKey("raw", asPublic, ecdh, false, []);
   const shared = new Uint8Array(
     await crypto.subtle.deriveBits(
@@ -200,18 +174,11 @@ async function decrypt(body: Uint8Array): Promise<string> {
       256,
     ),
   );
-  const hk = async (
-    s: Uint8Array,
-    ikm: Uint8Array,
-    info: Uint8Array,
-    n: number,
-  ) =>
+  const hk = async (s: Uint8Array, ikm: Uint8Array, info: Uint8Array, n: number) =>
     new Uint8Array(
       await crypto.subtle.deriveBits(
         { name: "HKDF", hash: "SHA-256", salt: s, info },
-        await crypto.subtle.importKey("raw", ikm, "HKDF", false, [
-          "deriveBits",
-        ]),
+        await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]),
         n * 8,
       ),
     );
@@ -219,34 +186,14 @@ async function decrypt(body: Uint8Array): Promise<string> {
   const ikm = await hk(
     fromBase64url(AUTH),
     shared,
-    new Uint8Array([
-      ...enc.encode("WebPush: info\0"),
-      ...fromBase64url(DEVICE.raw),
-      ...asPublic,
-    ]),
+    new Uint8Array([...enc.encode("WebPush: info\0"), ...fromBase64url(DEVICE.raw), ...asPublic]),
     32,
   );
-  const cek = await hk(
-    salt,
-    ikm,
-    enc.encode("Content-Encoding: aes128gcm\0"),
-    16,
-  );
-  const nonce = await hk(
-    salt,
-    ikm,
-    enc.encode("Content-Encoding: nonce\0"),
-    12,
-  );
-  const key = await crypto.subtle.importKey("raw", cek, "AES-GCM", false, [
-    "decrypt",
-  ]);
+  const cek = await hk(salt, ikm, enc.encode("Content-Encoding: aes128gcm\0"), 16);
+  const nonce = await hk(salt, ikm, enc.encode("Content-Encoding: nonce\0"), 12);
+  const key = await crypto.subtle.importKey("raw", cek, "AES-GCM", false, ["decrypt"]);
   const padded = new Uint8Array(
-    await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: nonce },
-      key,
-      body.slice(21 + body[20]!),
-    ),
+    await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, key, body.slice(21 + body[20]!)),
   );
   return new TextDecoder().decode(padded.slice(0, padded.lastIndexOf(2)));
 }
@@ -256,27 +203,18 @@ async function decrypt(body: Uint8Array): Promise<string> {
 test("a typed pull request alerts only after 2 hours waiting, counted from the first tick that saw it", async () => {
   const w = world({ awaiting: [typed(7)] });
   const s = service();
-  assert.equal(
-    (await pushTick(w.env, NOW, s.fetcher)).sent.length,
-    0,
-    "alerted at once",
-  );
+  assert.equal((await pushTick(w.env, NOW, s.fetcher)).sent.length, 0, "alerted at once");
   // The first sighting is kept, because the awaiting-seat set is rewritten every tick.
   const seen = JSON.parse(w.kv.store.get("push:state")!) as {
     typed_seen: Record<string, string>;
   };
   assert.equal(seen.typed_seen["owner/foxhound#7"], NOW.toISOString());
   assert.equal(
-    (await pushTick(w.env, new Date(NOW.getTime() + 2 * H), s.fetcher)).sent
-      .length,
+    (await pushTick(w.env, new Date(NOW.getTime() + 2 * H), s.fetcher)).sent.length,
     0,
     "alerted at exactly 2 hours",
   );
-  const later = await pushTick(
-    w.env,
-    new Date(NOW.getTime() + 2 * H + 60_000),
-    s.fetcher,
-  );
+  const later = await pushTick(w.env, new Date(NOW.getTime() + 2 * H + 60_000), s.fetcher);
   assert.deepEqual(later.sent, ["typed:owner/foxhound#7"]);
   assert.equal(s.got.length, 1);
   assert.equal(s.got[0]!.title, "Typed approval waiting");
@@ -307,18 +245,11 @@ test("a visual pull request alerts at once, once per head, and names no title", 
   });
   const w = world({ awaiting: [visual("aaa")] });
   const s = service();
-  assert.deepEqual((await pushTick(w.env, NOW, s.fetcher)).sent, [
-    "visual:owner/foxhound#9:aaa",
-  ]);
+  assert.deepEqual((await pushTick(w.env, NOW, s.fetcher)).sent, ["visual:owner/foxhound#9:aaa"]);
   assert.equal(s.got[0]!.title, "Visual change to look at");
-  assert.doesNotMatch(
-    s.got[0]!.body,
-    /Secret redesign/,
-    "an alert carries no title",
-  );
+  assert.doesNotMatch(s.got[0]!.body, /Secret redesign/, "an alert carries no title");
   assert.equal(
-    (await pushTick(w.env, new Date(NOW.getTime() + 60_000), s.fetcher)).sent
-      .length,
+    (await pushTick(w.env, new Date(NOW.getTime() + 60_000), s.fetcher)).sent.length,
     0,
     "sent twice for one head",
   );
@@ -368,14 +299,8 @@ test("a rollback and a failed rollback alert; a verified deploy and an old rollb
   const w = world({ deploys });
   const s = service();
   const report = await pushTick(w.env, NOW, s.fetcher);
-  assert.deepEqual(report.sent.sort(), [
-    "rollback:owner/capsid:1",
-    "rollback:owner/carrel:2",
-  ]);
-  assert.deepEqual(s.got.map((g) => g.title).sort(), [
-    "Deploy rolled back",
-    "Rollback failed",
-  ]);
+  assert.deepEqual(report.sent.sort(), ["rollback:owner/capsid:1", "rollback:owner/carrel:2"]);
+  assert.deepEqual(s.got.map((g) => g.title).sort(), ["Deploy rolled back", "Rollback failed"]);
 });
 
 test("PLANT: a namespace the safety shutoff paused alerts once, naming the namespace and the reason", async () => {
@@ -384,8 +309,7 @@ test("PLANT: a namespace the safety shutoff paused alerts once, naming the names
     paused: {
       capsid: {
         since,
-        reason:
-          "2 of the pull requests auto-merge merged were rolled back or reverted in 7 days",
+        reason: "2 of the pull requests auto-merge merged were rolled back or reverted in 7 days",
       },
     },
   });
@@ -393,34 +317,20 @@ test("PLANT: a namespace the safety shutoff paused alerts once, naming the names
   const report = await pushTick(w.env, NOW, s.fetcher);
   assert.deepEqual(report.sent, [`paused:capsid:${since}`]);
   assert.equal(s.got[0]!.title, "Auto-merge paused");
-  assert.equal(
-    s.got[0]!.url,
-    "https://portal.dustinedwards.info/prs#auto-merge",
-  );
+  assert.equal(s.got[0]!.url, "https://portal.dustinedwards.info/prs#auto-merge");
   assert.match(
     s.got[0]!.body,
     /^capsid: 2 of the pull requests auto-merge merged were rolled back or reverted in 7 days\./,
   );
   assert.equal(
-    (
-      await pushTick(
-        w.env,
-        new Date(NOW.getTime() + 5 * 60_000),
-        service().fetcher,
-      )
-    ).sent.length,
+    (await pushTick(w.env, new Date(NOW.getTime() + 5 * 60_000), service().fetcher)).sent.length,
     0,
     "the same pause alerted twice",
   );
 });
 
 test("a job at the correction cap alerts; a question alerts only past 4 hours on priority 70 or more", async () => {
-  const job = (
-    id: string,
-    priority: number,
-    summary: string,
-    ageMs: number,
-  ): Row => ({
+  const job = (id: string, priority: number, summary: string, ageMs: number): Row => ({
     id,
     namespace: "capsid",
     title: "secret title",
@@ -439,16 +349,12 @@ test("a job at the correction cap alerts; a question alerts only past 4 hours on
   const w = world({ jobs });
   const s = service();
   const report = await pushTick(w.env, NOW, s.fetcher);
-  assert.deepEqual(
-    report.sent.map((k) => k.split(":")[0] + ":" + k.split(":")[1]).sort(),
-    ["cap:job_cap", "question:job_q_old_high"],
-  );
+  assert.deepEqual(report.sent.map((k) => k.split(":")[0] + ":" + k.split(":")[1]).sort(), [
+    "cap:job_cap",
+    "question:job_q_old_high",
+  ]);
   for (const g of s.got)
-    assert.doesNotMatch(
-      g.body,
-      /secret title/,
-      "an alert carried a job's title",
-    );
+    assert.doesNotMatch(g.body, /secret title/, "an alert carried a job's title");
 });
 
 // Each sent once, never a button
@@ -457,10 +363,7 @@ test("a site alerts when down on two probes in a row and when back, once each, a
   const w = world();
   const s = service();
   const at = (min: number) => new Date(NOW.getTime() + min * 60_000);
-  const probe = (
-    state: SiteProbe["state"],
-    error: string | null = null,
-  ): SiteProbe => ({
+  const probe = (state: SiteProbe["state"], error: string | null = null): SiteProbe => ({
     namespace: "sample",
     name: "Sample",
     origin: "https://sample.example.com",
@@ -488,9 +391,7 @@ test("a site alerts when down on two probes in a row and when back, once each, a
     `site-down:sample:${at(5).toISOString()}`,
   ]);
   assert.deepEqual(await step(10, probe("down", "root answered 522")), []);
-  assert.deepEqual(await step(15, probe("ok")), [
-    `site-up:sample:${at(5).toISOString()}`,
-  ]);
+  assert.deepEqual(await step(15, probe("ok")), [`site-up:sample:${at(5).toISOString()}`]);
   assert.deepEqual(await step(20, probe("degraded", "backup: 38h old")), [
     "site-degraded:sample:backup:2026-10-11",
   ]);
@@ -525,11 +426,7 @@ test("an item is sent once, and the next tick sends nothing new", async () => {
   });
   const s = service();
   assert.equal((await pushTick(w.env, NOW, s.fetcher)).sent.length, 1);
-  const again = await pushTick(
-    w.env,
-    new Date(NOW.getTime() + 5 * 60_000),
-    s.fetcher,
-  );
+  const again = await pushTick(w.env, new Date(NOW.getTime() + 5 * 60_000), s.fetcher);
   assert.equal(again.sent.length, 0);
   assert.equal(again.ran, false);
   assert.equal(s.got.length, 1);
@@ -584,11 +481,7 @@ test("a 410 marks the device gone, and the item is kept for a later device", asy
   const state = JSON.parse(w.kv.store.get("push:state") ?? '{"sent":{}}') as {
     sent: Record<string, string>;
   };
-  assert.deepEqual(
-    state.sent,
-    {},
-    "an alert no device received was marked sent",
-  );
+  assert.deepEqual(state.sent, {}, "an alert no device received was marked sent");
 });
 
 test("no key, or no device, sends nothing and is not a run", async () => {
@@ -639,8 +532,7 @@ test("with no device on, the urgent alert goes by email once, and the next tick 
   const mails: Array<{ to: string; subject: string; text: string }> = [];
   Object.assign(w.env as object, {
     EMAIL: {
-      send: async (m: { to: string; subject: string; text: string }) =>
-        void mails.push(m),
+      send: async (m: { to: string; subject: string; text: string }) => void mails.push(m),
     },
     ALERT_EMAIL: "admin@example.com",
     ALERT_FROM: "capsid@example.com",
@@ -665,9 +557,9 @@ async function request(
   body?: unknown,
   opts: { site?: string } = {},
 ): Promise<Request> {
-  const session = (
-    await portalSessionCookie({ email: "admin@example.com" }, SECRET, NOW)
-  ).split(";")[0];
+  const session = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(
+    ";",
+  )[0];
   const headers: Record<string, string> = {
     Cookie: `${session}; __Secure-${PORTAL_CSRF_COOKIE}=${CSRF}`,
     [PORTAL_CSRF_HEADER]: CSRF,
@@ -694,11 +586,7 @@ test("GET lists the public key and the devices, never an endpoint", async () => 
   assert.equal(body.devices.length, 1);
   assert.equal(body.public_key?.length, 87);
   const unkeyed = (await (
-    await handlePortalPushGet(
-      await request("GET"),
-      world({ key: false }).env,
-      NOW,
-    )
+    await handlePortalPushGet(await request("GET"), world({ key: false }).env, NOW)
   ).json()) as PortalPush;
   assert.equal(unkeyed.public_key, null);
   assert.match(unkeyed.problem!, /not set/);
@@ -718,26 +606,12 @@ test("POST on stores a subscription once, off moves it once, and each is audited
     w.env,
     NOW,
   );
-  assert.equal(
-    w.tables.push_subscriptions!.rows.length,
-    1,
-    "the same browser was stored twice",
-  );
-  const off = await handlePortalPushPost(
-    await request("POST", { op: "off", id: 1 }),
-    w.env,
-    NOW,
-  );
+  assert.equal(w.tables.push_subscriptions!.rows.length, 1, "the same browser was stored twice");
+  const off = await handlePortalPushPost(await request("POST", { op: "off", id: 1 }), w.env, NOW);
   assert.equal(off.status, 200);
   assert.equal(w.tables.push_subscriptions!.rows[0]!.status, "off");
   assert.equal(
-    (
-      await handlePortalPushPost(
-        await request("POST", { op: "off", id: 1 }),
-        w.env,
-        NOW,
-      )
-    ).status,
+    (await handlePortalPushPost(await request("POST", { op: "off", id: 1 }), w.env, NOW)).status,
     409,
   );
   assert.deepEqual(
@@ -765,11 +639,7 @@ test("POST refuses an endpoint off the push services, a cross-site request and a
   assert.equal(
     (
       await handlePortalPushPost(
-        await request(
-          "POST",
-          { op: "on", subscription },
-          { site: "cross-site" },
-        ),
+        await request("POST", { op: "on", subscription }, { site: "cross-site" }),
         w.env,
         NOW,
       )
@@ -777,13 +647,7 @@ test("POST refuses an endpoint off the push services, a cross-site request and a
     403,
   );
   assert.equal(
-    (
-      await handlePortalPushPost(
-        await request("POST", { op: "approve" }),
-        w.env,
-        NOW,
-      )
-    ).status,
+    (await handlePortalPushPost(await request("POST", { op: "approve" }), w.env, NOW)).status,
     400,
   );
   assert.equal(w.tables.push_subscriptions!.rows.length, 0);
@@ -799,8 +663,6 @@ test("POST test sends one alert to each device and reports each answer", async (
     s.fetcher,
   );
   assert.equal(res.status, 200);
-  assert.deepEqual(((await res.json()) as PortalPush).results, [
-    { id: 1, status: 201 },
-  ]);
+  assert.deepEqual(((await res.json()) as PortalPush).results, [{ id: 1, status: 201 }]);
   assert.equal(s.got[0]!.title, "Capsid test alert");
 });

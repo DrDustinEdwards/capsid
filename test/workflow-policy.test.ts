@@ -76,8 +76,7 @@ function stepsOf(job: Job): string[][] {
   return steps;
 }
 
-const stepName = (step: string[]): string =>
-  /^ {6}- name:\s*(.+)$/.exec(step[0])?.[1].trim() ?? "";
+const stepName = (step: string[]): string => /^ {6}- name:\s*(.+)$/.exec(step[0])?.[1].trim() ?? "";
 
 // Supply chain: pins and timeouts.
 //
@@ -106,10 +105,7 @@ test("every third-party action is pinned by commit sha, never by tag", () => {
       }
     });
   }
-  assert.ok(
-    seen > 0,
-    "no action references found; the scan is reading the wrong directory",
-  );
+  assert.ok(seen > 0, "no action references found; the scan is reading the wrong directory");
   assert.deepEqual(
     offenders,
     [],
@@ -121,16 +117,12 @@ test("every third-party action is pinned by commit sha, never by tag", () => {
 // timeout-minutes: GitHub refuses the key there, and the called workflow's jobs declare
 // their own (devkit's ai-author.yml and no-bloat.yml do).
 const callsWorkflow = (job: Job): boolean =>
-  job.lines.some((l) =>
-    /^ {4}uses:\s*\S+\/\.github\/workflows\/\S+\.ya?ml@/.test(l),
-  );
+  job.lines.some((l) => /^ {4}uses:\s*\S+\/\.github\/workflows\/\S+\.ya?ml@/.test(l));
 
 test("every job declares timeout-minutes", () => {
   const offenders = jobs()
     .filter((job) => !callsWorkflow(job))
-    .filter(
-      (job) => !job.lines.some((l) => /^\s{4,}timeout-minutes:\s*\d+/.test(l)),
-    )
+    .filter((job) => !job.lines.some((l) => /^\s{4,}timeout-minutes:\s*\d+/.test(l)))
     .map((job) => `${job.workflow}:${job.id}`);
   assert.deepEqual(
     offenders,
@@ -151,31 +143,20 @@ test("the checks job runs npm run lint and npm run lint:repo, before the Tests s
     name: stepName(s),
     text: s.join("\n"),
   }));
-  const lint = steps.findIndex((s) =>
-    /^\s+run:\s*npm run lint:repo\s*$/m.test(s.text),
-  );
+  const lint = steps.findIndex((s) => /^\s+run:\s*npm run lint:repo\s*$/m.test(s.text));
   const tests = steps.findIndex((s) => s.name === "Tests");
   assert.ok(
     lint >= 0,
     "no step in ci.yml's checks job runs `npm run lint:repo`; the lints in test/lint/ run nowhere",
   );
-  const shared = steps.findIndex((s) =>
-    /^\s+run:\s*npm run lint\s*$/m.test(s.text),
-  );
+  const shared = steps.findIndex((s) => /^\s+run:\s*npm run lint\s*$/m.test(s.text));
   assert.ok(
     shared >= 0 && shared < tests,
     "no Lint step before Tests runs the shared `npm run lint`",
   );
   assert.ok(tests >= 0, "no Tests step parsed out of ci.yml's checks job");
-  assert.ok(
-    lint < tests,
-    "the lint step runs after Tests, so its failure no longer stops a merge",
-  );
-  assert.doesNotMatch(
-    steps[lint].text,
-    /continue-on-error/,
-    "the lint step must fail the job",
-  );
+  assert.ok(lint < tests, "the lint step runs after Tests, so its failure no longer stops a merge");
+  assert.doesNotMatch(steps[lint].text, /continue-on-error/, "the lint step must fail the job");
 });
 
 // The restore rehearsal (Grok audit 2026-10, P1 and U4). It mints bucket keys and reads
@@ -192,15 +173,8 @@ function rehearsalStep(name: string): string {
 test("PLANT: the rehearsal masks each minted AWS value before it exports them", () => {
   const pull = rehearsalStep("Mint a credential and pull the newest dump");
   const exportAt = pull.search(/^\s+export AWS_ACCESS_KEY_ID\b/m);
-  assert.ok(
-    exportAt > -1,
-    "the pull step no longer exports the minted keys; this test is stale",
-  );
-  for (const name of [
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
-    "AWS_SESSION_TOKEN",
-  ]) {
+  assert.ok(exportAt > -1, "the pull step no longer exports the minted keys; this test is stale");
+  for (const name of ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"]) {
     const maskAt = pull.indexOf(`echo "::add-mask::\${${name}}"`);
     assert.ok(maskAt > -1, `${name} is never masked`);
     assert.ok(maskAt < exportAt, `${name} is masked only after it is exported`);
@@ -208,26 +182,16 @@ test("PLANT: the rehearsal masks each minted AWS value before it exports them", 
 });
 
 test("PLANT: the rehearsal's run prefix reaches a run block only through env, after a character check", () => {
-  const text =
-    workflowFiles().find((f) => f.name === "restore-rehearsal.yml")?.text ?? "";
-  const runLines = text
-    .split("\n")
-    .filter((l) => /^\s+run:/.test(l) || /^\s{10,}\S/.test(l));
+  const text = workflowFiles().find((f) => f.name === "restore-rehearsal.yml")?.text ?? "";
+  const runLines = text.split("\n").filter((l) => /^\s+run:/.test(l) || /^\s{10,}\S/.test(l));
   const interpolated = runLines.filter(
     (l) => /\$\{\{\s*steps\./.test(l) && !/^\s+[A-Z_]+:\s*\$\{\{/.test(l),
   );
-  assert.deepEqual(
-    interpolated,
-    [],
-    "a step output is interpolated into a shell line",
-  );
+  assert.deepEqual(interpolated, [], "a step output is interpolated into a shell line");
   const pull = rehearsalStep("Mint a credential and pull the newest dump");
   const checkAt = pull.indexOf("=~ ^[A-Za-z0-9_./-]+$");
   const outputAt = pull.indexOf("run_prefix=");
-  assert.ok(
-    checkAt > -1,
-    "the run prefix is not checked against a path character set",
-  );
+  assert.ok(checkAt > -1, "the run prefix is not checked against a path character set");
   assert.ok(
     checkAt < outputAt,
     "the run prefix is written to the step output before it is checked",

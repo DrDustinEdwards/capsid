@@ -3,11 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail } from "../src/agents";
 import { capsidStatus } from "../src/status";
-import {
-  OVERNIGHT_DECISION_KEY,
-  OVERNIGHT_MODE_KEY,
-  setOvernight,
-} from "../src/overnight";
+import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY, setOvernight } from "../src/overnight";
 import { readOvernightDigest } from "../src/overnight-digest";
 import { readOvernightPlan } from "../src/overnight-plan";
 import { buildServer } from "../src/server";
@@ -24,9 +20,7 @@ const NOW = new Date("2026-10-05T12:00:00.000Z");
 let seq = 0;
 function fresh(prefix: string): { ns: string; id: (n: number) => string } {
   seq += 1;
-  const tag = `${Date.now().toString(16)}${seq.toString(16)}`
-    .slice(-10)
-    .padStart(10, "0");
+  const tag = `${Date.now().toString(16)}${seq.toString(16)}`.slice(-10).padStart(10, "0");
   return {
     ns: `${prefix}-${tag}`,
     id: (n) => `job_${tag}${String(n).padStart(2, "0")}`,
@@ -34,9 +28,7 @@ function fresh(prefix: string): { ns: string; id: (n: number) => string } {
 }
 
 async function mapNamespace(ns: string, repo: string): Promise<void> {
-  await env.DB.prepare(
-    "INSERT INTO namespaces (namespace, repos) VALUES (?1, ?2)",
-  )
+  await env.DB.prepare("INSERT INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind(ns, JSON.stringify([{ repo, label: "primary" }]))
     .run();
 }
@@ -49,13 +41,7 @@ async function queue(
   await env.DB.prepare(
     `INSERT INTO jobs (id, namespace, title, body, status, priority, gate_required, posted_by) VALUES (?1, ?2, ?3, 'body', 'queued', ?4, ?5, 'github:sample')`,
   )
-    .bind(
-      id,
-      ns,
-      over.title ?? `Job ${id}`,
-      over.priority ?? 50,
-      over.gate ?? 0,
-    )
+    .bind(id, ns, over.title ?? `Job ${id}`, over.priority ?? 50, over.gate ?? 0)
     .run();
 }
 
@@ -88,9 +74,7 @@ describe("the overnight plan on a real D1", () => {
     await mapNamespace(ns, "example/parked");
     await queue(id(1), ns, { priority: 10 });
     await queue(id(2), ns, { priority: 90 });
-    await env.DB.prepare("UPDATE jobs SET status = 'parked' WHERE id = ?1")
-      .bind(id(2))
-      .run();
+    await env.DB.prepare("UPDATE jobs SET status = 'parked' WHERE id = ?1").bind(id(2)).run();
     const plan = await readOvernightPlan(env as never, { namespace: ns }, NOW);
     expect(plan.lanes[0].jobs.map((j) => j.id)).toEqual([id(1)]);
     expect(plan.skipped.map((s) => s.id)).not.toContain(id(2));
@@ -153,22 +137,12 @@ describe("the morning digest on a real D1", () => {
     const claim = (n: number, usage: object | null, action = "complete") =>
       env.DB.prepare(
         `INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, ?2, 'agent:sample-driver', ?3, ?4, ?5)`,
-      ).bind(
-        id(n),
-        action,
-        ns,
-        JSON.stringify(usage ? { claim: { usage } } : { claim: {} }),
-        at,
-      );
+      ).bind(id(n), action, ns, JSON.stringify(usage ? { claim: { usage } } : { claim: {} }), at);
     await env.DB.batch([
       job(1, "done"),
       job(2, "done"),
       job(3, "done"),
-      job(
-        4,
-        "blocked",
-        "Opened https://github.com/example/sample/pull/41.\n\nRun this: merge it",
-      ),
+      job(4, "blocked", "Opened https://github.com/example/sample/pull/41.\n\nRun this: merge it"),
       outcome(1),
       outcome(2),
       outcome(3),
@@ -183,38 +157,22 @@ describe("the morning digest on a real D1", () => {
         `INSERT INTO job_outcome_prs (job_id, pr_url, merged) VALUES (?1, 'https://github.com/example/sample/pull/39', 1)`,
       ).bind(id(1)),
     ]);
-    const out = await readOvernightDigest(
-      env as never,
-      { namespace: ns, since },
-      NOW,
-    );
+    const out = await readOvernightDigest(env as never, { namespace: ns, since }, NOW);
     expect(out.truncated).toEqual([]);
     const by = Object.fromEntries(out.finished.map((j) => [j.id, j]));
-    expect([by[id(2)].usage.cost_usd, by[id(2)].usage.active_seconds]).toEqual([
-      1.25, 90,
-    ]);
+    expect([by[id(2)].usage.cost_usd, by[id(2)].usage.active_seconds]).toEqual([1.25, 90]);
     expect(by[id(1)].usage.cost_usd).toBeNull();
     expect(by[id(3)].usage.cost_usd).toBeNull();
-    expect(out.blocked.map((b) => [b.id, b.usage.cost_usd])).toEqual([
-      [id(4), 0.5],
-    ]);
-    expect(out.blocked[0].pull_requests).toEqual([
-      "https://github.com/example/sample/pull/41",
-    ]);
-    expect(
-      out.pull_requests_ready.map((p) => [
-        p.url.split("/").pop(),
-        p.state,
-        p.source,
-      ]),
-    ).toEqual([
-      ["40", "open", "outcome"],
-      ["41", "unchecked", "blocked summary"],
-    ]);
+    expect(out.blocked.map((b) => [b.id, b.usage.cost_usd])).toEqual([[id(4), 0.5]]);
+    expect(out.blocked[0].pull_requests).toEqual(["https://github.com/example/sample/pull/41"]);
+    expect(out.pull_requests_ready.map((p) => [p.url.split("/").pop(), p.state, p.source])).toEqual(
+      [
+        ["40", "open", "outcome"],
+        ["41", "unchecked", "blocked summary"],
+      ],
+    );
     expect(out.pull_requests_merged).toBe(1);
-    expect([out.totals.usage.jobs, out.totals.usage.cost_usd]).toEqual([
-      2, 1.75,
-    ]);
+    expect([out.totals.usage.jobs, out.totals.usage.cost_usd]).toEqual([2, 1.75]);
     expect(out.totals.jobs_without_usage).toBe(2);
   });
 });
@@ -227,15 +185,10 @@ describe("the overnight switch on a real KV", () => {
       mode: "off",
       decision: null,
     });
-    const set = await setOvernight(
-      env as never,
-      "access:admin@example.com",
-      NOW,
-      {
-        value: "subscription",
-        reason: "first supervised night",
-      },
-    );
+    const set = await setOvernight(env as never, "access:admin@example.com", NOW, {
+      value: "subscription",
+      reason: "first supervised night",
+    });
     expect(set.mode).toBe("subscription");
     const status = await capsidStatus(env as never, "capsid");
     expect(status.overnight.mode).toBe("subscription");
