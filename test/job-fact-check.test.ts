@@ -174,21 +174,16 @@ test("an unmapped repo, an ambiguous number and an unknown package are warnings"
   assert.match(unknown.warnings[0], /no package configured in the Portal is named Widget/);
 });
 
-test("published without npm and naming no known package is not read at all", async () => {
+test("a body with no claims, or a published claim naming no known package, reads nothing", async () => {
   const calls: string[] = [];
-  const out = await checkBodyFacts("sample", "Widget 9.0.0 is published.", readers({}, calls));
-  assert.deepEqual(out, { refusal: null, warnings: [] });
-  assert.deepEqual(calls, []);
-});
-
-test("a body with no claims reads nothing", async () => {
-  const calls: string[] = [];
-  const out = await checkBodyFacts(
+  const unnamed = await checkBodyFacts("sample", "Widget 9.0.0 is published.", readers({}, calls));
+  assert.deepEqual(unnamed, { refusal: null, warnings: [] });
+  const none = await checkBodyFacts(
     "sample",
     "GOAL: x\nDO: merge #12 and publish 0.3.0",
     readers({ repos: async () => assert.fail("read") }, calls),
   );
-  assert.deepEqual(out, { refusal: null, warnings: [] });
+  assert.deepEqual(none, { refusal: null, warnings: [] });
   assert.deepEqual(calls, []);
 });
 

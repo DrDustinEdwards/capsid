@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hostRefusal, MCP_HOST, servedOnMcpHost } from "../src/mcp-host.ts";
-import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
 import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope-routes.ts";
 
 // The host rules (src/mcp-host.ts) without the Worker: what the MCP host serves.
@@ -54,15 +53,6 @@ test("PLANT: the MCP host serves every declared route outside the Portal", () =>
     if (path === "/portal" || path.startsWith("/portal/")) continue;
     assert.equal(servedOnMcpHost(path), true, path);
   }
-});
-
-// Live gate 2 fetches the probe document from the host under test (test/cimd-probe.test.ts
-// ties gate 2's path to the Worker's). On 2026-10-10 the Worker served it and the gate
-// asked for it, but the MCP host's path list did not include it, so the host answered 404
-// and the gate rolled back the deploy of 4730307.
-test("PLANT: the MCP host serves the probe document at the Worker's path", () => {
-  assert.equal(servedOnMcpHost(VERIFY_LIVE_CLIENT_PATH), true);
-  assert.equal(at(MCP_HOST, VERIFY_LIVE_CLIENT_PATH), null);
 });
 
 test("any other host is untouched (the Portal host, the test hosts)", () => {

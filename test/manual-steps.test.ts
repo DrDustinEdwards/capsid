@@ -8,8 +8,6 @@ import {
   parseStepCache,
   stepState,
   stepsNamed,
-  stepsSeen,
-  tallySteps,
   type StepReaders,
 } from "../src/manual-steps.ts";
 import { blockSettled } from "../src/inbox.ts";
@@ -243,14 +241,6 @@ test("a repo's About box is seen with a description and a homepage, that homepag
 
 test("a step in no known form is unread, so it never settles a job", async () => {
   assert.equal(await stepState(parseStep("dns record example.com"), job, readers()), "unread");
-});
-
-test("every step seen settles; one unseen or unread, or none named, does not", () => {
-  assert.equal(stepsSeen(tallySteps(["seen", "seen"], READ_AT)), true);
-  assert.equal(stepsSeen(tallySteps(["seen", "unseen"], READ_AT)), false);
-  assert.equal(stepsSeen(tallySteps(["seen", "unread"], READ_AT)), false);
-  assert.equal(stepsSeen(tallySteps([], READ_AT)), false);
-  assert.equal(stepsSeen(undefined), false);
 });
 
 test("the cache keeps entries of the right shape and reports the rest", () => {

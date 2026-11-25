@@ -16,9 +16,9 @@
     "knip (Worker)": {},
     "knip (dashboard)": {},
     "jscpd": {
-      "clones": 136,
-      "lines": 1159,
-      "percentage": 0.74,
+      "clones": 129,
+      "lines": 1084,
+      "percentage": 0.71,
       "unread": 5
     },
     "shared copies": {
@@ -42,7 +42,7 @@
     },
     "tests": {
       "files": 273,
-      "cases": 2345
+      "cases": 2172
     },
     "comments": {
       "lines": 14931,

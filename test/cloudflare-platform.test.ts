@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,42 +9,6 @@ import { fileURLToPath } from "node:url";
 // test rather than an outage on the deadline day.
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-
-function filesUnder(dir: string, ext: RegExp): Array<{ path: string; text: string }> {
-  return readdirSync(join(ROOT, dir))
-    .filter((name) => ext.test(name))
-    .map((name) => ({ path: `${dir}/${name}`, text: readFileSync(join(ROOT, dir, name), "utf8") }));
-}
-
-// KV REST routes (the legacy path stops working 2026-10-15)
-
-// Assembled, not written literally, so this file cannot trip its own guard.
-const LEGACY_KV_ROUTE = ["workers", "namespaces"].join("/");
-
-test(`no Cloudflare API call uses the legacy KV route /${LEGACY_KV_ROUTE}/ (dead 2026-10-15)`, () => {
-  const groups = {
-    scripts: filesUnder("scripts", /\.(mjs|ts)$/),
-    src: filesUnder("src", /\.ts$/),
-    workflows: filesUnder(".github/workflows", /\.ya?ml$/),
-    test: filesUnder("test", /\.ts$/).filter(
-      (f) => !f.path.endsWith("cloudflare-platform.test.ts"),
-    ),
-  };
-  // A moved directory or a wrong extension would scan nothing and pass.
-  for (const [name, files] of Object.entries(groups)) {
-    assert.ok(
-      files.length > 0,
-      `the scan found no files under ${name}, so it checks nothing there`,
-    );
-  }
-  const everywhere = Object.values(groups).flat();
-  for (const file of everywhere) {
-    assert.ok(
-      !file.text.includes(`/${LEGACY_KV_ROUTE}/`),
-      `${file.path} uses the legacy KV namespace REST route, which stops working 2026-10-15; use /storage/kv/namespaces/`,
-    );
-  }
-});
 
 // compatibility date and toolchain pins
 

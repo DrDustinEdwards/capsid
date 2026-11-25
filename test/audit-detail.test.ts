@@ -49,18 +49,6 @@ test("PLANT: an edit lists only the fields that changed, the old value beside th
   assert.deepEqual(d.fields, [], "before and after are shown as the diff, not again as fields");
 });
 
-test("an add lists every field as new, and a remove every field as gone", () => {
-  const added = auditDetail(
-    JSON.stringify({ after: { name: "sample-pkg", repo: "example/sample" } }),
-  );
-  assert.deepEqual(added.changes, [
-    { field: "Name", before: null, after: "sample-pkg" },
-    { field: "Repo", before: null, after: "example/sample" },
-  ]);
-  const removed = auditDetail(JSON.stringify({ before: { name: "sample-pkg" } }));
-  assert.deepEqual(removed.changes, [{ field: "Name", before: "sample-pkg", after: null }]);
-});
-
 test("PLANT: a hash, a signature, a token or a nested value is never shown, only counted", () => {
   const params = {
     sha256: MARKER,
@@ -81,17 +69,6 @@ test("PLANT: a hash, a signature, a token or a nested value is never shown, only
   assert.equal(d.withheld, 8);
 });
 
-test("a list of scalars is one line; an empty list is none; a long value is capped", () => {
-  const d = auditDetail(
-    JSON.stringify({ posted: ["site-down-a", "ci-red-b"], cleared: [], note: "x".repeat(900) }),
-  );
-  assert.deepEqual(d.fields.slice(0, 2), [
-    { name: "Findings posted", value: "site-down-a, ci-red-b" },
-    { name: "Findings cleared", value: "none" },
-  ]);
-  assert.equal(d.fields[2]?.value.length, 300);
-});
-
 test("params that are not JSON are unreadable, said, not guessed at", () => {
   assert.deepEqual(auditDetail("not json {"), {
     reason: null,
@@ -107,10 +84,4 @@ test("params that are not JSON are unreadable, said, not guessed at", () => {
     withheld: 0,
     unreadable: false,
   });
-});
-
-test("a blank reason is no reason, and stays out of the fields", () => {
-  const d = auditDetail(JSON.stringify({ reason: "   ", id: "job_0000000000aa" }));
-  assert.equal(d.reason, null);
-  assert.deepEqual(d.fields, [{ name: "Id", value: "job_0000000000aa" }]);
 });

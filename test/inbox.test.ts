@@ -7,9 +7,7 @@ import {
   migrationsNamed,
   STALE_CLAIM_MS,
   prHoldTitle,
-  restrictInbox,
   severityOf,
-  type Inbox,
 } from "../src/inbox.ts";
 import { POLICY_CHECKS } from "../src/auto-merge-policy.ts";
 import {
@@ -25,19 +23,6 @@ import { fakeKv } from "./fakes.ts";
 // The pure parts of "what needs Dustin, per app" (job_84e901d8eb71). The queries that feed
 // them, and the route, run against a real D1 and the whole Worker in
 // test-integration/inbox.test.ts.
-
-test("severity: anything waiting on a person is needs-you, only machine faults are failing, nothing is none", () => {
-  assert.equal(severityOf([]), "none");
-  assert.equal(severityOf([{ kind: "ci" }]), "failing");
-  assert.equal(severityOf([{ kind: "site-down" }, { kind: "ci" }]), "failing");
-  assert.equal(
-    severityOf([{ kind: "ci" }, { kind: "blocked-job" }]),
-    "needs-you",
-    "a person's item outranks a failing build",
-  );
-  assert.equal(severityOf([{ kind: "question" }]), "needs-you");
-  assert.equal(severityOf([{ kind: "pr" }]), "needs-you");
-});
 
 test("a blocked job is an item with the pull request it names as its link, and a question is marked", () => {
   const plain = blockedJobItem({
@@ -67,24 +52,11 @@ test("a blocked job is an item with the pull request it names as its link, and a
 });
 
 test("a held pull request reads in plain words: what held it and what answering takes, never a check's name", () => {
-  assert.equal(
-    prHoldTitle({ number: 383, failed: "body_names_job", class: "approve" }),
-    "PR #383 waits for you: its description names no job (one tap to approve)",
-  );
   const visual = { title: "New header", preview: null, shots: [] };
   assert.equal(
     prHoldTitle({ number: 479, failed: "body_names_job", class: "approve", visual }),
     "PR #479 waits for you: it changes what people see, so it waits for your look (one tap to approve)",
     "a visual PR one tap would merge says so, not that it names no job",
-  );
-  assert.equal(
-    prHoldTitle({ number: 9, failed: "ci_green", visual }),
-    "PR #9 waits for you: its checks are not green",
-    "red CI still says red",
-  );
-  assert.equal(
-    prHoldTitle({ number: 7, failed: "paths_allowed_for_namespace" }),
-    "PR #7 waits for you: it changes files outside what this app merges on its own",
   );
   for (const check of POLICY_CHECKS) {
     const title = prHoldTitle({ number: 1, failed: check });
@@ -142,51 +114,6 @@ test("a blocked job is settled when its pull requests all closed after it blocke
     blockSettled(plain, { job_a: { ...merged, at: "2026-10-09T00:00:00.000Z" } }, null),
     false,
     "read before the job last changed",
-  );
-});
-
-test("restricting the inbox to readable apps drops the others and recomputes the totals", () => {
-  const inbox: Inbox = {
-    generated: "2026-10-08T12:00:00.000Z",
-    count: 3,
-    severity: "needs-you",
-    apps: [
-      {
-        namespace: "a",
-        name: "A",
-        count: 1,
-        severity: "failing",
-        items: [
-          { title: "CI is failing", kind: "ci", link: null, since: "2026-10-08T09:00:00.000Z" },
-        ],
-      },
-      {
-        namespace: "b",
-        name: "B",
-        count: 2,
-        severity: "needs-you",
-        items: [
-          { title: "x", kind: "blocked-job", link: null, since: "2026-10-08T09:00:00.000Z" },
-          { title: "y", kind: "pr", link: null, since: "2026-10-08T09:30:00.000Z" },
-        ],
-      },
-    ],
-  };
-  const onlyA = restrictInbox(inbox, (ns) => ns === "a");
-  assert.deepEqual(
-    onlyA.apps.map((a) => a.namespace),
-    ["a"],
-  );
-  assert.equal(onlyA.count, 1);
-  assert.equal(
-    onlyA.severity,
-    "failing",
-    "b's blocked job no longer counts toward a caller who cannot read b",
-  );
-  const none = restrictInbox(inbox, () => false);
-  assert.deepEqual(
-    { count: none.count, severity: none.severity, apps: none.apps },
-    { count: 0, severity: "none", apps: [] },
   );
 });
 

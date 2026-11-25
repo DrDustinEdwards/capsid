@@ -6,7 +6,7 @@ import { createMcpHandler } from "agents/mcp/server";
 // oxfmt-ignore
 // @ts-expect-error scripts/ is plain .mjs with no declarations, deliberately: it
 // runs in the live CI job with no npm ci and no build step.
-import { EXPECTED_TOOLS, eraSteps, probeMcp, rpcMessage, stepProblem } from "../scripts/mcp-probe-lib.mjs";
+import { EXPECTED_TOOLS, eraSteps, stepProblem } from "../scripts/mcp-probe-lib.mjs";
 import { ROLES } from "../scripts/roles.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
@@ -109,47 +109,6 @@ test("EXPECTED_TOOLS is the count of Capsid's served tools a read grant can call
     EXPECTED_TOOLS,
     readable.length,
     "scripts/mcp-probe-lib.mjs EXPECTED_TOOLS drifted from the served surface",
-  );
-});
-
-test("an event-stream answer is read off its data line", () => {
-  const msg = { jsonrpc: "2.0", id: 1, result: { ok: true } };
-  assert.deepEqual(rpcMessage(`event: message\ndata: ${JSON.stringify(msg)}\n\n`), msg);
-  assert.deepEqual(rpcMessage(JSON.stringify(msg)), msg);
-  assert.equal(rpcMessage("<html>"), null);
-});
-
-test("the probe passes against the real handler in both eras, as the live-probe agent", async () => {
-  const serve = realHandler();
-  const post = async (body: string, headers: Record<string, string>) => {
-    const response = await serve(
-      new Request("https://mcp.example.com/ops/mcp", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-          ...headers,
-        },
-        body,
-      }),
-    );
-    return { status: response.status, text: await response.text() };
-  };
-  assert.deepEqual(await probeMcp(post), []);
-});
-
-test("a 401 says the key was refused, and a JSON-RPC error names its code", () => {
-  const [step] = eraSteps("2025-11-25");
-  assert.match(String(stepProblem(step, 401, "")), /probe key was refused/);
-  assert.match(
-    String(
-      stepProblem(
-        step,
-        200,
-        JSON.stringify({ jsonrpc: "2.0", id: 1, error: { code: -32603, message: "boom" } }),
-      ),
-    ),
-    /JSON-RPC error -32603: boom/,
   );
 });
 

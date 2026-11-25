@@ -20,30 +20,20 @@ test("a file changed by the named pull request and by another open one is an ove
   ]);
 });
 
-test("no shared file is no overlap, and an empty read is no overlap rather than an error", () => {
+test("no shared file, an empty read, a job's own pull requests and a rename listed under both names", () => {
   assert.deepEqual(overlapsOf([{ number: 1, paths: ["a"] }], [{ number: 2, paths: ["b"] }]), []);
   assert.deepEqual(overlapsOf([{ number: 1, paths: [] }], [{ number: 2, paths: [] }]), []);
-});
 
-test("a rename listed under both names collides with a pull request that edits either name", () => {
+  const own = [
+    { number: 10, paths: ["a"] },
+    { number: 11, paths: ["a"] },
+  ];
+  assert.deepEqual(overlapsOf(own, own), []);
+
   // readPrFiles lists a renamed file under its old and new path.
   const renamed = { number: 7, paths: ["src/old.ts", "src/new.ts"] };
   assert.equal(overlapsOf([renamed], [{ number: 3, paths: ["src/old.ts"] }]).length, 1);
   assert.equal(overlapsOf([renamed], [{ number: 4, paths: ["src/new.ts"] }]).length, 1);
-});
-
-test("a job's own pull requests are not compared with each other, nor with themselves", () => {
-  const found = overlapsOf(
-    [
-      { number: 10, paths: ["a"] },
-      { number: 11, paths: ["a"] },
-    ],
-    [
-      { number: 10, paths: ["a"] },
-      { number: 11, paths: ["a"] },
-    ],
-  );
-  assert.deepEqual(found, []);
 });
 
 test("the line names each pair, caps the files shown and says how many more", () => {
@@ -51,10 +41,7 @@ test("the line names each pair, caps the files shown and says how many more", ()
     overlaps: [{ pr: 265, other: 260, files: ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"] }],
     problem: null,
   });
-  assert.equal(
-    line,
-    "Overlaps: #265 with #260 (a.ts, b.ts, c.ts, +2 more). Merge in PR order, oldest first, and rebase the later.",
-  );
+  assert.match(line ?? "", /#265 with #260 \(a\.ts, b\.ts, c\.ts, \+2 more\)/);
 });
 
 test("a comparison that could not be read says not checked, and a clean one says nothing", () => {

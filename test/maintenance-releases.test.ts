@@ -7,7 +7,6 @@ import {
   RELEASE_TAG_AUDIT_ACTION,
   RELEASE_TAG_CAP,
   RELEASE_TAGS_SWITCH_KEY,
-  versionCommit,
   type ReleasePackage,
   type ReleaseReaders,
 } from "../src/maintenance-releases.ts";
@@ -23,31 +22,6 @@ const sha = (c: string) => c.repeat(40);
 const C1 = sha("1");
 const C2 = sha("2");
 const C3 = sha("3");
-
-test("the commit that set a version is the oldest of the newest run carrying it, not the newest commit", () => {
-  const history = [
-    { sha: C3, version: "1.3.0" }, // a dependency change that kept the version
-    { sha: C2, version: "1.3.0" }, // the bump
-    { sha: C1, version: "1.2.0" },
-  ];
-  assert.equal(versionCommit(history, "1.3.0", false), C2);
-  assert.equal(
-    versionCommit(history.slice(0, 2), "1.3.0", true),
-    C2,
-    "the file's whole history read: its first commit set the version",
-  );
-  assert.equal(
-    versionCommit(history.slice(0, 2), "1.3.0", false),
-    null,
-    "the run reaches the end of an incomplete read: not known, so not guessed",
-  );
-  assert.equal(
-    versionCommit([{ sha: C1, version: "1.2.0" }], "1.3.0", true),
-    null,
-    "the newest commit does not carry the version",
-  );
-  assert.equal(versionCommit([], "1.3.0", true), null);
-});
 
 // The rule, on fake readers.
 

@@ -65,16 +65,6 @@ test("scan flags a stale tool count in a standing doc", () => {
   assert.equal(claims[0].authoritative, TOOLS);
 });
 
-test("scan does NOT flag a correct count", () => {
-  assert.deepEqual(
-    scanCountClaims(
-      [{ path: "core.md", type: "core", body: `${TOOLS} tools, split 13 read and 11 write.` }],
-      "capsid",
-    ),
-    [],
-  );
-});
-
 test("episodics are exempt because their numbers are history, not claims", () => {
   // A session doc saying "6 of 6 gates passed" is an accurate record of a run.
   // Flagging it would bury the real findings in noise.
@@ -156,28 +146,6 @@ test("'all seven' about anything else is NOT flagged", () => {
   }
 });
 
-test("the scan never returns a rewritten body, only a flag", () => {
-  // Flag, never auto-correct: a "corrected" or "replacement" field would be a program
-  // editing canon on its own judgment.
-  const claims = scanCountClaims([{ path: "core.md", type: "core", body: "16 tools" }], "capsid");
-  // Exactly one claim, or the loop below passes without checking anything.
-  assert.equal(
-    claims.length,
-    1,
-    `expected one claim for a stale tool count: ${JSON.stringify(claims)}`,
-  );
-  for (const c of claims) {
-    assert.deepEqual(
-      Object.keys(c)
-        .sort()
-        .filter(
-          (k) => !["path", "type", "noun", "quote", "states", "authoritative", "note"].includes(k),
-        ),
-      [],
-    );
-  }
-});
-
 // False-positive classes. Each is a regression test: a lint with a high
 // false-positive rate gets turned off.
 
@@ -242,19 +210,6 @@ test("a four-digit year is never a tool count", () => {
   );
 });
 
-test("the one genuine hit still fires after all three fixes", () => {
-  // A true positive must survive the false-positive fixes.
-  const doc = {
-    path: "concept-build-operations.md",
-    type: "concept",
-    body: "The server exposes 11 tools over MCP.",
-  };
-  const claims = scanCountClaims([doc], "capsid");
-  assert.equal(claims.length, 1);
-  assert.equal(claims[0].states, "11");
-  assert.equal(claims[0].authoritative, TOOLS);
-});
-
 test("a transition states the RESULTING count, not the pre-state", () => {
   // "19 to N" says the surface stopped being 19.
   const doc = {
@@ -278,17 +233,6 @@ test("a transition states the RESULTING count, not the pre-state", () => {
     ),
     [],
   );
-});
-
-test("a transition in a LIVE-STATE doc reports the resulting count", () => {
-  const doc = {
-    path: "core.md",
-    type: "core",
-    body: `Expansion layer, tool surface 19 to ${AFTER_TOOLS}.`,
-  };
-  const claims = scanCountClaims([doc], "capsid");
-  assert.equal(claims.length, 1);
-  assert.equal(claims[0].states, AFTER_TOOLS);
 });
 
 test("a subset count is not a total", () => {

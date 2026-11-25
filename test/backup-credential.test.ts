@@ -26,66 +26,6 @@ import { sourceFiles } from "./source-files.ts";
 // with a backup-specific derived key and receives a one-hour object-read-only
 // credential scoped to backups/json/ on capsid-media, from its own parent token.
 
-test("the backup credential key derives from the root with its own context, unequal to the root and the signing key", async () => {
-  const root = "root-secret";
-  const backup = await deriveBackupCredentialKey(root);
-  assert.match(backup, /^[0-9a-f]{64}$/);
-  assert.equal(backup, await deriveBackupCredentialKey(root), "derivation must be deterministic");
-  assert.notEqual(backup, root);
-  assert.notEqual(
-    backup,
-    await deriveTaskKey(root),
-    "the backup key collides with the signed-document key",
-  );
-});
-
-test("the mint asks for object-read-only, one hour, backups/json/ and files/ on capsid-media, from the BACKUP parent", async () => {
-  await withFetch(
-    {
-      "POST /client/v4/accounts/acct-1/r2/temp-access-credentials": (body: unknown) => {
-        const request = body as Record<string, unknown>;
-        assert.equal(request.bucket, "capsid-media");
-        assert.equal(request.permission, "object-read-only");
-        assert.equal(request.ttlSeconds, 3600);
-        assert.equal(request.parentAccessKeyId, "backup-parent-key-id");
-        assert.deepEqual(request.prefixes, ["backups/json/", "files/"]);
-        return {
-          body: {
-            success: true,
-            result: { accessKeyId: "AK", secretAccessKey: "SK", sessionToken: "ST" },
-          },
-        };
-      },
-    },
-    async () => {
-      const env = fakeEnv({
-        R2_TEMP_CRED_TOKEN: "cf-api-token",
-        R2_BACKUP_PARENT_ACCESS_KEY_ID: "backup-parent-key-id",
-        R2_ACCOUNT_ID: "acct-1",
-      });
-      const minted = await mintBackupCredential(env);
-      assert.ok(minted.ok, `mint refused: ${minted.ok ? "" : minted.refusal}`);
-      assert.equal(minted.credential.bucket, "capsid-media");
-      assert.equal(minted.credential.prefix, "backups/json/");
-      assert.equal(minted.credential.files_prefix, "files/");
-      assert.equal(minted.credential.endpoint, "https://acct-1.r2.cloudflarestorage.com");
-      assert.equal(minted.credential.session_token, "ST");
-    },
-  );
-});
-
-test("an unconfigured backup mint is a clear 503 naming R2_BACKUP_PARENT_ACCESS_KEY_ID", async () => {
-  await withFetch({}, async (calls) => {
-    const minted = await mintBackupCredential(
-      fakeEnv({ R2_TEMP_CRED_TOKEN: "t", R2_ACCOUNT_ID: "a" }),
-    );
-    assert.equal(minted.ok, false);
-    assert.equal(minted.ok ? 0 : minted.status, 503);
-    assert.match(minted.ok ? "" : minted.refusal, /R2_BACKUP_PARENT_ACCESS_KEY_ID/);
-    assert.equal(calls.length, 0);
-  });
-});
-
 test("verification refuses a bad signature and admits a good one", async () => {
   const env = fakeEnv({ IMPROVE_SCORE_SECRET: "root-secret" });
   const now = new Date("2026-09-07T06:00:00Z");
@@ -160,6 +100,8 @@ test("every pinned site mints object-read-only on its OWN bucket, backups/json/ 
         const request = body as Record<string, unknown>;
         asked.push(String(request.bucket));
         assert.equal(request.permission, "object-read-only");
+        assert.equal(request.ttlSeconds, 3600);
+        assert.equal(request.parentAccessKeyId, "backup-parent-key-id");
         assert.deepEqual(request.prefixes, ["backups/json/", "files/"]);
         return {
           body: {
@@ -183,6 +125,8 @@ test("every pinned site mints object-read-only on its OWN bucket, backups/json/ 
           OFFACCOUNT_SOURCES[site].bucket,
           `${site} was minted on another bucket`,
         );
+        assert.equal(minted.credential.prefix, "backups/json/");
+        assert.equal(minted.credential.files_prefix, "files/");
       }
     },
   );
@@ -192,21 +136,7 @@ test("every pinned site mints object-read-only on its OWN bucket, backups/json/ 
   );
 });
 
-test("the pinned table: every site that dumps, capsid on its media pin, no bucket shared", () => {
-  assert.deepEqual(
-    Object.fromEntries(OFFACCOUNT_SITES.map((site) => [site, OFFACCOUNT_SOURCES[site].bucket])),
-    {
-      capsid: "capsid-media",
-      germomics: "germomics-backups",
-      txasm: "txasm-books",
-      foxing: "foxing-backups",
-      foxhound: "foxhound-backups",
-      dustinedwards: "dustinedwards-backups",
-      julieedwards: "julieedwards-backups",
-      carrel: "carrel-backups",
-      bsw: "bsw-backups",
-    },
-  );
+test("capsid's backup bucket is the MEDIA pin, and no two sites share a backup bucket", () => {
   assert.equal(
     OFFACCOUNT_SOURCES.capsid.bucket,
     R2.name,
@@ -216,13 +146,10 @@ test("the pinned table: every site that dumps, capsid on its media pin, no bucke
   assert.equal(new Set(buckets).size, buckets.length, "two sites share a backup bucket");
 });
 
-test("a request with no site is capsid's, so the rehearsal keeps working", () => {
-  const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789" }));
-  assert.ok(parsed.ok);
-  assert.equal(parsed.site, "capsid");
-});
-
-test("a pinned site in the body is read through", () => {
+test("a request with no site is capsid's, and a pinned site in the body is read through", () => {
+  const none = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789" }));
+  assert.ok(none.ok);
+  assert.equal(none.site, "capsid");
   for (const site of OFFACCOUNT_SITES) {
     const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", site }));
     assert.ok(parsed.ok, `${site} was refused`);

@@ -71,7 +71,7 @@ export interface StaleStepEntry {
 
 export type StaleStepCache = Record<string, StaleStepEntry>;
 
-export function tallySteps(states: readonly StepState[], at: string): StaleStepEntry {
+function tallySteps(states: readonly StepState[], at: string): StaleStepEntry {
   const entry: StaleStepEntry = { seen: 0, unseen: 0, unread: 0, at };
   for (const state of states) entry[state] += 1;
   return entry;
