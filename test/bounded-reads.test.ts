@@ -308,4 +308,3 @@ test("the resources/list override cannot silently drop a statically registered r
   );
   assert.match(text, /setRequestHandler\("resources\/list"/, "the paginating list handler is gone");
 });
-
