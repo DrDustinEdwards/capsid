@@ -106,6 +106,15 @@ export function parseLiveConfig(body: string): LiveConfig {
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+// Why an answer is not the site's: its final URL is on another origin (a followed redirect), else null.
+export function redirectedOffSite(res: Response, origin: string): string | null {
+  if (!res.url) return null;
+  const finalOrigin = new URL(res.url).origin;
+  return finalOrigin === new URL(origin).origin
+    ? null
+    : `redirected off the site to ${finalOrigin}`;
+}
+
 /** One GET of a site's page. A page that cannot be judged says why in `problem`: an
  *  error, a non-2xx answer, a redirect off the site (a login), a body that is not HTML,
  *  or one past the size bound. None of those is evidence about the beacon. */
@@ -132,12 +141,10 @@ export async function readPage(
   } catch (err) {
     return unread(null, `no answer: ${errorMessage(err).slice(0, 120)}`);
   }
-  if (res.url) {
-    const finalOrigin = new URL(res.url).origin;
-    if (finalOrigin !== new URL(origin).origin) {
-      await res.body?.cancel();
-      return unread(res.status, `redirected off the site to ${finalOrigin}`, true);
-    }
+  const offSite = redirectedOffSite(res, origin);
+  if (offSite) {
+    await res.body?.cancel();
+    return unread(res.status, offSite, true);
   }
   if (res.status < 200 || res.status >= 300) {
     await res.body?.cancel();

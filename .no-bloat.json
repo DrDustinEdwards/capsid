@@ -42,10 +42,10 @@
     },
     "tests": {
       "files": 273,
-      "cases": 2009
+      "cases": 2011
     },
     "comments": {
-      "lines": 8951,
+      "lines": 8955,
       "code": 126932,
       "percentage": 6.6
     }
