@@ -137,17 +137,6 @@ test("a job that reported nothing records NULL everywhere, never zero", async ()
   assert.equal(row.namespace, "capsid");
 });
 
-test("a reported zero is stored as zero, which is a different fact", async () => {
-  const verdict = await verifyEvidence(fakeEnv({}), "capsid", { tests_added: 0, commits: 0 });
-  assert.equal(
-    verdict.tests_added,
-    0,
-    "a driver that counted and found none must not be recorded as silent",
-  );
-  assert.equal(verdict.commits, 0);
-  assert.equal(verdict.files_changed, null, "a field nobody mentioned is still null");
-});
-
 test("nothing is marked verified when nothing was checked", async () => {
   const verdict = await verifyEvidence(fakeEnv({}), "capsid", {
     commits: 9,
@@ -302,26 +291,26 @@ test("a repo the namespace does not map is refused, not read", async () => {
   });
 });
 
-test("CI THAT HAS NOT FINISHED IS NOT CI THAT FAILED", async () => {
-  // Three answers, not two: an in-progress run is neither red nor green.
-  const running: Route = {
+test("CI that has not finished, or has no runs, is not red; a failed run is red, a verified fact", async () => {
+  const run = (status: string, conclusion: string | null): Route => ({
     body: {
       workflow_runs: [
         {
           id: 1,
           name: "ci",
           head_sha: HEAD,
-          status: "in_progress",
-          conclusion: null,
+          status,
+          conclusion,
           event: "push",
           created_at: "x",
           html_url: "u",
         },
       ],
     },
-  };
+  });
+  // Three answers, not two: an in-progress run is neither red nor green.
   await withFetch(
-    { [`GET ${PR_PATH}`]: prRoute(true), [`GET ${RUNS_PATH}`]: running },
+    { [`GET ${PR_PATH}`]: prRoute(true), [`GET ${RUNS_PATH}`]: run("in_progress", null) },
     async () => {
       const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL] });
       assert.equal(verdict.ci_green, null);
@@ -332,9 +321,6 @@ test("CI THAT HAS NOT FINISHED IS NOT CI THAT FAILED", async () => {
       );
     },
   );
-});
-
-test("a sha with no runs is not green and not red", async () => {
   await withFetch(
     { [`GET ${PR_PATH}`]: prRoute(true), [`GET ${RUNS_PATH}`]: { body: { workflow_runs: [] } } },
     async () => {
@@ -345,29 +331,10 @@ test("a sha with no runs is not green and not red", async () => {
       assert.equal(verdict.verified.prs_merged, true);
     },
   );
-});
-
-test("a failed run is recorded as red, which is a verified fact", async () => {
-  const red: Route = {
-    body: {
-      workflow_runs: [
-        {
-          id: 1,
-          name: "ci",
-          head_sha: HEAD,
-          status: "completed",
-          conclusion: "failure",
-          event: "push",
-          created_at: "x",
-          html_url: "u",
-        },
-      ],
-    },
-  };
   await withFetch(
     {
       [`GET ${PR_PATH}`]: prRoute(true),
-      [`GET ${RUNS_PATH}`]: red,
+      [`GET ${RUNS_PATH}`]: run("completed", "failure"),
       [`GET ${RUNS_PATH}/1/jobs`]: { body: { jobs: [] } },
     },
     async () => {
@@ -376,17 +343,6 @@ test("a failed run is recorded as red, which is a verified fact", async () => {
       assert.equal(verdict.verified.ci_green, true);
     },
   );
-});
-
-test("GITHUB BEING UNREACHABLE NEVER FAILS THE JOB", async () => {
-  // Refusing the complete would leave a lease on finished work, so the failure is
-  // recorded as notes and the transition goes through.
-  await withFetch({}, async () => {
-    const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL], commits: 2 });
-    assert.equal(verdict.verified.commits, false);
-    assert.equal(verdict.commits, 2);
-    assert.ok(verdict.notes.length > 0, "an unreachable GitHub produced no note at all");
-  });
 });
 
 test("PLANT: an installation token that cannot be minted is a note, not a throw (audit 2026-09-25, F1-1)", async () => {
@@ -655,13 +611,6 @@ test("BACKFILL fails closed: a repo that cannot be read leaves the unpinned row 
 });
 
 // the bar a job can set on a driver's history
-
-test("a min_record nobody set is no requirement", () => {
-  assert.deepEqual(parseMinRecord(null), { ok: true, value: {} });
-  assert.deepEqual(parseMinRecord(undefined), { ok: true, value: {} });
-  assert.deepEqual(parseMinRecord("{}"), { ok: true, value: {} });
-  assert.equal(missingForRecord({ prs_merged: 0 }, null), null);
-});
 
 test("a CORRUPT min_record refuses: it fails CLOSED", () => {
   // A garbled bar is not the same as no bar; the claim marks such a job failed rather

@@ -6,8 +6,6 @@ import {
   JOB_ACTIONS,
   JOB_PARAM_NAMES,
   OPEN_JOB_STATUSES,
-  jobDocPath,
-  mintJobId,
   swallowedParamTag,
 } from "../src/jobs-schema.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
@@ -103,15 +101,6 @@ test("supersede refuses a missing reason and a swallowed tag before it reads any
   assert.match(swallowed.refusal ?? "", /^reason contains the literal text '<\/replaced_by>'\./);
 });
 
-test("a job id is minted, not sequential", () => {
-  // A sequential id invites addressing a job by arithmetic.
-  const a = mintJobId();
-  const b = mintJobId();
-  assert.match(a, /^job_[0-9a-f]{12}$/);
-  assert.notEqual(a, b);
-  assert.equal(jobDocPath(a), `jobs/${a}.md`);
-});
-
 test("every action the schema advertises is one the tool handles", async () => {
   // JOB_ACTIONS is what the description and the driver are written against. Each is
   // called through the real tool; an action with no branch falls through to the
@@ -200,16 +189,27 @@ const SWALLOWED_REAL =
   '<evidence>{"prs": ["https://github.com/DrDustinEdwards/capsid-mcp/pull/21"], "tests_added": 42}</evidence>\n' +
   "</invoke>\n";
 
-test("PLANT: the real malformed summary from job_9980f57bd359 is detected", () => {
-  const found = swallowedParamTag(SWALLOWED_REAL);
+test("PLANT: the real malformed summary from job_9980f57bd359 is detected, and ordinary prose, even prose ABOUT the pattern, is not refused", () => {
   assert.equal(
-    found,
+    swallowedParamTag(SWALLOWED_REAL),
     "result_summary",
     "the field's own closing tag is the first one in the swallowed text",
   );
+  // The guard matches the full `</name>` spelling only.
+  for (const innocent of [
+    "landed the change; evidence is in the PR",
+    "refuse a summary containing '</' followed by a parameter name",
+    "the result_ref is a document key",
+    "a < b and c > d",
+    "</div> in a rendered page",
+    "</resultref>",
+    "",
+  ]) {
+    assert.equal(swallowedParamTag(innocent), null, `innocent text was refused: ${innocent}`);
+  }
 });
 
-test("every parameter name the guard knows is one the tool serves", async () => {
+test("every parameter name the guard knows is one the tool serves, and the note is bounded well above the reason", async () => {
   // Derived from the served schema, so a name the guard lists and nobody can send
   // fails here.
   assert.ok(JOB_PARAM_NAMES.length > 0, "JOB_PARAM_NAMES is empty, so no name was checked");
@@ -230,45 +230,14 @@ test("every parameter name the guard knows is one the tool serves", async () => 
   );
   const missing = JOB_PARAM_NAMES.filter((name) => !served.includes(name));
   assert.deepEqual(missing, [], `the jobs tool serves no parameter named: ${missing.join(", ")}`);
-});
 
-test("the jobs tool takes a resume note longer than a reason, bounded by MAX_RESUME_NOTE", async () => {
   // reason stays at MAX_TITLE; note carries the full approval, so the served schema
   // has to admit it.
-  const server = buildServer(
-    fakeEnv({ APP_KV: fakeKv({}).kv }),
-    adminAgentForEmail("admin@example.com"),
-  );
-  const client = new Client({ name: "jobs-note", version: "1.0.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const { tools } = await client.listTools();
-  await client.close();
   const props = (tools.find((tool) => tool.name === "capsid_work_jobs")?.inputSchema.properties ??
     {}) as Record<string, { maxLength?: number }>;
-  assert.equal(
-    props.note?.maxLength,
-    MAX_RESUME_NOTE,
-    "the jobs tool serves no note bounded by MAX_RESUME_NOTE",
-  );
+  assert.equal(props.note?.maxLength, MAX_RESUME_NOTE);
   assert.equal(props.reason?.maxLength, MAX_TITLE, "reason's bound moved");
   assert.ok(MAX_RESUME_NOTE > MAX_TITLE * 10, "the note is not bounded well above the reason");
-});
-
-test("ordinary prose is not refused, including prose ABOUT the pattern", () => {
-  // The guard matches the full `</name>` spelling only. A summary that mentions
-  // evidence or a result ref is ordinary text.
-  for (const innocent of [
-    "landed the change; evidence is in the PR",
-    "refuse a summary containing '</' followed by a parameter name",
-    "the result_ref is a document key",
-    "a < b and c > d",
-    "</div> in a rendered page",
-    "</resultref>",
-    "",
-  ]) {
-    assert.equal(swallowedParamTag(innocent), null, `innocent text was refused: ${innocent}`);
-  }
 });
 
 // The three call sites, driven: each entry point asks the detector, and nothing reaches

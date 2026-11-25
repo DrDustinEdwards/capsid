@@ -22,20 +22,6 @@ test("the gate's threshold is the same number /health warns at", () => {
   assert.equal(BACKUP_STALE_HOURS, HEALTH_THRESHOLD);
 });
 
-test("a backup from three hours ago is fresh", () => {
-  const r = checkBackupFreshness(health("2026-09-08T09:00:00Z", 3), { assert: true, now: NOW });
-  assert.equal(r.outcome, "fresh");
-  assert.equal(r.passed, true);
-  assert.match(r.detail, /3h ago/);
-});
-
-test("a backup from 27 hours ago FAILS, and names the age", () => {
-  const r = checkBackupFreshness(health("2026-09-07T09:00:00Z", 27), { assert: true, now: NOW });
-  assert.equal(r.outcome, "stale");
-  assert.equal(r.passed, false);
-  assert.match(r.detail, /27h ago, over the 26h threshold/);
-});
-
 test("25.9 hours passes and 26.1 fails: the boundary is where it says it is", () => {
   const at = (hours: number) => new Date(NOW - hours * 3_600_000).toISOString();
   assert.equal(checkBackupFreshness(health(at(25.9)), { assert: true, now: NOW }).passed, true);

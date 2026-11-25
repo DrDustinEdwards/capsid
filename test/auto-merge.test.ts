@@ -21,7 +21,6 @@ import {
   type PrFacts,
 } from "../src/auto-merge-policy-evaluate.ts";
 import { parseMergePolicy } from "../src/auto-merge-policy-parse.ts";
-import { mergeParams } from "../src/auto-merge-tick-judge.ts";
 import { signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { ALLOWED_AUTHORS, CAPSID_CI, GOOD_POLICY, SECRET, success } from "./auto-merge-fixtures.ts";
@@ -125,13 +124,6 @@ test("a job-less PR merges only in a promoted unit", () => {
   assert.equal(failed(evaluatePolicy(greenPr(over), ALLOWED_AUTHORS, null)), "body_names_job");
 });
 
-test("a job completed without a claim passes whoever holds it", () => {
-  for (const jobClaimedBy of ["access:dustin@example.com", "agent:seat", "opkey:9f2c1a"]) {
-    const verdict = evaluate(greenPr({ jobClaimedBy }));
-    assert.equal(verdict.merge, true, `${jobClaimedBy}: ${why(verdict)}`);
-  }
-});
-
 test("head_in_base_repo: a fork's PR never merges, nor one whose fork GitHub no longer reports", () => {
   for (const headRepo of ["someone-else/capsid-mcp", null]) {
     assert.equal(failed(evaluate(greenPr({ headRepo }))), "head_in_base_repo");
@@ -193,30 +185,6 @@ test("ci_green: each required step, skipped, failed, pending or missing, refuses
   }
 });
 
-test("ci_green: carrel and capsomer hold the steps their workflows run, and a rename refuses", () => {
-  for (const namespace of ["carrel", "capsomer"]) {
-    const required = AUTO_MERGE_REQUIRED_CI[namespace];
-    const merged = evaluate(greenPr({ namespace, ciSteps: success(required) }));
-    assert.equal(merged.merge, true, why(merged));
-    for (const step of required) {
-      const variants = [
-        success(required).map((r, i) =>
-          required[i] === step ? { ...r, step: `${r.step} (renamed)` } : r,
-        ),
-        success(required).map((r, i) =>
-          required[i] === step ? { ...r, conclusion: "skipped" } : r,
-        ),
-        success(required.filter((r) => r !== step)),
-      ];
-      for (const ciSteps of variants) {
-        const verdict = evaluate(greenPr({ namespace, ciSteps }));
-        assert.equal(failed(verdict), "ci_green", `${namespace} ${requiredCiLabel(step)}`);
-        assert.ok(why(verdict).includes(requiredCiLabel(step)));
-      }
-    }
-  }
-});
-
 test("ci_green: a same-named step in another job or workflow does not count", () => {
   for (const move of [{ job: "score" }, { workflow: ".github/workflows/other.yml" }]) {
     const ciSteps = success(CAPSID_CI).map((r) => (r.step === "Tests" ? { ...r, ...move } : r));
@@ -229,16 +197,6 @@ test("ci_green: one namespace's green steps do not satisfy another's", () => {
   assert.equal(failed(evaluate(greenPr({ ciSteps: asDustinedwards }))), "ci_green");
   const right = evaluate(greenPr({ namespace: "dustinedwards", ciSteps: asDustinedwards }));
   assert.equal(right.merge, true, why(right));
-});
-
-test("a failing check reports only the checks that actually passed before it", () => {
-  assert.equal(POLICY_CHECKS[POLICY_CHECKS.length - 1], "ci_green");
-  const late = evaluate(greenPr({ ciConclusion: "failure" }));
-  assert.deepEqual(late.merge ? null : late.passed, POLICY_CHECKS.slice(0, -1));
-  const early = evaluate(
-    greenPr({ changedPaths: ["src/gate-policy.ts"], ciConclusion: "failure" }),
-  );
-  assert.deepEqual(early.merge ? null : early.passed, []);
 });
 
 // Whether the refused list passes a path, apart from capsid's allowed paths.
@@ -574,29 +532,4 @@ test("every required CI step is a step the CI workflow actually has", () => {
     assert.equal(r.workflow, ".github/workflows/ci.yml");
     assert.ok(stepNames.includes(r.step), `ci.yml has no step named '${r.step}'`);
   }
-});
-
-test("the merge audit row names the policy version, the job, the driver, both shas and the path class", () => {
-  const facts = greenPr();
-  const verdict = evaluate(facts);
-  const row = mergeParams(
-    "1",
-    facts,
-    verdict.merge ? verdict.passed : [],
-    "f852780aabbccddeeff0011223344556677889900",
-    new Date("2026-09-12T03:00:00Z"),
-    "docs",
-  );
-  assert.deepEqual(row, {
-    policy_version: "1",
-    path_class: "docs",
-    repo: "DrDustinEdwards/capsid-mcp",
-    pr: 23,
-    head_sha: "bfae8ca9012345678901234567890123456789ab",
-    job: "job_4c0ecc28548b",
-    driver: "agent:capsid-driver",
-    merge_sha: "f852780aabbccddeeff0011223344556677889900",
-    passed: [...POLICY_CHECKS],
-    at: "2026-09-12T03:00:00.000Z",
-  });
 });

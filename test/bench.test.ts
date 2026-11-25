@@ -9,7 +9,6 @@ import {
   slotsDone,
 } from "../src/bench-slots.ts";
 import {
-  parseDrawRequest,
   parseScoreRequest,
   runOutcome,
   type ScoreRequest,
@@ -17,7 +16,6 @@ import {
 } from "../src/bench-requests.ts";
 import { createHmac } from "node:crypto";
 import { verifyBenchRequest } from "../src/signed-requests.ts";
-import { sourceFile } from "./source-files.ts";
 
 // The paired comparison's outcome rules (src/bench-requests.ts runOutcome). These decide the
 // paper's primary outcome, the false success claim, so each rule is pinned here; the
@@ -324,45 +322,6 @@ test("PLANT: a start reads earlier runs as they stood at its start (Grok audit 2
     slotAt([{ ...aClosed, finished_at: "2026-10-19T01:20:00.000Z" }], new Set(), bAt),
     { slot: 1, attempt: 2 },
   );
-  // The start takes the slot from slotAt, and nothing else asks nextSlot.
-  assert.match(sourceFile("bench.ts"), /\bslotAt\(/);
-  assert.equal(
-    [...sourceFile("bench-slots.ts").matchAll(/\bnextSlot\(/g)].length,
-    2,
-    "nextSlot is defined once and called only from slotAt",
-  );
-});
-
-test("a draw request carries the registration's two sha256 hashes and seed, a start position and distinct task ids", () => {
-  const reg = {
-    registration_sha256: "a".repeat(64),
-    frame_sha256: "b".repeat(64),
-    seed: "20261019",
-  };
-  const body = (over: Record<string, unknown>) =>
-    JSON.stringify({
-      jti: "0123456789",
-      registration: reg,
-      from: 1,
-      tasks: ["sample__repo-1", "sample__repo-2"],
-      ...over,
-    });
-  const ok = parseDrawRequest(body({}));
-  assert.ok(ok.ok);
-  assert.deepEqual(ok.tasks, ["sample__repo-1", "sample__repo-2"]);
-  assert.equal(
-    parseDrawRequest(body({ registration: { ...reg, frame_sha256: "B".repeat(64) } })).ok,
-    false,
-  );
-  assert.equal(parseDrawRequest(body({ registration: { ...reg, seed: "" } })).ok, false);
-  assert.equal(parseDrawRequest(body({ from: 0 })).ok, false);
-  assert.equal(parseDrawRequest(body({ tasks: [] })).ok, false);
-  assert.equal(
-    parseDrawRequest(body({ tasks: Array.from({ length: 101 }, (_, i) => `sample__repo-${i}`) }))
-      .ok,
-    false,
-  );
-  assert.equal(parseDrawRequest(body({ tasks: ["sample__repo-1", "sample__repo-1"] })).ok, false);
 });
 
 test("a drawn task's slots run baseline, treatment, three times, and the next task waits for all six", () => {

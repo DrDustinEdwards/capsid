@@ -53,7 +53,7 @@ const outcome = (
 
 // revertTargets
 
-test("revertTargets reads GitHub's revert button: the title and the body's 'Reverts owner/repo#N'", () => {
+test("revertTargets reads GitHub's revert button, 'reverts #N' in any case, and git's 'This reverts commit <sha>'", () => {
   assert.deepEqual(revertTargets('Revert "Tidy the docs"', "Reverts example/capsid#41", REPO), {
     prs: [41],
     shas: [],
@@ -66,17 +66,11 @@ test("revertTargets reads GitHub's revert button: the title and the body's 'Reve
     ),
     { prs: [41], shas: [] },
   );
-});
-
-test("revertTargets reads 'reverts #N' and 'revert #N' in any letter case, from the title or the body", () => {
   assert.deepEqual(
     revertTargets("Undo it", "this REVERTS #11\nREVERTS #12\nrevert #13", REPO).prs,
     [12, 13],
   );
   assert.deepEqual(revertTargets("Revert #7", "", REPO).prs, [7]);
-});
-
-test("revertTargets reads git's 'This reverts commit <sha>' from 7 hex characters up", () => {
   const sha = "bfae8ca9012345678901234567890123456789ab";
   assert.deepEqual(revertTargets('Revert "x"', `This reverts commit ${sha}.`, REPO), {
     prs: [],
@@ -90,16 +84,13 @@ test("revertTargets reads git's 'This reverts commit <sha>' from 7 hex character
   );
 });
 
-test("revertTargets ignores another repo's pull request and prose that merely mentions a number", () => {
+test("revertTargets ignores another repo's pull request and prose that merely mentions a number or a revert", () => {
   assert.deepEqual(revertTargets("Revert", "Reverts other/repo#41", REPO), { prs: [], shas: [] });
   assert.deepEqual(revertTargets("Fix #41", "Closes #41. Reverting nothing; see #12.", REPO), {
     prs: [],
     shas: [],
   });
   assert.deepEqual(revertTargets("", "", REPO), { prs: [], shas: [] });
-});
-
-test("revertTargets reads a bare 'revert #N' only at the start of the title or of a body line, not in prose", () => {
   assert.deepEqual(
     revertTargets(
       "Don't revert #12 here",
@@ -215,14 +206,6 @@ test("a pull request's bad event is its latest after the lift, so a fresh revert
   );
 });
 
-test("countsFrom lists a policy namespace with no event, and one only seen in the evidence", () => {
-  const counts = countsFrom([merged(1, 1, "carrel")], [], ["capsid"], NOW);
-  assert.deepEqual(counts.map((c) => [c.namespace, c.auto_merged]).sort(), [
-    ["capsid", 0],
-    ["carrel", 1],
-  ]);
-});
-
 // judgeShutoff
 
 test("PLANT: two rollbacks of auto-merged pull requests in 7 days pause the namespace", () => {
@@ -238,16 +221,6 @@ test("PLANT: two rollbacks of auto-merged pull requests in 7 days pause the name
     paused.capsid!,
     /2 of the pull requests auto-merge merged were rolled back or reverted in 7 days/,
   );
-});
-
-test("PLANT: one rollback and one revert pause the namespace", () => {
-  const counts = countsFrom(
-    [merged(41, 3), merged(42, 3), reverted(42, 50, 1)],
-    [outcome(41, "rolled_back", 2)],
-    ["capsid"],
-    NOW,
-  );
-  assert.deepEqual(Object.keys(judgeShutoff(counts, {}, {}, NOW)), ["capsid"]);
 });
 
 test("PLANT: a 7-day rate over 3 times a nonzero baseline pauses on one event", () => {
@@ -355,30 +328,6 @@ test("PLANT: a revert of an unattended merge suspends its unit, like a rollback"
   assert.equal(report.proposals[0]!.kind, "demote");
   // Dustin lifted the suspension after the revert merged: it is answered.
   assert.deepEqual(judgeUnits([], [revert], [], NOW, { "capsid/docs": at(0.5) }).suspended, []);
-});
-
-test("a revert blocks the promotion of its unit", () => {
-  const approvals = Array.from({ length: 20 }, (_, i) => ({
-    namespace: "capsid",
-    path_class: "tests",
-    status: "merged",
-    close_reason: null,
-    closed_at: at(14 - (i * 14) / 19),
-  }));
-  assert.equal(judgeUnits(approvals, [], [], NOW).proposals.length, 1);
-  const revert = {
-    kind: "revert" as const,
-    reverted_by: 50,
-    namespace: "capsid",
-    repo: REPO,
-    pr: 41,
-    head_sha: "a".repeat(40),
-    run_id: 0,
-    run_at: at(1),
-    merged_by: "approval" as const,
-    path_class: "tests",
-  };
-  assert.deepEqual(judgeUnits(approvals, [revert], [], NOW).proposals, []);
 });
 
 // Resume

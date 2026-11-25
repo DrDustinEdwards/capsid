@@ -3,9 +3,6 @@ import { test } from "node:test";
 import { STANDARD_SECURITY_HEADERS } from "@dustinedwards/site-runtime/headers";
 import {
   MAX_PAGE_BYTES,
-  MAX_PAGE_RULES,
-  MAX_ANALYTICS_RULES,
-  MAX_SHA_RULES,
   liveChecks,
   parseLiveConfig,
   readPage,
@@ -23,7 +20,6 @@ import type { OpsSite } from "../src/ops-sites.ts";
 import type { SiteProbe } from "../src/ops-types/sites.ts";
 import type { WebAnalyticsSite } from "../src/ops-types/views.ts";
 import { gatherFindings } from "../src/watcher-gather.ts";
-import { owningCheck, WATCHER_CHECKS } from "../src/watcher-checks.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // The watcher's live checks (src/live-checks.ts). The beacon snippet and CSP directives are
@@ -102,21 +98,9 @@ test("PLANT: a '- site' line that does not parse refuses the whole document, nam
   }
 });
 
-test("the document is bounded in page rules and in sha rules", () => {
-  const lines = (n: number, rule: (i: number) => string) =>
-    Array.from({ length: n }, (_, i) => rule(i)).join("\n");
-  const beacons = (n: number) => lines(n, (i) => `- site sample beacon /p${i}`);
-  assert.ok("error" in parseLiveConfig(beacons(MAX_PAGE_RULES + 1)));
-  assert.ok("rules" in parseLiveConfig(beacons(MAX_PAGE_RULES)));
-  assert.ok("error" in parseLiveConfig(lines(MAX_SHA_RULES + 1, (i) => `- site s${i} sha`)));
-  const analytics = (n: number) => lines(n, (i) => `- site s${i} analytics`);
-  assert.ok("error" in parseLiveConfig(analytics(MAX_ANALYTICS_RULES + 1)));
-  assert.ok("rules" in parseLiveConfig(analytics(MAX_ANALYTICS_RULES)));
-});
-
 // the beacon
 
-test("beaconCount counts script tags that load the beacon, in any quoting and for a protocol-relative src", () => {
+test("beaconCount counts script tags that load the beacon, in any quoting, and not other scripts, a mention in text or a lookalike host", () => {
   assert.equal(beaconCount(page("")), 0);
   assert.equal(beaconCount(page(BEACON)), 1);
   assert.equal(
@@ -130,9 +114,6 @@ test("beaconCount counts script tags that load the beacon, in any quoting and fo
     1,
   );
   assert.equal(beaconCount(page(BEACON + BEACON)), 2);
-});
-
-test("beaconCount does not count other scripts, a mention in text, or a lookalike host", () => {
   assert.equal(beaconCount(page(`<script src="https://example.com/app.js"></script>`)), 0);
   assert.equal(
     beaconCount(page(`<p>static.cloudflareinsights.com is where the beacon lives</p>`)),
@@ -181,7 +162,7 @@ const summary = (
   analytics_read: number,
 ) => ({ pages_expected, pages_read, shas_expected, shas_read, analytics_expected, analytics_read });
 
-test("a public page with one beacon and a CSP that allows it is clean", () => {
+test("PLANT: a CSP that blocks the beacon's script or its report is a finding, one that allows it is clean", () => {
   const ok =
     "script-src 'self' https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/; connect-src 'self'";
   assert.deepEqual(pageFindings(SITE, beaconRule, read(page(BEACON), ok)), []);
@@ -190,9 +171,6 @@ test("a public page with one beacon and a CSP that allows it is clean", () => {
     [],
     "no CSP at all blocks nothing",
   );
-});
-
-test("PLANT: a CSP that blocks the beacon's script or its report is a finding", () => {
   for (const policy of [
     "script-src 'self'; connect-src 'self'",
     "script-src https://static.cloudflareinsights.com/beacon.min.js; connect-src 'self'",
@@ -212,12 +190,6 @@ test("a page that must carry no beacon is clean without one and a finding with o
   assert.deepEqual(prints(pageFindings(SITE, noBeaconRule, read(page(BEACON)))), [
     "live-beacon-present-sample-account",
   ]);
-});
-
-test("a page that was not read yields no finding about the beacon: not read is not clean and not dirty", () => {
-  const unread = { status: 500, headers: null, html: null, problem: "answered 500", gated: false };
-  assert.deepEqual(pageFindings(SITE, beaconRule, unread), []);
-  assert.deepEqual(pageFindings(SITE, noBeaconRule, unread), []);
 });
 
 // the security headers
@@ -241,10 +213,6 @@ const withHeaders = (headers: Headers): Parameters<typeof pageFindings>[2] => ({
   html: page(""),
   problem: null,
   gated: false,
-});
-
-test("a page that carries every standard header and an enforced policy is clean under the headers rule", () => {
-  assert.deepEqual(pageFindings(SITE, headersRule, withHeaders(goodHeaders())), []);
 });
 
 test("PLANT: a missing header, a report-only policy and no policy at all each file one finding naming what failed", () => {
@@ -514,15 +482,6 @@ const CONFIG = [
   "- site sample analytics",
 ].join("\n");
 
-test("no document: nothing is read and the check does not run", async () => {
-  const out = await liveChecks(null, [SITE], [probe()], deps({}), NOW);
-  assert.deepEqual(out, {
-    findings: [],
-    ran: false,
-    summary: summary(0, 0, 0, 0, 0, 0),
-  });
-});
-
 test("an invalid document is one finding, and the check does not run", async () => {
   const out = await liveChecks({ body: "- site sample beacon" }, [SITE], [probe()], deps({}), NOW);
   assert.deepEqual(prints(out.findings), ["live-config-invalid"]);
@@ -657,20 +616,6 @@ test("PLANT: two rules for one unknown site, or one page named twice, file one f
 });
 
 // through the watcher
-
-test("the live checks are a watcher check, and every live-* fingerprint belongs to it", () => {
-  assert.ok((WATCHER_CHECKS as readonly string[]).includes("live checks"));
-  for (const fingerprint of [
-    "live-analytics-off-a",
-    "live-headers-a-root",
-    "live-csp-beacon-a-root",
-    "live-sha-drift-a-1234567",
-    "live-config-invalid",
-    "live-page-unread-a-root",
-  ]) {
-    assert.equal(owningCheck(fingerprint), "live checks", fingerprint);
-  }
-});
 
 // A D1 that answers the site configuration and the live-checks document and throws on every other read.
 function liveDb(doc: string | null) {

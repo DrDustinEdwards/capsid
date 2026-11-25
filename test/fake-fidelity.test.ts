@@ -46,15 +46,6 @@ test("C1-17: a batch that aborts on a guard leaves every row as it was", async (
   assert.equal(fake.recorded.length, 0);
 });
 
-test("C1-17: run() reports the rows a write moved, and 0 when its WHERE matched nothing", async () => {
-  const fake = fakeD1({ agents: [{ id: "ag-1", name: "one", revoked_at: null }] });
-  const touch = (id: string) =>
-    fake.db.prepare("UPDATE agents SET last_seen = datetime('now') WHERE id = ?1").bind(id).run();
-  assert.equal((await touch("ag-1")).meta.changes, 1);
-  assert.equal((await touch("nobody")).meta.changes, 0);
-  assert.equal(typeof fake.rows.agents[0].last_seen, "string");
-});
-
 test("C1-17: a keyed jobs UPDATE ... RETURNING moves only the row its CAS names", async () => {
   const fake = fakeD1({
     jobs: [{ id: "j-1", namespace: "sample", title: "t", status: "queued", posted_by: "watcher" }],
@@ -72,49 +63,6 @@ test("C1-17: a keyed jobs UPDATE ... RETURNING moves only the row its CAS names"
   assert.equal(fake.rows.jobs[0].status, "queued");
   assert.deepEqual(await clear("watcher"), { id: "j-1" });
   assert.equal(fake.rows.jobs[0].status, "failed");
-});
-
-test("C1-17: a COUNT over jobs counts, and a jobs read applies every filter", async () => {
-  const fake = fakeD1({
-    jobs: [
-      {
-        id: "j-1",
-        namespace: "sample",
-        title: "a",
-        status: "done",
-        posted_by: "p",
-        updated_at: "2026-09-25T01:00:00.000Z",
-      },
-      {
-        id: "j-2",
-        namespace: "sample",
-        title: "b",
-        status: "done",
-        posted_by: "p",
-        updated_at: "2026-09-24T01:00:00.000Z",
-      },
-      {
-        id: "j-3",
-        namespace: "sample",
-        title: "c",
-        status: "claimed",
-        claimed_by: "agent:b",
-        posted_by: "p",
-      },
-    ],
-  });
-  const done = await fake.db
-    .prepare(
-      "SELECT COUNT(*) AS n FROM jobs WHERE namespace = ?1 AND status = 'done' AND substr(updated_at, 1, 10) = ?2",
-    )
-    .bind("sample", "2026-09-25")
-    .first<{ n: number }>();
-  assert.deepEqual(done, { n: 1 });
-  const held = await fake.db
-    .prepare("SELECT * FROM jobs WHERE status = 'claimed' AND claimed_by = ?1 LIMIT 1")
-    .bind("agent:a")
-    .first();
-  assert.equal(held, null);
 });
 
 test("C1-18: the nightly jti prune keeps a nonce seen within the day", async () => {

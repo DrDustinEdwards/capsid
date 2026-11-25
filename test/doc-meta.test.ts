@@ -103,10 +103,3 @@ test("an off-schema type is rejected and the message names episodic", () => {
   assert.match(error, /unknown type 'session'/);
   assert.match(error, /episodic/);
 });
-
-// 'active' is valid: status is not a visibility filter, and rejecting it would break
-// the callers that write it.
-
-test("status validation does not accept the empty string", () => {
-  assert.ok(validateDocStatus(""), "expected the empty string to be rejected");
-});

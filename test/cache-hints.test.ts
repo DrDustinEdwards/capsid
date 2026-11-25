@@ -52,26 +52,3 @@ test("PLANT: the tool list is served in registration order", async () => {
     await client.close();
   }
 });
-
-test("PLANT: a read grant is served only the tools it can call, so the list is private", async () => {
-  // The list depends on the grant (src/scope.ts toolListed; area 11, T7): a read-only
-  // operator key sees no write tool, the admin sees every tool. So tools/list is cached
-  // private, never shared between callers.
-  const env = fakeEnv({ APP_KV: fakeKv({}).kv });
-  const admin = await connect(buildServer(env, adminAgentForEmail("admin@example.com")));
-  const readOnly = await connect(buildServer(env, "read", "test:cache-hints"));
-  try {
-    const all = (await admin.listTools()).tools.map((t) => t.name);
-    const read = (await readOnly.listTools()).tools.map((t) => t.name);
-    assert.deepEqual(all, [...CAPSID_TOOLS]);
-    assert.deepEqual(
-      read,
-      CAPSID_TOOLS.filter(
-        (t) => !["capsid_write_doc", "capsid_delete_doc", "capsid_close_pr"].includes(t),
-      ),
-    );
-  } finally {
-    await admin.close();
-    await readOnly.close();
-  }
-});

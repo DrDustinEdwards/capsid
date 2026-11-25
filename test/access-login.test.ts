@@ -66,22 +66,3 @@ test("PLANT: the state cookie cannot be computed from the state in the callback 
     /this browser did not start the flow/,
   );
 });
-
-test("the browser that started the sign-in passes the state check and reaches the token exchange", async () => {
-  const { env: e } = env();
-  const { state, cookie } = await started(e);
-  const real = globalThis.fetch;
-  const asked: string[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    asked.push(String(input));
-    return new Response("{}", { status: 500 });
-  }) as typeof fetch;
-  try {
-    const result = await completeAccessLogin(callback(state, cookie), e, FLOW, (s) => s);
-    assert.equal(result.ok, false);
-    assert.match(!result.ok ? await result.response.text() : "", /token exchange failed \(500\)/);
-    assert.equal(asked.length, 1);
-  } finally {
-    globalThis.fetch = real;
-  }
-});

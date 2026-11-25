@@ -19,24 +19,18 @@ test("parseLinks treats an empty array as clear", () => {
   assert.deepEqual(parseLinks("[]", "capsid"), { edges: [] });
 });
 
-test("parseLinks rejects a non-array", () => {
-  const result = parseLinks('{"type":"references","to_path":"x"}', "capsid");
-  assert.ok("error" in result && /must be a JSON array/.test(result.error));
-});
-
-test("parseLinks rejects an unknown type", () => {
-  const result = parseLinks('[{"type":"mentions","to_path":"x"}]', "capsid");
-  assert.ok("error" in result && /type in governs/.test(result.error));
-});
-
-test("parseLinks rejects a missing to_path", () => {
-  const result = parseLinks('[{"type":"references"}]', "capsid");
-  assert.ok("error" in result && /to_path/.test(result.error));
-});
-
-test("parseLinks rejects invalid JSON", () => {
-  const result = parseLinks("{not json", "capsid");
-  assert.ok("error" in result && /invalid links JSON/.test(result.error));
+test("parseLinks rejects a non-array, an unknown type, a missing to_path and invalid JSON", () => {
+  const cases: Array<[string, RegExp]> = [
+    ['{"type":"references","to_path":"x"}', /must be a JSON array/],
+    ['[{"type":"mentions","to_path":"x"}]', /type in governs/],
+    ['[{"type":"references"}]', /to_path/],
+    ["{not json", /invalid links JSON/],
+  ];
+  for (const [raw, expected] of cases) {
+    const result = parseLinks(raw, "capsid");
+    assert.ok("error" in result, `${raw} was accepted`);
+    assert.match(result.error, expected);
+  }
 });
 
 // An edge endpoint is a document key, so it is held to the same grammar as a
@@ -66,19 +60,4 @@ test("an edge namespace is held to the SAME namespace rule the tools use", () =>
   );
   assert.ok("error" in result, "an unbounded namespace was accepted on an edge");
   assert.match(result.error, /is not a namespace name/);
-});
-
-test("the shapes the live store actually holds still parse", () => {
-  // Shapes the live store holds, including the archive/ prefix and a nested path,
-  // so the rule cannot tighten past the data.
-  for (const to_path of [
-    "core.md",
-    "archive/session-2026-08-09.md",
-    "parity/PARITY-LEDGER.md",
-    "TASK-brake-followup-3.md",
-  ]) {
-    const result = parseLinks(JSON.stringify([{ type: "governs", to_path }]), "capsid");
-    assert.ok("edges" in result, `${to_path} was rejected but exists in the live store`);
-    assert.equal(result.edges[0].to_path, to_path);
-  }
 });

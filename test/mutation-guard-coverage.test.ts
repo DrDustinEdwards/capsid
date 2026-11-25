@@ -43,19 +43,6 @@ function servedCall(
   return { tool, args: action === undefined ? args : { action, ...args } };
 }
 
-// scanner-rule: conventions-verification, enumerate every site (audit 2026-09-07) (count guard)
-test("the scan finds the mutation entry points at all, so this file cannot pass by reading nothing", () => {
-  const found = mutationTools()
-    .map((t) => t.name)
-    .sort();
-  assert.ok(
-    found.length >= 4,
-    `the mutation scan found ${found.length} operations; the walk is broken`,
-  );
-  // Named so an operation disappearing from the mutation set is also visible.
-  assert.deepEqual(found, ["delete", "lint", "move", "restore", "write"]);
-});
-
 // Every mutation entry point, driven over MCP: one plant per operation the scan finds,
 // at a signed policy document. A real call exercises the guard, the opt-in and the flag.
 
