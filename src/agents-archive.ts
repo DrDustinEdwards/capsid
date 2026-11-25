@@ -1,18 +1,14 @@
 import { auditStatement } from "./store-guards";
 
-// Revoked agents leave the live inventory and keep their history: archive and hide, never
-// delete an agent with history (docs/auth.md says why). An archived
-// agent is a revoked agents row with archived_at set (migrations/0066), so its name stays
-// reserved (mintAgent) and its key stays refused (resolveAgent) with no second table to read.
+// Revoked agents are archived and hidden, never deleted (docs/auth.md). An archived agent is a revoked row
+// with archived_at set (0066), so its name stays reserved and its key refused with no second table.
 
-// A revoked agent moves this long after revocation, so a revocation made by mistake can
-// still be read in place for a week.
+// Moves a week after revocation, so a mistaken revocation can still be read in place.
 export const ARCHIVE_AFTER_DAYS = 7;
 
 type ArchiveReason = "revoked-7-days";
 
-// How many agents one pass moves. A pass is not the place to drain a backlog of
-// hundreds; the next pass takes the rest.
+// A pass is not the place to drain a backlog; the next pass takes the rest.
 const MAX_PER_PASS = 20;
 
 const ARCHIVE_ACTION = "agents.archive";
@@ -42,7 +38,6 @@ interface DueRow {
   reason: ArchiveReason;
 }
 
-/** The revoked agents due to move: 7 days after revocation, oldest revocation first. */
 async function archiveDue(db: D1Database, now: Date): Promise<DueRow[]> {
   const { results } = await db
     .prepare(
@@ -56,9 +51,8 @@ async function archiveDue(db: D1Database, now: Date): Promise<DueRow[]> {
   return results ?? [];
 }
 
-/** The move of one agent, as one batch: stamp it archived with its counts and write the
- *  audit row. The update is guarded on the row still being revoked and not archived, so a
- *  row that changed between the read and the batch moves nothing. */
+// One agent's move as one batch (archive stamp plus audit row), guarded on the row still being
+// revoked and unarchived, so a row that changed since the read moves nothing.
 function archiveStatements(db: D1Database, actor: string, due: DueRow): D1PreparedStatement[] {
   const agentActor = `agent:${due.name}`;
   return [
@@ -82,12 +76,9 @@ function archiveStatements(db: D1Database, actor: string, due: DueRow): D1Prepar
 
 export interface ArchivePass {
   archived: Array<{ name: string; reason: ArchiveReason }>;
-  // Due, and moved nothing: the row changed between the read and the batch.
   skipped: string[];
 }
 
-/** The watcher pass's archive step. Each agent moves in its own batch, so one that
- *  fails leaves the rest moved and says which. */
 export async function archiveRevokedAgents(
   db: D1Database,
   actor: string,
@@ -96,8 +87,7 @@ export async function archiveRevokedAgents(
   const out: ArchivePass = { archived: [], skipped: [] };
   for (const due of await archiveDue(db, now)) {
     const results = await db.batch(archiveStatements(db, actor, due));
-    // The UPDATE is the move, so its count says whether it happened. agents has no trigger
-    // to inflate it.
+    // The UPDATE is the move, so its count says whether it happened; agents has no trigger to inflate it.
     if ((results[0]?.meta?.changes ?? 0) === 1)
       out.archived.push({ name: due.name, reason: due.reason });
     else out.skipped.push(due.name);
@@ -105,8 +95,7 @@ export async function archiveRevokedAgents(
   return out;
 }
 
-/** Archived agents, newest move first. The stored verifier never leaves this module:
- *  readers get its first twelve hex, the fingerprint agents list shows. */
+/** Archived agents, newest move first. The verifier never leaves this module, only its first twelve hex. */
 export async function listArchivedAgents(
   db: D1Database,
   limit = 200,
@@ -123,7 +112,6 @@ export async function listArchivedAgents(
   }));
 }
 
-/** An archived agent by name, or null. */
 export async function archivedAgentByName(
   db: D1Database,
   name: string,

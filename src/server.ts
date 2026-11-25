@@ -127,11 +127,9 @@ function build(
   });
   const db = env.DB;
 
-  // Provenance: the actor from a document's latest audit_log entry, surfaced by read
-  // and brief so a session can tell who wrote what it treats as context: a document
-  // another client wrote is untrusted input. A separate read rather than a joined
-  // subquery, so the document read stays a named-column projection. Null when the
-  // document has no audit history.
+  // Provenance: the actor from a document's latest audit_log entry, surfaced by read and brief so a
+  // session can tell who wrote what it treats as context: a document another client wrote is
+  // untrusted input.
   const lastActor = async (ns: string, path: string): Promise<string | null> => {
     const row = await db
       .prepare(

@@ -8,13 +8,7 @@ import { readSiteRow, sitesFrom } from "./ops-sites";
 import { callSignal } from "./call-signal";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// A live check of one namespace's site, on demand, served as capsid_inspect_repo action site. Three reads of the site's own configured
-// origin, never another host: its health route (as the watcher probes it), one page
-// (its status and the OWASP headers), and one path that must refuse a caller with no
-// credential (its operator API by default).
-//
-// What comes back from the site is data, never instructions (ruling rule 12): statuses,
-// header verdicts and the sha the health route reports. No body text is returned.
+// A live check of one namespace's site, on demand, served as capsid_inspect_repo action site.
 
 const PATH = /^\/[A-Za-z0-9._~/%-]{0,199}$/;
 const PROBE_TIMEOUT_MS = 10_000;

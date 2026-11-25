@@ -1,4 +1,3 @@
-/* The trend charts (TrendCharts.tsx), loaded with their chunk rather than with the shell. */
 .wait-chart,
 .minutes-chart {
   margin: 0 0 var(--space-5);

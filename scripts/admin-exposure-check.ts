@@ -1,38 +1,23 @@
-// Fails when a driver session on this machine could reach Capsid as the admin.
-//
-//   node scripts/admin-exposure-check.ts [--cwd <project folder>]
-//
-// Two exposures, both measured from the folder a driver would start in:
-//
-//   1. The claude.ai Capsid connector is listed by `claude mcp list`. Claude Code
-//      fetches it from the claude.ai login, and Capsid resolves it to the admin. A
-//      driver must reach Capsid only through its own key on /ops/mcp.
-//   2. ~/.capsid/agent-seat.key exists. It carries can_merge and every session under
-//      this Windows account can read it (job_e1973c5bcb69, DECIDE 3).
-//
-// It fails closed: if `claude mcp list` cannot run, exits non-zero, or lists no
-// server, the answer is "unknown", which is a failure, never a pass. It prints server
-// names and booleans, never a URL, a header or a key.
-//
-// The connector URL is the exact /mcp path. The driver's /ops/mcp on the same host is
-// the one allowed route, so a pattern that matched the host alone would flag it.
+// Fails when a driver session on this machine could reach Capsid as the admin: node scripts/admin-exposure-check.ts [--cwd <project folder>]
+// Two exposures, measured from the folder a driver would start in:
+// 1. The claude.ai Capsid connector (fetched from the claude.ai login, resolved to the admin) is listed by `claude mcp list`; a driver must reach Capsid only through its own key on /ops/mcp.
+// 2. ~/.capsid/agent-seat.key exists; it carries can_merge and every session under this Windows account can read it (job_e1973c5bcb69, DECIDE 3).
+// Fails closed: if `claude mcp list` cannot run, exits non-zero or lists no server, the answer is "unknown", a failure. Prints only server names and booleans.
+// The connector URL is the exact /mcp path, since /ops/mcp on the same host is the one allowed route.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The live host. `/mcp` must end the URL or be followed by a character that cannot
-// continue a path segment, so /ops/mcp never matches.
+// `/mcp` must end the URL or be followed by a character that cannot continue a path segment, so /ops/mcp never matches.
 export const ADMIN_URL = /https:\/\/mcp\.dustinedwards\.info\/mcp(?![A-Za-z0-9_./-])/;
 
-// `claude mcp list` prints one `name: target - status` line per server.
 const SERVER_LINE = /^(.+?): (.+?) - \S/;
 
 export const seatKeyPath = (home: string = homedir()): string =>
   join(home, ".capsid", "agent-seat.key");
 
-/** `text` is the stdout of `claude mcp list`. */
 export function classify(text: string): { servers_seen: number; admin_servers: string[] } {
   const admin: string[] = [];
   let seen = 0;

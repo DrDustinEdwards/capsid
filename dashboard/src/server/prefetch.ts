@@ -8,30 +8,17 @@ import type { OpsFeed } from "../types";
 import type { ViewId } from "../app/ctx";
 import { FILTER_KEYS, PUSH_KEY, parseDocParam } from "../lib/keys";
 
-// The server's half of TanStack Query's server rendering (Advanced Server Rendering guide): a
-// new QueryClient per request, the page's reads made before it renders, and the cache handed
-// to the browser (dehydrate, then HydrationBoundary in the route), so the HTML carries every
-// table, chart and number and the browser does not read them again to draw the page. After
-// that the browser owns the data: the minute poll, Refresh and every filter read as before.
-//
-// The keys here are the ones the views' useAnswer calls use, so a read made here is the
-// one the view finds. A read that fails is left out, and the view reads it in the browser
-// and says why.
+// A new QueryClient per request, dehydrated into the HTML so the first render carries every read.
+// Keys must match the views' useAnswer calls, or the view will not find the prefetched read.
 
-/** One Portal read, named from its API root: "/ops", "/claims?since=...". */
 export type PortalRead = (path: string) => Promise<Response>;
 
 export interface PortalServer {
-  /** The Portal's reads for this request: the Worker's own /portal/api routes with the
-   *  visitor's session, or the demo's sample answers (src/portal-app.ts in the Worker). */
   read: PortalRead;
-  /** This response's Content-Security-Policy nonce, for every script the page renders. */
   nonce: string;
 }
 
-// With no Worker in front (the dev server), reads go to the dev mock on the same origin, with the
-// page's cookies. One key for the whole process, kept on globalThis: src/worker.ts sets it and the
-// server build reads it, and each carries its own copy of this module.
+// One key for the whole process on globalThis: src/worker.ts sets it and the server build reads it, and each carries its own copy of this module.
 const KEY = Symbol.for("capsid-portal.server");
 const shared = globalThis as { [KEY]?: ReturnType<typeof createContext<PortalServer | null>> };
 export const portalServer = (shared[KEY] ??= createContext<PortalServer | null>(null));
@@ -63,7 +50,6 @@ const qs = (o: Record<string, string>) => {
   return s ? `?${s}` : "";
 };
 
-/** What a view reads as it first draws, for the address it was opened at. */
 function specsFor(
   view: ViewId,
   url: URL,
@@ -86,8 +72,6 @@ function specsFor(
       if (p.get("tab") === "resources") out.push({ key: ["resources"], path: "/resources" });
       break;
     case "sites": {
-      // A site's own page reads what its tab shows; the list reads the deploy measures on its
-      // Deploys tab.
       if (!site) {
         if (p.get("tab") === "deploys") out.push(trends);
         break;
@@ -166,7 +150,6 @@ function specsFor(
         { key: ["shared-code"], path: "/shared-code" },
         { key: ["completeness"], path: "/completeness" },
       );
-      // The demo draws each package's download chart at once (views/Packages.tsx).
       if (demo)
         for (const pkg of feed?.live.packages ?? [])
           out.push({
@@ -194,8 +177,7 @@ function specsFor(
 }
 
 async function readInto(client: QueryClient, server: PortalServer, spec: Spec): Promise<void> {
-  // A read that fails is not kept (prefetchQuery never throws): the view reads it again in the
-  // browser and says why.
+  // prefetchQuery never throws: a failed read is left out and the view reads it in the browser.
   await client.prefetchQuery({
     queryKey: spec.key,
     queryFn: async () =>
@@ -205,8 +187,6 @@ async function readInto(client: QueryClient, server: PortalServer, spec: Spec): 
   });
 }
 
-// The feed, read once per page: the shell renders it, and a view's reads are timed from it, as
-// the view times them in the browser (the first render's now is the feed's read time).
 const feeds = new WeakMap<object, Promise<OpsFeed | null>>();
 function feedOf(
   context: Readonly<RouterContextProvider>,
@@ -224,7 +204,6 @@ function feedOf(
   return feed;
 }
 
-/** The feed, for the shell: the letterhead, the menu's counts and every view read it. */
 export async function prefetchFeed(
   context: Readonly<RouterContextProvider>,
   request: Request,
@@ -235,7 +214,6 @@ export async function prefetchFeed(
   return dehydrate(client);
 }
 
-/** A view's own reads, for the address it was opened at. */
 export async function prefetchView(
   context: Readonly<RouterContextProvider>,
   request: Request,

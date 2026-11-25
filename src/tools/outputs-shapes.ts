@@ -1,8 +1,6 @@
 import { z, type ZodType } from "zod";
 import type { Shape } from "./operations";
 
-// The pieces the output shapes are built from (src/tools/outputs.ts holds the shapes).
-
 export const obj = z.looseObject({});
 export const rows = z.array(obj);
 export const str = z.string();

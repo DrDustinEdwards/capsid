@@ -23,15 +23,7 @@ import { base64url, fromBase64urlText, hmacSha256Hex } from "@dustinedwards/site
 import { isSameOriginPath } from "@dustinedwards/site-runtime/url";
 import { isolationVerdict, originRefusal } from "@dustinedwards/site-runtime/origin";
 
-// Capsid Portal's own session. A browser opening /portal has no OAuth token, so the Portal signs in through the same Access for SaaS app as the MCP login (src/access-login.ts, capsid/research/design-capsid-access-login.md) with its own redirect URL, state cookie and KV prefix, and turns the verified email into a signed cookie. It does not go through the MCP provider, whose flow ends at a client redirect_uri.
-//
-// The cookie is a signed assertion (HMAC over a base64url payload with the email, a random session id, the sign-in time and an expiry). Three things end it:
-// - 24 hours after the sign-in (PORTAL_SESSION_TTL_SECONDS), which sends the browser back through Access. With the idle hour below, these are the approved admin durations (NIST SP 800-63B-4).
-// - An hour with no request: site-runtime's adminIdle times the session (withPortalIdle below), then the browser is sent to Access's logout so the next visit asks for a sign-in instead of passing straight through.
-// - Sign out and the idle end record the session id in D1 (portal_session_ends, migrations/0055), and a cookie carrying it is refused, so a copy taken elsewhere ends at once and the person's other sessions are left alone. Sessions live in D1, never KV (D9).
-// The admin check (ADMIN_EMAIL or CO_OWNER_EMAILS) runs again on every request.
-//
-// Every cookie here is host-only (no Domain attribute, ever) and scoped by portalCookiePath (src/portal-host.ts): Path=/ on portal.dustinedwards.info, which serves nothing but the Portal, and Path=/portal on any other host, so /mcp and /ops there never see it. A Path=/console cookie from before the move is never sent here, so a browser signed in there signs in once more.
+// Capsid Portal's own session.
 
 export const PORTAL_PATH = "/portal";
 export const PORTAL_PREFIX = "/portal/";
@@ -48,7 +40,9 @@ export const PORTAL_SESSION_TTL_SECONDS = 24 * 60 * 60;
 // silent sign-in.
 const PORTAL_COOKIE_MAX_AGE = PORTAL_SESSION_TTL_SECONDS + ADMIN_IDLE_SECONDS;
 
-// The Portal's half of the Access login. The state stored against the token is the Portal path to return to. The callback and state cookie follow the host: on portal.dustinedwards.info the callback is /callback, which the host rewrite hands to PORTAL_CALLBACK_PATH; Access must list each host's callback URL (docs/auth.md).
+// The Portal's half of the Access login. The state stored against the token is the Portal path to
+// return to. The callback and state cookie follow the host: on portal.dustinedwards.info the
+// callback is /callback, which the host rewrite hands to PORTAL_CALLBACK_PATH;
 function portalLogin(url: URL): LoginFlow {
   return {
     callbackPath: publicPortalPath(url, PORTAL_CALLBACK_PATH),
@@ -101,17 +95,17 @@ export async function portalSessionCookie(
   );
 }
 
-/** The Set-Cookie values that sign this browser out: the session and CSRF cookies,
- *  same name, path and attributes, Max-Age=0. */
+// The Set-Cookie values that sign this browser out: the session and CSRF cookies, same name, path
+// and attributes, Max-Age=0.
 export function portalSignOutCookies(cookiePath: string = PORTAL_PATH): string[] {
   return [PORTAL_SESSION_COOKIE, PORTAL_CSRF_COOKIE].map((name) =>
     capsidCookie(name, "", cookiePath, 0),
   );
 }
 
-// The verified payload, expired or not, or null: a bad signature or shape, an email no
-// longer admitted (so changing ADMIN_EMAIL or CO_OWNER_EMAILS invalidates every
-// outstanding Portal cookie), or a session that was signed out or ended idle. Read once per request: withPortalIdle and portalGate share it.
+// The verified payload, expired or not, or null: a bad signature or shape, an email no longer
+// admitted (so changing ADMIN_EMAIL or CO_OWNER_EMAILS invalidates every outstanding Portal
+// cookie), or a session that was signed out or ended idle.
 const verified = new WeakMap<Request, Promise<SessionPayload | null>>();
 function verifiedSession(request: Request, env: Env): Promise<SessionPayload | null> {
   let found = verified.get(request);
@@ -166,8 +160,8 @@ export async function readPortalSession(
     : { email: payload.email };
 }
 
-/** Ends one Portal session, in any browser that holds its cookie. The row is kept until
- *  the cookie could no longer be sent (the nightly backup prunes it after `expires_at`). */
+// Ends one Portal session, in any browser that holds its cookie. The row is kept until the cookie
+// could no longer be sent (the nightly backup prunes it after `expires_at`).
 export async function endPortalSession(env: Env, sid: string, now: Date): Promise<void> {
   await env.DB.prepare(
     "INSERT OR IGNORE INTO portal_session_ends (sid, ended_at, expires_at) VALUES (?1, ?2, ?3)",
@@ -190,17 +184,9 @@ export async function logPortalSignOut(email: string): Promise<void> {
   });
 }
 
-/**
- * site-runtime's adminIdle around the Portal's routes, as the sites use withAdminIdle
- * around /admin. The Portal's sign-in is not an Access token on the request, so it
- * passes adminIdle its own session: `id` a server-keyed digest of the session id, so
- * the last-request cookie cannot be made without COOKIE_ENCRYPTION_KEY (which also keys
- * its signature, as adminIdle's `secret`), and
- * `signedInAt` the sign-in time. The app's polling fetches send
- * X-Background (BACKGROUND_HEADER), which adminIdle checks but does not count as a
- * request, so an open tab left alone goes idle. With no session it goes straight to
- * `handle`, whose gate starts the sign-in.
- */
+// site-runtime's adminIdle around the Portal's routes, as the sites use withAdminIdle around
+// /admin. The Portal's sign-in is not an Access token on the request, so it passes adminIdle its
+// own session:
 export async function withPortalIdle(
   request: Request,
   env: Env,
@@ -247,9 +233,9 @@ export async function withPortalIdle(
   return out;
 }
 
-/** What the top bar shows for the signed-in person: the name from their Access identity,
- *  else the local part of their email, never a fixed label. Initials are the first letters
- *  of the first and last word. */
+// What the top bar shows for the signed-in person: the name from their Access identity, else the
+// local part of their email, never a fixed label. Initials are the first letters of the first and
+// last word.
 export function portalDisplay(user: PortalUser): { name: string; initials: string } {
   const name = user.name?.trim() || user.email.split("@")[0] || user.email;
   const words = name.split(/[\s._-]+/).filter(Boolean);
@@ -262,8 +248,8 @@ export function startPortalLogin(request: Request, env: Env, returnTo: string): 
   return startAccessLogin(request, env, portalLogin(new URL(request.url)), returnTo);
 }
 
-/** /portal itself or a path under /portal/. A bare startsWith("/portal") would also
- *  pass /portalx, and /portal//host would leave the origin once /portal is cut off. */
+// /portal itself or a path under /portal/. A bare startsWith("/portal") would also pass /portalx,
+// and /portal//host would leave the origin once /portal is cut off.
 function isPortalPath(path: string): boolean {
   if (path === PORTAL_PATH) return true;
   return path.startsWith(PORTAL_PREFIX) && isSameOriginPath(path.slice(PORTAL_PATH.length));
@@ -322,8 +308,8 @@ const BEARER_REFUSAL =
 
 export type PortalGate = { ok: true; user: PortalUser } | { ok: false; response: Response };
 
-/** Every Portal route but the callback answers to this: a 403 for any Authorization
- *  header, the Access sign-in with no session, else the administrator. */
+// Every Portal route but the callback answers to this: a 403 for any Authorization header, the
+// Access sign-in with no session, else the administrator.
 export async function portalGate(
   request: Request,
   env: Env,
@@ -358,9 +344,9 @@ export function queryParam(url: URL, name: string): string | null {
   return raw ? raw : null;
 }
 
-/** A Portal API route behind the gate: `run` is called only once the administrator is signed in
- *  (with the user, ahead of any extra arguments the caller passes), and a request that is not
- *  gets the gate's own response. */
+// A Portal API route behind the gate: `run` is called only once the administrator is signed in
+// (with the user, ahead of any extra arguments the caller passes), and a request that is not gets
+// the gate's own response.
 export function behindGate<A extends unknown[]>(
   run: (request: Request, env: Env, now: Date, user: PortalUser, ...rest: A) => Promise<Response>,
 ) {

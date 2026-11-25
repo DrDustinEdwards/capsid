@@ -21,14 +21,7 @@ import { Status } from "capsomer/react/status";
 import { KIND_STATUS } from "../lib/derive";
 import "./Completeness.css";
 
-// COMPLETENESS: devkit's daily scoreboard (src/completeness.ts). Every area of the shared code
-// against the package and every live site, each cell from the live checks and the verifiers'
-// verdicts only, so no thread can mark its own work complete. The grid gives the whole
-// picture; each area's panel below says why a cell is not complete yet, with the proof.
-// Nothing here changes anything: a verdict is a file in devkit, signed by a verifier.
-
 const BOARD_URL = "https://github.com/DrDustinEdwards/devkit/blob/scoreboard/SCOREBOARD.md";
-// "unmeasured": a check could not measure the cell (its reason says why), which is neither a pass nor a failure.
 const KIND = {
   complete: "ok",
   partial: "warn",
@@ -36,8 +29,6 @@ const KIND = {
   unmeasured: "unknown",
   "n/a": "nodata",
 } as const;
-// The grid's tones (Capsomer's StatusMatrix); a check that could not measure is the muted
-// question mark, the same mark as KIND's "unknown" in the panels below.
 const TONE = {
   complete: "ok",
   partial: "warn",
@@ -236,8 +227,6 @@ function AreaPanel({
   );
 }
 
-// Cells that say the same thing (no check yet, the same reason) share one line, so twelve
-// sites without a check read as one sentence; a cell with errors or proof keeps its own.
 function groups(
   open: Array<{ c: Column; cell: CompletenessCell }>,
 ): Array<{ names: string[]; cell: CompletenessCell }> {

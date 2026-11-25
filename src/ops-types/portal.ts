@@ -1,33 +1,8 @@
 import type { OpsFeed } from "./feed";
 
-// The Portal's controls (capsid/research/design-portal-unify.md, section 2).
-//
-// Two requests, as ruled 2026-09-11: a preview that writes nothing and returns what
-// will change plus a signed token, then a perform that carries only the token. Both
-// are JSON POSTs with the headers X-Capsid-CSRF (the feed's csrf value) and
-// Content-Type: application/json.
-//   POST /portal/api/actions/preview    body PortalActionRequest -> PortalPreview
-//   POST /portal/api/actions/perform    body { token }           -> PortalPerformed
-//   GET  /portal/api/namespaces                                   -> PortalNamespaces
-//   GET  /portal/api/activity?namespace=&actor= | ?id=           -> PortalActivity
-//   GET  /portal/api/claims?job= | ?namespace=&agent=&since=&until= -> PortalClaimsJob | PortalClaimsAggregate
-//   GET  /portal/api/packages/history?name=                       -> PortalPackageHistory
-//   GET  /portal/api/not-found                                    -> PortalNotFound
-//   GET  /portal/api/stale                                        -> PortalStale
-//   GET  /portal/api/merge-units                                  -> PortalMergeUnits
-//   GET  /portal/api/site-search?namespace=                       -> PortalSiteSearch
-//   GET  /portal/api/site-traffic?namespace=&days=                -> PortalSiteTraffic
-//   GET  /portal/api/workers-builds?namespace=&limit=             -> PortalWorkersBuilds
-//   GET  /portal/api/build-log?build=                             -> PortalBuildLog
-//   GET  /portal/api/plan                                         -> PortalPlan
-//   GET  /portal/api/digest?since=                                -> PortalDigest
-//   GET  /portal/api/maintenance                                  -> PortalMaintenance
-//   GET  /portal/api/convergence                                  -> PortalConvergence
-//   GET  /portal/api/push                                         -> PortalPush
-//   POST /portal/api/push   body { op: "on", subscription, label } | { op: "off", id } | { op: "test" } -> PortalPush
-//   POST /portal/api/sign-out           body {}                  -> 204, the Portal's cookies expired
-// A refusal is text/plain: 400 refused or invalid, 403 CSRF or cross-site, 410 the
-// token expired (preview again), 413 body too large. Signed out is the gate's 302.
+// Preview writes nothing and returns a signed token; perform carries only the token. Both are JSON
+// POSTs with X-Capsid-CSRF. A refusal is text/plain: 400 refused or invalid, 403 CSRF or
+// cross-site, 410 token expired, 413 body too large.
 
 export type PortalAction =
   | "overnight"
@@ -49,97 +24,20 @@ export type PortalAction =
   | "package_edit"
   | "package_remove"
   | "site_repair"
-  // Back up now (src/site-backup.ts): run_job { backup: true } on one site or on every site
-  // that sets backup: true in its operator configuration.
   | "site_backup"
-  // Run a scheduled job now (src/site-jobs.ts): run_job { job } on a site's operator API, or
-  // one of Capsid's own nightly jobs.
   | "run_job"
-  // The merge units (docs/design/design-merge-pipeline.md section 7): a signed policy
-  // change that promotes or removes a unit, and the Undo of a unit's suspension.
   | "sign_policy_change"
-  // Write the auto-merge policy from docs/policy/auto-merge.md on the default branch and
-  // sign it (src/policy-sign.ts, planPolicyFromRepo).
   | "sign_policy_from_repo"
   | "unit_resume"
-  // Lift a namespace's auto-merge pause (src/merge-safety.ts), the shutoff after bad
-  // unattended merges.
   | "automerge_resume"
-  // Register, remap and delete a project (namespace), as capsid_admin_manage_namespaces
-  // actions register, update and delete_preview/delete_perform do (src/namespace-admin.ts,
-  // src/namespace-delete.ts).
   | "namespace_add"
   | "namespace_edit"
   | "namespace_remove"
-  // A newly minted agent's key starts resolving (src/agents-admin.ts activateAgent). Portal only.
   | "activate_agent"
-  // Mint a new site key and set it on the site's Worker and on Carrel (src/site-key.ts).
-  // Portal only. The value is never shown.
   | "site_key_rotate";
 
-// params by action:
-//   pause         { namespace, reason, undo? }   reason required
-//   unpause       { namespace, reason, undo? }   reason required
-//   mode          { value: "api" | "subscription" | "off", reason, undo? }   reason required
-//   overnight     { value: "off" | "api" | "subscription", reason, undo? }   reason required
-//                 choosing subscription records Dustin's decision, its date and its
-//                 reasoning with the switch (src/overnight.ts)
-//                 undo: "true" marks the reverse of a change just made, from the
-//                 Portal's Undo; the click row is then portal-undo-<action>
-//                 instead of portal-<action>.
-//   resume_job    { id, reason, note? }   reason required; note is the full approval,
-//                 which the driver reads as resume_note.note
-//   release_job   { id, reason }          reason required
-//   fail_job      { id, reason }          reason required
-//   close_shipped { id, reason }          reason required; the seat's complete of a
-//                 blocked job another credential holds, credited to that holder
-//   supersede_job { id, reason, replaced_by? }   reason required; a queued job, or a
-//                 claimed one with no work recorded, ends as superseded (no outcome)
-//   park_job      { id, reason, undo? }   reason required, one line: when it comes back
-//   unpark_job    { id, reason?, undo? }  a parked job goes back to the queue; the reason
-//                 is recorded in the click row only (unpark itself takes none)
-//   pr_close      { namespace, number, reason, repo? }   reason required; closes an open
-//                 pull request as capsid_close_pr action close does, head branch cleanup included
-//   approve_pr    { namespace, prs, shas, repo?, confirm?, reason?, undo? }   prs and shas
-//                 comma-separated, in the same order: each pull request at the head sha
-//                 that was reviewed. Records approvals (src/pr-approvals.ts) and never
-//                 merges; a typed (money) one only alone, with its number as confirm.
-//                 undo: "true" voids the open approvals of prs, "undone"
-//   revoke_agent  { name }
-//   site_add      { namespace, name?, origin?, health_path?, platform?, script? }
-//                 no origin: the namespace serves no site, and takes no other field
-//   site_edit     { namespace, revision, name?, origin?, health_path?, platform?, script? }
-//                 every field is the row as it will be; revision is the one shown
-//   site_remove   { namespace, revision }
-//   reset_breaker { namespace }           the queue's circuit breaker (src/job-breaker.ts)
-//   package_add   { name, repo?, formerly? }
-//   package_edit  { name, revision, repo?, formerly? }   the row as it will be
-//   package_remove { name, revision }
-//   site_repair   { namespace, tool }     one allowlisted tool on a site's operator API
-//                 (src/site-repair.ts); refused for a tool outside the site's list or the
-//                 Worker's ceiling, and while the rate limit holds
-//   site_backup   { namespace? }          run_job { backup: true } on that site, or with no
-//                 namespace on every site that sets backup: true (src/site-backup.ts)
-//   run_job       { namespace, name }     one scheduled job run now: the site's, through its
-//                 operator API's run_job, or Capsid's own (src/site-jobs.ts)
-//   sign_policy_change { change: "promote" | "demote", unit, confirm, reason? }
-//                 confirm is the policy's next version, typed
-//   sign_policy_from_repo { confirm, reason? }   confirm is the file's version, typed
-//   unit_resume   { unit, reason }        reason required
-//   automerge_resume { namespace, reason }   reason required
-//   namespace_add { namespace, repo?, label?, repos? }   repo as "owner/name" (label
-//                 defaults to "primary"), or repos as a JSON array of { repo, label } with
-//                 exactly one "primary"; refused if the namespace is registered
-//   namespace_edit { namespace, repos }   repos as above, the whole mapping as it will be;
-//                 the preview binds the mapping it read, so an edit in between is refused
-//   namespace_remove { namespace, cascade?: "true", allow_improve_paths?: "true" }
-//                 every refusal of delete_preview: an open job, a live agent naming it,
-//                 the roster, live documents without cascade, signed policy documents
-//                 without allow_improve_paths, over the batch cap. The preview binds the
-//                 plan's fingerprint; anything counted that changes refuses the perform
-//   site_key_rotate { namespace }         the site's ops_sites row must name a Cloudflare
-//                 Worker script, and CF_SECRETS_TOKEN must be set. The key is never shown,
-//                 logged or audited
+// Params are by action; most writes need a reason, and undo: "true" marks the reverse of a change
+// just made (click row portal-undo-<action>).
 export interface PortalActionRequest {
   action: PortalAction;
   params: Record<string, string>;
@@ -147,13 +45,9 @@ export interface PortalActionRequest {
 
 export interface PortalPreview {
   action: PortalAction;
-  // One sentence: what this does, naming the target.
   summary: string;
-  // Exactly what changes, one line each, from the state read now.
   changes: string[];
-  // The audit rows the perform will write, as "<action> by <actor>".
   audit: string[];
-  // Signed; carries action and params. Valid until expires_at.
   token: string;
   expires_at: string;
 }
@@ -161,16 +55,12 @@ export interface PortalPreview {
 export interface PortalPerformed {
   action: PortalAction;
   summary: string;
-  // Set when the action happened but the click's own audit row was not written.
   warning: string | null;
-  // The feed as it stands after the action.
   feed: OpsFeed;
 }
 
 export interface PortalNamespace {
   namespace: string;
-  // The queue's circuit breaker: open after the threshold of holder fails in 24 hours,
-  // until reset. since is the window's start in audit_log's UTC format.
   breaker: {
     open: boolean;
     failed: number;
@@ -181,8 +71,6 @@ export interface PortalNamespace {
   // Null means no truth report was ever run, which is not an integrity of zero.
   latest_report: { integrity: number | null; generated: string } | null;
   jobs: { queued: number; claimed: number; blocked: number; done_today: number };
-  // The repo mapping the repo tools resolve through, as stored (one entry labeled primary).
-  // Empty when the namespace has no row in the namespaces table or its row does not parse.
   repos: Array<{ repo: string; label: string }>;
 }
 
@@ -192,31 +80,22 @@ export interface PortalNamespaces {
 }
 
 export interface PortalActivityRow {
-  // The audit_log row id: unique, so the view keys on it.
   id: number;
   at: string;
   actor: string | null;
-  // The MCP client behind a write ("Grok Bot"), "system" or "job:<id>" for a pass no client made; null when not known.
   client: string | null;
   action: string | null;
   namespace: string | null;
   path: string | null;
-  // What the row records. A job transition writes two rows with one action, actor and
-  // path: "job" for the job and "document" for its mirror document. null when the
-  // row's params name neither.
   target: "job" | "document" | null;
-  // What the row recorded, by name (src/audit-detail.ts). Never the raw params.
   detail: AuditDetail;
 }
 
-// One field of an audit row's params, labeled in plain English.
 export interface AuditField {
   name: string;
   value: string;
 }
 
-// One field that differs between a row's `before` and `after`. before is null for a
-// field the change added, after is null for one it removed.
 export interface AuditChange {
   field: string;
   before: string | null;
@@ -224,23 +103,16 @@ export interface AuditChange {
 }
 
 export interface AuditDetail {
-  // The reason typed with the change, when the row carries one.
   reason: string | null;
-  // Field by field, when the row carries a before or an after; null when it carries neither.
   changes: AuditChange[] | null;
   fields: AuditField[];
-  // Recorded fields not shown: hashes, signatures and nested values.
   withheld: number;
-  // The params are not JSON (rows older than that rule), so nothing can be shown.
   unreadable: boolean;
 }
 
 export interface PortalActivity {
   generated: string;
-  // id: one row by its id, for the Activity drawer; the namespace and actor filters
-  // are then not applied.
   filter: { namespace: string | null; actor: string | null; id: number | null };
-  // Newest first, at most `limit`.
   rows: PortalActivityRow[];
   limit: number;
 }

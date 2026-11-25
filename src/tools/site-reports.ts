@@ -16,8 +16,6 @@ import { MAX_AUDIT_FINDINGS, MAX_AUDIT_PAGES, siteAudit } from "../site-audit";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
-// The site reports: reads of a live site, beside the repo tools in src/tools/repo.ts.
-
 const INSPECT_PAGE = "inspect: the page to inspect, a whole https address on the site.";
 
 export function defineSiteReportOperations(server: McpServer, ctx: ToolCtx): void {

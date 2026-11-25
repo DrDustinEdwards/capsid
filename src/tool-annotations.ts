@@ -1,17 +1,4 @@
-// One honest set of hints per served tool,
-// so a client can confirm before acting. A tool's hints hold for every action it takes:
-// a tool with one action that writes is not read-only. test/tool-annotations.test.ts
-// derives each flag and fails both directions:
-// - readOnlyHint is true iff every action needs only the read grant (TOOL_GRANTS and
-//   TOOL_ACTION_GRANTS in src/scope.ts): "read", or "admin_read" for an admin tool
-//   that only reads.
-// - destructiveHint is true iff some action can overwrite or remove existing state.
-// - openWorldHint is true iff some operation the tool runs calls into src/github* or
-//   the Cloudflare API, directly or through a named module.
-// - idempotentHint is true for every read-only tool, and for a write only when a
-//   repeat of any of its actions changes nothing further.
-// The protocol's defaults when a hint is omitted are idempotent false and open world
-// true, so both are stated for every tool rather than left to a client's reading.
+// One honest set of hints per served tool, so a client can confirm before acting.
 
 export interface ToolHints {
   readOnlyHint: boolean;
@@ -93,10 +80,9 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // Replaces a site's key on the site Worker and on Carrel through the Cloudflare API.
 };
 
-// A tool whose action decides its grant (capsid_work_jobs, capsid_lint_namespace) is
-// served to a caller holding only the read grant with its read actions alone
-// (src/tools/surface-composite.ts READ_VIEWS), so for that caller it is read-only in fact and says
-// so (area 11, T7). Both views read only this Worker's D1 and KV.
+// A tool whose action decides its grant (capsid_work_jobs, capsid_lint_namespace) is served to a
+// caller holding only the read grant with its read actions alone (src/tools/surface-composite.ts
+// READ_VIEWS), so for that caller it is read-only in fact and says so (area 11, T7).
 export const READ_VIEW_HINTS: Record<string, ToolHints> = {
   // list, with its plan, digest, models and stale views: the queue and the stored plan.
   capsid_work_jobs: read({ idempotent: true, openWorld: false }),

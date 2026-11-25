@@ -47,8 +47,7 @@ export async function listRepoTree(
   };
 }
 
-// fresh: skip the KV read cache, for a caller that compares two reads (the second must be
-// GitHub's answer now, not the first one served back).
+// fresh: skip the KV read cache, for a caller comparing two reads.
 export async function readRepoFile(
   env: Env,
   namespace: string,
@@ -76,7 +75,6 @@ export async function readRepoFile(
   if (data.encoding === "base64" && data.content) {
     content = fromBase64Text(data.content);
   } else {
-    // Files over 1 MB come back without inline content; fetch the blob by sha.
     const blob = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/blobs/${data.sha}`);
     if (!blob.ok) throw new Error(`read_repo_file blob fetch failed (${blob.status})`);
     const blobData = (await blob.json()) as { content: string; encoding: string };
@@ -88,12 +86,10 @@ export async function readRepoFile(
 export const REPO_BATCH_MAX_FILES = 20;
 export const REPO_FILE_BUDGET = 200 * 1024;
 
-/** Read up to REPO_BATCH_MAX_FILES files, each independently. One missing path does
- *  not fail the batch: a batch is triage, and a triage call that throws because one
- *  of twenty paths moved has to be retried by bisection.
- *
- *  The per-file budget applies here and not to the single-path read, so an existing
- *  readRepoFile call never starts truncating silently. */
+/**
+ * One missing path does not fail the batch. The per-file budget applies here, not to the single-path
+ * read, so readRepoFile never starts truncating.
+ */
 export async function readRepoFiles(
   env: Env,
   namespace: string,
@@ -138,14 +134,8 @@ export async function readRepoFiles(
   };
 }
 
-// Every blob path on the default branch, in one call, for the truth report's
-// doc-vs-code drift check, which asks a set-membership question about a few hundred
-// paths. It reuses searchCode's tree fetch and size refusal: a recursive tree on a
-// large repo is one response, and GitHub truncates it silently past a limit.
-//
-// Returns null rather than throwing when the tree cannot be read or is too large, so
-// the caller reports the check as unrun; an empty set would report every cited path
-// as drift.
+// Null, not a throw, when the tree is unreadable or too large: an empty set would report every
+// cited path as drift.
 export async function repoBlobPaths(
   env: Env,
   namespace: string,

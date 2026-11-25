@@ -41,8 +41,8 @@ export type Binding =
 const str = (v: unknown): string | null =>
   typeof v === "string" && v.length > 0 && v.length <= 200 ? v : null;
 
-/** One binding as Capsid keeps it: its name, its kind and the resource it points at.
- *  Never a value. Null for a binding without a name. */
+// One binding as Capsid keeps it: its name, its kind and the resource it points at. Never a value.
+// Null for a binding without a name.
 export function bindingOf(raw: unknown): Binding | null {
   if (!raw || typeof raw !== "object") return null;
   const b = raw as Record<string, unknown>;
@@ -107,8 +107,8 @@ function refused(what: string, permission: string) {
   };
 }
 
-/** The tables of one D1 database, by a read of sqlite_master: an FTS5 table's shadow
- *  tables (name_data, name_idx, name_content, name_docsize, name_config) are left out. */
+// The tables of one D1 database, by a read of sqlite_master: an FTS5 table's shadow tables
+// (name_data, name_idx, name_content, name_docsize, name_config) are left out.
 export function userTables(rows: Array<{ name?: unknown; sql?: unknown }>): string[] {
   const names = rows.map((r) => (typeof r.name === "string" ? r.name : "")).filter(Boolean);
   const virtual = rows
@@ -118,8 +118,8 @@ export function userTables(rows: Array<{ name?: unknown; sql?: unknown }>): stri
   return names.filter((n) => !shadow(n)).slice(0, MAX_TABLES);
 }
 
-/** The store bindings of a Worker's newest Previews, each from its newest deployment. A
- *  Worker with no Previews has none; a refused read is its reason. */
+// The store bindings of a Worker's newest Previews, each from its newest deployment. A Worker with
+// no Previews has none; a refused read is its reason.
 async function readPreviewStores(
   fetchImpl: FetchLike,
   token: string,
@@ -169,8 +169,8 @@ async function readPreviewStores(
   }
 }
 
-/** Everything the document needs, from Cloudflare. Throws only when the Worker list itself
- *  cannot be read; every other part fails alone, with the reason kept. */
+// Everything the document needs, from Cloudflare. Throws only when the Worker list itself cannot be
+// read; every other part fails alone, with the reason kept.
 export async function readResourceFacts(
   env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
   fetchImpl: FetchLike = (u, i) => fetch(u, i),

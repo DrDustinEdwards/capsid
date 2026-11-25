@@ -23,20 +23,9 @@ import { MAX_TRAFFIC_DAYS, siteTraffic } from "./site-traffic";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { plural } from "@drdustinedwards/site-helpers/text";
-// One site's own page in the Portal: its Search and traffic tab and its Deploys tab, read
-// live for one namespace. Four routes, each a door onto a library the chat tools already
-// serve, so the Portal and chat cannot disagree:
-//   GET /portal/api/site-search?namespace=    searchConsole and bingWebmaster
-//                                             (capsid_inspect_repo actions search_console and bing_webmaster)
-//   GET /portal/api/site-traffic?namespace=&days=   siteTraffic, every TRAFFIC_REPORTS report
-//                                             (capsid_inspect_repo action site_traffic)
-//   (the Deploys tab's workers-builds and build-log routes are src/portal-builds.ts)
-// The site, its property and its Worker come from the namespace's ops_sites row, never from
-// the caller. Each source answers on its own: data, or no data with the reason (docs/portal.md,
-// "No data is a state, never a zero"), so one source failing leaves the others. They read the
-// outside services and write nothing. Routes, not tools, so no grant is checked here (one
-// enforcement point, test/route-gates.test.ts): each answers to portalGate, and src/scope.ts
-// lists it among the routes gated some other way. Tests: test-integration/portal-site.test.ts.
+// One site's own page in the Portal: its Search and traffic tab and its Deploys tab, read live for
+// one namespace. Four routes, each a door onto a library the chat tools already serve, so the
+// Portal and chat cannot disagree:
 
 export const PORTAL_SITE_SEARCH_PATH = "/portal/api/site-search";
 export const PORTAL_SITE_TRAFFIC_PATH = "/portal/api/site-traffic";
@@ -371,8 +360,8 @@ export const handlePortalSiteSearch = behindGate(async (request, env, now) => {
   return jsonResponse(await readSiteSearch(env, ns.namespace, fetch, now));
 });
 
-/** A namespace read with one whole-number parameter (days, limit): the gate, the namespace
- *  and the number, each refused with its reason, then the read. */
+// A namespace read with one whole-number parameter (days, limit): the gate, the namespace and the
+// number, each refused with its reason, then the read.
 export const countedRead = behindGate(
   async (
     request,

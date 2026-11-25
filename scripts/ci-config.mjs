@@ -1,23 +1,11 @@
 #!/usr/bin/env node
-// Reconstructs wrangler.jsonc on a CI runner. Never run locally: it writes the
-// gitignored config file, and a developer machine already has the real one.
-//
-// wrangler.jsonc is gitignored because this is a public repo, so a checkout carries
-// only wrangler.jsonc.example with placeholder ids and CI cannot deploy without this
-// step.
-//
-// RESOLVE BY NAME, VERIFY BY ID, FAIL CLOSED ON DISAGREEMENT. A rename, a duplicate or
-// a second account would otherwise silently rebind this Worker to the wrong data and
-// the deploy would look green.
-//
-// The pinned ids are published in capsid/core.md and are inert without an API token.
-// They are an assertion, not a credential.
+// Reconstructs wrangler.jsonc on a CI runner, where a checkout carries only the example. Never run locally: it would overwrite a developer's real, gitignored config.
+// Resolve by name, verify by id, fail closed on disagreement: a rename, duplicate or second account would otherwise rebind the Worker to the wrong data with a green deploy.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { APP_KV, D1, GITHUB_APP_CLIENT_ID, OAUTH_KV, R2 } from "./bindings.mjs";
 
-// Pinned in scripts/bindings.mjs, the one place a binding id is written.
 const EXPECTED = {
   d1: D1,
   appKv: APP_KV,
@@ -26,9 +14,7 @@ const EXPECTED = {
   githubAppClientId: GITHUB_APP_CLIENT_ID,
 };
 
-// Refuse to run outside CI. This script WRITES wrangler.jsonc, and on a developer
-// machine that file is the real, gitignored config. GitHub Actions sets CI=true. The
-// escape hatch is explicit and named so it cannot be triggered by accident.
+// Refuse outside CI (GitHub Actions sets CI=true): this writes the real gitignored config on a developer machine. The escape hatch is explicit and named.
 if (
   process.env.CI !== "true" &&
   process.env.CI_CONFIG_ALLOW_LOCAL !== "i-know-this-overwrites-wrangler-jsonc"
@@ -57,8 +43,7 @@ function die(message) {
   process.exit(1);
 }
 
-// wrangler prints human preamble before JSON on some commands, so take the first
-// well-formed JSON array in the output rather than trusting the whole stream to parse.
+// wrangler prints a preamble before JSON on some commands, so take the first well-formed JSON array.
 function parseJsonArray(text, label) {
   const start = text.indexOf("[");
   const end = text.lastIndexOf("]");
@@ -95,7 +80,6 @@ function assertId(label, actual, expected) {
   console.log(`ci-config: ${label} ok, name resolved to the pinned id ${expected}`);
 }
 
-// D1
 const d1List = parseJsonArray(wrangler(["d1", "list", "--json"]), "D1");
 const d1 = resolveUnique(
   d1List,
@@ -104,7 +88,6 @@ const d1 = resolveUnique(
 );
 assertId("D1 capsid", d1.uuid ?? d1.id, EXPECTED.d1.id);
 
-// KV
 const kvList = parseJsonArray(wrangler(["kv", "namespace", "list"]), "KV");
 const appKv = resolveUnique(
   kvList,
@@ -112,8 +95,7 @@ const appKv = resolveUnique(
   (n) => n.title === EXPECTED.appKv.name,
 );
 assertId(`KV ${EXPECTED.appKv.name} (APP_KV)`, appKv.id, EXPECTED.appKv.id);
-// Either title while the namespace is renamed in place (same id) from "capsid-oauth" to
-// the <worker>-oauth rule's "capsid-mcp-oauth"; a later change drops the old title.
+// Either title while the namespace is renamed in place from "capsid-oauth" to "capsid-mcp-oauth".
 const OAUTH_KV_TITLES = [EXPECTED.oauthKv.name, "capsid-oauth"];
 const oauthKv = resolveUnique(
   kvList,
@@ -121,24 +103,15 @@ const oauthKv = resolveUnique(
   (n) => OAUTH_KV_TITLES.includes(n.title),
 );
 assertId(`KV ${EXPECTED.oauthKv.name} (OAUTH_KV)`, oauthKv.id, EXPECTED.oauthKv.id);
-// The split is the point: if these two ever resolve to the same id again, the Worker's
-// caches are back in the provider's keyspace and nothing else would say so.
+// If these two resolve to the same id, the Worker's caches are back in the provider's keyspace and nothing else would say so.
 if (appKv.id === oauthKv.id) {
   die(
     `APP_KV and OAUTH_KV resolved to the SAME namespace id (${appKv.id}). The 2026-08-15 split has been undone. Nothing was deployed.`,
   );
 }
 
-// R2 is asserted against the COMMITTED CONFIG, not against the account.
-//
-// An R2 binding carries no id, only a bucket name that is a literal in
-// wrangler.jsonc.example, so there is nothing to resolve by name and verify by id. The
-// check here is config-side: the pin must be set and not a placeholder. A bucket
-// missing from the account is caught by `wrangler deploy` in the next step.
-//
-// The deploy token needs Workers R2 Storage EDIT, not Read: wrangler checks R2
-// permission only for bindings that are new relative to the deployed version, and
-// fails with Authentication error 10000 without Edit.
+// R2 is asserted against the committed config, not the account: a binding carries only a literal bucket name, so the pin must be set and not a placeholder (a missing bucket fails `wrangler deploy`).
+// The deploy token needs Workers R2 Storage Edit: wrangler checks R2 permission for new bindings and fails with Authentication error 10000 without it.
 if (!EXPECTED.r2.name || EXPECTED.r2.name.startsWith("YOUR_")) {
   die("the R2 MEDIA bucket pin is unset or still a placeholder. Nothing was deployed.");
 }
@@ -146,7 +119,6 @@ console.log(
   `ci-config: R2 MEDIA ${EXPECTED.r2.name} pinned by name, existence is enforced by the deploy step`,
 );
 
-// Render the example into a real config.
 let config = readFileSync("wrangler.jsonc.example", "utf8");
 const substitutions = [
   ["YOUR_D1_ID", EXPECTED.d1.id],
@@ -164,9 +136,7 @@ for (const [placeholder, value] of substitutions) {
   config = config.split(placeholder).join(value);
 }
 
-// The catch-all. Any placeholder that survives means a binding this script does not know
-// about was added to the example, and deploying would send a literal "YOUR_..." string
-// to Cloudflare.
+// Catch-all: a surviving placeholder is a binding this script does not know, and deploying would send a literal "YOUR_..." to Cloudflare.
 const leftover = config.match(/YOUR_[A-Z0-9_]+/g);
 if (leftover) {
   die(

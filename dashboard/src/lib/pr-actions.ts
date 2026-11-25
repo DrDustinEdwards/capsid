@@ -1,21 +1,15 @@
 import type { BatchItem, ConfirmRequest } from "../app/ctx";
 import type { OpsAwaitingSeat, OpsFeed } from "../types";
 
-// A pull request waiting for you (live.awaiting_seat), and the two controls that decide it:
-// approve_pr and pr_close.
-
 export function prName(a: Pick<OpsAwaitingSeat, "repo" | "number">): string {
   return `${a.repo} #${a.number}`;
 }
 
-// The id a pull request's row or card carries, so an alert or a link can name it.
 export function prAnchor(a: Pick<OpsAwaitingSeat, "repo" | "number">): string {
   return `pr-${a.repo.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${a.number}`;
 }
 
-// Approving (src/pr-approvals.ts) records the head the tick judged, and the next tick merges
-// it once CI is green on that sha. A money PR (class typed) is approved by typing its number
-// in chat, never here; seat and wait cannot be approved.
+// A money PR (class typed) is approved by typing its number in chat, never here.
 export function canApprove(a: OpsAwaitingSeat): a is OpsAwaitingSeat & { head_sha: string } {
   return (
     (a.class === "approve" || a.class === "auto") &&
@@ -37,7 +31,6 @@ export function approveRequest(a: OpsAwaitingSeat & { head_sha: string }): Confi
   return { action: item.action, params: item.params, title: `Approve pull request ${prName(a)}` };
 }
 
-// Closing without a merge: a confirm with a reason; GitHub can reopen it, the Portal does not.
 export function closeRequest(a: OpsAwaitingSeat): ConfirmRequest {
   return {
     action: "pr_close",
@@ -46,7 +39,6 @@ export function closeRequest(a: OpsAwaitingSeat): ConfirmRequest {
   };
 }
 
-// Several approvals as one confirm: each its own approve_pr, previewed and performed in turn.
 export function approveAllRequest(
   list: ReadonlyArray<OpsAwaitingSeat & { head_sha: string }>,
 ): ConfirmRequest {
@@ -60,7 +52,6 @@ export function approveAllRequest(
   };
 }
 
-// The pull request an inbox item's GitHub address names, when it is one waiting for you.
 export function seatFor(feed: OpsFeed, link: string | null): OpsAwaitingSeat | undefined {
   const m = link ? /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(link) : null;
   if (!m) return undefined;

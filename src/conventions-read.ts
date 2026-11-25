@@ -2,11 +2,6 @@
 // capsid/conventions.md first, but audit_log recorded writes only. A read of that document,
 // through `capsid_read_doc` or `capsid_start_session`, now leaves one `conventions-read` row, at
 // most one per caller per hour.
-//
-// The row is NOT addressed to capsid/conventions.md: `lastActor` and the Portal read the newest
-// audit row for a document's path as its last writer, so a reader's row there would make every
-// reader the document's last_actor. It sits in the capsid namespace with no path, and params say
-// how the document was reached.
 
 import { HEALTH_PROBE_NS, HEALTH_PROBE_PATH } from "./store-probe";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
@@ -14,17 +9,14 @@ import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 const CONVENTIONS_READ_ACTION = "conventions-read";
 const WINDOW = "-1 hour";
 
-/** Whether a read of this document is a read of the portfolio rules. */
 export function isConventionsDoc(namespace: string, path: string): boolean {
   return namespace === HEALTH_PROBE_NS && path === HEALTH_PROBE_PATH;
 }
 
-/** Record that `actor` read the rules, unless it already did inside the last hour. A
- *  caller that names its `thread` is counted once per hour per thread, since every project
- *  thread acts as one login; a caller that names none is counted once per hour as before.
- *  One statement, so the check and the insert cannot be separated by another request's row
- *  for the same caller. A failure is reported and never fails the read: this is a
- *  measurement, and the caller asked for a document. */
+/**
+ * Record that `actor` read the rules, unless it already did inside the last hour. One statement,
+ * so the check and the insert cannot be separated by another request's row for the same caller.
+ */
 export async function recordConventionsRead(
   db: D1Database,
   actor: string,

@@ -1,18 +1,10 @@
-// The chart demo's data (src/lib/demo.ts): every GET answer of the dev mock (dev/mock-api.ts, which
-// serves dev/sample-feed.json and fake answers beside it), captured once into
-// build/client/demos/api/<name>.json with the mock's clock pinned to DEMO_CAPTURED. The Worker's demo
-// pages and the browser both read these files, moving every time to now. Runs after the build; it
-// starts the mock on a free port, reads each route, and stops it.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEMO_CAPTURED, demoFileName } from "../src/lib/demo.ts";
 
-// The routes the app reads with a plain GET. packages/history needs a package name, so each configured
-// package's history is read on its own, into packages/history/<name>.json (src/lib/demo.ts reads it).
-// A site page's reads take a query; the demo keeps one answer per route (src/lib/demo.ts drops the
-// query), captured for the sample site, so a route's file is named for its path alone.
+// The demo keeps one answer per route (src/lib/demo.ts drops the query), captured for the sample site.
 const ROUTES = [
   "ops",
   "namespaces",
@@ -37,7 +29,6 @@ const ROUTES = [
   "push",
 ];
 
-// Before the mock loads: it reads the pinned clock as it starts.
 process.env.WF_MOCK_NOW = DEMO_CAPTURED;
 const { mockHandler } = await import("../dev/mock-api.ts");
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");

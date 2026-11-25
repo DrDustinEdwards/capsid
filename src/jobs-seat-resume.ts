@@ -1,4 +1,3 @@
-// Resume: a blocked job back off its gate.
 import type { Env } from "./env";
 import type { Agent } from "./agents";
 import {
@@ -35,41 +34,25 @@ import {
 
 type PrUrl = NonNullable<ReturnType<typeof parsePrUrl>>;
 
-// Resume. A gate is a pause, not an ending: `claim` refuses anything that is not queued,
-// so a job a driver stopped at a gate could otherwise never be picked back up.
-//
-// The signature is checked again: a blocked job sits in the table for as long as a human
-// takes, the window in which a row could be edited, and resume hands the body back to a
-// session with shell and repo credentials. A tampered job is marked failed.
-//
-// A plain resume is the seat's act (callerIsSeat), not restricted to the original claimer,
-// because the seat that approves is routinely not the session that blocked. The reason is
-// required and lands in the audit row. A driver may not plain-resume: its reason would read
-// as "approved" as though a human had said yes. It may still resume its own job through
-// approved_by_policy for a branch push or a pull request.
-//
-// The claim goes back to the driver that blocked it (a blocked row keeps claimed_by); `take`
-// is the explicit way for a resumer to acquire the job, and runs every check a claim runs.
-// If that credential cannot take it back (the shared admin identity, a runner whose
-// session ended, a revoked agent) the job goes back to the queue with its approval and the
-// next claimer gets the resume note.
+// Resume. A gate is a pause, not an ending: `claim` refuses anything that is not queued, so a job
+// a driver stopped at a gate could otherwise never be picked back up.
 export interface ResumeOptions {
-  // Set: approved on the signed gate policy (the value is the policy version the caller
-  // read). The blocked command must match a policy class or the resume is refused.
+  // Set: approved on the signed gate policy (the value is the policy version the caller read). The
+  // blocked command must match a policy class or the resume is refused.
   approvedByPolicy?: string;
   take?: boolean;
   correction?: boolean;
   note?: string;
 }
 
-// What a driver may approve for itself: pushing its own branch and opening its own pull
-// request. A migration stays the seat's.
 const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
 
-/** The head commit of the job's own pull request, and the mapped repo it is on.
- *  The pull request is the one the job records: its result_ref, or its job_outcome_prs
- *  rows. Throws with the reason when there is none, more than one, one outside the
- *  namespace's mapping, or one GitHub cannot read. */
+/**
+ * The head commit of the job's own pull request, and the mapped repo it is on. The pull request is
+ * the one the job records: its result_ref, or its job_outcome_prs rows. Throws with the reason
+ * when there is none, more than one, one outside the namespace's mapping, or one GitHub cannot
+ * read.
+ */
 async function jobBranchHead(env: Env, job: JobRow): Promise<{ repo: string; sha: string }> {
   const recorded = await env.DB.prepare("SELECT pr_url FROM job_outcome_prs WHERE job_id = ?1")
     .bind(job.id)
@@ -90,7 +73,6 @@ async function jobBranchHead(env: Env, job: JobRow): Promise<{ repo: string; sha
     );
   }
   const [pr] = [...byKey.values()];
-  // resolveRepo refuses a repo the namespace does not map, before GitHub is asked.
   const { owner, repo, full } = await resolveRepo(env, job.namespace, `${pr.owner}/${pr.repo}`);
   const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${pr.number}`);
   if (!resp.ok) throw new Error(`reading pull request #${pr.number} failed (${resp.status})`);
@@ -109,7 +91,6 @@ export async function resumeJob(
   opts: ResumeOptions = {},
 ): Promise<JobResult> {
   const { approvedByPolicy, take = false, correction = false } = opts;
-  // A blank note is no note, so resume_note does not carry an empty block.
   const fullNote = opts.note?.trim() ? opts.note : undefined;
   const actor = agent.actor;
   const badActor = actorShapeRefusal("resume", actor);
@@ -130,9 +111,9 @@ export async function resumeJob(
     );
   }
 
-  // A plain resume is a record that the seat approved the gate, and a driver approving
-  // a gate, its own or a sibling's, is no approval. `take` does not change that, so a
-  // driver passing take is refused the same way.
+  // A plain resume is a record that the seat approved the gate, and a driver approving a gate, its
+  // own or a sibling's, is no approval. `take` does not change that, so a driver passing take is
+  // refused the same way.
   const isSeat = callerIsSeat(agent);
   if (approvedByPolicy === undefined && !isSeat) {
     const own = current.claimed_by === actor;
@@ -144,15 +125,15 @@ export async function resumeJob(
     );
   }
 
-  // The claimant the claim goes to. A blocked row with no claimant (none should
-  // exist, since block keys on claimed_by) goes to the caller.
+  // The claimant the claim goes to. A blocked row with no claimant (none should exist, since block
+  // keys on claimed_by) goes to the caller.
   const holder = take || !current.claimed_by ? actor : current.claimed_by;
 
   const { toQueue } = await resumeDestination(env, holder, current, take);
   const acquiring = !toQueue && holder === actor;
 
-  // A resume that acquires the job is a claim, so it asks a claim's scope question. A job
-  // going back to its own claimant passed these at its claim.
+  // A resume that acquires the job is a claim, so it asks a claim's scope question. A job going back
+  // to its own claimant passed these at its claim.
   const corrupt = corruptRequirement(current);
   if (corrupt) {
     return refuse(
@@ -160,9 +141,9 @@ export async function resumeJob(
       `${id} has a corrupt requirement: ${corrupt}. It stays blocked; a requirement that cannot be read is not the same as none.`,
     );
   }
-  // The namespace is asked either way. A resume that returns the job to its own
-  // claimant still moves a job, so a caller that cannot write the job's namespace may
-  // not do it; only the job's flags are left to the claimant it goes back to.
+  // The namespace is asked either way. A resume that returns the job to its own claimant still moves
+  // a job, so a caller that cannot write the job's namespace may not do it; only the job's flags are
+  // left to the claimant it goes back to.
   const outside = outsideJobNamespace(agent, current.namespace);
   if (outside) {
     return refuse(
@@ -187,10 +168,9 @@ export async function resumeJob(
     }
   }
 
-  // The retry cap, checked before anything is spent. A job sent back twice already is
-  // one where each further correction has stopped being progress, and what to do next
-  // belongs to a person. An admin is that person arriving, so an admin resume passes
-  // and does not spend the budget.
+  // The retry cap, checked before anything is spent. A job sent back twice already is one where each
+  // further correction has stopped being progress, and what to do next belongs to a person. An admin
+  // is that person arriving, so an admin resume passes and does not spend the budget.
   const spentOnWork = await correctionsForWork(env.DB, current.namespace, current.title);
   if (!agent.admin && atCorrectionCap(spentOnWork)) {
     return refuse(
@@ -224,10 +204,8 @@ export async function resumeJob(
 
   let policyMatch: { klass: string; detail: string; version: string } | null = null;
   if (approvedByPolicy !== undefined) {
-    // Approving on policy is the seat's act: `resume` takes the write grant every driver
-    // holds, so without this a driver could approve its own blocked command. A driver may
-    // approve only its own branch push and pull request, on a job it still holds, and only when
-    // every matched class is in DRIVER_SELF_APPROVED; the never list still runs first.
+    // Approving on policy is the seat's act: `resume` takes the write grant every driver holds, so
+    // without this a driver could approve its own blocked command. the never list still runs first.
     if (!isSeat && (current.claimed_by !== actor || take)) {
       return refuse(
         "resume",
@@ -237,8 +215,8 @@ export async function resumeJob(
       );
     }
     const command = commandFromSummary(current.result_summary);
-    // The driver's narrower list is checked first, so a driver's migration is refused without
-    // a repo read on its behalf.
+    // The driver's narrower list is checked first, so a driver's migration is refused without a repo
+    // read on its behalf.
     if (!isSeat && command) {
       const match = classifyCommand(command);
       const beyond =
@@ -251,8 +229,6 @@ export async function resumeJob(
         );
       }
     }
-    // A migration is read at the job's branch head, not the default branch: the approved
-    // command runs the file in the driver's checkout. Read once, only when the command names one.
     let head: Promise<{ repo: string; sha: string }> | null = null;
     const verdict = await approveByPolicy(env, approvedByPolicy, command, async (path) => {
       head ??= jobBranchHead(env, current);
@@ -263,9 +239,8 @@ export async function resumeJob(
     if (!verdict.approved) {
       return refuse("resume", id + " is not pre-approved: " + verdict.reason);
     }
-    // The approved verdict is the one that counts, so the driver's list is asserted on
-    // it too. Unreachable unless the two classifications disagree, which is the case
-    // this line exists for.
+    // The approved verdict is the one that counts, so the driver's list is asserted on it too.
+    // Unreachable unless the two classifications disagree, which is the case this line exists for.
     if (!isSeat && verdict.klasses.some((k) => !DRIVER_SELF_APPROVED.includes(k))) {
       return refuse(
         "resume",
@@ -275,9 +250,9 @@ export async function resumeJob(
     policyMatch = { klass: verdict.klass, detail: verdict.detail, version: verdict.policyVersion };
   }
 
-  // Only a correction spends the budget, never an admin's. The 0 or 1 is bound, not
-  // interpolated, so the statement stays one static string for the source guards and the
-  // query-plan test. claimed_at is not touched, so duration spans the whole working life.
+  // Only a correction spends the budget, never an admin's. The 0 or 1 is bound, not interpolated, so
+  // the statement stays one static string for the source guards and the query-plan test. claimed_at
+  // is not touched, so duration spans the whole working life.
   const spend = correction && !agent.admin ? 1 : 0;
   const job: JobRow = {
     ...current,
@@ -287,8 +262,8 @@ export async function resumeJob(
     corrections_count: current.corrections_count + spend,
     updated_at: now.toISOString(),
   };
-  // Signed with the job body's key, over the approval, the full note and who gave it,
-  // bound to this job (src/job-signing.ts); latestResumeNote checks it on every read.
+  // Signed with the job body's key, over the approval, the full note and who gave it, bound to this
+  // job (src/job-signing.ts); latestResumeNote checks it on every read.
   const noteSig = await signJobText(
     env.IMPROVE_SCORE_SECRET,
     "resume-note",
@@ -306,12 +281,8 @@ export async function resumeJob(
     ...(spend ? { correction: true as const } : {}),
     signature: noteSig ? "verified" : "unconfigured",
   };
-  // The touch this resume records. A correction sends the work back; an approval clears
-  // the gate, on the signed policy or by the seat (admin or can_merge). "resume" was a
-  // plain resume by another write-grant caller, which is now refused above; older rows
-  // still carry it. A driver approving its own branch push
-  // or pull request on the policy is the policy's approval, not a person's. The note, when
-  // there is one, is a row of its own, so a count of approvals is not a count of notes.
+  // an approval clears the gate, on the signed policy or by the seat (admin or can_merge). The note,
+  // when there is one, is a row of its own, so a count of approvals is not a count of notes.
   const touchKind = correction ? "correction" : policyMatch || isSeat ? "approval" : "resume";
   const touchActorKind = actorKind(actor, {
     policy: policyMatch !== null && !isSeat,
@@ -351,7 +322,6 @@ export async function resumeJob(
         ]
       : []),
   ];
-  // One static statement for both returns (?5 is 'claimed' or 'queued', ?2 NULL for the queue).
   const won = await guardedTransition(env, current, [
     env.DB.prepare(
       `UPDATE jobs SET status = ?5, claimed_by = ?2,
@@ -370,9 +340,8 @@ export async function resumeJob(
       resumed_count: job.resumed_count,
       corrections_count: job.corrections_count,
       ...(agent.admin ? { cap_lifted_by_admin: true } : {}),
-      // Which class matched, not merely that one did. A row saying "approved by policy"
-      // cannot be checked against the policy afterwards; one naming the class and what
-      // it matched can.
+      // Which class matched, not merely that one did. A row saying "approved by policy" cannot be
+      // checked against the policy afterwards; one naming the class and what it matched can.
       ...(policyMatch
         ? {
             approved_by_policy: policyMatch.version,

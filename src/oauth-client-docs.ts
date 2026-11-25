@@ -1,11 +1,6 @@
-// OAuth client documents the Worker serves itself. The Worker takes clients by Client ID
-// Metadata Document only (capsid/research/design-capsid-access-login.md), and a client id is
-// the URL of its document, so it is served at a stable path that names no branch.
-// The document's client_id is the URL it was fetched at, which is what the
-// provider requires (scripts/cimd-probe-lib.mjs, probeDocumentProblem).
-//
-// Public by nature: a CIMD document is fetched by the authorization server with no
-// credential and holds no secret (token_endpoint_auth_method "none").
+// OAuth client documents the Worker serves itself. The Worker takes clients by Client ID Metadata
+// Document only (capsid/research/design-capsid-access-login.md), and a client id is the URL of its
+// document, so it is served at a stable path that names no branch.
 
 const OAUTH_CLIENT_PREFIX = "/oauth/clients/";
 export const VERIFY_LIVE_CLIENT_PATH = `${OAUTH_CLIENT_PREFIX}verify-live.json`;

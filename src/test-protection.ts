@@ -1,10 +1,6 @@
 import { inTestDir, type PrFileRow } from "./github/pr-files";
 
-// Narrow test protection on complete (docs/work-queue.md, "CI on complete"). Green CI shows nothing when the change took away the
-// test that would have failed, so complete is refused when a pull request removes a test
-// file, removes or renames a test, or adds a skip, unless the job's body names that file
-// or test. Only these three: editing a test's body is ordinary work, and is left to the
-// reviewer and to auto-merge, which never merges an existing test edit unattended.
+// Narrow test protection on complete (docs/work-queue.md, "CI on complete").
 
 // Test files in any of the repos: capsid's directories and merge-class's names, plus
 // Python's and Go's own naming.

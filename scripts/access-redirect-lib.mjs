@@ -1,13 +1,8 @@
-// verify-live gate 5's check, side-effect free so a test can drive it. Approving the
-// consent form must redirect to the MCP login's Access for SaaS app (src/access-login.ts):
-// the team domain, the app's authorization endpoint for the pinned client id, this
-// origin's /callback, the authorization code flow with PKCE S256, a nonce and a state.
-//
-// NO node_modules IMPORTS: verify-live runs in the live job, which skips npm ci.
+// Gate 5's check, side-effect free so a test can drive it. Approving the consent form must redirect to the MCP login's Access for SaaS app (src/access-login.ts).
+// No node_modules imports: verify-live runs in the live job, which skips npm ci.
 
 import { ACCESS_SAAS } from "./bindings.mjs";
 
-// null when the redirect is the Access sign-in it should be, otherwise the reason.
 export function accessRedirectProblem(status, location, origin, access = ACCESS_SAAS) {
   if (status !== 302) return `status ${status}, not 302`;
   let url;

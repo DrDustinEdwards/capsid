@@ -4,19 +4,11 @@ import { ThemeSwitch } from "capsomer/react/theme-switch";
 import { setSingleKeys } from "capsomer/behavior/shortcuts";
 import { THEME_PREF, useSingleKeys } from "../lib/prefs";
 import { Panel } from "capsomer/react/panel";
-// The lazy Automation section's segmented control: loaded with the route, so that section
-// brings no stylesheet of its own to wait for before it hydrates.
 import "capsomer/segmented.css";
 import "capsomer/switch.css";
 import "./Settings.css";
 import { PageHead } from "./shared";
 
-// SETTINGS: your preferences only (the Portal audit's new map, 2026-11-06). The overnight run
-// first (the switch that matters at 2 a.m.), then phone alerts and the daily digest, then this
-// browser's display. The sites are on Sites, each site's row on its Setup tab; the packages on
-// Packages; the projects on Projects.
-
-// The overnight switch and phone alerts load on their own, after the page's first paint.
 const Automation = lazy(() => import("./Automation").then((m) => ({ default: m.Automation })));
 const PhoneAlerts = lazy(() => import("./PhoneAlerts").then((m) => ({ default: m.PhoneAlerts })));
 
@@ -35,9 +27,6 @@ export function Settings() {
   );
 }
 
-// Display: this browser's own preferences (DECIDE 8). Each applies at once and is
-// remembered in localStorage; nothing is sent to the Worker. The theme is Capsomer's switch,
-// Light or Dark like the header's button; until one is chosen the page follows the device.
 function Display() {
   const singleKeys = useSingleKeys();
   return (

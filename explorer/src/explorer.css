@@ -131,7 +131,6 @@ h3 {
   content: " \2192";
 }
 
-/* Readings: a figure over what it counts. */
 .readings {
   display: flex;
   flex-wrap: wrap;
@@ -957,8 +956,6 @@ html:not(.js) .chapter h3::before {
   }
 }
 
-/* The close of every page: the family footer, with Capsid's own part (capsomer/family-footer). */
-
 /* Readings set as a page's headline figures, and a system's facts set the same way, smaller. */
 .readings-row {
   margin-block: var(--space-6) var(--space-7);
@@ -983,7 +980,6 @@ html:not(.js) .chapter h3::before {
   }
 }
 
-/* The numbers page. */
 .numbers-part {
   margin-block-start: var(--space-8);
 }
@@ -1007,7 +1003,6 @@ html:not(.js) .chapter h3::before {
   margin-block-start: var(--space-5);
 }
 
-/* Filters and chips. */
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1172,7 +1167,6 @@ html:not(.js) .chapter h3::before {
   margin-block-start: var(--space-8);
 }
 
-/* A system's page. */
 .links {
   display: grid;
   gap: var(--space-3);
@@ -1188,7 +1182,6 @@ html:not(.js) .chapter h3::before {
   color: var(--muted);
 }
 
-/* The flows page. */
 .flow-cards {
   display: grid;
   gap: var(--space-8);
@@ -1207,7 +1200,6 @@ html:not(.js) .chapter h3::before {
   color: var(--accent-text);
 }
 
-/* Search. */
 .search-input {
   inline-size: 100%;
   min-block-size: 52px;
@@ -1248,7 +1240,6 @@ html:not(.js) .chapter h3::before {
   overflow-wrap: anywhere;
 }
 
-/* A sortable table's headings are buttons, marked with the way they sort. */
 th .sort {
   all: unset;
   cursor: pointer;
@@ -1263,7 +1254,6 @@ th[aria-sort="ascending"] .sort::after {
   content: " \2191";
 }
 
-/* Each section's parts rise into place once, when the script finds them below the fold. */
 .rise {
   opacity: 0;
   transform: translateY(24px);
@@ -1601,7 +1591,6 @@ main .cap-pill {
   line-height: var(--leading-snug);
 }
 
-/* The contents (Capsomer's leader index). */
 .contents {
   margin: var(--space-5) 0 var(--space-7);
 }

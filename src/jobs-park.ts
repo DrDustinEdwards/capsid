@@ -13,42 +13,25 @@ import {
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import { DAY_MS } from "./time";
-// Park: a job that is wanted but not now. A parked job is never claimed or planned (both read
-// only queued rows) but is still listed and searchable: it keeps its row and mirror.
-//
-// The seat's act, like edit (the admin or a can_merge caller): a driver that could park a job
-// could take work out of the queue's order. Only a queued job is parked; a claimed or blocked
-// one is resumed or superseded. The one-line reason ("comes back when ...") is kept in
-// result_summary, so there is no migration, and cleared when the job comes back.
-//
-// Parked is not an open status (src/jobs-schema.ts): it holds no title slot, so the partial
-// unique index is unchanged and readers treat it as finished. The price is that the same title
-// can be posted while a job is parked, so unpark refuses, naming the job, when it would put a
-// second open job under one title.
-//
-// A due date: park may take `until`, and the five-minute tick (returnDueParked, src/tick.ts)
-// returns the job to the queue once it passes, as PARK_DUE_ACTOR, through the transition unpark
-// makes. Kept in jobs.parked_until (migrations/0064), cleared when the job leaves parked. When
-// the title is taken by then the job stays parked and the inbox shows it as due (src/inbox.ts);
-// the tick never supersedes anything.
+// Park: a job that is wanted but not now. A parked job is never claimed or planned (both read only
+// queued rows) but is still listed and searchable: it keeps its row and mirror.
 
 const REASON_MAX = 300;
-// How far ahead a due date may be: a year. A job wanted further out than that is a
-// decision to make again, not a timer.
 const UNTIL_MAX_MS = 366 * DAY_MS;
 const DUE_PER_TICK = 25;
 const PARK_DUE_ACTOR = "system:park-due";
 
-/** A reason is one line: it is shown in a list, not read as a document. */
 function oneLine(reason: string | undefined): string | null {
   const text = (reason ?? "").trim();
   if (!text || text.length > REASON_MAX || /[\r\n]/.test(text)) return null;
   return text;
 }
 
-/** A due date as a normalized ISO time, or a refusal. A bare date (YYYY-MM-DD) is the
- *  start of that UTC day; a time needs its zone (Z or an offset), so it is never read in
- *  whatever zone the Worker happens to run in. It must be after `now` and within a year. */
+/**
+ * A due date as a normalized ISO time, or a refusal. A bare date (YYYY-MM-DD) is the start of that
+ * UTC day; a time needs its zone (Z or an offset), so it is never read in whatever zone the Worker
+ * happens to run in. It must be after `now` and within a year.
+ */
 function parseUntil(until: string, now: Date): { at: string } | { refusal: string } {
   const text = until.trim();
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(text);
@@ -155,9 +138,10 @@ export async function unparkJob(env: Env, agent: Agent, now: Date, id: string): 
   return returnToQueue(env, agent.actor, now, current);
 }
 
-/** The parked job back in the queue, for the seat's unpark and for the tick's due date:
- *  the same title check, the same guarded write and the same audit action, with the
- *  actor that did it. */
+/**
+ * The parked job back in the queue, for the seat's unpark and for the tick's due date: the same
+ * title check, the same guarded write and the same audit action, with the actor that did it.
+ */
 async function returnToQueue(
   env: Env,
   actor: string,
@@ -193,7 +177,6 @@ async function returnToQueue(
       }),
     ]);
   } catch (err) {
-    // The partial unique index: another job took the title between the check and the write.
     const message = errorMessage(err);
     if (/UNIQUE/i.test(message)) {
       const taken = await openTitleHolder(env.DB, current.namespace, current.title, id).catch(
@@ -218,17 +201,15 @@ async function returnToQueue(
 
 export interface ParkDueReport {
   returned: string[];
-  // Each job that is due but stayed parked, with why (its title is taken, or it moved).
   kept: Array<{ id: string; why: string }>;
   note: string;
 }
 
-/** The tick's step: every parked job whose due date has passed goes back to the queue,
- *  up to DUE_PER_TICK a tick, oldest due first. A refusal keeps the job parked, writes a
- *  `job-park-due-kept` audit row naming the due date, and is reported, so the run ledger
- *  says why once; a job with that row for its current due date is not tried again, so a
- *  taken title is one refusal, not one every five minutes. The inbox shows it as due
- *  until the seat unparks, supersedes or parks it again. */
+/**
+ * A refusal keeps the job parked, writes a `job-park-due-kept` audit row naming the due date, and
+ * is reported, so the run ledger says why once; a job with that row for its current due date is
+ * not tried again, so a taken title is one refusal, not one every five minutes.
+ */
 export async function returnDueParked(env: Env, now: Date): Promise<ParkDueReport> {
   const { results } = await env.DB.prepare(
     `SELECT j.* FROM jobs j

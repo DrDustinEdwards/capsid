@@ -1,5 +1,3 @@
-/* The Library page (Library.tsx), loaded with it rather than with the shell: the results, and one document's text.
-   Empty shelves and links reuse Shared code's classes (styles.css). */
 .lib-results {
   list-style: none;
   margin: 0;

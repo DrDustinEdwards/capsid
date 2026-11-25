@@ -78,9 +78,9 @@ export const STALE_DECISION_DAYS = 180;
 // Consolidate when a namespace holds more than five unconsolidated documents. Capsid's own threshold.
 export const UNCONSOLIDATED_CADENCE = 5;
 
-// Matches a repo path in prose: at least one slash, a file extension, and no spaces. `capsid/conventions.md` matches too and is excluded below, because a Capsid document path is not a repo path.
-//
-// The lookbehind, not a word boundary: a word boundary does not fall between a space and a dot, so `.github/workflows/ci.yml` would be captured as `github/workflows/ci.yml` and reported absent from a repo that has it. The lookbehind also stops the same path matching again after the dot. The extension must start with a letter, which excludes section numbers such as `2/2.1`.
+// Matches a repo path in prose: at least one slash, a file extension, and no spaces.
+// `capsid/conventions.md` matches too and is excluded below, because a Capsid document path is not
+// a repo path.
 const REPO_PATH =
   /(?<![A-Za-z0-9_./-])(\.?(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z][A-Za-z0-9]{0,4})\b/g;
 
@@ -102,7 +102,10 @@ const NAMESPACE_PREFIXES = [
 // The stored report's path prefix.
 export const REPORTS_PREFIX = "reports/";
 
-// Prefixes that are not subjects of the report. `archive/` is consumed history. `reports/` holds earlier reports: `report` stores its result as an ordinary document, and the next run would read it back, so every finding it wrote becomes a finding it finds and integrity ratchets down on every run. A report is an observation of the store, not a member of it.
+// Prefixes that are not subjects of the report. `archive/` is consumed history. `reports/` holds
+// earlier reports: `report` stores its result as an ordinary document, and the next run would read
+// it back, so every finding it wrote becomes a finding it finds and integrity ratchets down on
+// every run.
 const UNSCANNED_PREFIXES = ["archive/", REPORTS_PREFIX];
 
 export function isUnscanned(path: string): boolean {
@@ -224,7 +227,8 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     })),
   });
 
-  // 5. Doc-vs-code drift: a repo path named in canon that is no longer in the repo. The repo is gated and the store is not, so the store is where a path rots. Unrun is not clean: when the repo could not be read the check has zero subjects and is excluded from integrity, rather than reporting zero findings, which would read as perfect.
+  // 5. Doc-vs-code drift: a repo path named in canon that is no longer in the repo. The repo is
+  // gated and the store is not, so the store is where a path rots.
   if (input.repoPaths) {
     // A candidate counts only when its first segment is a top-level entry of this namespace's mapped repo, which separates `src/gone.ts` from `apps/web/...` in another portfolio repo (not drift here).
     const repoRoots = new Set([...input.repoPaths].map((p) => p.split("/")[0]));

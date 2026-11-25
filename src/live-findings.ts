@@ -6,17 +6,10 @@ import { MINUTE_MS } from "./time";
 
 import type { LiveRule } from "./live-checks";
 
-// What the live checks conclude from what src/live-checks.ts read: the pure part.
-
 const BEACON_SCRIPT_HOST = "static.cloudflareinsights.com";
 
-// A push whose deploy has had this long and still has not reached the site is a finding
-// (CI takes about seven minutes).
 export const DEPLOY_GRACE_MINUTES = 45;
 
-/** Scripts on the page that load the Web Analytics beacon. A script tag whose own
- *  attributes name the beacon host. A beacon a page injects with inline script, or one
- *  Cloudflare adds in the browser, is not in the delivered HTML and is not counted. */
 export function beaconCount(html: string): number {
   return [...html.matchAll(/<script\b[^>]*>/gi)].filter((tag) => BEACON_SRC.test(tag[0])).length;
 }
@@ -33,7 +26,6 @@ export interface LiveFinding {
   evidence: string[];
 }
 
-/** A page's path as one fingerprint-safe word: "/" is root, "/a/b" is a-b. */
 export const slug = (path: string): string =>
   path
     .replace(/^\/+|\/+$/g, "")
@@ -46,15 +38,16 @@ export interface PageRead {
   headers: Headers | null;
   html: string | null;
   problem: string | null;
-  // The page was not served to an anonymous visitor: a login redirect off the site, or a
-  // 401 or 403. For a page that must carry no beacon that is the answer wanted, not a
-  // page that could not be read.
+  // The page was not served to an anonymous visitor: a login redirect off the site, or a 401 or 403.
+  // For a page that must carry no beacon that is the answer wanted, not a page that could not be
+  // read.
   gated: boolean;
 }
 
-/** The findings one beacon or nobeacon rule produces from one page read. A page that
- *  could not be read yields none about the beacon (not read is not absent); the caller
- *  reports it as unread. */
+/**
+ * The findings one beacon or nobeacon rule produces from one page read. A page that could not be
+ * read yields none about the beacon (not read is not absent); the caller reports it as unread.
+ */
 export function pageFindings(
   site: Pick<OpsSite, "namespace" | "name" | "origin">,
   rule: Extract<LiveRule, { path: string }>,
@@ -65,8 +58,9 @@ export function pageFindings(
   const where = slug(rule.path);
   const out: LiveFinding[] = [];
   if (rule.kind === "headers") {
-    // The package's own check, graded against what the site declared in the registry (site-runtime ./sites), so a
-    // declared deviation is not a finding and the watcher holds no second copy of either.
+    // The package's own check, graded against what the site declared in the registry (site-runtime
+    // ./sites), so a declared deviation is not a finding and the watcher holds no second copy of
+    // either.
     const results = checkSecurityHeaders(page.headers, { site: siteForOrigin(site.origin) });
     if (results.length === 0)
       throw new Error(
@@ -103,8 +97,9 @@ export function pageFindings(
     }
     return out;
   }
-  // A beacon rule: site-runtime's C15, the beacon's script path prefix and its report to the site itself, graded as
-  // if the site declared cloudflareWebAnalytics, so the watcher holds no second CSP parser.
+  // A beacon rule: site-runtime's C15, the beacon's script path prefix and its report to the site
+  // itself, graded as if the site declared cloudflareWebAnalytics, so the watcher holds no second
+  // CSP parser.
   const blocked = failures(
     checkSecurityHeaders(page.headers, {
       site: siteForOrigin(site.origin),
@@ -122,8 +117,6 @@ export function pageFindings(
   return out;
 }
 
-/** The sha finding for one site, or null. `committedAt` is when the default branch's head
- *  was committed; a head younger than the grace is a deploy still in flight. */
 export function shaFinding(
   site: Pick<OpsSite, "namespace" | "name">,
   deployed: string | null,
@@ -141,7 +134,6 @@ export function shaFinding(
       ],
     };
   }
-  // A health route may report a short sha; either side may be the prefix.
   if (deployed.length >= 7 && (head.sha.startsWith(deployed) || deployed.startsWith(head.sha)))
     return null;
   const committed = head.committed_at ? Date.parse(head.committed_at) : Number.NaN;
@@ -161,9 +153,11 @@ export function shaFinding(
   };
 }
 
-/** The Web Analytics finding for one site, or null. A Worker cannot see the beacon the edge
- *  injects, so what is read is the setting that makes Cloudflare inject it: the site's
- *  host has automatic setup on, and its ruleset is not switched off. */
+/**
+ * The Web Analytics finding for one site, or null. A Worker cannot see the beacon the edge
+ * injects, so what is read is the setting that makes Cloudflare inject it: the site's host has
+ * automatic setup on, and its ruleset is not switched off.
+ */
 export function analyticsFinding(
   site: Pick<OpsSite, "namespace" | "name" | "origin">,
   sites: readonly WebAnalyticsSite[],

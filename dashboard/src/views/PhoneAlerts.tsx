@@ -13,12 +13,6 @@ import { Panel } from "capsomer/react/panel";
 import { PushDevices } from "capsomer/react/web-push";
 import "capsomer/web-push.css";
 
-// Phone alerts (src/push.ts; docs/design/design-merge-pipeline.md section 5): turn Web
-// Push on for this browser, list the devices that have it, turn one off, send a test.
-// Loaded on its own after Settings' first paint, so it adds nothing to the initial
-// script. The alert itself is shown by Capsomer's push worker (capsomer/push-sw.js), which the
-// build writes as sw.js (vite.config.ts).
-
 export function PhoneAlerts() {
   const { feed, now, signOut } = useApp();
   const load = useAnswer(PUSH_KEY, fetchPush);
@@ -28,7 +22,6 @@ export function PhoneAlerts() {
   const [said, setNote] = useState<{ kind: "ok" | "crit"; text: string } | null>(null);
   const note = said ?? (load.error ? { kind: "crit" as const, text: load.error } : null);
 
-  // A change answers the devices as they are now, which replaces the read.
   const take = (r: Answer<PortalPush>, ok: string) => {
     if (r.kind === "ok") {
       queryClient.setQueryData(PUSH_KEY, r.value);
@@ -47,7 +40,6 @@ export function PhoneAlerts() {
     }
   };
 
-  // PushDevices asks for permission and subscribes; the server stores what it sends here.
   const turnOn = async (subscription: PushSubscriptionJSON, label: string) => {
     setBusy(true);
     setNote(null);
@@ -99,8 +91,6 @@ export function PhoneAlerts() {
   );
 }
 
-// The daily email digest (src/digest.ts): on or off, and why. Nothing to press: it is
-// turned on by configuration once Email Routing is on.
 function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: number }) {
   return (
     <Panel flush title="Daily digest">
@@ -111,8 +101,6 @@ function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: numbe
         {digest.on ? (
           <Banner tone="ok">On. It goes to {digest.to}.</Banner>
         ) : (
-          // Plain words first (the UX audit's m11); what the setup still needs, in the
-          // Worker's own words, is one click away.
           <Banner
             tone="warn"
             title="Not set up yet."

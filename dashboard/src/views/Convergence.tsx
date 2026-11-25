@@ -13,14 +13,8 @@ import { Status } from "capsomer/react/status";
 import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
 
-// The convergence view in Sites (job_09e5f6cbf782): for each site that opted into Capsid
-// calling its operator API, GET /portal/api/convergence reads, live, what the site's
-// sync_status and health route say, the repair each check maps to, and its Worker's
-// secrets by name. "Run" is the site_repair control: the same preview and perform as
-// every control, the allowlist enforced in the Worker. Nothing on this panel is a value
-// of a secret; the Worker never sends one.
+// Nothing on this panel is a value of a secret; the Worker never sends one.
 
-// One site's Sync and repairs tab. A site that has not opted in says so.
 export function Convergence({ ns }: { ns: string }) {
   const load = useAnswer(["convergence"], fetchConvergence);
   const { reread } = load;
@@ -252,8 +246,6 @@ function Checks({
   );
 }
 
-// The site's Worker secrets by name, set or not, against what its configuration names: on
-// the site's Setup tab, from the same read.
 export function SiteSecrets({ ns }: { ns: string }) {
   const load = useAnswer(["convergence"], fetchConvergence);
   const site = load.data?.sites.find((s) => s.namespace === ns);

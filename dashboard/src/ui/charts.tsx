@@ -1,6 +1,4 @@
-// The Sites table's small charts, drawn by Enarratio: each site's uptime and errors per hour.
-// Inline forms (the bare SVG, role="img" with its text alternative), since a chart in a table
-// cell needs no frame.
+// Inline SVG with a text alternative and no frame: a chart in a table cell needs none.
 import { sparkline, uptimeStrip, uptimeStripTable } from "enarratio";
 import type { HourBucket, SiteSnapshot } from "../types";
 import { fromRing, padRing, uptimeOf } from "capsomer/behavior/uptime-strip";
@@ -11,10 +9,6 @@ import { markup } from "capsomer/behavior/trusted-html";
 
 const TICKS = 84;
 
-// Chart 8 (design-portal-evaluation.md section 3: "Is every site up, and since when?"), drawn
-// with Enarratio's uptimeStrip: each two-hour window up, degraded (a failed probe among
-// passes), down (every probe failed) or unknown (no watcher pass). The site drawer draws the
-// same options as a whole figure in Capsomer's frame (app/Drawer.tsx).
 export function uptimeOptions(site: SiteSnapshot) {
   const ring = padRing(site.ring, RING_SLOTS);
   const slots = fromRing(ring, {
@@ -33,7 +27,6 @@ export function uptimeOptions(site: SiteSnapshot) {
   };
 }
 
-/** The Sites table's strip, its windows also stated in a table only assistive technology reads. */
 export function UptimeTicks({ site }: { site: SiteSnapshot }) {
   const opts = uptimeOptions(site);
   return (
@@ -65,7 +58,6 @@ export function errorTotals(e: HourBucket[]) {
   return { req, err, rate: req ? err / req : null };
 }
 
-/** The Sites table's errors per hour, the cell's totals under it. */
 export function ErrorSpark({ values, label }: { values: number[]; label: string }) {
   return (
     <span

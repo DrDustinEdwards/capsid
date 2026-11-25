@@ -1,25 +1,9 @@
-// What a Capsid dump must hold that d1-dump's restore drill cannot know. The drill
-// (npx d1-dump drill, run weekly by .github/workflows/restore-rehearsal.yml) restores
-// the newest dump into a scratch D1 and checks counts against the marker, FTS5
-// agreement, one search and the 100 KB statement cap. This script reads the same
-// downloaded run directory and checks the rest, with no database:
-//
+// What a Capsid dump must hold that d1-dump's restore drill cannot know (the drill, run weekly by restore-rehearsal.yml, checks counts, FTS5 agreement, one search and the 100 KB statement cap). This reads the same run directory with no database:
 // - _complete.json lists exactly the other files in the run.
-// - Each table file's own "table" field matches its file name, so a copy shuffle cannot
-//   restore rows into the wrong table, and every row of a table carries the same
-//   columns, so a row that lost a nullable column is not restored as NULL.
-// - The sidecar (_kv.json) is present, holds a non-empty object of the right shape, and
-//   nothing else underscore-prefixed rides along that nothing verifies. _schema.json and
-//   the marker are the only others allowed, and _holdout-manifests.json, which dumps
-//   written while the improve loop existed carry (it was removed 2026-10-19).
-// - documents is not empty: a gutted dump passes every count and proves nothing.
-// - The dump is not TORN. It is one D1 batch, so its tables describe one instant.
-//   Plain referential integrity is not checked: the live store holds orphaned version
-//   and audit rows from deletions, path rewrites and a namespace rename, so orphans are
-//   counted and reported. What fails is the pair of shapes a torn read produces and a
-//   deletion cannot: a version row whose document_id is above the highest id in the
-//   documents file with no delete or move recorded for its path, and a `write` audit
-//   row at or after the newest document that names a path not in the documents file.
+// - Each table file's "table" matches its file name (a copy shuffle cannot restore rows into the wrong table) and every row has the same columns (a lost nullable column is not restored as NULL).
+// - _kv.json is a non-empty object of the right shape, and nothing else underscore-prefixed rides along except _schema.json, the marker and _holdout-manifests.json (dumps from before the improve loop was removed 2026-10-19).
+// - documents is not empty: a gutted dump passes every count.
+// - The dump is not torn (one D1 batch, one instant). Orphaned version and audit rows from deletions, path rewrites and a namespace rename are counted, not failed; what fails is what a torn read produces and a deletion cannot: a version row whose document_id is above the highest in documents with no delete or move recorded, and a `write` audit row at or after the newest document naming a path not in documents.
 
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -30,8 +14,7 @@ export const COMPLETE_MARKER = "_complete.json";
 export const SIDECARS = ["_kv.json"];
 export const OPTIONAL_SIDECARS = ["_schema.json", "_holdout-manifests.json"];
 
-// Parsed dump JSON, whose shape is what this checks: a file's fields are unknown until a check has read them, and a
-// row's columns are the ones the checks below name.
+// Parsed dump JSON: a file's fields are unknown until a check has read them.
 type Json = { [field: string]: unknown };
 type Row = {
   id: number;

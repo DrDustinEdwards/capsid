@@ -70,9 +70,9 @@ export interface HeadRun {
 // this pass. Otherwise the line says what master's CI run showed, as evidence.
 export type DeployVerdict = { wait: true; reason: string } | { wait: false; evidence: string };
 
-/** Whether master head's own CI run leaves a drift finding premature. `runs` is the
- *  run list for that sha, newest first, or null when it could not be read. A failed
- *  or canceled run, no run at all, and an unreadable list all keep the finding. */
+// Whether master head's own CI run leaves a drift finding premature. `runs` is the run list for
+// that sha, newest first, or null when it could not be read. A failed or canceled run, no run at
+// all, and an unreadable list all keep the finding.
 export function deployVerdict(runs: readonly HeadRun[] | null, now: Date): DeployVerdict {
   if (runs === null)
     return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run could not be read` };
@@ -107,10 +107,9 @@ export function deployVerdict(runs: readonly HeadRun[] | null, now: Date): Deplo
   };
 }
 
-/** What /health says that should not be true. `masterSha` and `latestMigration` come
- *  from the repo, so this answers "is the deployed Worker the one master describes"
- *  rather than only "is it up". `deploy` is master head's CI verdict; a deploy still in
- *  flight is not drift. */
+// What /health says that should not be true. `masterSha` and `latestMigration` come from the repo,
+// so this answers "is the deployed Worker the one master describes" rather than only "is it up".
+// `deploy` is master head's CI verdict; a deploy still in flight is not drift.
 export function healthFindings(
   health: HealthReport,
   masterSha: string | null,
@@ -226,8 +225,8 @@ function migrationNumber(name: string): number {
   return Number.isNaN(n) ? -1 : n;
 }
 
-/** What capsid_read_status action status says that should not be true. Per namespace, because the job
- *  each finding becomes belongs to the namespace it is about. */
+// What capsid_read_status action status says that should not be true. Per namespace, because the
+// job each finding becomes belongs to the namespace it is about.
 export function statusFindings(status: StatusReport): Finding[] {
   const out: Finding[] = [];
   for (const ns of status.namespaces ?? []) {
@@ -258,11 +257,8 @@ export interface CiRun {
   url?: string;
 }
 
-/** A default branch that has been red for longer than a flake. Reads the most recent
- *  COMPLETED run, because a run still in flight is not yet an answer.
- *
- *  One incident per namespace, not per commit: the fingerprint is `ci-red-<namespace>`
- *  and the head sha is evidence, so every red commit on a red branch is not a new finding. */
+// A default branch that has been red for longer than a flake. Reads the most recent COMPLETED run,
+// because a run still in flight is not yet an answer.
 export function ciFindings(namespace: string, runs: CiRun[], now: Date): Finding[] {
   const latest = runs.find((r) => r.status === "completed");
   if (!latest) return [];
@@ -285,9 +281,8 @@ export function ciFindings(namespace: string, runs: CiRun[], now: Date): Finding
   ];
 }
 
-/** A registered namespace the site map neither covers nor excludes, or a map entry
- *  whose namespace is not registered. The fingerprint names the drift, so a different
- *  drift is a new finding. */
+// A registered namespace the site map neither covers nor excludes, or a map entry whose namespace
+// is not registered. The fingerprint names the drift, so a different drift is a new finding.
 export function siteMapFindings(drift: SiteMapDrift): Finding[] {
   if (drift.unmapped.length === 0 && drift.unknown.length === 0) return [];
   const names = [
@@ -314,10 +309,9 @@ export function siteMapFindings(drift: SiteMapDrift): Finding[] {
   ];
 }
 
-/** One finding per repo the GitHub App can see that no namespace maps, naming it and the
- *  namespace its name suggests. It proposes; mapping is admin-only and never automatic.
- *  Every finding says what the read covered, so a clear pass is never "0 unmapped"
- *  over "0 listed". */
+// One finding per repo the GitHub App can see that no namespace maps, naming it and the namespace
+// its name suggests. It proposes; mapping is admin-only and never automatic. Every finding says
+// what the read covered, so a clear pass is never "0 unmapped" over "0 listed".
 export function unmappedRepoFindings(read: RepoMapRead): Finding[] {
   const covered = `the App's ${read.installations} installation(s) list ${read.installed.length} repos; ${read.mapped.size} are mapped to a namespace; ${read.onPurpose.size} are named unmapped on purpose`;
   return unmappedRepos(read).map((r) =>
@@ -338,9 +332,9 @@ export function unmappedRepoFindings(read: RepoMapRead): Finding[] {
   );
 }
 
-/** The App's repo list could not be read whole, so unmapped repos cannot be found. Fails
- *  closed: this is a finding, and the "repo map" check does not count as run, so an open
- *  unmapped-repo finding is not cleared on no evidence. */
+// The App's repo list could not be read whole, so unmapped repos cannot be found. Fails closed:
+// this is a finding, and the "repo map" check does not count as run, so an open unmapped-repo
+// finding is not cleared on no evidence.
 export function repoMapUnreadableFinding(reason: string): Finding {
   return finding(
     "capsid",
@@ -353,9 +347,9 @@ export function repoMapUnreadableFinding(reason: string): Finding {
 export const liveFinding = (f: LiveFinding): Finding =>
   finding(f.namespace, f.fingerprint, f.headline, f.evidence);
 
-/** A site down on two probes in a row: the previous snapshot's ring ended in '0' and
- *  this pass's probe is down too. One failed probe is a blip; a ring that ended in '-'
- *  (no pass reached that slot) is not a failed probe. */
+// A site down on two probes in a row: the previous snapshot's ring ended in '0' and this pass's
+// probe is down too. One failed probe is a blip; a ring that ended in '-' (no pass reached that
+// slot) is not a failed probe.
 export function siteDownFindings(prev: OpsSnapshot | null, probes: SiteProbe[]): Finding[] {
   const before = new Map((prev?.sites ?? []).map((s) => [s.namespace, s]));
   const out: Finding[] = [];
@@ -380,8 +374,8 @@ export const CPU_HOUR_LIMIT_MS = 1_000_000;
 
 type WatchedSite = { namespace: string; name: string };
 
-/** Each site's Worker and its most recent complete hour, the last of its hourly buckets. A
- *  site with no analytics this pass is left out, so it is not judged. */
+// Each site's Worker and its most recent complete hour, the last of its hourly buckets. A site with
+// no analytics this pass is left out, so it is not judged.
 function latestHours(
   sites: ReadonlyArray<WatchedSite>,
   cloudflare: Record<string, SiteCloudflare>,
@@ -393,8 +387,8 @@ function latestHours(
   });
 }
 
-/** A site whose Worker used more than CPU_HOUR_LIMIT_MS of CPU time in the most recent
- *  complete hour. A site with no analytics this pass is not judged. */
+// A site whose Worker used more than CPU_HOUR_LIMIT_MS of CPU time in the most recent complete
+// hour. A site with no analytics this pass is not judged.
 export function siteCpuFindings(
   sites: ReadonlyArray<WatchedSite>,
   cloudflare: Record<string, SiteCloudflare>,
@@ -421,13 +415,9 @@ export function siteCpuFindings(
 export const ERROR_RATE_THRESHOLD = 0.01;
 export const ERROR_RATE_MIN_REQUESTS = 100;
 
-/** A site whose Worker errored on more than ERROR_RATE_THRESHOLD of its requests in
- *  the most recent complete hour, the last of its hourly buckets. An error is an
- *  invocation that threw or a returned 5xx (`serverErrors`, the edge's count for that
- *  hour, src/site-traffic.ts readServerErrors). A thrown invocation is answered with a
- *  5xx at the edge too, so the edge count already holds it: the larger of the two is
- *  used, never their sum, and the thrown count stands alone when the edge read failed.
- *  A site with no analytics this pass is not judged. */
+// A site whose Worker errored on more than ERROR_RATE_THRESHOLD of its requests in the most recent
+// complete hour, the last of its hourly buckets. An error is an invocation that threw or a returned
+// 5xx (`serverErrors`, the edge's count for that hour, src/site-traffic.ts readServerErrors).
 export function siteErrorFindings(
   sites: ReadonlyArray<WatchedSite>,
   cloudflare: Record<string, SiteCloudflare>,

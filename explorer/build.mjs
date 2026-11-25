@@ -1,13 +1,7 @@
-// Builds the explorer into explorer/dist: every page prerendered, the assets beside them, and
-// _headers. Run by .github/workflows/explorer.yml, which fetches the two public documents first.
-//
+// Builds the explorer into explorer/dist: every page prerendered, the assets beside them, and _headers. Run by .github/workflows/explorer.yml, which fetches the two public documents first.
 //   npm run build -- [--model <file or url>] [--stats <file or url>] [--code <file or url>] [--out <dir>]
-//
-// The defaults are the live documents Capsid serves (src/public-data.ts); a model from a file
-// builds no code pages unless --code names a code document too. Every document is checked with
-// Capsid's own schemas before anything is written, so the explorer can only publish what the
-// privacy filter's output shape allows (the third line, design section 2). The tests build from
-// explorer/fixtures, which are invented.
+// Defaults are the live documents Capsid serves (src/public-data.ts); a model from a file builds no code pages unless --code names a code document too.
+// Every document is checked with Capsid's own schemas before anything is written, so only what the privacy filter's output shape allows is published (design section 2). Tests build from explorer/fixtures, which are invented.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -98,8 +92,7 @@ function contentHash(/** @type {string} */ dir) {
 }
 
 /**
- * The code document, or null while Capsid has not built one yet: its route answers 503 until the
- * first daily build after the route shipped, and the rest of the explorer does not wait for it.
+ * The code document, or null while Capsid has not built one: its route answers 503 until the first daily build after the route shipped.
  * @param {string | undefined} source
  */
 async function readCode(source) {
@@ -194,8 +187,6 @@ export async function build({
 
   const assets = join(out, "assets");
   mkdirSync(assets, { recursive: true });
-  // Capsomer's stylesheet in its layer order (capsomer/build): the faces from ../fonts/ (copied below), the teal family,
-  // the parts the pages use and the Capsid site layer.
   const css = capsomerStylesheet({
     family: "teal",
     site: "capsid",
@@ -223,9 +214,7 @@ export async function build({
   // Every stylesheet blocks the first paint, so each ships minified: Capsomer's sources are mostly comments, and on a
   // phone (Lighthouse's slow 4G) their bytes held the home page's LCP within 50 ms of its 2.5 s budget (2026-11-01).
   writeFileSync(join(assets, "capsomer.css"), await minifyCss(css));
-  // The whole chart stylesheet, as every site loads it: Enarratio's base rules on Capsomer's tokens, gridlines, series inks
-  // and color pairs (capsomer/enarratio.css; the teal family and prefers-contrast come from the tokens). Only a page that
-  // draws a chart links it (src/pages.mjs).
+  // The whole chart stylesheet, as every site loads it; only a page that draws a chart links it (src/pages.mjs).
   writeFileSync(
     join(assets, "enarratio.css"),
     await minifyCss(inlineCss(join(CAPSOMER_ROOT, "css", "enarratio.css"))),
@@ -238,16 +227,13 @@ export async function build({
   // switch, meters and chart-enhance. One file, so the script tag's integrity covers all of it: sixteen modulepreloads
   // carrying the imports' integrity cost the home page 0.7 s of Lighthouse LCP.
   writeFileSync(join(assets, "explorer.js"), await bundleScript(join(here, "src", "explorer.js")));
-  // The remembered theme, set before the first paint so the page never flashes the other one: Capsomer's themeScript
-  // (cap-theme in localStorage; with nothing remembered the system's setting applies). A file, not an inline script,
-  // so the policy needs no hash. It also marks the page as scripted before the first paint, so what script adds (the
-  // panel's breakers) is laid out from the start and moves nothing when the module runs.
+  // The remembered theme (Capsomer's themeScript), set before first paint so the page never flashes the other one. A file, not an inline script, so the policy needs no hash;
+  // it also marks the page scripted so the panel's breakers are laid out from the start.
   writeFileSync(
     join(assets, "theme.js"),
     `document.documentElement.classList.add("js");\n${themeScript()}\n`,
   );
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
-  // The family icon set (Prelum's prelum-icons) at the root, where iconLinks() and the manifest point.
   cpSync(join(here, "src", "icons"), out, { recursive: true });
   writeFileSync(
     join(out, "site.webmanifest"),
@@ -261,11 +247,9 @@ export async function build({
     ),
   );
   copyFileSync(join(here, "src", "og-card.png"), join(assets, "og-card.png"));
-  // The faces (inlined above), served from here because the policy allows fonts from 'self' only: Capsomer's fonts/
-  // beside assets/, where the stylesheet's "../fonts/" points.
+  // Served from here because the policy allows fonts from 'self' only.
   copyFonts(join(out, "fonts"));
-  // _headers from the explorer's entry in site-runtime's registry (capsid), by its one bin: the shared set, the page
-  // policy reporting to Capsid's /csp-report, and Prelum's training reservation (the TDMRep header ai.txt names).
+  // _headers from the explorer's entry in site-runtime's registry, by its one bin.
   const headersBin = join(
     dirname(fileURLToPath(import.meta.resolve("@dustinedwards/site-runtime/sites"))),
     "bin",
@@ -280,10 +264,7 @@ export async function build({
     "--header",
     "tdm-reservation: 1",
   ]);
-  // For search engines and language models, from Prelum: every page in a sitemap, robots.txt (the
-  // family bot policy; Cloudflare puts its own lines first), ai.txt (citation welcome, training
-  // reserved, as the tdm-reservation header in _headers says) and llms.txt (https://llmstxt.org),
-  // a short guide.
+  // For search engines and language models, from Prelum: sitemap, robots.txt, ai.txt (training reserved, as the tdm-reservation header says) and llms.txt.
   const listed = pages
     .map(([path]) => path)
     .filter((path) => path !== "/404" && path !== "/search/");
@@ -303,7 +284,6 @@ export async function build({
     aiTxt({ origin: ORIGIN, name: "Capsid", contact: "contact@dustinedwards.info" }),
   );
   writeFileSync(join(out, "llms.txt"), llmsTxt(model.systems.length, tools.length));
-  // The family's security contact (RFC 9116) and the IndexNow key file the deploy pings with.
   mkdirSync(join(out, ".well-known"), { recursive: true });
   writeFileSync(
     join(out, ".well-known", "security.txt"),
@@ -314,20 +294,13 @@ export async function build({
     }),
   );
   writeFileSync(join(out, `${INDEXNOW_KEY}.txt`), INDEXNOW_KEY);
-  // Each page's Markdown copy (/tools.md, or Accept: text/markdown) and llms-full.txt, from the pages just written; the
-  // Worker serves them as files (serveMarkdownCopies, worker.mjs).
-  // The search page is not in the sitemap, so it gets no copy.
+  // Each page's Markdown copy and llms-full.txt, served as files (serveMarkdownCopies, worker.mjs). The search page is not in the sitemap, so it gets no copy.
   await writeMarkdownCopies({ dir: out, origin: ORIGIN, skip: (path) => path === "/search" });
-  // Each sitemap URL's lastmod: the day its Markdown copy last changed against the live build's build.json (Prelum's
-  // writeSitemapLastmod), which writes the record build.json carries on. Without a record to compare (a build from local
-  // fixtures) no URL has a lastmod, since none is better than a wrong one
-  // (https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap).
+  // Each sitemap URL's lastmod: the day its Markdown copy last changed against the live build.json. With no record to compare (a local-fixtures build) no URL has one, since none is better than a wrong one.
   const dates = previousSource
     ? await writeSitemapLastmod({ dir: out, origin: ORIGIN, previous: previousSource, today })
     : {};
-  // What this build is of, and a hash of everything else it wrote: the workflow deploys only
-  // when the hash differs from the live build.json (ruling answer 8), whether the data or the
-  // explorer's own files changed. Written last, so the hash cannot cover itself.
+  // What this build is of, and a hash of everything else it wrote: the workflow deploys only when it differs from the live build.json (ruling answer 8). Written last, so the hash cannot cover itself.
   // A sha384 integrity and crossorigin on every page's two script tags, for Integrity-Policy (site-runtime ./sri).
   await writeIntegrity(out);
   const content = contentHash(out);

@@ -23,8 +23,6 @@ import {
 
 const SITE_FIELDS = ["name", "origin", "health_path", "platform", "script"] as const;
 
-// Previews of the site controls, dispatched from planAction (src/controls-plan.ts).
-
 export async function planSiteAction(
   env: Env,
   action:
@@ -61,9 +59,9 @@ export async function planSiteAction(
       const checked = validateSite(p);
       if (!checked.ok) return refused(checked.refusal);
       const site = checked.site;
-      // A registered namespace, or a further host of one (`<namespace>-<host>`, such as
-      // carrel-mcp): the rule the watcher's site-map check reads (ops-sites owningNamespace).
-      // Namespace names hold no LIKE wildcards (lowercase letters, digits and hyphens).
+      // A registered namespace, or a further host of one (`<namespace>-<host>`, such as carrel-mcp): the
+      // rule the watcher's site-map check reads (ops-sites owningNamespace). Namespace names hold no
+      // LIKE wildcards (lowercase letters, digits and hyphens).
       const registered = await env.DB.prepare(
         "SELECT namespace FROM namespaces WHERE namespace = ?1 OR ?1 LIKE namespace || '-%' LIMIT 1",
       )
@@ -104,7 +102,6 @@ export async function planSiteAction(
       const diffs = SITE_FIELDS.filter((f) => before[f] !== site[f]).map(
         (f) => `${f}: ${shown(before[f])} -> ${shown(site[f])}`,
       );
-      // The operator API, only when the edit names it: a form that does not show it leaves it.
       const beforeOperator = before.operator ? JSON.stringify(before.operator) : null;
       if (site.operator !== undefined && site.operator !== beforeOperator)
         diffs.push(`operator: ${shown(beforeOperator)} -> ${shown(site.operator)}`);

@@ -17,11 +17,10 @@ import { externalFence } from "./provenance";
 import { readMaintenance, type MaintenanceItem } from "./maintenance";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Capsid's status as a driver and the Portal read it (capsid_read_status action status,
-// GET /portal/api/namespaces): per namespace the queue, the breaker, what waits on the
-// seat and the maintenance list, and across them the signed policies, the overnight
-// switch, the merge safety meter and, for the admin, the credential inventory. The
-// tool keeps its old name so no credential's tools list has to change.
+// Capsid's status as a driver and the Portal read it (capsid_read_status action status, GET
+// /portal/api/namespaces): per namespace the queue, the breaker, what waits on the seat and the
+// maintenance list, and across them the signed policies, the overnight switch, the merge safety
+// meter and, for the admin, the credential inventory.
 
 interface NamespaceStatus {
   namespace: string;
@@ -57,10 +56,8 @@ export interface StatusReport {
   // The canon documents and rulings an agent key may not change (src/canon.ts),
   // so a driver knows before it writes.
   canon_paths: ReturnType<typeof servedCanonPaths>;
-  // The version a driver passes as approved_by_policy, served here because a
-  // namespace-scoped driver cannot read the capsid namespace. Only the version and
-  // whether it is on, never the body. Reported only when the policy loads (signature
-  // verified, agreeing with the code); otherwise the reason it does not.
+  // The version a driver passes as approved_by_policy, served here because a namespace-scoped
+  // driver cannot read the capsid namespace. Only the version and whether it is on, never the body.
   policies: PolicyVersions;
   // The overnight run's switch and, when it runs on the subscription, the recorded
   // decision (src/overnight.ts). The scheduler reads this before it starts a session.
@@ -96,11 +93,9 @@ export interface AgentSummary {
   record: AgentRecord;
 }
 
-// Exported for the Watch Floor feed (src/ops-feed.ts), which lists the same inventory
-// with the same records rather than a second reading of the agents table.
-// The archive is read newest move first and bounded: the archive grows as revoked agents
-// move out of the live table. The full archive is agents list with
-// archived: true.
+// Exported for the Watch Floor feed (src/ops-feed.ts), which lists the same inventory with the same
+// records rather than a second reading of the agents table. The archive is read newest move first
+// and bounded: the archive grows as revoked agents move out of the live table.
 const SUMMARY_ARCHIVE_LIMIT = 50;
 
 export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {

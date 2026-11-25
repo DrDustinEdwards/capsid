@@ -4,16 +4,6 @@ import { checkInspectUrl, pageOnSite, reportSite } from "./site-reports";
 import { dateWindow } from "./search-console";
 import { callSignal } from "./call-signal";
 
-// Bing Webmaster Tools for a namespace's site, served as capsid_inspect_repo action bing (Bing's
-// index also feeds ChatGPT search and Copilot). Six reports through Bing's Webmaster JSON API: top
-// queries and top pages (clicks, impressions, average position over a window), daily traffic, one
-// URL's crawl facts, the submitted sitemaps, and URLs with crawl issues.
-//
-// ONE KEY, CALLED READ-ONLY. The API key (BING_WEBMASTER_API_KEY) belongs to Dustin's Bing account
-// and has no narrower scope, so the narrowing is here: only Get methods, named in one list, never
-// a Submit, Add or Remove. The key rides in the query string, as Bing requires, so no URL is ever
-// logged or returned.
-//
 // THE NAMESPACE PICKS THE SITE, as in src/search-console.ts: the verified Bing site matching the
 // namespace's ops_sites origin, and an inspected URL must be on it. What Bing returns is data.
 
@@ -49,7 +39,6 @@ export interface BingArgs {
   url?: string;
 }
 
-// Bing's crawl issue flags (UrlWithCrawlIssues.Issues), a bit set.
 const ISSUE_FLAGS: Array<[number, string]> = [
   [1, "301"],
   [2, "302"],
@@ -65,7 +54,6 @@ const ISSUE_FLAGS: Array<[number, string]> = [
 const NOT_CONFIGURED =
   "Bing Webmaster Tools is not configured: the secret BING_WEBMASTER_API_KEY is not set on Capsid. docs/bing-webmaster.md says how.";
 
-// A .NET JSON date, "/Date(1700000000000)/" or "/Date(1700000000000-0700)/", as an ISO day.
 export function bingDay(value: unknown): string | null {
   const m = typeof value === "string" ? /\/Date\((-?\d+)(?:[+-]\d{4})?\)\//.exec(value) : null;
   return m ? new Date(Number(m[1])).toISOString().slice(0, 10) : null;
@@ -104,7 +92,6 @@ async function bing(
   return parsed?.d ?? null;
 }
 
-// The verified Bing site for an origin: the exact origin first, else the same host. Pure.
 export function pickBingSite(
   origin: string,
   sites: Array<{ Url?: string; IsVerified?: boolean }>,
@@ -136,8 +123,6 @@ interface StatRow {
   AvgClickPosition?: number;
 }
 
-// Bing reports queries and pages in weekly buckets. Sums each key's buckets inside the
-// window; the position is the impression-weighted mean of the buckets that have one.
 export function sumStats(
   rows: StatRow[],
   start: string,

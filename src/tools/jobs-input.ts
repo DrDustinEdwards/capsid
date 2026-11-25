@@ -5,12 +5,9 @@ import { CORRECTION_CAP, JOB_ACTIONS, JOB_STATUSES } from "../jobs-schema";
 import { SCOPE_FLAGS } from "../agents-schema";
 import { claimSchema } from "../job-claims";
 
-// The work queue tool's description and input schema (src/tools/jobs.ts defines the handler).
-
 const MAX_JOB_ID = 64;
 
-// How many pull requests one job may name as evidence. Each one costs a GitHub read
-// inside `complete`, so the bound stops one call fanning out without limit.
+// Each pull request costs a GitHub read inside `complete`, so the bound stops one call fanning out.
 const MAX_EVIDENCE_PRS = 10;
 
 export const JOBS_DEFINITION = {
@@ -167,20 +164,17 @@ block and complete act only on a job this caller holds, except as stated above.`
           files_changed: z.number().int().nonnegative().optional(),
           tests_added: z.number().int().nonnegative().optional(),
         }),
-        // A JSON string is accepted too. An MCP client caches the tool schema at
-        // connect time, so a session that connected before this parameter existed
-        // refuses the object locally, and some clients flatten an object to a
-        // string. Both are a caller that knows what it did and cannot say so in the
-        // shape asked for; refusing them would leave the outcome row storing nulls.
+        // A JSON string is accepted too: a client that cached the schema before this parameter
+        // existed refuses the object locally, and some clients flatten an object to a string;
+        // refusing both would leave the outcome row storing nulls.
         bounded(MAX_BODY),
       ])
       .optional()
       .describe(
         "For complete: what the work produced, as an object or a JSON string. An omitted field is stored as NULL, not 0. For each named pull request the stored merge state, commit count and file count are read from GitHub; tests_added is stored as given.",
       ),
-    // The same object-or-string union as evidence, for the same reason. The object
-    // is strict (src/job-claims.ts), and the string form is parsed against the same
-    // schema, so an unknown key is refused either way rather than dropped.
+    // Same union as evidence; the string is parsed against the same strict schema, so an unknown
+    // key is refused either way.
     claim: z
       .union([claimSchema, bounded(MAX_BODY)])
       .optional()

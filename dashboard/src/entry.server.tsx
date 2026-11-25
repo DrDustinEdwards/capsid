@@ -5,12 +5,7 @@ import { nonceFor } from "./server/prefetch";
 // React Router prints every route error, so each scanner 404 wrote a stack trace; a route 404 is counted, not logged.
 export { handleServerError as handleError } from "@dustinedwards/site-runtime/log";
 
-// The Workers runtime's render. React's prerender, not renderToReadableStream: it waits for the
-// whole tree, its lazy charts and panels included, and writes each in place, so the HTML a reader
-// with scripts off receives holds every table, chart and number, not a fallback with the content
-// in a hidden block for a script to swap in. The result hydrates like any server render. The
-// Portal is behind a sign-in and never shared-cached, so the wait costs one reader one render.
-// React writes no inline script of its own here; React Router's carry the nonce (root.tsx).
+// React's prerender, not renderToReadableStream: it waits for the whole tree, so the HTML a reader with scripts off gets holds every chart and table, not a fallback for a script to swap in.
 export default async function handleRequest(
   request: Request,
   status: number,
@@ -24,8 +19,7 @@ export default async function handleRequest(
     <ServerRouter context={routerContext} url={request.url} nonce={nonce} />,
     {
       signal: request.signal,
-      // React writes a large finished boundary out of place, after the shell, for a script to move
-      // in (its progressive chunks). One chunk, so every part is in place.
+      // One chunk, so every part is in place: React otherwise writes a large finished boundary out of place for a script to move in.
       progressiveChunkSize: Number.POSITIVE_INFINITY,
       onError(error: unknown) {
         failed = true;

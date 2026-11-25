@@ -1,24 +1,10 @@
-// THE BACKUP FRESHNESS CHECK, separated from the gate so a test can drive it, for the
-// same reason scripts/canary-lib.mjs and scripts/cimd-probe-lib.mjs exist: verify-live.mjs
-// is a program that runs on import.
-//
-// A gate rather than only a /health field, so a failing backup cron is reported.
-//
-// TWENTY-SIX HOURS is the daily cron plus a two-hour grace, the same number src/health.ts
-// uses, so a single late run does not fail the gate and a genuinely missed day does.
-//
-// ASSERTED ON SCHEDULED RUNS ONLY, since a push says nothing about last night's backup.
-// A skip is REPORTED as a skip, never as a pass.
-//
-// THE AGE IS COMPUTED HERE, from last_ok, rather than taken from the response's own
-// age_hours: a number the thing under test reports is not a measurement of it. The
-// reported value is cross-checked and a large disagreement is itself a finding, because
-// it means the Worker's clock and the runner's disagree.
+// The backup freshness check (gate 1c), apart from the gate so a test can drive it (verify-live.mjs runs on import).
+// 26 hours is the daily cron plus two hours' grace, the same as src/health.ts. Asserted on scheduled runs only (a push says nothing about last night's backup); a skip is reported as a skip, never a pass.
+// The age is computed here from last_ok, not taken from the response's age_hours: a number the thing under test reports is not a measurement of it. A large disagreement is itself a finding, a clock mismatch.
 
 export const BACKUP_STALE_HOURS = 26;
 
-// A disagreement larger than this between the computed age and the age the Worker reports
-// means the two clocks are not the same clock. Well above any plausible request latency.
+// Beyond this, the computed and reported ages come from different clocks; well above any request latency.
 const CLOCK_SKEW_TOLERANCE_HOURS = 1;
 
 /**
@@ -41,8 +27,7 @@ export function checkBackupFreshness(health, opts) {
   }
 
   if (typeof lastOk !== "string" || lastOk.length === 0) {
-    // FAIL CLOSED. No stamp means no backup has completed cleanly, which is the condition
-    // this gate exists to catch, not a reason to skip.
+    // Fail closed: no stamp means no clean backup, the condition this gate exists to catch.
     return {
       outcome: "unknown",
       passed: false,
@@ -67,8 +52,7 @@ export function checkBackupFreshness(health, opts) {
       ? ""
       : ` (worker reported ${reported}h${Math.abs(reported - ageHours) > CLOCK_SKEW_TOLERANCE_HOURS ? ", DISAGREEING with this runner's clock" : ""})`;
 
-  // A stamp in the FUTURE gives a negative age. Beyond the clock skew tolerance it is a
-  // bad stamp or a bad clock, and proves nothing about when the last backup ran.
+  // A future stamp (negative age) beyond the clock skew tolerance is a bad stamp or clock and proves nothing.
   if (ageHours < -CLOCK_SKEW_TOLERANCE_HOURS) {
     return {
       outcome: "unknown",

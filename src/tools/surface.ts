@@ -9,23 +9,10 @@ import {
   singleHandler,
 } from "./surface-composite";
 
-// The served surface (capsid/research/design-mcp-servers.md section 3). Capsid serves the whole-job tools
-// of CAPSID_TOOLS on /mcp and /ops/mcp, and Capsid Admin those of CAPSID_ADMIN_TOOLS on its
-// own route for the administrator alone (src/mcp-handler.ts). Each tool is named {service}_{action}_{resource}
-// (ruling rule 5) and carries one honest set of hints (rule 6, src/tool-annotations.ts).
-//
-// A tool with more than one action takes `action`, which picks the operation that does
-// the work (./operations). Its input schema is every operation's arguments, each
-// optional unless every action needs it; the operation's own schema is applied when the
-// action runs, so an argument an action needs is still refused when it is missing. An
-// operation argument the action fixes (manage_pr's merge or close, cloudflare_config's
-// read) is set by the action, not exposed.
-//
-// Every registration is a literal call on the server, as test/invariants.test.ts,
-// test/tool-annotations.test.ts and test/counts.test.ts read them, and goes through the
-// registrar (src/scope.ts guardRegistrations), which checks the tool and its action.
-
-// ---- Capsid (11) -------------------------------------------------------------------
+// Each tool is named {service}_{action}_{resource} (ruling rule 5) and carries one honest set of
+// hints (rule 6, src/tool-annotations.ts). Every registration is a literal call on the server, as
+// test/invariants.test.ts, test/tool-annotations.test.ts and test/counts.test.ts read them, and
+// goes through the registrar (src/scope.ts guardRegistrations).
 
 const FIND_DOCS: CompositeSpec = {
   name: "capsid_find_docs",
@@ -124,7 +111,6 @@ const CLOSE_PR: CompositeSpec = {
   },
 };
 
-// A driver's general read: the queue, the breaker, the maintenance list and the versions model.
 const READ_STATUS: CompositeSpec = {
   name: "capsid_read_status",
   title: "Read Capsid's status",
@@ -200,7 +186,6 @@ const READ_OPS: CompositeSpec = {
 
 const ADMIN_CONTROL_ACTIONS = ["sign_policy", "breaker_reset", "overnight"] as const;
 
-// The administrator's switches: the signed policies, the job breaker and the overnight run.
 const MANAGE_SWITCHES: CompositeSpec = {
   name: "capsid_admin_manage_switches",
   title: "Administrator switches",
@@ -214,7 +199,6 @@ const MANAGE_SWITCHES: CompositeSpec = {
   ),
 };
 
-// The tools that are one operation each.
 export const SINGLE_TOOLS: Record<string, { op: string; title: string }> = {
   capsid_start_session: { op: "brief", title: "Start a session" },
   capsid_delete_doc: { op: "delete", title: "Delete a document" },
@@ -239,11 +223,7 @@ export const COMPOSITES: readonly CompositeSpec[] = [
   MANAGE_SWITCHES,
 ];
 
-// The served tool and action an operation runs under, for a check made inside a handler
-// (the repo guards, the document override, lint, the CI log tail). `opAction` is the
-// operation's own action argument where an action of the tool fixes it (manage_pr's
-// merge or close). The one inverse of the tables above, so a handler cannot
-// name a tool the surface does not serve.
+// The one inverse of the tables above, so a handler cannot name a tool the surface does not serve.
 export function surfaceOf(
   op: string,
   opAction?: string,
@@ -266,8 +246,6 @@ export function surfaceOf(
   );
 }
 
-// The served surface, for the tests and the docs: every tool name on each server, in
-// the order tools/list publishes it.
 export const CAPSID_TOOLS = [
   "capsid_start_session",
   "capsid_find_docs",
@@ -292,8 +270,6 @@ export const CAPSID_ADMIN_TOOLS = [
   "capsid_admin_manage_switches",
 ] as const;
 
-// `readOnly`: the caller holds the read grant and not write, so the tools whose action
-// decides their grant are served as their read view (READ_VIEWS).
 export function registerCapsidTools(server: McpServer, ops: Operations, readOnly: boolean): void {
   server.registerTool(
     "capsid_start_session",

@@ -10,8 +10,6 @@ import { resumeJob } from "./jobs-seat-resume";
 import { supersedeJob } from "./jobs-seat-supersede";
 import { readJob } from "./jobs-transition";
 import { runSiteJob } from "./site-jobs";
-// Performs the job controls, dispatched from performAction (src/controls-perform.ts). Returns a
-// refusal, or null once the mutator has run and state holds its summary.
 
 export async function performJobAction(
   c: PerformContext,
@@ -44,8 +42,8 @@ export async function performJobAction(
                 : "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.",
         };
       }
-      // resume_job's note is the full approval when it is longer than a line (stale jobs
-      // D6): the driver reads it as resume_note.note on its next claim or list.
+      // resume_job's note is the full approval when it is longer than a line (stale jobs D6): the driver
+      // reads it as resume_note.note on its next claim or list.
       const note = action === "resume_job" ? (required(params, "note") ?? undefined) : undefined;
       const result =
         action === "resume_job"
@@ -145,7 +143,8 @@ export async function performJobAction(
       return null;
     }
     case "run_job": {
-      // Every check runs again inside runSiteJob: the configuration, token and rate limit can change before the click.
+      // Every check runs again inside runSiteJob: the configuration, token and rate limit can change
+      // before the click.
       const namespace = required(params, "namespace");
       const name = required(params, "name");
       if (!namespace || !name)

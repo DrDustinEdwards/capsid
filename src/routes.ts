@@ -119,11 +119,8 @@ import { logEvent } from "@dustinedwards/site-runtime/log";
 import { textResponse } from "@dustinedwards/site-runtime/http";
 import { rateLimiter } from "./http";
 
-// The MCP authorization flow (rule 13): site-runtime's consent page, the Access for SaaS
-// round trip and the /callback, behind the OAuth provider. Capsid passes what is its own:
-// who is admitted (ADMIN_EMAIL and every CO_OWNER_EMAILS entry, src/auth.ts), and the
-// sign-in time its admin server's step-up reads (src/scope.ts STEP_UP), which joins the
-// grant's props. Every grant reads; the write box adds capsid.write.
+// The MCP authorization flow (rule 13): site-runtime's consent page, the Access for SaaS round trip
+// and the /callback, behind the OAuth provider.
 const login = loginHandler<Env>({
   name: "Capsid",
   scopes: SCOPES,
@@ -179,12 +176,7 @@ async function handleOperatorMcp(
   return serveMcp(request, env, ctx, "/ops/mcp", () => buildServer(env, resolved.agent));
 }
 
-// What needs Dustin, per app (src/inbox.ts), for the admin shell's app strip. It is read
-// by each app's SERVER with a key, never by a browser: a browser on another admin host
-// would need either a Portal session it does not hold or a secret in the page, and
-// Cloudflare Access would stop the CORS preflight anyway. A key scoped to one namespace
-// sees that app alone. The shell renders without badges when this fails, so a failure
-// here is a plain error and never retried into a block.
+// What needs Dustin, per app (src/inbox.ts), for the admin shell's app strip.
 async function handleInbox(request: Request, env: Env): Promise<Response> {
   const caller = await resolveAgent(request, env);
   if (!caller) {
@@ -262,12 +254,9 @@ export const CSP_REPORT_RULES = [
   { limit: 1000, windowSeconds: 86_400 },
 ];
 
-// The family's one receiver (@dustinedwards/site-runtime/csp-report): a POST always
-// gets 204, the body is read to 16 KB and no further, at most ten violations are
-// logged one line each with every URL cut to origin and path, and nothing is stored.
-// The limiter is asked first, and a refusal is a dropped report rather than a 429. Every method
-// comes here, so a GET is the receiver's 405 as on the other sites, and the Portal's
-// pages, which report here from their own host, get the preflight the Reporting API sends.
+// The family's one receiver (@dustinedwards/site-runtime/csp-report): a POST always gets 204, the
+// body is read to 16 KB and no further, at most ten violations are logged one line each with every
+// URL cut to origin and path, and nothing is stored.
 async function handleCspReport(request: Request, env: Env): Promise<Response> {
   return receiveCspReport(request, {
     allowOrigin: `https://${PORTAL_HOST}`,
@@ -397,10 +386,8 @@ export const defaultHandler = {
     // The owner page: the same sign-in and admission as consent (site-runtime ./owner-page).
     if (url.pathname === "/owner" || url.pathname.startsWith("/owner/"))
       return handleLogin(request, env);
-    // Capsid Portal. The callback and every /portal/api/ route are matched before the
-    // app's catch-all, and an unknown /portal/api/ path is a 404, never the app's page.
-    // Nothing answers under /console: the Portal moved without redirects
-    // (capsid/research/design-portal-unify.md), so an old address reaches the 404 below.
+    // Capsid Portal. The callback and every /portal/api/ route are matched before the app's
+    // catch-all, and an unknown /portal/api/ path is a 404, never the app's page.
     if (url.pathname === PORTAL_CALLBACK_PATH)
       return handlePortalCallback(request, env, new Date());
     // Every other Portal route goes through the shared idle hour (withPortalIdle, src/portal-auth.ts).

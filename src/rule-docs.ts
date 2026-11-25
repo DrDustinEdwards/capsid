@@ -1,20 +1,6 @@
-// The rule documents: the ones sessions follow as rules rather than read as records
-// Two checks hold them:
-//
-//   - the cap. A namespace's core.md stays under 8KB, any other rule document under 20KB.
-//   - stale tool names. A rule document names no tool or action the Worker does not
-//     serve. A session that follows a rule naming a removed tool fails at the call.
-//
-// Dated records (archive/, research/, reports/, audits/, jobs/, and Dustin's rulings in
-// capsid/rulings/) are not rule documents:
-// they say what was true when written, and an old tool name there is history.
-//
-// Three places run the checks. capsid_write_doc refuses a write that makes a rule document
-// worse (ruleDocWriteRefusal: over the cap and larger than before, or a stale name the
-// stored body did not have), so an over-cap document can still be cut in steps.
-// capsid_lint_namespace mode report lists every violation in the namespace, and the daily
-// maintenance pass files one finding per violating document. test/rule-docs.test.ts
-// plants both kinds.
+// The rule documents: the ones sessions follow as rules rather than read as records Two checks hold
+// them: - the cap. A namespace's core.md stays under 8KB, any other rule document under 20KB. -
+// stale tool names. A rule document names no tool or action the Worker does not serve.
 
 import { rewriteProse, OLD_TOOLS } from "../scripts/tool-names-lib";
 import { TOOL_GRANTS } from "./scope";
@@ -56,10 +42,9 @@ const SERVED_ACTIONS: ReadonlySet<string> = new Set(
   [...SERVED.values()].flatMap((a) => (a ? [...a] : [])),
 );
 
-// Old names with an underscore are not words, so outside backticks they still name the old
-// tool. rewriteProse reads only backtick spans and calls; this reads the rest. open_pr is
-// excluded for the reason rewriteProse gives (it is also a gate class). A name followed by
-// "(" is a call, which rewriteProse already reads.
+// Old names with an underscore are not words, so outside backticks they still name the old tool.
+// rewriteProse reads only backtick spans and calls; this reads the rest. open_pr is excluded for
+// the reason rewriteProse gives (it is also a gate class).
 const BARE_OLD = OLD_TOOLS.filter(
   (name) => name.includes("_") && name !== "open_pr" && !SERVED_ACTIONS.has(name),
 );
@@ -94,8 +79,8 @@ function multiset(names: string[]): Map<string, number> {
   return out;
 }
 
-/** Every tool or action reference in `text` that the Worker does not serve. Fenced code is
- *  not read: a SQL or JS example there is not a tool reference. */
+// Every tool or action reference in `text` that the Worker does not serve. Fenced code is not read:
+// a SQL or JS example there is not a tool reference.
 export function staleToolNames(text: string): StaleName[] {
   const found: StaleName[] = [];
   // "write(s)" and "item(es)" are plurals, not calls.
@@ -181,10 +166,9 @@ function describeRuleDocProblem(p: RuleDocProblem): string {
   return `${p.namespace}/${p.path}: ${parts.join("; ")}`;
 }
 
-/** Refuse a write that makes a rule document worse: over its cap and larger than the
- *  stored body, or naming a stale tool the stored body did not. A write that cuts an
- *  over-cap document, or leaves an existing stale name alone, passes, so a violating
- *  document can be fixed in steps. Null when the write may go ahead. */
+// Refuse a write that makes a rule document worse: over its cap and larger than the stored body, or
+// naming a stale tool the stored body did not. A write that cuts an over-cap document, or leaves an
+// existing stale name alone, passes, so a violating document can be fixed in steps.
 export function ruleDocWriteRefusal(
   namespace: string,
   path: string,
@@ -222,10 +206,9 @@ export function ruleDocWriteRefusal(
   return `${namespace}/${path} is a rule document (src/rule-docs.ts). Nothing was written: ${reasons.join(" Also, ")}`;
 }
 
-/** The daily maintenance pass's rule (src/maintenance.ts): one item per rule document
- *  over its cap or naming a stale tool, in every namespace, and how many were read.
- *  ruleDocCap alone decides which documents those are: every path is listed, and only the
- *  rule documents' bodies are read. A failed read is one rule-docs-not-checked item. */
+// The daily maintenance pass's rule (src/maintenance.ts): one item per rule document over its cap
+// or naming a stale tool, in every namespace, and how many were read. ruleDocCap alone decides
+// which documents those are: every path is listed, and only the rule documents' bodies are read.
 export async function gatherRuleDocItems(
   db: D1Database,
 ): Promise<{ items: OpsMaintenanceItem[]; read: number }> {

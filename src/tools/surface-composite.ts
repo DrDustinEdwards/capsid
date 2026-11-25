@@ -4,18 +4,12 @@ import { hintsFor, READ_VIEW_HINTS } from "../tool-annotations";
 import { type OperationResult, type Operations, type Shape } from "./operations";
 import { toolOutput } from "./outputs";
 
-// How a tool's spec becomes its served config and handler (specs: src/tools/surface.ts).
-
 interface ActionSpec {
   op: string;
-  // Operation arguments the action fixes. Not exposed in the tool's schema.
   inject?: Record<string, unknown>;
-  // What this action does, in the tool's description. The operation's own description
-  // follows it.
   summary: string;
-  // The operation arguments this action takes, where it takes fewer than the operation
-  // declares (close_pr's close takes none of manage_pr's merge_method). The rest are neither
-  // exposed for this action nor accepted: one sent is refused.
+  // Narrower than the operation: the rest are neither exposed for this action nor accepted (one
+  // sent is refused).
   fields?: readonly string[];
 }
 
@@ -24,14 +18,13 @@ export interface CompositeSpec {
   title: string;
   summary: string;
   actions: Record<string, ActionSpec>;
-  // The action an omitted `action` means. A tool with none requires it.
   defaultAction?: string;
 }
 
 const optional = (t: ZodType): boolean => t.safeParse(undefined).success;
 
-// A schema's shape without its descriptions: two actions' `namespace` differ only in wording,
-// while search's and bing's `report` differ in the values they accept.
+// Descriptions are left out: two actions' `namespace` differ only in wording, while search's and
+// bing's `report` differ in accepted values.
 function shapeKey(t: ZodType): string {
   const strip = (v: unknown): unknown =>
     Array.isArray(v)
@@ -49,8 +42,8 @@ function shapeKey(t: ZodType): string {
 function mergedShape(ops: Operations, spec: CompositeSpec): Shape {
   const actions = Object.values(spec.actions);
   const first = new Map<string, ZodType>();
-  // Every differently shaped schema a key has across the actions, so the tool's schema
-  // accepts what any action does; each operation still checks its own (Operations.run).
+  // Every differently shaped schema a key has across actions, so the tool accepts what any does;
+  // each operation still checks its own.
   const variants = new Map<string, Map<string, ZodType>>();
   const requiredBy = new Map<string, number>();
   for (const a of actions) {
@@ -93,8 +86,6 @@ function mergedShape(ops: Operations, spec: CompositeSpec): Shape {
   return shape;
 }
 
-// The tool's summary, its actions, then each operation's own description once, headed by
-// the actions it serves.
 function describe(ops: Operations, spec: CompositeSpec): string {
   const actions = Object.entries(spec.actions);
   const list = actions
@@ -108,14 +99,11 @@ function describe(ops: Operations, spec: CompositeSpec): string {
   return `${spec.summary}\n\nActions: ${list}.\n\n${details.join("\n\n")}`;
 }
 
-// The tool's config: title, description and merged input schema. The registration in
-// buildServer supplies the hints, so each literal call names its own.
 export function compositeConfig(ops: Operations, spec: CompositeSpec) {
   for (const a of Object.values(spec.actions))
     if (!ops.has(a.op)) throw new Error(`${spec.name}: no operation '${a.op}'`);
-  // Closed (additionalProperties: false; area 11, T4), so an argument no action of the
-  // tool takes is refused by the SDK, never stripped; one another action takes is
-  // refused by compositeHandler, which names what this action takes.
+  // Closed: an argument no action takes is refused by the SDK, never stripped; one another action
+  // takes is refused by compositeHandler, naming what this action takes.
   const namespaceActions = Object.entries(spec.actions)
     .filter(
       ([, a]) =>
@@ -153,8 +141,8 @@ export function compositeHandler(ops: Operations, spec: CompositeSpec) {
         isError: true,
       };
     }
-    // An argument this action does not take is refused, not dropped: a caller that sent
-    // a sha with close meant something the call would not do.
+    // Refused, not dropped: a caller that sent a sha with close meant something the call would not
+    // do.
     const fields = chosen.fields;
     const extra = fields
       ? Object.keys(rest).filter((k) => !fields.includes(k) && rest[k] !== undefined)
@@ -174,8 +162,6 @@ export function compositeHandler(ops: Operations, spec: CompositeSpec) {
   };
 }
 
-// A tool that is one operation, served under its own schema, closed (area 11, T4) so an
-// argument it does not take is refused rather than stripped.
 export function singleConfig(
   ops: Operations,
   name: string,
@@ -193,12 +179,9 @@ export function singleConfig(
   };
 }
 
-// What a caller holding only the read grant is served of a tool whose action decides its
-// grant (TOOL_GRANTS "action"): the argument that picks the action, narrowed to the
-// actions that only read (READ_ACTIONS in src/scope.ts), and the arguments those take.
-// The same tool and handler, so no new tool: the caller could never run the other actions
-// (the handler refuses them for want of the write grant), and now cannot ask for them, so
-// the tool it lists is read-only in fact and is annotated so (area 11, T7).
+// A caller holding only the read grant is served the read view of a tool whose action decides its
+// grant: same tool and handler, action narrowed to READ_ACTIONS, so the listed tool is read-only in
+// fact and annotated so (area 11, T7).
 const READ_VIEWS: Record<string, { key: string; fields: readonly string[] }> = {
   capsid_work_jobs: {
     key: "action",

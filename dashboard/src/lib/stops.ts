@@ -2,16 +2,12 @@ import { stopCommand, type Command } from "capsomer/behavior/command-menu";
 import type { ConfirmRequest } from "../app/ctx";
 import type { OpsFeed } from "../types";
 
-// A stop's own control: the confirm dialog (preview then perform), or a switch on
-// Namespaces, pressed so that its reason field opens. Nothing is written from here.
 export interface StopActions {
   confirm: (r: ConfirmRequest) => void;
   flip: (switchId: string) => void;
 }
 
-// Every way to stop something, in one place (capsid/decisions.md 2026-09-30, "admin
-// panels review adopted", item 4): type "stop" to find them all. Each is listed only while
-// there is something to stop. Here, not in app/CommandMenu.tsx, so a node test can import it.
+// Here, not in app/CommandMenu.tsx, so a node test can import it.
 export function stopCommands(feed: OpsFeed | null, a: StopActions): Command[] {
   if (!feed) return [];
   const out: Command[] = [];

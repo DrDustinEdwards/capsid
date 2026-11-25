@@ -3,24 +3,11 @@ import type { PrFacts, PolicyVerdict } from "./auto-merge-policy-evaluate";
 import { TEST_FILE, worthReviewer } from "./model-routing";
 import { isMoneyPath } from "./scope";
 
-// THE MERGE CLASSES (docs/design/design-merge-pipeline.md section 2). Every open pull request on a
-// covered repo gets exactly one class, with its reasons, computed each tick by this pure function.
-// REPORT-ONLY for now (the design's PR 2): the class rides on the awaiting-seat set and the inbox;
-// the approval record (PR 3) and executor (PR 4) are what act.
-//
-//   auto     passes every check of the signed policy: the tick merges it
-//   approve  fails only on rules a person may waive: one tap, batchable
-//   typed    any money path: a typed confirmation, never batched, never automatic
-//   seat     needs a step outside a merge: a migration, a workflow, a fork head, a base that is not
-//            the default branch, a file list that could not be read
-//   wait     CI has not finished, or the PR is a draft: nobody acts yet
-//
 // Money is decided first, so no other rule can move a money PR out of typed (design section 8).
 
 const MERGE_CLASSES = ["auto", "approve", "typed", "seat", "wait"] as const;
 export type MergeClass = (typeof MERGE_CLASSES)[number];
 
-// The path classes, least risky first: a PR's path class is the riskiest of its files'.
 export const PATH_CLASSES = [
   "docs",
   "dashboard-css",
@@ -46,14 +33,13 @@ const DEPS_FILE =
   /(^|\/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$/i;
 const DOC_FILE = /\.(md|mdx|txt|png|jpe?g|gif|svg|webp)$/i;
 
-/** One file's path class. */
 export function pathClassOf(path: string): PathClass {
   if (isMoneyPath(path)) return "money";
   if (/(^|\/)migrations\/[^/]+\.sql$/i.test(path)) return "migration";
   if (/^\.github\/workflows\//i.test(path)) return "workflow";
-  // Which dependency changed is in the diff, not the path, so a manifest or lockfile is
-  // judged as another's package until the diff is read (deps-own).
-  // Before the refused list, which names lockfiles for a different reason.
+  // Which dependency changed is in the diff, not the path, so a manifest or lockfile is judged as
+  // another's package until the diff is read (deps-own). Before the refused list, which names
+  // lockfiles for a different reason.
   if (DEPS_FILE.test(path)) return "deps-other";
   if (AUTO_MERGE_REFUSED_PATHS.some(({ pattern }) => pattern.test(path))) return "src-worth";
   if (TEST_FILE.test(path)) return "tests";
@@ -63,7 +49,6 @@ export function pathClassOf(path: string): PathClass {
   return worthReviewer([{ filename: path }]).level === "worth" ? "src-worth" : "src-routine";
 }
 
-/** The riskiest path class among `paths`, or null for none. */
 export function pathClassOfAll(paths: readonly string[]): PathClass | null {
   let worst = -1;
   for (const p of paths) worst = Math.max(worst, PATH_CLASSES.indexOf(pathClassOf(p)));
@@ -75,7 +60,6 @@ export function existingTestReason(edits: readonly string[]): string {
   return `changes an existing test: ${edits.slice(0, 3).join(", ")}${edits.length > 3 ? `, and ${edits.length - 3} more` : ""}`;
 }
 
-/** The class of one pull request, from the facts the tick read and the policy's verdict. */
 export function mergeClass(facts: PrFacts, verdict: PolicyVerdict, draft = false): Classification {
   const paths = facts.changedPaths;
   const path_class = facts.filesProblem ? null : pathClassOfAll(paths);
@@ -91,9 +75,9 @@ export function mergeClass(facts: PrFacts, verdict: PolicyVerdict, draft = false
   if (draft) return { class: "wait", path_class, reasons: ["the PR is a draft"] };
   if (facts.ciConclusion === null || facts.ciConclusion === "pending")
     return { class: "wait", path_class, reasons: [`CI has not finished: ${facts.ciNote}`] };
-  // A changed existing test is never merged unattended, whatever the policy and the
-  // promoted units say: a test edited to pass is how a regression gets past CI. It is
-  // approve, one tap, and it holds with every unit promoted (src/auto-merge-tick.ts).
+  // A changed existing test is never merged unattended, whatever the policy and the promoted units
+  // say: a test edited to pass is how a regression gets past CI. It is approve, one tap, and it
+  // holds with every unit promoted (src/auto-merge-tick.ts).
   const testEdit = facts.existingTestEdits.length
     ? existingTestReason(facts.existingTestEdits)
     : null;
@@ -115,8 +99,8 @@ export function mergeClass(facts: PrFacts, verdict: PolicyVerdict, draft = false
   if (facts.baseRef !== facts.defaultBranch)
     seat.push(`the base is ${facts.baseRef}, not the default branch ${facts.defaultBranch}`);
   if (seat.length) return { class: "seat", path_class, reasons: seat };
-  // Over the size cap is its own reason, named first whichever check the policy stopped
-  // at, so a big pull request reads as one a person approves for its size.
+  // Over the size cap is its own reason, named first whichever check the policy stopped at, so a big
+  // pull request reads as one a person approves for its size.
   const reasons = testEdit ? [testEdit] : [];
   if (overSizeCap(facts)) reasons.push(sizeCapReason(facts));
   if (verdict.failed !== "size_within_cap")

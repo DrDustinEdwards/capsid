@@ -1,18 +1,5 @@
-// A wrangler.jsonc good enough for `wrangler deploy --dry-run`, built OFFLINE.
-//
-// `npm run types` generates worker-configuration.d.ts from it with `wrangler types`,
-// because the real wrangler.jsonc is gitignored and CI holds no credential to run
-// scripts/ci-config.mjs.
-//
-// THIS IS NOT ci-config.mjs. That script makes a DEPLOY safe: it resolves each binding
-// by name and refuses if the resolved id disagrees with the pinned one. This one is for
-// a DRY RUN, which bundles and exits without talking to the account. Nothing is
-// resolved, nothing is verified, and the pinned ids are substituted for the example's
-// placeholders.
-//
-// IT MUST NEVER BE USED TO DEPLOY. It writes wrangler.dryrun.jsonc, which the deploy
-// path does not read; the dry run names it with --config. Writing wrangler.jsonc would
-// overwrite a developer's real gitignored config.
+// A wrangler.jsonc for `wrangler deploy --dry-run`, built offline: `npm run types` generates worker-configuration.d.ts from it, because the real file is gitignored and CI holds no credential for ci-config.mjs.
+// Not ci-config.mjs: nothing is resolved or verified; pinned ids just replace the example's placeholders. Never use it to deploy: it writes wrangler.dryrun.jsonc (named with --config) so a developer's real wrangler.jsonc is not overwritten.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { APP_KV, D1, GITHUB_APP_CLIENT_ID, OAUTH_KV, R2 } from "./bindings.mjs";
@@ -21,9 +8,7 @@ const OUT = "wrangler.dryrun.jsonc";
 
 const example = readFileSync("wrangler.jsonc.example", "utf8");
 
-// The placeholders wrangler.jsonc.example carries, and the pinned value each stands for.
-// Every substitution is asserted below, so a renamed placeholder is a loud failure
-// rather than a config that still says YOUR_D1_ID.
+// Each placeholder and the pinned value it stands for; every substitution is asserted so a renamed placeholder fails loudly.
 const SUBSTITUTIONS = [
   ["YOUR_D1_ID", D1.id],
   ["YOUR_APP_KV_ID", APP_KV.id],
@@ -44,9 +29,7 @@ for (const [placeholder, value] of SUBSTITUTIONS) {
   config = config.split(placeholder).join(value);
 }
 
-// The dashboard's assets block is removed: the dry run measures the Worker bundle, and
-// the scorer's build job builds no dashboard, so the assets directory would not exist.
-// Between the markers only; a missing marker is a loud failure, not a silent keep.
+// Remove the dashboard assets block: the dry run measures the Worker bundle and the build job builds no dashboard. A missing marker fails loudly.
 const ASSETS = /\n[ \t]*\/\/ ASSETS-BEGIN\n[\s\S]*?\n[ \t]*\/\/ ASSETS-END\n/;
 if (!ASSETS.test(config)) {
   console.error(
@@ -56,9 +39,7 @@ if (!ASSETS.test(config)) {
 }
 config = config.replace(ASSETS, "\n");
 
-// Nothing that still looks like a placeholder may survive. A dry run tolerates a wrong
-// id, so an unnoticed leftover would be invisible here and visible only as a bundle that
-// never got measured.
+// No placeholder may survive: a dry run tolerates a wrong id, so a leftover would be invisible.
 const leftover = config.match(/YOUR_[A-Z0-9_]+/g);
 if (leftover) {
   console.error(

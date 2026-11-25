@@ -10,13 +10,8 @@ import { HOUR_MS } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The public data build (design capsid/research/design-system-explorer.md, section 2;
-// docs/public-data.md). Once a UTC day the tick reads every repo's visibility from
-// GitHub, runs the model through toPublic, computes the aggregate numbers, and stores
-// both documents in KV. The routes below serve those stored documents and nothing else:
-// they never read D1 or GitHub, so a request cannot make the Worker compute anything.
-//
-// Their readers are the explorer's and dustinedwards.info's builds, not browsers
-// (answer 4), so the responses carry no CORS header.
+// docs/public-data.md). Once a UTC day the tick reads every repo's visibility from GitHub, runs the
+// model through toPublic, computes the aggregate numbers, and stores both documents in KV.
 
 export const PUBLIC_MODEL_PATH = "/public/model/v1.json";
 export const PUBLIC_MODEL_KEY = "public:model:v1";
@@ -42,8 +37,8 @@ const PUBLIC_DATA_RULES = [
   { limit: 1000, windowSeconds: 86_400 },
 ];
 
-/** The model the Worker was built with. A model that fails its schema fails the
- *  build step loudly, every day, rather than publish a partial map. */
+// The model the Worker was built with. A model that fails its schema fails the build step loudly,
+// every day, rather than publish a partial map.
 export function bundledModel(): SystemModel {
   const parsed = parseSystemModel(rawModel);
   if (!parsed.ok) throw new Error(`system/model.json is invalid: ${parsed.problems.join("; ")}`);
@@ -66,15 +61,9 @@ const LIVE: PublicBuildReaders = {
   codeMap: readCodeMap,
 };
 
-/**
- * Builds and stores the public documents once per UTC day. The model and the numbers
- * are read and computed before anything is written, so a failed read leaves the last
- * good documents served and the day unstamped; a partial visibility read cannot happen
- * (listInstalledRepos throws on one). The code maps come after, on their own: a repo's
- * broken map keeps the last good code document and is reported, and does not hold back
- * the model or retry every tick. Later in the day the code document alone is rebuilt
- * each hour, so a repo's new map shows the same day.
- */
+// Builds and stores the public documents once per UTC day. The model and the numbers are read and
+// computed before anything is written, so a failed read leaves the last good documents served and
+// the day unstamped; a partial visibility read cannot happen (listInstalledRepos throws on one).
 export async function publicBuildTick(
   env: Env,
   now: Date,
@@ -116,8 +105,8 @@ function privacyOf(repos: InstalledRepo[]): Map<string, boolean> {
   return new Map(repos.map((r) => [r.full_name.toLowerCase(), r.private] as const));
 }
 
-/** Builds and stores the code document. A map that fails its parse keeps the last good
- *  document. Either way the attempt is stamped, so a broken map is retried the next hour, not every tick. */
+// Builds and stores the code document. A map that fails its parse keeps the last good document.
+// Either way the attempt is stamped, so a broken map is retried the next hour, not every tick.
 async function storeCode(
   env: Env,
   model: SystemModel,
@@ -159,11 +148,9 @@ export const PUBLIC_DOCS = {
   versions: { path: PUBLIC_VERSIONS_PATH, key: PUBLIC_VERSIONS_KEY },
 } as const;
 
-/**
- * GET of one public document. The colo's cache first, so a cached answer costs no KV
- * read and no counter; then the per-IP limit; then the stored document. 503 until the
- * first build, and never a computed fallback.
- */
+// GET of one public document. The colo's cache first, so a cached answer costs no KV read and no
+// counter; then the per-IP limit; then the stored document. 503 until the first build, and never a
+// computed fallback. /
 export async function handlePublicDocument(
   request: Request,
   env: Env,
@@ -173,7 +160,6 @@ export async function handlePublicDocument(
   cache: Cache | undefined = (globalThis as { caches?: CacheStorage & { default?: Cache } }).caches
     ?.default,
 ): Promise<Response> {
-  // The query string is not part of the key, so it cannot be used to miss the cache.
   const key = new Request(new URL(doc.path, request.url).toString());
   const hit = await cache?.match(key);
   if (hit) return hit;

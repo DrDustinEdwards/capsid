@@ -33,7 +33,9 @@ function deny(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true };
 }
 
-// An omitted namespace means "every namespace" on tools such as capsid_find_docs (list, glob, search), capsid_read_status action status and capsid_work_jobs action list. For a narrowed caller that would be an unchecked hole, so a namespace-restricted caller that omits it is refused. Whether a tool takes a namespace is read from its input schema, so a new argument is covered automatically.
+// An omitted namespace means "every namespace" on tools such as capsid_find_docs (list, glob,
+// search), capsid_read_status action status and capsid_work_jobs action list. For a narrowed caller
+// that would be an unchecked hole, so a namespace-restricted caller that omits it is refused.
 function namespaceRefusal(agent: Agent, tool: string): string | null {
   if (agent.scopes.namespaces === "*") return null;
   return (
@@ -44,10 +46,9 @@ function namespaceRefusal(agent: Agent, tool: string): string | null {
 
 interface RegisteredConfig {
   inputSchema?: Record<string, unknown> | z.ZodObject;
-  // A composite tool's actions whose operation takes a namespace (src/tools/surface.ts).
-  // The merged schema declares `namespace` when any action takes one, and an action that
-  // takes none (capsid_find_docs action namespaces) must not be refused for omitting it.
-  // The registrar reads it and does not pass it on.
+  // A composite tool's actions whose operation takes a namespace (src/tools/surface.ts). The merged
+  // schema declares `namespace` when any action takes one, and an action that takes none
+  // (capsid_find_docs action namespaces) must not be refused for omitting it.
   namespaceActions?: readonly string[];
 }
 
@@ -73,7 +74,8 @@ function toolSucceeded(result: unknown): boolean {
   }
 }
 
-// Which argument names what a tool is asked to do (lint spells it `mode`). The registrar needs it to populate need.action; a tool absent here cannot be narrowed below the tool name. `mode` on capsid_write_doc is not an action: it already decides a write shape, and one setting should not have two authorities.
+// Which argument names what a tool is asked to do (lint spells it `mode`). The registrar needs it
+// to populate need.action; a tool absent here cannot be narrowed below the tool name.
 const ACTION_ARG: Record<string, string> = {
   capsid_find_docs: "action",
   capsid_read_doc: "action",
@@ -92,7 +94,7 @@ const ACTION_ARG: Record<string, string> = {
   capsid_admin_manage_switches: "action",
 };
 
-// The action a tool falls back to when the caller omits an optional one. Every handler default needs an entry: an unknown action on a narrowed tool is refused (allowsToolAction), so an agent minted ["lint", "lint.gather"] would be refused its own default mode. test/audit-2026-09-16.test.ts derives the required entries from the served schemas.
+// The action a tool falls back to when the caller omits an optional one.
 const DEFAULT_ACTION: Record<string, string> = {
   capsid_find_docs: "list",
   capsid_read_doc: "read",
@@ -111,10 +113,8 @@ export function actionArgFor(tool: string): string | undefined {
   return Object.hasOwn(ACTION_ARG, tool) ? ACTION_ARG[tool] : undefined;
 }
 
-// The action this call asks for, read off the tool's own declared argument so an
-// unrelated property spelled "action" cannot narrow it.
-// A tool's declared arguments: a raw shape, or the shape of a zod object (the composite
-// tools, src/tools/surface.ts, register one so extra arguments reach their handler).
+// The action this call asks for, read off the tool's own declared argument so an unrelated property
+// spelled "action" cannot narrow it.
 function declaredShape(config: RegisteredConfig): Record<string, unknown> | undefined {
   const schema = config?.inputSchema;
   if (schema instanceof z.ZodObject) return schema.shape as Record<string, unknown>;
@@ -135,17 +135,9 @@ function actionOf(
   return defaultActionFor(tool);
 }
 
-// The registrar gate. Wraps the registration method once, before any tool module
-// runs, so every registration that follows is guarded whether or not its author
-// thought about scopes. A new tool cannot forget it, because a tool has to be
-// registered to exist.
-//
-// It wraps the server rather than replacing the call sites so every registration
-// stays a literal call on the server object, which test/invariants.test.ts,
-// test/tool-annotations.test.ts and test/counts.test.ts parse by that spelling. This
-// module must never spell that call itself, or those scanners would count it.
-// Where the registrar logs every call (site-runtime's ToolCallLog): the Durable Object, the
-// server's serverInfo, and the OAuth client of an admin session.
+// The registrar gate. Wraps the registration method once, before any tool module runs, so every
+// registration that follows is guarded whether or not its author thought about scopes. A new tool
+// cannot forget it, because a tool has to be registered to exist.
 export interface CallLog {
   env: Partial<AuditEnv>;
   server: { name: string; version: string };
@@ -153,13 +145,9 @@ export interface CallLog {
   clientName?: string;
 }
 
-// The tools whose answers carry text written outside Capsid, and its label: a repository's
-// files, code search hits, pull request titles and bodies, review comments and CI logs, all
-// written by whoever can push or comment. Their successful results go through
-// site-runtime's outsideResult: the shared notice, then the answer inside <data> delimiters,
-// and the notice beside the answer in structuredContent. Documents are not listed: a
-// document's provenance (last_actor) travels with it, and the server's instructions name
-// documents as data.
+// The tools whose answers carry text written outside Capsid, and its label: a repository's files,
+// code search hits, pull request titles and bodies, review comments and CI logs, all written by
+// whoever can push or comment.
 const OUTSIDE_TOOLS: Record<string, string> = {
   capsid_read_repo: "repo",
   capsid_inspect_repo: "repo",
@@ -187,12 +175,7 @@ function markOutside(tool: string, result: unknown): unknown {
 export type ToolIcon = { src: string; mimeType?: string; sizes?: string[] };
 
 // Whether this caller's grant could ever call the tool, whatever the arguments: the grant
-// TOOL_GRANTS names. A tool its grant never could is not registered for it, so
-// tools/list shows a read grant no write tool, as site-runtime's toolsForGrant does on the
-// other servers, and a call to one is an unknown tool. An "action" tool is listed for every
-// grant: one of its actions needs only read. The admin identity (Capsid Admin's route admits
-// only the admin, src/mcp-handler.ts), the tools axis, an action, a namespace, a repo and the
-// flags stay call-time checks in refusalFor, each refused by name.
+// TOOL_GRANTS names.
 export function toolListed(agent: Agent, tool: string): boolean {
   const { grant } = needFor(requiredGrant(tool));
   return grant === undefined || agent.scopes.grants.includes(grant);
@@ -282,9 +265,7 @@ export function guardRegistrations(
     };
     // Every call is logged when the server keeps the log (site-runtime's ToolCallLog), whoever
     // makes it and whatever it does: one `refused` row, or `started` before the handler and
-    // `finished` after it. A call whose `started` row cannot be written does not run, so no
-    // tool runs unlogged. audit_log stays the record of what a write changed (the Portal
-    // reads it); this is the record of every call.
+    // `finished` after it.
     const guarded: ToolHandler = async (...callArgs: unknown[]) => {
       const args = (callArgs[0] ?? {}) as Record<string, unknown>;
       const action = actionOf(name, config, args);
@@ -365,11 +346,9 @@ export function guardRegistrations(
         });
       return result;
     };
-    // An OAuth token without the scope the call needs is answered 403 insufficient_scope
-    // before the handler runs, naming every scope it needs, so the client can step up
-    // instead of the person reconnecting by hand. A key carries no token and
-    // gets the refusal above in words. A grant from before the scopes existed carries none
-    // and reads, as src/index.ts treats it.
+    // An OAuth token without the scope the call needs is answered 403 insufficient_scope before the
+    // handler runs, naming every scope it needs, so the client can step up instead of the person
+    // reconnecting by hand. A key carries no token and gets the refusal above in words.
     const challenge =
       log &&
       toolScopeChallenge(

@@ -6,20 +6,13 @@ import type { JobRow } from "./jobs-schema";
 import { MINUTE_MS } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// One outcome row per finished job, written once, carrying counts.
-//
-// The Worker never stores a driver's count for something it could have checked. This Worker
-// holds a GitHub App token reaching every repo in the portfolio, so for anything that ended
-// in a pull request GitHub is the authority and the driver's number is an opinion. Where a
-// check ran the stored number is GitHub's, marked verified; otherwise the driver's is stored,
-// marked unverified.
-//
-// Null is not zero: a field nobody reported is null, one counted and found empty is 0.
+// One outcome row per finished job, written once. Where the job ended in a pull request GitHub, not the driver, is
+// the authority (the Worker's App token reaches every repo): a checked number is GitHub's, marked verified; else the
+// driver's, unverified. Null is not zero: unreported is null, counted and found empty is 0.
 
 export const OUTCOME_RESULT_KINDS = ["pr", "doc", "none"] as const;
 export type OutcomeResultKind = (typeof OUTCOME_RESULT_KINDS)[number];
 
-// The fields a driver may report. An omitted field stays null in the row.
 export interface JobEvidence {
   prs?: string[];
   commits?: number;
@@ -27,7 +20,6 @@ export interface JobEvidence {
   tests_added?: number;
 }
 
-// Which fields the Worker checked itself, stored as JSON on the row, written out in full.
 interface VerifiedFields {
   prs_opened: boolean;
   prs_merged: boolean;
@@ -52,8 +44,7 @@ export interface JobOutcomeRow {
   result_kind: OutcomeResultKind;
   verified: string;
   recorded_at: string;
-  // The job's kind, the model Capsid recommended and the model the session reported it ran
-  // (migrations/0032, src/model-routing.ts). NULL where not routed or not reported.
+  // Kind, the model Capsid recommended and the one the session reported (0032); NULL where not routed or reported.
   job_kind?: string | null;
   model_chosen?: string | null;
   model_actual?: string | null;
@@ -67,17 +58,14 @@ const NOTHING_VERIFIED: VerifiedFields = {
   ci_green: false,
 };
 
-// Derived from result_ref, not declared: `resultRef` in src/limits.ts admits only a
-// document path or an https URL.
+// Derived from result_ref, which admits only a document path or an https URL.
 export function resultKindOf(resultRef: string | null | undefined): OutcomeResultKind {
   if (!resultRef) return "none";
   return /^https:\/\//i.test(resultRef) ? "pr" : "doc";
 }
 
-// Whole minutes from the first claim, including time blocked at a gate; resume does
-// not reset claimed_at (migrations/0011's comment describes an earlier rule). A job the
-// seat released keeps its first claim time. null with no claim timestamp,
-// and null rather than negative if the clocks disagree.
+// Whole minutes from the first claim, including gate time; resume does not reset claimed_at (0011's comment is
+// stale) and a seat-released job keeps it. null with no claim, and null rather than negative on clock skew.
 export function durationMinutes(claimedAt: string | null, now: Date): number | null {
   if (!claimedAt) return null;
   const started = Date.parse(claimedAt);
@@ -92,12 +80,10 @@ interface PrFacts {
   commits: number;
   changed_files: number;
   head_sha: string;
-  // The repo this pull request is on, resolved through the namespace mapping, so the
-  // CI lookup asks that repo and not the namespace primary.
+  // Resolved through the namespace mapping so CI asks that repo, not the namespace primary.
   repo: string;
-  // Which pull request answered at this number: GitHub's global node id and when it was
-  // opened. A recreated or transferred repo reuses numbers, so a URL alone does not say
-  // which pull request an outcome named (src/outcome-prs.ts). Null when GitHub omitted it.
+  // GitHub's node id and open time: a recreated or transferred repo reuses numbers, so a URL alone does not
+  // say which PR an outcome named (src/outcome-prs.ts). Null when GitHub omitted it.
   node_id: string | null;
   created_at: string | null;
 }
@@ -111,16 +97,11 @@ export interface EvidenceVerdict {
   ci_green: number | null;
   verified: VerifiedFields;
   notes: string[];
-  // Each named pull request's merge state as GitHub reported it, keyed by URL. A URL
-  // the Worker could not read is absent, never false. Written to job_outcome_prs at
-  // complete time, so the row says which pull requests were verified.
+  // Merge state as GitHub reported it, by URL; a URL the Worker could not read is absent, never false.
   pr_states?: Record<string, boolean>;
-  // Each pull request read, by URL: which one it was, pinned on its join row so a later
-  // read of the same URL can tell whether the number still names it.
+  // Which PR each URL was, pinned so a later read can tell whether the number still names it.
   pr_identity?: Record<string, { node_id: string | null; created_at: string | null }>;
-  // What GitHub itself said, kept apart from the fields above (which mix it with the driver's
-  // numbers); job_evaluations (src/job-claims.ts) sets these beside the claim. Null wherever
-  // the Worker did not read it.
+  // What GitHub itself said, apart from fields that mix in the driver's numbers (job_evaluations sets these).
   github?: GitHubFacts;
   reported?: {
     prs: string[] | null;
@@ -132,8 +113,7 @@ export interface EvidenceVerdict {
 
 export interface GitHubFacts {
   merged: Record<string, boolean>;
-  // Sums over every named pull request, null unless every one was read: a sum over
-  // some of them is not the job's total.
+  // Null unless every named PR was read: a sum over some is not the total.
   commits: number | null;
   files_changed: number | null;
   ci_green: number | null;
@@ -144,15 +124,14 @@ export async function prFacts(env: Env, namespace: string, url: string): Promise
   if (!parsed)
     return `${url} is not a GitHub pull request URL, so nothing could be verified about it`;
   const { owner, repo, number } = parsed;
-  // Resolved through the namespace mapping, the authorization boundary, so the
-  // outcome recorder cannot read a repo the namespace does not map.
+  // Resolved through the namespace mapping, the authorization boundary, so the recorder cannot read an unmapped repo.
   let resolved;
   try {
     resolved = await resolveRepo(env, namespace, `${owner}/${repo}`);
   } catch (err) {
     return `${url}: ${errorMessage(err)}`;
   }
-  // Caught too: verifyEvidence promises its callers a note, never a throw.
+  // Caught too: verifyEvidence promises a note, never a throw.
   let pr: {
     merged?: boolean;
     commits?: number;
@@ -184,9 +163,8 @@ export async function prFacts(env: Env, namespace: string, url: string): Promise
   };
 }
 
-// CI is green only when every run has finished and none failed. No runs, or a run
-// still going, is null and unverified: not answered yet is not failed. `skipped` and
-// `neutral` do not fail, since a paths filter that excluded the change did not judge it.
+// Green only when every run finished and none failed; no runs or one still going is null (not answered is not
+// failed). `skipped` and `neutral` do not fail: a paths filter that excluded the change did not judge it.
 const NOT_A_FAILURE = new Set(["success", "skipped", "neutral"]);
 
 async function ciGreenForSha(
@@ -224,9 +202,7 @@ async function ciGreenForSha(
   return { green: runs.every((r) => NOT_A_FAILURE.has(r.conclusion ?? "")) };
 }
 
-// Evidence arrives as an object or a JSON string (some clients flatten an object argument,
-// and a stale cached schema may refuse it). A string that does not parse is refused, not
-// ignored.
+// Evidence arrives as an object or JSON string (some clients flatten objects); an unparseable string is refused.
 export type EvidenceInput = JobEvidence | string | undefined;
 
 export function parseEvidence(
@@ -268,9 +244,7 @@ export function parseEvidence(
   };
 }
 
-// The pull requests a finished job names: evidence.prs plus the job's result_ref when it is
-// a pull request URL (a session sending only result_ref named its PR all the same, and GitHub
-// is the authority on it). Deduplicated, in order.
+// evidence.prs plus result_ref when it is a PR URL (a session sending only result_ref named its PR all the same). Deduplicated.
 export function namedPrUrls(
   evidence: JobEvidence | undefined,
   resultRef: string | null | undefined,
@@ -285,11 +259,8 @@ export function namedPrUrls(
   return urls;
 }
 
-// Best effort, and it never fails the job: with GitHub unreachable the outcome records
-// the driver's own numbers, marked unverified, with a note saying why.
-//
-// resultRef is the job's result_ref. `reported` stays what the evidence said, so the
-// record of what the driver sent is not changed by what the Worker also read.
+// Best effort, never fails the job: with GitHub unreachable the driver's numbers are stored, unverified, with a note.
+// `reported` stays what the evidence said.
 export async function verifyEvidence(
   env: Env,
   namespace: string,
@@ -334,10 +305,8 @@ export async function verifyEvidence(
   );
   github.merged = { ...verdict.pr_states };
 
-  // A partly read list keeps what was read. prs_merged counts the PRs read and is marked
-  // verified; prs_opened stays the number named and UNVERIFIED, so no reader takes the merged
-  // count for a total (the agent record's merge rate reads only rows whose prs_opened is
-  // verified). Commits and files stay the driver's: a sum over some PRs is not the total.
+  // A partly read list keeps what was read: prs_merged is verified but prs_opened stays unverified, so no reader
+  // takes merged for a total (the merge rate reads only rows whose prs_opened is verified).
   if (facts.length !== urls.length) {
     if (facts.length > 0) {
       verdict.prs_merged = facts.filter((f) => f.merged).length;
@@ -346,7 +315,6 @@ export async function verifyEvidence(
     verdict.notes.push(
       `${facts.length} of ${urls.length} named pull requests could be read. prs_merged counts the ${facts.length} read and is verified; prs_opened, commits and files_changed stay the driver's and unverified, and the run is not judged.`,
     );
-    // CI on the last named pull request, when that one was read.
     const lastUrl = urls[urls.length - 1];
     const lastRead = read.get(lastUrl);
     if (!lastRead) {
@@ -376,7 +344,6 @@ export async function verifyEvidence(
   github.commits = verdict.commits;
   github.files_changed = verdict.files_changed;
 
-  // CI on the last pull request's head, the one a driver opens at the end of its work.
   const last = facts[facts.length - 1];
   const ci = await ciGreenForSha(env, namespace, last.head_sha, last.repo);
   if (ci.note) verdict.notes.push(ci.note);
@@ -388,8 +355,6 @@ export async function verifyEvidence(
   return verdict;
 }
 
-// A new row carries no usage: those columns are NULL until a claim reports them.
-// actualModel: the model_id the session reported in its claim, or null when it reported none.
 export function outcomeFrom(
   job: JobRow,
   verdict: EvidenceVerdict,
@@ -398,8 +363,7 @@ export function outcomeFrom(
 ): JobOutcomeRow {
   return {
     job_id: job.id,
-    // Copied, not joined, because a release clears claimed_by.
-    // "unattributed" only keeps the NOT NULL column satisfied.
+    // Copied, not joined, because a release clears claimed_by; "unattributed" only satisfies NOT NULL.
     agent: job.claimed_by ?? "unattributed",
     namespace: job.namespace,
     prs_opened: verdict.prs_opened,
@@ -420,8 +384,7 @@ export function outcomeFrom(
   };
 }
 
-// ON CONFLICT DO NOTHING: the first record of a job stands, and a second terminal
-// transition neither rewrites it nor aborts its own batch.
+// The first record of a job stands; a second terminal transition neither rewrites it nor aborts its batch.
 export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
   return db
     .prepare(

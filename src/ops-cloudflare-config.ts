@@ -7,19 +7,9 @@ import {
   type FetchLike,
 } from "./ops-cloudflare";
 
-// The reads behind capsid_admin_read_ops's Cloudflare actions: Access applications and policies, and Email
-// Routing rules and destination addresses. Only src/tools/cloudflare.ts imports
-// this module (test/ops-cloudflare-config.test.ts), and that tool is admin only.
-//
-// Every reader copies named fields into a fresh object. Nothing Cloudflare returns is
-// passed through whole, because these objects carry secrets beside their settings: an
-// Access for SaaS app holds saas_app.client_secret, and SCIM provisioning holds
-// scim_config.authentication.{password, token, client_secret}. A field Cloudflare adds
-// later is therefore dropped until it is named here. Never read: saas_app, scim_config,
-// aud, or any other field not listed below.
-//
-// Permissions, all on CF_OPS_TOKEN (the steps to add them are in src/ops-cloudflare.ts
-// and docs/portal.md, "The Cloudflare token"). A 403 names the one that is missing.
+// The reads behind capsid_admin_read_ops's Cloudflare actions: Access applications and policies,
+// and Email Routing rules and destination addresses. Only src/tools/cloudflare.ts imports this
+// module (test/ops-cloudflare-config.test.ts), and that tool is admin only.
 
 export const CF_CONFIG_ACTIONS = [
   "access_apps",
@@ -96,8 +86,8 @@ const texts = (v: unknown): string[] =>
     .map(text)
     .filter((s): s is string => s !== null);
 
-/** One list read, with a 403 turned into the permission the token lacks. Any other
- *  failure keeps Cloudflare's own message. */
+// One list read, with a 403 turned into the permission the token lacks. Any other failure keeps
+// Cloudflare's own message.
 async function readAll(
   fetchImpl: FetchLike,
   token: string,
@@ -198,8 +188,8 @@ function toEmailAddress(raw: unknown): EmailAddressOut {
   };
 }
 
-/** The zones Email Routing rules are read for: the one named, or every zone in the
- *  account the token can list. A name no zone has fails, never an empty answer. */
+// The zones Email Routing rules are read for: the one named, or every zone in the account the token
+// can list. A name no zone has fails, never an empty answer.
 async function zonesFor(
   fetchImpl: FetchLike,
   token: string,
@@ -225,8 +215,7 @@ async function zonesFor(
   return zone === undefined ? zones : zones.filter((z) => z.name === zone);
 }
 
-/** One cloudflare_config action. Credentials missing fails with what is unset, and
- *  nothing is fetched. */
+/** One cloudflare_config action. Credentials missing fails with what is unset, and nothing is fetched. */
 export async function readCloudflareConfig(
   env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
   action: CfConfigAction,

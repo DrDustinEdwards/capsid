@@ -19,13 +19,8 @@ import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
 import { Pill, Status } from "capsomer/react/status";
 import { FilterEmpty, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
 
-// The add and edit form loads only when it opens, with its fields' stylesheets (as on SitePage).
 const SiteForm = lazy(() => import("./SiteConfig").then((m) => ({ default: m.SiteForm })));
 
-// SITES (the Portal audit's new map, 2026-11-06): every site in one table, its status, uptime,
-// live deploy, errors and backup age, with Add site; then each site's uptime by month. A row
-// opens the site's own page (views/SitePage.tsx). The Deploys tab holds every site's deploys.
-// Projects recorded as serving no site are listed last, so that record can be changed too.
 export function Sites() {
   const tab = tabOf(SITES_TABS, useTabParam()) ?? SITES_TABS[0].id;
   return (
@@ -46,7 +41,6 @@ function AllSites() {
   const noSite = configured.filter((s) => s.origin === null);
   const list = (snap?.sites ?? []).filter((s) => ns === "all" || s.namespace === ns);
   const emptied = !!snap && !list.length && snap.sites.length > 0;
-  // A site added since the watcher's last pass has a row but no probe yet.
   const probed = new Set((snap?.sites ?? []).map((s) => s.namespace));
   const waiting = configured.filter((s) => s.origin !== null && !probed.has(s.namespace));
   return (
@@ -125,7 +119,6 @@ function AllSites() {
   );
 }
 
-// One recorded site in the table, with Edit.
 function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
   const { now } = useApp();
   const at = parse(s.updated_at);
@@ -168,7 +161,6 @@ function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
         </div>
       </td>
       <td className="ctl">
-        {/* Edit only: Remove is in the form's Danger area (UX audit M9). */}
         <button
           type="button"
           className="cap-btn"
@@ -238,10 +230,7 @@ function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
   );
 }
 
-// Capsid's own backup is the only one the feed carries (snapshot.health.backup, against
-// the 26-hour window /health uses). Every other site's backup is not reported until its
-// health contract says so, and that is shown as no data, never as "none" or a zero. The
-// column header says so once; each cell says "No data" (design D18).
+// Only Capsid's own backup is in the feed; every other site's is no data, never "none" or a zero.
 const BACKUP_LIMIT_HOURS = 26;
 
 function BackupCell({ s }: { s: SiteSnapshot }) {

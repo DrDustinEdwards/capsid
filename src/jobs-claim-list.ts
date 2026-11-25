@@ -4,10 +4,9 @@ import { JOBS_ROWS_MAX, startedNotice, type JobRow, type JobStatus } from "./job
 import { resumeNotes } from "./jobs-mirror";
 import { type JobResult } from "./jobs-transition";
 
-// List never carries a body unless one job was asked for by a writer: a body is the signed
-// prompt a driver executes, and selecting every column would let a read grant read every
-// queued prompt. The columns are named so the body never leaves D1 for a list; `withBody` is
-// set only for a single named id and a caller holding write.
+// List never carries a body unless one job was asked for by a writer: a body is the signed prompt
+// a driver executes, and selecting every column would let a read grant read every queued prompt.
+// The columns are named so the body never leaves D1 for a list;
 const JOB_LIST_COLUMNS = [
   "id",
   "namespace",
@@ -60,11 +59,11 @@ export async function listJobs(
     .bind(...binds)
     .all<JobListRow>();
   const rows = results ?? [];
-  // One extra row asked for, so "exactly the page" is distinguishable from "there are
-  // more". Same shape as every other bounded read here.
+  // One extra row asked for, so "exactly the page" is distinguishable from "there are more". Same
+  // shape as every other bounded read here.
   const truncated = rows.length > JOBS_ROWS_MAX;
-  // One named job carries its latest resume note. Not every row of a wide list, which
-  // would cost one read per resumed job.
+  // One named job carries its latest resume note. Not every row of a wide list, which would cost one
+  // read per resumed job.
   const listNotes = args.id && rows.length === 1 ? await resumeNotes(env, rows[0]) : null;
   const listNote = listNotes?.notes[0] ?? null;
   const listStarted = args.id && rows.length === 1 ? startedNotice(rows[0]) : null;

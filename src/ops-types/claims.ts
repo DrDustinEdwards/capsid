@@ -1,16 +1,12 @@
-// Claims apart from verified outcomes (migrations/0023_job_claims.sql). The
-// `capsid_admin_read_claims` tool and GET /portal/api/claims return these, from the same readers
-// (src/job-claims-read.ts). Every column is as stored: JSON columns stay JSON text,
-// and NULL stays null, because NULL is not zero.
+// Claims apart from verified outcomes (0023), as stored: JSON columns stay JSON text and NULL stays null (not zero).
+// Returned by capsid_admin_read_claims and GET /portal/api/claims from the same readers (src/job-claims-read.ts).
 
 export type ClaimsAgreement = "agree" | "disagree" | "unclaimed" | "unchecked";
 
 export interface ClaimsFilter {
   namespace: string | null;
-  // The claiming agent's actor string, e.g. agent:sample-driver.
   agent: string | null;
-  // ISO 8601, inclusive lower bound and exclusive upper bound on each row's own time
-  // (recorded_at for claims and evaluations, at for touches).
+  // ISO 8601, inclusive lower and exclusive upper bound on recorded_at (claims, evaluations) or at (touches).
   since: string | null;
   until: string | null;
 }
@@ -26,43 +22,34 @@ interface ClaimsTouchSummary {
   count: number;
   by_kind: Record<string, number>;
   by_actor_kind: Record<string, number>;
-  // Over the touches that carry a wait. Null when none does: no wait was measured,
-  // which is not a wait of zero.
+  // Null when no touch carried a wait: unmeasured is not zero.
   waits: number;
   waited_ms_total: number | null;
   waited_ms_median: number | null;
 }
 
 export interface ClaimsGroup {
-  // Null for touches on a job no agent has made a claim on yet.
   agent: string | null;
   namespace: string;
-  // Distinct jobs with a claim, and claim rows.
   jobs: number;
   claims: number;
-  // Per evaluation name (pr_merged, prs_opened, ...), the claim-to-verified agreement.
   evaluations: Record<string, ClaimsAgreementCounts>;
   touches: ClaimsTouchSummary;
 }
 
-// One ended wait: a touch with a waited_ms, tied to the gate it ended. gate_class is a
-// class of capsid/policy/gates.md (compound commands joined with "+"), "needs_human"
-// when the gate's command matched none or recorded no command, or "unreadable_gate"
-// when the gate row's detail was not the JSON the writer produces.
+// One ended wait. gate_class is a class of capsid/policy/gates.md (compound commands joined with "+"),
+// "needs_human" when no class matched or no command, "unreadable_gate" when the detail was not the writer's JSON.
 export interface ClaimsWaitRow {
   namespace: string;
   gate_class: string;
-  // Who ended the wait: human, policy, seat and so on (job_touches.actor_kind).
   ended_by: string;
   waits: number;
   waited_ms_total: number;
   waited_ms_median: number;
 }
 
-// Cost, tokens and active time the agents reported in claim.usage, summed over the claims
-// that carried any. Every figure is null when none did, never 0.
+// Usage reported in claim.usage, summed over claims that carried any; null when none did, never 0.
 export interface ClaimsUsageTotals {
-  // Claims that carried any usage at all.
   rows: number;
   cost_usd: number | null;
   active_seconds: number | null;
@@ -79,10 +66,9 @@ export interface ClaimsUsageRow extends ClaimsUsageTotals {
 export interface ClaimsAggregate {
   filter: ClaimsFilter;
   groups: ClaimsGroup[];
-  // Ended waits by namespace, gate class and who ended them, longest total first.
   waits: ClaimsWaitRow[];
   usage: ClaimsUsageRow[];
-  // Each bounded read that hit its bound, by name. Empty means the answer is whole.
+  // Each bounded read that hit its bound, by name; empty means the answer is whole.
   truncated: string[];
 }
 
@@ -127,9 +113,7 @@ export interface JobTouchRow {
 
 export interface ClaimsJob {
   job: { id: string; namespace: string; title: string; status: string; claimed_by: string | null };
-  // The job_outcomes row as stored, or null when the job has not ended.
   outcome: Record<string, unknown> | null;
-  // Oldest first, each at most `limit`.
   claims: JobClaimRow[];
   evaluations: JobEvaluationRow[];
   touches: JobTouchRow[];
@@ -137,9 +121,8 @@ export interface ClaimsJob {
   truncated: string[];
 }
 
-// GET /portal/api/claims?namespace=&agent=&since=&until=  -> PortalClaimsAggregate
-// GET /portal/api/claims?job=<id>                         -> PortalClaimsJob (404 JSON for no such job)
-// A since or until that is not an ISO time is a text/plain 400.
+// GET /portal/api/claims?namespace=&agent=&since=&until= -> PortalClaimsAggregate; ?job=<id> -> PortalClaimsJob
+// (404 JSON for no such job). A since or until that is not an ISO time is a text/plain 400.
 export interface PortalClaimsAggregate extends ClaimsAggregate {
   generated: string;
 }

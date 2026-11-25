@@ -1,14 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The confirm dialog, clicked in a real browser against the production build. The
-// defect these guard: on the live Portal a Pause with a typed reason, then Preview,
-// did nothing and said nothing. Every path below must end in something visible. Pause
-// is a switch now (e2e/switches.spec.ts), so these open "Mark failed" on a queued job,
-// the dialog that asks for a reason the same way.
+// The defect these guard: a Pause with a typed reason, then Preview, did nothing and said nothing. Every path must end in something visible.
 
 const PREVIEW_URL = "**/api/actions/preview";
 const PERFORM_URL = "**/api/actions/perform";
-// A queued job no other spec reads.
 const JOB = "job_0cdf2803f0ba";
 
 async function openReasonDialog(page: Page) {
@@ -22,8 +17,7 @@ async function openReasonDialog(page: Page) {
 test("Mark failed with a typed reason, then Preview, shows the preview and performs, and the result stays in the message", async ({
   page,
 }) => {
-  // The perform is answered here with the feed unchanged, so the job stays queued for
-  // every other spec that reads the mock.
+  // The perform is answered with the feed unchanged, so the job stays queued for every other spec.
   await page.route(PERFORM_URL, async (route) => {
     const feed = await (await page.request.get("api/ops")).json();
     await route.fulfill({
@@ -38,8 +32,6 @@ test("Mark failed with a typed reason, then Preview, shows the preview and perfo
   const dialog = await openReasonDialog(page);
   await dialog.getByRole("textbox", { name: "Reason", exact: true }).pressSequentially("testing");
   await dialog.getByRole("button", { name: "Preview" }).click();
-  // A plain sentence first; the rows it changes and the audit rows are behind Details
-  // (UX audit M5).
   await expect(dialog.locator("[data-summary]")).toBeVisible();
   await expect(dialog.getByText("What changes")).toBeHidden();
   await dialog.getByText("Details", { exact: true }).click();
@@ -62,8 +54,7 @@ test("Preview with no reason says a reason is required, and sends nothing", asyn
 
 test("a reason the browser filled in without an input event still previews", async ({ page }) => {
   const dialog = await openReasonDialog(page);
-  // Autofill and similar set the field's value with no input event, so the app's state
-  // never hears of it. The click must read the field.
+  // Autofill and similar set the value with no input event, so the app's state never hears of it. The click must read the field.
   await dialog
     .getByRole("textbox", { name: "Reason", exact: true })
     .evaluate((el: HTMLTextAreaElement) => {
@@ -100,7 +91,6 @@ test("a request the network drops is shown in the dialog", async ({ page }) => {
 
 test("a preview with no answer ends in a message, not a dialog stuck busy", async ({ page }) => {
   await page.clock.install();
-  // Held, never answered.
   await page.route(PREVIEW_URL, () => undefined);
   const dialog = await openReasonDialog(page);
   await dialog.getByRole("textbox", { name: "Reason", exact: true }).pressSequentially("testing");
@@ -115,10 +105,7 @@ test("a preview with no answer ends in a message, not a dialog stuck busy", asyn
 });
 
 test.describe("on a phone", () => {
-  // A mobile browser widens its layout viewport to fit a page that overflows, and a
-  // centered dialog then sits off the visible screen. Measured before the fix: at 390 px
-  // the document was 1189 px wide (the tab bar), and tapping Preview hit the dialog
-  // element instead of the button.
+  // A mobile browser widens its layout viewport when a page overflows, so a centered dialog sat off screen (at 390 px the document was 1189 px wide).
   test.use({
     viewport: { width: 390, height: 844 },
     isMobile: true,
@@ -137,7 +124,6 @@ test.describe("on a phone", () => {
     await expect(dialog.locator("[data-summary]")).toBeVisible();
     await dialog.getByText("Details", { exact: true }).tap();
     await expect(dialog.getByText("What changes")).toBeVisible();
-    // The dialog is Mark failed, so its perform button is named for that (ruling 11).
     for (const name of ["Mark failed", "Cancel"]) {
       await expect(dialog.getByRole("button", { name, exact: true })).toBeInViewport({ ratio: 1 });
     }

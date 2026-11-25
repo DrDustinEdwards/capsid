@@ -1,8 +1,7 @@
 /**
  * Runs `fn` over `items` with at most `limit` in flight and returns the results in the items'
  * order. The tick's reads wait on GitHub and Cloudflare, not CPU, so one at a time would spend the
- * whole four-minute budget waiting. A throw from `fn` rejects, as in a plain loop; a caller that
- * must tolerate one failure catches inside `fn`.
+ * whole four-minute budget waiting.
  */
 export async function mapLimit<T, R>(
   items: readonly T[],

@@ -13,8 +13,6 @@ export interface LinkEdge {
   to_path: string;
 }
 
-// Endpoints are document keys. Same pathProblem and nsName as the write path.
-// An empty array clears outgoing edges. to_ns defaults to the writing namespace.
 export function parseLinks(
   linksJson: string,
   fromNs: string,

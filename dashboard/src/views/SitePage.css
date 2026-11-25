@@ -1,6 +1,3 @@
-/* A site's own page (SitePage.tsx), loaded with it rather than with the shell: its lead line, and the headings, search
-   tables and build log of the Convergence and SiteTraffic parts it draws. */
-/* Its status, address and project under its name. */
 .site-lead {
   display: inline-flex;
   align-items: center;
@@ -16,7 +13,7 @@
 .search-rows + .search-rows {
   margin-top: var(--space-4);
 }
-/* A build log: strangers' text, kept as written, scrolled in place. */
+/* A build log: strangers' text, kept as written. */
 pre.log {
   margin: 0;
   padding: var(--space-4) var(--space-5);
