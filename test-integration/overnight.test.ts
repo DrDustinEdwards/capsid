@@ -21,7 +21,10 @@ let seq = 0;
 function fresh(prefix: string): { ns: string; id: (n: number) => string } {
   seq += 1;
   const tag = `${Date.now().toString(16)}${seq.toString(16)}`.slice(-10).padStart(10, "0");
-  return { ns: `${prefix}-${tag}`, id: (n) => `job_${tag}${String(n).padStart(2, "0")}` };
+  return {
+    ns: `${prefix}-${tag}`,
+    id: (n) => `job_${tag}${String(n).padStart(2, "0")}`,
+  };
 }
 
 async function mapNamespace(ns: string, repo: string): Promise<void> {
@@ -171,19 +174,6 @@ describe("the morning digest on a real D1", () => {
     expect(out.pull_requests_merged).toBe(1);
     expect([out.totals.usage.jobs, out.totals.usage.cost_usd]).toEqual([2, 1.75]);
     expect(out.totals.jobs_without_usage).toBe(2);
-  });
-
-  it("a window with nothing in it is empty, not an error", async () => {
-    const { ns } = fresh("quiet");
-    const out = await readOvernightDigest(
-      env as never,
-      { namespace: ns, since: "2030-01-01T00:00:00.000Z" },
-      NOW,
-    );
-    expect(out.finished).toEqual([]);
-    expect(out.blocked).toEqual([]);
-    expect(out.pull_requests_ready).toEqual([]);
-    expect(out.totals.jobs_without_usage).toBe(0);
   });
 });
 

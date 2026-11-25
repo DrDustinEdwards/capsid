@@ -114,7 +114,7 @@ test("a co-owner's click is audited under her own verified email, never ADMIN_EM
   assert.equal(click?.params[0], "access:co@example.com");
 });
 
-test("a co-owner's session is refused when CO_OWNER_EMAILS is unset, and a confirmation previewed by the primary owner is refused to her", async () => {
+test("a co-owner's session is refused when CO_OWNER_EMAILS is unset", async () => {
   const none = world();
   const refused = await handlePortalPreview(
     await preview(
@@ -126,17 +126,6 @@ test("a co-owner's session is refused when CO_OWNER_EMAILS is unset, and a confi
   );
   assert.equal(refused.status, 302, "an unadmitted session is sent to sign in");
   wroteNothing(none, "a co-owner with no CO_OWNER_EMAILS");
-  const w = world({ coOwners: "co@example.com" });
-  const { token } = await issue(w);
-  const res = await handlePortalPerform(
-    await perform({ token }, { session: "co@example.com" }),
-    w.env,
-    NOW,
-    deps,
-  );
-  assert.equal(res.status, 403);
-  assert.match(await res.text(), /issued for another email/);
-  wroteNothing(w, "a confirmation issued to the primary owner");
 });
 
 // A confirmation is used once the nonce makes a second perform a

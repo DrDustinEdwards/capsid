@@ -73,7 +73,11 @@ async function started(
   assert.equal(res.status, 302);
   const location = String(res.headers.get("Location"));
   const state = String(new URL(location).searchParams.get("state"));
-  return { state, cookie: (res.headers.get("Set-Cookie") ?? "").split(";")[0], location };
+  return {
+    state,
+    cookie: (res.headers.get("Set-Cookie") ?? "").split(";")[0],
+    location,
+  };
 }
 
 // Node's Headers has getSetCookie; the Workers types this suite checks against do not.
@@ -124,7 +128,9 @@ test("the admin completes the login: session cookie carries the email, state coo
     "__Secure-capsid_portal_state=; Path=/portal; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
   );
   const session = await readPortalSession(
-    new Request(`${ORIGIN}/portal/`, { headers: { Cookie: cookies[0].split(";")[0] } }),
+    new Request(`${ORIGIN}/portal/`, {
+      headers: { Cookie: cookies[0].split(";")[0] },
+    }),
     e,
     new Date(),
   );
@@ -173,7 +179,9 @@ test("the name in the ID token rides the session cookie, and a token with no nam
     await stubPortalAccess(location, claims);
     const res = await handlePortalCallback(callback(state, cookie), e, new Date());
     const session = await readPortalSession(
-      new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }),
+      new Request(`${ORIGIN}/portal/`, {
+        headers: { Cookie: setCookies(res)[0].split(";")[0] },
+      }),
       e,
       new Date(),
     );
@@ -181,7 +189,7 @@ test("the name in the ID token rides the session cookie, and a token with no nam
   }
 });
 
-test("a state cookie that is not the digest of the state is refused with the Portal's restart hint", async () => {
+test("a state cookie that is not the digest of the state, or is the MCP flow's, is refused with the Portal's restart hint", async () => {
   const e = env();
   const { state } = await started(e);
   const res = await handlePortalCallback(
@@ -194,17 +202,14 @@ test("a state cookie that is not the digest of the state is refused with the Por
     await res.text(),
     "state validation failed: this browser did not start the flow. Open /portal again.",
   );
-});
-
-test("the MCP flow's state cookie does not satisfy the Portal callback", async () => {
-  const e = env();
-  const { state, cookie } = await started(e);
-  const res = await handlePortalCallback(
-    callback(state, cookie.replace("capsid_portal_state=", "capsid_state=")),
+  // The MCP flow's state cookie does not satisfy the Portal callback.
+  const { state: s2, cookie } = await started(e);
+  const mcp = await handlePortalCallback(
+    callback(s2, cookie.replace("capsid_portal_state=", "capsid_state=")),
     e,
     new Date(),
   );
-  assert.equal(res.status, 403);
+  assert.equal(mcp.status, 403);
 });
 
 test("a state with no KV entry is refused as expired", async () => {
@@ -226,8 +231,16 @@ for (const [name, claims, overrides, pattern] of [
   ],
   ["an unset ADMIN_EMAIL", {}, { ADMIN_EMAIL: undefined }, /not an administrator of capsid/],
   [
+    "a co-owner when CO_OWNER_EMAILS is empty",
+    { email: "co@example.com" },
+    { CO_OWNER_EMAILS: "" },
+    /not an administrator of capsid/,
+  ],
+  [
     "a wrong issuer",
-    { iss: "https://other.cloudflareaccess.com/cdn-cgi/access/sso/oidc/sample-client" },
+    {
+      iss: "https://other.cloudflareaccess.com/cdn-cgi/access/sso/oidc/sample-client",
+    },
     {},
     /could not be verified/,
   ],
@@ -384,7 +397,9 @@ test("a co-owner completes the login: the cookie carries her email and verifies 
   const res = await handlePortalCallback(callback(state, cookie), e, new Date());
   assert.equal(res.status, 302);
   const session = await readPortalSession(
-    new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }),
+    new Request(`${ORIGIN}/portal/`, {
+      headers: { Cookie: setCookies(res)[0].split(";")[0] },
+    }),
     e,
     new Date(),
   );
@@ -405,26 +420,13 @@ test("a co-owner completes the login: the cookie carries her email and verifies 
   );
   // The same cookie stops verifying when she is taken off the list.
   const removed = await readPortalSession(
-    new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }),
+    new Request(`${ORIGIN}/portal/`, {
+      headers: { Cookie: setCookies(res)[0].split(";")[0] },
+    }),
     env({ CO_OWNER_EMAILS: "other@example.com" }),
     new Date(),
   );
   assert.equal(removed, null);
-});
-
-test("a co-owner with CO_OWNER_EMAILS unset or empty is refused and gets no session", async () => {
-  for (const [claims, overrides] of [
-    [{ email: "co@example.com" }, {}],
-    [{ email: "co@example.com" }, { CO_OWNER_EMAILS: "" }],
-  ] as const) {
-    const e = env(overrides);
-    const { state, cookie, location } = await started(e);
-    await stubPortalAccess(location, claims);
-    const res = await handlePortalCallback(callback(state, cookie), e, new Date());
-    assert.equal(res.status, 403);
-    assert.match(await res.text(), /not an administrator of capsid/);
-    assert.equal(res.headers.get("Set-Cookie"), null);
-  }
 });
 
 // G4: an hour with no request ends the Portal session and the Access session, through
@@ -454,7 +456,9 @@ test("PLANT: an hour with no request sends the browser to Access's logout and en
 
   // 80 minutes in, 50 after the last request: still active.
   const second = await withPortalIdle(
-    new Request(`${ORIGIN}/portal/`, { headers: { Cookie: `${session}; ${seen}` } }),
+    new Request(`${ORIGIN}/portal/`, {
+      headers: { Cookie: `${session}; ${seen}` },
+    }),
     e,
     handle,
     at(80),
@@ -482,7 +486,9 @@ test("PLANT: an hour with no request sends the browser to Access's logout and en
 
   // 150 minutes in, 70 after the last request by the admin (the poll at 120 does not count): idle.
   const idle = await withPortalIdle(
-    new Request(`${ORIGIN}/portal/`, { headers: { Cookie: `${session}; ${seen2}` } }),
+    new Request(`${ORIGIN}/portal/`, {
+      headers: { Cookie: `${session}; ${seen2}` },
+    }),
     e,
     handle,
     at(150),

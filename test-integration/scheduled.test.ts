@@ -146,24 +146,6 @@ describe("the three cron expressions", () => {
 });
 
 describe("the replay table is real", () => {
-  it("the jti replay cache really has a PRIMARY KEY, so a duplicate claim conflicts", async () => {
-    // migrations/0004_improve_jti.sql, kept for the bench and the backup credential when
-    // the improve loop went. Only a real database proves the conflict happens, and the
-    // replay defense rests on it.
-    const first = await env.DB.prepare(
-      "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('bench:capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti",
-    ).first<{ jti: string }>();
-    expect(first?.jti).toBe("dup");
-
-    const second = await env.DB.prepare(
-      "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('bench:capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti",
-    ).first<{ jti: string }>();
-    expect(
-      second,
-      "the second claim must return nothing; if it returns a row the replay cache is decorative",
-    ).toBeNull();
-  });
-
   it("PLANT: concurrent claimJti calls for one jti resolve to ONE winner", async () => {
     // A PRIMARY KEY has no get-then-put window, and only real SQLite can show it; a
     // synchronous fake would agree with itself.

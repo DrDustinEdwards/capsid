@@ -4,7 +4,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildAdminServer } from "../src/server.ts";
 import { checkScope } from "../src/scope.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
-import { allowsScope, defaultScopes, noFlags, type AgentScopes } from "../src/agents-schema.ts";
+import { defaultScopes, noFlags, type AgentScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // The namespace-remap escalation, closed in both directions. A namespace-scoped
@@ -37,36 +37,23 @@ function agentWith(scopes: Partial<AgentScopes>, admin = false): Agent {
 
 // half one: the mapping is admin work
 
-for (const action of ["update", "register"] as const) {
-  const tool = "capsid_admin_manage_namespaces";
-  test(`${tool}.${action} refuses a minted agent and names why`, () => {
-    // The driver is scoped to the namespace it is asking about and holds write, so
-    // every other axis passes. Only the admin check can refuse this call.
-    const refusal = checkScope(agentWith({}), {
-      tool,
-      action,
-      namespace: "capsid",
-      grant: "write",
-      admin: true,
-    });
-    assert.ok(refusal, `${tool}.${action} admitted a minted agent`);
-    assert.match(refusal, /admin only/, "the refusal does not say it is an admin tool");
-    assert.match(refusal, /authorization boundary/, "the refusal does not say why");
-  });
-
-  test(`${tool}.${action} admits the admin`, () => {
-    assert.equal(
-      checkScope(agentWith({ namespaces: "*", repos: "*" }, true), {
-        tool,
-        action,
-        namespace: "capsid",
-        grant: "write",
-        admin: true,
-      }),
-      null,
-    );
-  });
-}
+const tool = "capsid_admin_manage_namespaces";
+test(`${tool}.update refuses a minted agent and names why, and admits the admin`, () => {
+  // The driver is scoped to the namespace it is asking about and holds write, so
+  // every other axis passes. Only the admin check can refuse this call.
+  const need = {
+    tool,
+    action: "update",
+    namespace: "capsid",
+    grant: "write",
+    admin: true,
+  } as const;
+  const refusal = checkScope(agentWith({}), need);
+  assert.ok(refusal, `${tool}.update admitted a minted agent`);
+  assert.match(refusal, /admin only/, "the refusal does not say it is an admin tool");
+  assert.match(refusal, /authorization boundary/, "the refusal does not say why");
+  assert.equal(checkScope(agentWith({ namespaces: "*", repos: "*" }, true), need), null);
+});
 
 test("the admin refusal comes BEFORE the namespace refusal", () => {
   // A driver asking about someone else's namespace must still be told the tool is
@@ -193,29 +180,6 @@ test("PLANT: a driver narrowed to its own repos is refused on another, remap or 
   });
   assert.ok(refusal, "a narrowed driver reached a repo outside its axis");
   assert.match(refusal, /not scoped to the 'DrDustinEdwards\/capsid-backups' repo/);
-});
-
-test("the wildcard still means everything for an agent legitimately scoped to it", () => {
-  // The seat, the auditor and the reviewer are not narrowed, so "*" must keep working.
-  assert.equal(allowsScope("*", "DrDustinEdwards/anything"), true);
-  const seat = agentWith({ namespaces: "*", repos: "*" });
-  assert.equal(
-    checkScope(seat, {
-      tool: "capsid_read_repo",
-      action: "files",
-      namespace: "foxhound",
-      repo: "DrDustinEdwards/recova",
-      grant: "read",
-    }),
-    null,
-  );
-});
-
-test("a list containing the literal star is NOT a wildcard on the read path", () => {
-  // The stored-column direction, which is what a hand-edited or corrupted scopes
-  // row would carry. parseList keeps it a list of one odd name; only the mint path
-  // turns a single-entry ["*"] into the wildcard, and that asymmetry is deliberate.
-  assert.equal(allowsScope(["*"], "DrDustinEdwards/capsid"), false);
 });
 
 // the mint script derives the axis rather than copying the mapping

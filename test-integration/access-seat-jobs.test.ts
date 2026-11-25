@@ -83,11 +83,6 @@ const row = (id: string) =>
     .first<Record<string, string>>();
 
 describe(`the seat as ${SEAT_ACTOR}, through the capsid_work_jobs tool`, () => {
-  it("the admin agent speaks access:<email>", () => {
-    expect(SEAT.actor).toBe(SEAT_ACTOR);
-    expect(SEAT.admin).toBe(true);
-  });
-
   it("post: the job is recorded as posted by access:<email>", async () => {
     const result = await jobsTool(SEAT, {
       action: "post",

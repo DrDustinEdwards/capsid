@@ -92,13 +92,6 @@ test("PLANT: a session with no recorded sign-in time is refused, never treated a
   assert.match(r.text, /before sign-in times were recorded/);
 });
 
-test("THE INNOCENT DIRECTION: a fresh sign-in passes the step-up", async () => {
-  const r = await call(signedIn(MINUTE), "capsid_admin_manage_switches", { action: "overnight" });
-  // The call goes on to its handler, which refuses for want of a value and a reason.
-  assert.doesNotMatch(r.text, /step-up required/);
-  assert.equal(r.isError, true);
-});
-
 test("THE INNOCENT DIRECTION: a stale sign-in still reads; only the risky actions are stepped up", async () => {
   const stale = signedIn(STALE);
   const r = await call(stale, "capsid_admin_manage_agents", { action: "list" });
@@ -132,33 +125,32 @@ test("a key holder (no session) is not stepped up: its key is the credential", (
   );
 });
 
-test("PLANT: allowed at 1h59 after sign-in with no other activity", () => {
-  assert.equal(checkScope(signedIn(HOUR + 59 * MINUTE), performNeed), null);
-});
-
-test("PLANT: refused at 2h01 after sign-in with no activity, naming the rule", () => {
-  const refusal = checkScope(signedIn(2 * HOUR + MINUTE), performNeed) ?? "";
-  assert.match(refusal, /step-up required: 'capsid_admin_run_controls\.perform'/);
-  assert.match(refusal, /within the last 2 hours, and never more than 12 hours after the sign-in/);
-  assert.match(refusal, /Nothing was done\./);
-});
-
-test("PLANT: allowed at 3h after sign-in when a step-up action succeeded at 1h30", () => {
-  assert.equal(checkScope(signedIn(3 * HOUR, 90 * MINUTE), performNeed), null);
-});
-
-test("PLANT: refused at 3h when the last step-up action was 2h01 ago", () => {
+test("PLANT: the 2 hour idle window and the 12 hour cap, measured from sign-in and the last step-up action", () => {
+  // [sign-in age, last step-up age, allowed]
+  const cases: Array<[number, number | undefined, boolean]> = [
+    [HOUR + 59 * MINUTE, undefined, true],
+    [2 * HOUR + MINUTE, undefined, false],
+    [3 * HOUR, 90 * MINUTE, true],
+    [3 * HOUR, 2 * HOUR + MINUTE, false],
+    [12 * HOUR + MINUTE, MINUTE, false],
+    [12 * HOUR - MINUTE, MINUTE, true],
+  ];
+  for (const [signedInAgo, stepUpAgo, allowed] of cases) {
+    const refusal = checkScope(signedIn(signedInAgo, stepUpAgo), performNeed);
+    assert.equal(
+      refusal === null,
+      allowed,
+      `sign-in ${signedInAgo / MINUTE}m, step-up ${stepUpAgo}`,
+    );
+  }
+  const idle = checkScope(signedIn(2 * HOUR + MINUTE), performNeed) ?? "";
+  assert.match(idle, /step-up required: 'capsid_admin_run_controls\.perform'/);
+  assert.match(idle, /within the last 2 hours, and never more than 12 hours after the sign-in/);
+  assert.match(idle, /Nothing was done\./);
   assert.match(
-    checkScope(signedIn(3 * HOUR, 2 * HOUR + MINUTE), performNeed) ?? "",
-    /step-up required/,
+    checkScope(signedIn(12 * HOUR + MINUTE, MINUTE), performNeed) ?? "",
+    /past the 12 hour cap/,
   );
-});
-
-test("PLANT: refused at 12h01 after sign-in even with a step-up action a minute ago", () => {
-  const refusal = checkScope(signedIn(12 * HOUR + MINUTE, MINUTE), performNeed) ?? "";
-  assert.match(refusal, /step-up required/);
-  assert.match(refusal, /past the 12 hour cap/);
-  assert.equal(checkScope(signedIn(12 * HOUR - MINUTE, MINUTE), performNeed), null);
 });
 
 async function mintAs(

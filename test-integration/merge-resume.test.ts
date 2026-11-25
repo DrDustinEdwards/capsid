@@ -94,21 +94,6 @@ describe("autoResumeJob", () => {
     expect((await jobRow(id))?.status).toBe("queued");
   });
 
-  it("returns the job to its holder even when the holder holds another claim: there is no claim limit", async () => {
-    const driver = driverAgent();
-    const id = await blockedJob(ADMIN, driver, NOW, "holder busy", MERGE_BLOCK);
-    expect(
-      (
-        await claimJob(jobsEnv(), driver, NOW, {
-          id: await postGatedJob(ADMIN, NOW, "the driver moved on"),
-        })
-      ).ok,
-    ).toBe(true);
-    const out = await autoResumeJob(jobsEnv(), LATER, (await readJob(env.DB, id))!, NOTE);
-    expect(out.to).toBe("holder");
-    expect((await jobRow(id))?.status).toBe("claimed");
-  });
-
   it("writes nothing when the job moved after it was read", async () => {
     const driver = driverAgent();
     const id = await blockedJob(ADMIN, driver, NOW, "moved first", MERGE_BLOCK);

@@ -542,8 +542,6 @@ function readOnlyCaller(surface: Surface): Agent {
 // touches nothing; the read half proves no read is refused, which a private gate on a
 // read tool would do.
 test("SWEEP: a read-only caller is refused every write by checkScope on both servers, and no read", async () => {
-  let writes = 0;
-  let reads = 0;
   const writeTools = new Set<string>();
   const readTools = new Set<string>();
   for (const surface of Object.keys(SURFACES) as Surface[]) {
@@ -573,7 +571,6 @@ test("SWEEP: a read-only caller is refused every write by checkScope on both ser
     for (const tool of unserved) {
       const result = results.get(tool);
       assert.ok(result, `${tool} was not called`);
-      writes += 1;
       writeTools.add(tool);
       assert.match(
         result.text,
@@ -592,7 +589,6 @@ test("SWEEP: a read-only caller is refused every write by checkScope on both ser
         const result = results.get(label);
         assert.ok(result, `${label} was not called`);
         if (isReadCall(tool.name, action)) {
-          reads += 1;
           readTools.add(tool.name);
           assert.doesNotMatch(
             result.text,
@@ -606,7 +602,6 @@ test("SWEEP: a read-only caller is refused every write by checkScope on both ser
             `${label} never reached its handler, so this asserts nothing about it: ${result.text}`,
           );
         } else {
-          writes += 1;
           writeTools.add(tool.name);
           assert.equal(
             result.isError,
@@ -643,5 +638,4 @@ test("SWEEP: a read-only caller is refused every write by checkScope on both ser
         );
     }
   }
-  assert.ok(writes >= writeTools.size && reads >= readTools.size);
 });

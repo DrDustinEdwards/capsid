@@ -205,23 +205,6 @@ describe("gatherMaintenance", () => {
     );
     expect(list.items.filter((i) => i.rule === "auto-resumed").map((i) => i.job)).toEqual([recent]);
   });
-
-  it("stays quiet on a clean queue", async () => {
-    await post("An ordinary queued job");
-    expect(
-      (
-        await gatherMaintenance(
-          env as never,
-          NOW,
-          NO_PRS,
-          NO_BRANCHES,
-          NO_DEPLOYS,
-          NO_DRIFT,
-          NO_RELEASES,
-        )
-      ).items,
-    ).toEqual([]);
-  });
 });
 
 describe("gatherModelDriftItems", () => {

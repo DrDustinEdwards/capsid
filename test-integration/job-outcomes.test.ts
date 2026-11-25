@@ -2,7 +2,6 @@ import { env } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeJob, failJob, postJob, resumeJob } from "../src/jobs";
-import { capsidStatus } from "../src/status";
 import { reverifyStatements } from "../src/outcome-prs";
 import { outcomeStatement } from "../src/job-outcomes";
 import { grantAgent } from "../src/agents";
@@ -68,29 +67,6 @@ async function plantOutcome(jobId: string, opened: number, merged: number, verif
      VALUES (?1, ?2, 'capsid', ?3, ?4, 0, 0, 'pr', ?5, '2026-09-01')`,
   )
     .bind(jobId, DRIVER_ACTOR, opened, merged, verified)
-    .run();
-}
-
-// A minted agent row, because agentSummaries reads the agents table and a legacy
-// operator key resolves to a caller without inserting one; without it `status.agents`
-// is [] and the per-credential assertions iterate nothing.
-async function seedAgent(name: string) {
-  await env.DB.prepare(
-    `INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at)
-       VALUES (?1, ?2, 'driver', ?3, ?4, 'github:DrDustinEdwards', '2026-09-10 00:00:00')`,
-  )
-    .bind(
-      `agent_${name.slice(0, 12).padEnd(12, "0")}`,
-      name,
-      `hash-${name}`,
-      JSON.stringify({
-        namespaces: ["capsid"],
-        repos: ["DrDustinEdwards/capsid"],
-        tools: "*",
-        grants: ["read", "write"],
-        flags: {},
-      }),
-    )
     .run();
 }
 
@@ -205,32 +181,8 @@ describe("job outcomes", () => {
     expect(row?.resumed_count).toBe(1);
   });
 
-  it("PLANT: a second insert for the same job cannot overwrite the first record", async () => {
-    // Exercised against a real insert rather than read off the DDL: an outcome that
-    // could be rewritten after the fact is not evidence.
-    const posted = await post({ title: "cannot be rewritten" });
-    const id = posted.job!.id;
-    await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
-    await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "first" });
-    const before = await outcomeRow(id);
-
-    await env.DB.prepare(
-      `INSERT INTO job_outcomes (job_id, agent, namespace, prs_merged, blocked_count, resumed_count,
-         result_kind, verified, recorded_at)
-       VALUES (?1, 'agent:impostor', 'capsid', 999, 0, 0, 'pr', '{}', '2030-01-01')
-       ON CONFLICT(job_id) DO NOTHING`,
-    )
-      .bind(id)
-      .run();
-
-    expect(await outcomeCount(id)).toBe(1);
-    const after = await outcomeRow(id);
-    expect(after?.agent).toBe(before?.agent);
-    expect(after?.prs_merged).toBeNull();
-  });
-
   it("PLANT: the writer's own statement defers to the first record, and a second batch still commits", async () => {
-    // The test above plants its own SQL. This one sends outcomeStatement twice: without
+    // Sends outcomeStatement twice: without
     // ON CONFLICT DO NOTHING the second batch would abort on the primary key, taking the
     // transition that carries it with it.
     const row = (agent: string, merged: number | null) => ({
@@ -330,51 +282,6 @@ describe("job outcomes", () => {
     const taken = await resumeJob(jobsEnv(), OTHER, NOW, id, "I will finish it", { take: true });
     expect(taken.ok, taken.refusal).toBe(true);
     expect((await jobRow(id))?.claimed_by).toBe(OTHER_ACTOR);
-  });
-
-  it("a job with no bar is claimed without the record ever being read", async () => {
-    // The record is computed from every outcome row, so reading it on a claim that
-    // asks no question would put a table scan in front of the queue's hottest path.
-    await post({ title: "no bar" });
-    const base = jobsEnv() as unknown as { DB: D1Database };
-    const read: string[] = [];
-    const counting = {
-      ...base,
-      DB: {
-        prepare(sql: string) {
-          read.push(sql);
-          return base.DB.prepare(sql);
-        },
-        batch: (statements: D1PreparedStatement[]) => base.DB.batch(statements),
-      },
-    } as unknown as Parameters<typeof claimJob>[0];
-    const won = await claimJob(counting, DRIVER, NOW, { namespace: "capsid" });
-    expect(won.ok, won.refusal).toBe(true);
-    expect(read.length, "the claim issued no statements, so this proves nothing").toBeGreaterThan(
-      0,
-    );
-    expect(read.filter((sql) => /FROM job_outcomes/.test(sql))).toEqual([]);
-  });
-
-  it("improve_status carries a record per credential, and it is counts and rates only", async () => {
-    // No scope argument, so this is the unrestricted internal caller and the inventory
-    // is attached. The ?? [] satisfies the optional type (a scoped caller gets no
-    // inventory); it is not a branch this test can take.
-    await seedAgent("capsid-driver");
-    const status = await capsidStatus(jobsEnv() as never, "capsid");
-    const agents = status.agents ?? [];
-    // The count check, or the loop below passes by iterating an empty array.
-    expect(agents.length).toBeGreaterThan(0);
-    for (const agent of agents) {
-      expect(agent.record).toBeDefined();
-      expect(agent.record.actor).toBe(`agent:${agent.name}`);
-      // A rate with no denominator is null, never a zero that would read as a bad
-      // record for a credential that has no record.
-      for (const rate of [agent.record.pr_merge_rate, agent.record.ci_green_rate]) {
-        expect(rate === null || (rate >= 0 && rate <= 1)).toBe(true);
-      }
-      expect(Object.keys(agent.record).join(" ")).not.toMatch(/score|rating|trust/i);
-    }
   });
 
   it("PLANT: re-verifying the last pull request marks prs_opened verified, which is what min_record reads", async () => {

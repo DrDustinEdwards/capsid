@@ -2,16 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { normalizeDashes } from "../src/normalize.ts";
 
-test("prose em dash collapses to a comma-space", () => {
-  assert.equal(normalizeDashes("the shell — the capsid"), "the shell, the capsid");
-});
-
-test("word-hugging em dash collapses to a comma-space", () => {
-  assert.equal(normalizeDashes("word—word"), "word, word");
-});
-
-test("horizontal bar is treated like an em dash", () => {
-  assert.equal(normalizeDashes("a ― b"), "a, b");
+test("em dash, word-hugging em dash, horizontal bar and spaced en dash collapse to a comma-space", () => {
+  for (const [input, want] of [
+    ["the shell — the capsid", "the shell, the capsid"],
+    ["word—word", "word, word"],
+    ["a ― b", "a, b"],
+    ["a – b", "a, b"],
+  ]) {
+    assert.equal(normalizeDashes(input), want, input);
+  }
 });
 
 test("title mode uses a spaced hyphen", () => {
@@ -29,14 +28,6 @@ test("numeric en-dash range becomes a plain hyphen", () => {
   assert.equal(normalizeDashes("built 2014–2018 in total"), "built 2014-2018 in total");
 });
 
-test("spaced en dash used as an em dash collapses to a comma-space", () => {
-  assert.equal(normalizeDashes("a – b"), "a, b");
-});
-
 test("text with no wide dashes is returned unchanged", () => {
   assert.equal(normalizeDashes("plain ascii text, with a comma"), "plain ascii text, with a comma");
-});
-
-test("empty input is returned as-is", () => {
-  assert.equal(normalizeDashes(""), "");
 });

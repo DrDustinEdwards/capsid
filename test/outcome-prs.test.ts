@@ -73,12 +73,7 @@ test("a repeated pull request is written once, because a batch conflict would ab
     " ",
   ]);
   assert.equal(recorded.length, 1, "the duplicate and the blank are dropped before the batch");
-});
-
-test("evidence naming no pull requests writes no rows", () => {
-  const { recorded, db } = recorder();
-  assert.deepEqual(outcomePrStatements(db, "job_1", []), []);
-  assert.equal(recorded.length, 0);
+  assert.deepEqual(outcomePrStatements(db, "job_1", []), [], "no pull requests, no rows");
 });
 
 // seeding a row that stored no pull request
@@ -93,16 +88,18 @@ test("pull request URLs are found in both result_ref and the summary prose", () 
     "https://github.com/DrDustinEdwards/capsid-mcp/pull/24",
     "https://github.com/DrDustinEdwards/capsid-mcp/pull/25",
   ]);
-});
-
-test("the same URL in both fields is one URL", () => {
-  const url = "https://github.com/o/r/pull/7";
-  assert.deepEqual(prUrlsFromJob({ result_ref: url, result_summary: `landed in ${url}` }), [url]);
+  const same = "https://github.com/o/r/pull/7";
+  assert.deepEqual(prUrlsFromJob({ result_ref: same, result_summary: `landed in ${same}` }), [
+    same,
+  ]);
 });
 
 test("a job with no pull request anywhere seeds nothing", () => {
   assert.deepEqual(
-    prUrlsFromJob({ result_ref: "capsid/some-doc.md", result_summary: "wrote a document" }),
+    prUrlsFromJob({
+      result_ref: "capsid/some-doc.md",
+      result_summary: "wrote a document",
+    }),
     [],
   );
   assert.deepEqual(prUrlsFromJob({ result_ref: null, result_summary: null }), []);
@@ -143,7 +140,9 @@ test("a merge that fails to update an outcome does not fail the merge", async ()
       first: async () => {
         if (/job_outcome_prs/.test(sql)) throw new Error("planted outcome failure");
         if (/FROM namespaces/.test(sql))
-          return { repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) };
+          return {
+            repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]),
+          };
         return null;
       },
       all: async () => {
@@ -170,11 +169,16 @@ test("a merge that fails to update an outcome does not fail the merge", async ()
             base: { ref: "main" },
           },
         },
-        "PUT /repos/owner/repo/pulls/7/merge": { body: { merged: true, sha: "m1" } },
+        "PUT /repos/owner/repo/pulls/7/merge": {
+          body: { merged: true, sha: "m1" },
+        },
         "DELETE /repos/owner/repo/git/refs/heads/feat/x": { status: 204 },
       },
       async () => {
-        const client = await connectAdmin({ prepare: statement, batch: async () => [] });
+        const client = await connectAdmin({
+          prepare: statement,
+          batch: async () => [],
+        });
         const result = (await client.callTool({
           name: "capsid_close_pr",
           arguments: { namespace: "capsid", number: 7, action: "merge" },
@@ -212,14 +216,6 @@ test("the same evidence as a JSON string parses to the same thing", () => {
 test("JSON that is not an object is refused", () => {
   for (const bad of ["[1,2,3]", '"a string"', "42", "null"]) {
     assert.ok("error" in parseEvidence(bad), `${bad} must be refused`);
-  }
-});
-
-test("undefined and empty stay undefined, because absent evidence is not an error", () => {
-  for (const empty of [undefined, "", "   "]) {
-    const parsed = parseEvidence(empty);
-    assert.ok("evidence" in parsed);
-    assert.equal(parsed.evidence, undefined);
   }
 });
 

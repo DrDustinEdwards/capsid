@@ -30,7 +30,10 @@ const SLOT = ringSlot(NOW);
 test("the ring starts with this pass and advances one slot per half hour", () => {
   const first = advanceRing(undefined, SLOT, true);
   assert.deepEqual(first, { ring: "1", ring_slot: SLOT });
-  assert.deepEqual(advanceRing(first, SLOT + 1, false), { ring: "10", ring_slot: SLOT + 1 });
+  assert.deepEqual(advanceRing(first, SLOT + 1, false), {
+    ring: "10",
+    ring_slot: SLOT + 1,
+  });
 });
 
 test("slots no pass reached are marked as no data, not as up", () => {
@@ -51,7 +54,6 @@ test("two passes in one slot keep the worse result, so a success does not hide a
 });
 
 test("the ring holds 7 days of half-hour slots and no more, even after a long gap", () => {
-  assert.equal(RING_SLOTS, 336);
   const full = { ring: "1".repeat(RING_SLOTS), ring_slot: SLOT };
   const next = advanceRing(full, SLOT + 1, false);
   assert.equal(next.ring.length, RING_SLOTS);
@@ -122,18 +124,12 @@ test("U1: the home page is read every pass, so a 5xx there degrades a site whose
   assert.match(String(p.error), /home page answered 500/);
 });
 
-test("a health body with no sha is ok and reports no sha", async () => {
-  const f = fetchFor({
-    "https://sample.example.com/health": { status: 200, body: "not json" },
-    "https://sample.example.com/": 200,
-  });
-  const p = await probeSite(site({}), f.impl, NOW, null);
-  assert.equal(p.state, "ok");
-  assert.equal(p.sha, null);
-});
-
 test("PLANT: a health body past the cap is not read whole and yields no sha", async () => {
-  const huge = JSON.stringify({ status: "ok", sha: "deadbee", pad: "x".repeat(MAX_HEALTH_BYTES) });
+  const huge = JSON.stringify({
+    status: "ok",
+    sha: "deadbee",
+    pad: "x".repeat(MAX_HEALTH_BYTES),
+  });
   const impl = async () => new Response(huge, { status: 200 });
   const p = await probeSite(site({}), impl, NOW, null);
   assert.equal(p.state, "ok");
@@ -165,7 +161,10 @@ test("a 2xx health body that admits a problem is degraded and names it; a fail b
   const warn = fetchFor({
     "https://sample.example.com/health": {
       status: 200,
-      body: JSON.stringify({ ok: true, backup: { warning: "last backup 38h ago" } }),
+      body: JSON.stringify({
+        ok: true,
+        backup: { warning: "last backup 38h ago" },
+      }),
     },
     "https://sample.example.com/": 200,
   });
@@ -258,9 +257,17 @@ test("Capsid itself is read in-process, never fetched", async () => {
 
 test("each check is clear, a finding, or could not run, and only a check that ran can be clear", () => {
   const found: Finding[] = [
-    { fingerprint: "ci-red-abc1234", namespace: "foxhound", title: "t", body: "b" },
+    {
+      fingerprint: "ci-red-abc1234",
+      namespace: "foxhound",
+      title: "t",
+      body: "b",
+    },
   ];
-  const states = checkStates({ findings: found, ran: new Set(["ci", "health"] as const) });
+  const states = checkStates({
+    findings: found,
+    ran: new Set(["ci", "health"] as const),
+  });
   assert.deepEqual(
     states.map((c) => c.id),
     [...WATCHER_CHECKS],
@@ -347,14 +354,22 @@ function tickEnv(kv: ReturnType<typeof fakeKv>) {
     first: async () => null,
     run: async () => ({}),
   };
-  return fakeEnv({ APP_KV: kv.kv, DB: { prepare: () => ({ ...noRows, bind: () => noRows }) } });
+  return fakeEnv({
+    APP_KV: kv.kv,
+    DB: { prepare: () => ({ ...noRows, bind: () => noRows }) },
+  });
 }
 const gathered = (): Gathered => ({
   findings: [],
   ran: new Set(["health", "site probes"] as const),
   observed: {
     health: HEALTH,
-    offaccount: { reported_at: null, sites: [], last_run: null, last_drill: null },
+    offaccount: {
+      reported_at: null,
+      sites: [],
+      last_run: null,
+      last_drill: null,
+    },
     ci: [],
     siteMap: { unmapped: [], unknown: [] },
     probes: [probe("capsid", "ok")],

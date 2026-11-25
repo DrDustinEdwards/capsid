@@ -30,7 +30,7 @@ const ONE_REPO = [{ repo: "owner/mapped-repo", label: "primary" }];
 
 // The input-level guard.
 
-test("repoPathProblem rejects '.' and '..' segments and control chars", () => {
+test("repoPathProblem rejects '.' and '..' segments and control chars, and allows real repo paths", () => {
   assert.ok(repoPathProblem("../../x"));
   assert.ok(repoPathProblem("a/../b"));
   assert.ok(repoPathProblem("./x"));
@@ -39,9 +39,7 @@ test("repoPathProblem rejects '.' and '..' segments and control chars", () => {
   assert.ok(repoPathProblem("/leading"));
   assert.ok(repoPathProblem("trailing/"));
   assert.ok(repoPathProblem("a//b"));
-});
-
-test("repoPathProblem allows real repo paths, including dotted and dotfile names", () => {
+  // Real repo paths, including dotted and dotfile names, pass.
   assert.equal(repoPathProblem(".github/workflows/improve-score.yml"), null);
   assert.equal(repoPathProblem(".npmrc"), null);
   assert.equal(repoPathProblem("src/foo.test.ts"), null);

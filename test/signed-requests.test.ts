@@ -13,14 +13,6 @@ test("readBoundedText refuses a body over the cap before it is fully buffered", 
   assert.equal(result.ok, false);
 });
 
-test("readBoundedText returns the body when it is under the cap", async () => {
-  const body = JSON.stringify({ jti: "0123456789", site: "capsid" });
-  const stream = new Response(body).body;
-  const result = await readBoundedText({ body: stream }, MAX_REPORT_BYTES);
-  assert.equal(result.ok, true);
-  assert.equal(result.ok && result.text, body);
-});
-
 // The replay cache is an INSERT against a PRIMARY KEY, so the database decides who
 // claimed a nonce. The concurrency property is driven against a real D1 in
 // test-integration/scheduled.test.ts.

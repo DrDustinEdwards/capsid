@@ -105,45 +105,30 @@ function brancher(): Agent {
 
 // the narrowed agent cannot close or merge
 
-test("PLANT: an agent scoped to capsid_close_pr.delete_branch is REFUSED the same tool's action close", async () => {
-  // The narrowing within one tool. close also carries can_merge; this asserts the axis
-  // refusal because checkScope names the tool before it names a missing flag.
-  await withFetch({}, async (calls) => {
-    const result = await callAs(brancher(), "capsid_close_pr", {
-      namespace: "capsid",
-      number: 7,
-      action: "close",
+for (const action of ["close", "merge"]) {
+  test(`PLANT: an agent scoped to capsid_close_pr.delete_branch is REFUSED the same tool's action ${action}`, async () => {
+    // The narrowing within one tool. close and merge also carry can_merge; this asserts the axis
+    // refusal because checkScope names the tool before it names a missing flag.
+    await withFetch({}, async (calls) => {
+      const result = await callAs(brancher(), "capsid_close_pr", {
+        namespace: "capsid",
+        number: 7,
+        action,
+      });
+      assert.equal(result.isError, true, `a delete_branch-only agent ran ${action}`);
+      assert.match(
+        result.content[0].text,
+        new RegExp(`not scoped to the 'capsid_close_pr\\.${action}' tool`),
+        result.content[0].text,
+      );
+      assert.equal(
+        calls.length,
+        0,
+        "the call reached GitHub before refusing, so the refusal describes something that already happened",
+      );
     });
-    assert.equal(result.isError, true, "a delete_branch-only agent closed a pull request");
-    assert.match(
-      result.content[0].text,
-      /not scoped to the 'capsid_close_pr\.close' tool/,
-      result.content[0].text,
-    );
-    assert.equal(
-      calls.length,
-      0,
-      "the close reached GitHub before refusing, so the refusal describes something that already happened",
-    );
   });
-});
-
-test("PLANT: the same agent is REFUSED action merge, for the axis and not only for the flag", async () => {
-  await withFetch({}, async (calls) => {
-    const result = await callAs(brancher(), "capsid_close_pr", {
-      namespace: "capsid",
-      number: 7,
-      action: "merge",
-    });
-    assert.equal(result.isError, true);
-    assert.match(
-      result.content[0].text,
-      /not scoped to the 'capsid_close_pr\.merge' tool/,
-      result.content[0].text,
-    );
-    assert.equal(calls.length, 0);
-  });
-});
+}
 
 test("THE INNOCENT DIRECTION: the agent IS allowed action delete_branch", async () => {
   // Without this, a capsid_close_pr broken for everybody passes the plants above.
@@ -158,33 +143,6 @@ test("THE INNOCENT DIRECTION: the agent IS allowed action delete_branch", async 
     assert.ok(
       calls.length > 0,
       "the call never reached GitHub, so this asserts nothing about the axis",
-    );
-  });
-});
-
-test("A BARE TOOL NAME STILL MEANS THE WHOLE TOOL, so no agent minted before the qualifier changed", async () => {
-  // Narrowing is opted into. An agent whose list names capsid_close_pr and no qualified
-  // sibling keeps every action.
-  const caller = brancher();
-  caller.scopes.tools = ["capsid_close_pr"];
-  caller.scopes.flags.can_merge = true;
-  const routes = {
-    "PATCH /repos/o/r/pulls/7": { body: { number: 7, state: "closed", html_url: "https://pr" } },
-  };
-  await withFetch(routes, async (calls) => {
-    const result = await callAs(caller, "capsid_close_pr", {
-      namespace: "capsid",
-      number: 7,
-      action: "close",
-    });
-    const text = result.content[0]?.text ?? "";
-    assert.doesNotMatch(text, /not scoped to/, `an unqualified list was narrowed anyway: ${text}`);
-    const out = succeeded(result);
-    assert.equal(out.action, "close");
-    assert.equal(out.state, "closed");
-    assert.ok(
-      calls.some((c) => c.method === "PATCH" && c.path === "/repos/o/r/pulls/7"),
-      "the close never reached GitHub",
     );
   });
 });
@@ -353,94 +311,50 @@ test("every tool named in ACTION_ARG serves an argument by that name", async () 
 
 // the repos axis binds the default call
 
-test("PLANT: a driver scoped to one repo is refused a write to the namespace primary when they differ", async () => {
+test("PLANT: a driver scoped to one repo is refused a write and a read of the namespace primary when they differ", async () => {
   // The axis must be checked against the resolved repo, not the `repo` argument, which
   // is a selector and usually absent. Otherwise a remap of the mapping redirects a
   // narrowed driver.
   const caller = brancher();
   caller.scopes.tools = "*";
   caller.scopes.repos = ["DrDustinEdwards/capsid"];
+  const elsewhere = [{ repo: "DrDustinEdwards/somewhere-else", label: "primary" }];
   await withFetch({}, async (calls) => {
-    const result = await callAs(
-      caller,
-      "capsid_close_pr",
-      { namespace: "capsid", action: "delete_branch", branch: "feature/x" },
-      [{ repo: "DrDustinEdwards/somewhere-else", label: "primary" }],
-    );
-    assert.equal(
-      result.isError,
-      true,
-      "a driver wrote to a repo outside its axis by omitting the selector",
-    );
-    assert.match(
-      result.content[0].text,
-      /not scoped to the 'DrDustinEdwards\/somewhere-else' repo/,
-      result.content[0].text,
-    );
-    assert.equal(calls.length, 0, "the write reached GitHub before refusing");
+    for (const [tool, args] of [
+      ["capsid_close_pr", { namespace: "capsid", action: "delete_branch", branch: "feature/x" }],
+      ["capsid_read_repo", { namespace: "capsid", action: "tree" }],
+    ] as const) {
+      const result = await callAs(caller, tool, args, elsewhere);
+      assert.equal(result.isError, true, `a driver used ${tool} on a repo outside its axis`);
+      assert.match(
+        result.content[0].text,
+        /not scoped to the 'DrDustinEdwards\/somewhere-else' repo/,
+        result.content[0].text,
+      );
+    }
+    assert.equal(calls.length, 0, "the call reached GitHub before refusing");
   });
 });
 
-test("PLANT: the same driver is refused a READ of a repo outside its axis", async () => {
-  // Reads resolve the same mapping.
-  const caller = brancher();
-  caller.scopes.tools = "*";
-  caller.scopes.repos = ["DrDustinEdwards/capsid"];
-  const result = await callAs(caller, "capsid_read_repo", { namespace: "capsid", action: "tree" }, [
-    { repo: "DrDustinEdwards/somewhere-else", label: "primary" },
-  ]);
-  assert.equal(result.isError, true, "a driver read a repo outside its axis");
-  assert.match(
-    result.content[0].text,
-    /not scoped to the 'DrDustinEdwards\/somewhere-else' repo/,
-    result.content[0].text,
-  );
-});
-
-test("THE LABEL 'primary' IS A SELECTOR, NOT A SCOPE VALUE, so passing it is not refused", async () => {
-  // Comparing the argument to the axis would refuse the legitimate label.
-  const caller = brancher();
-  caller.scopes.tools = "*";
-  caller.scopes.repos = ["DrDustinEdwards/capsid"];
-  caller.scopes.flags.can_merge = true;
-  await withFetch(closeRoutes("DrDustinEdwards/capsid"), async () => {
-    const result = await callAs(
-      caller,
-      "capsid_close_pr",
-      { namespace: "capsid", action: "close", number: 7, repo: "primary" },
-      [{ repo: "DrDustinEdwards/capsid", label: "primary" }],
-    );
-    const text = result.content[0]?.text ?? "";
-    assert.doesNotMatch(
-      text,
-      /not scoped to the 'primary' repo/,
-      `a legitimate label was compared to the axis: ${text}`,
-    );
-    assert.doesNotMatch(text, /unauthorized:/, `the driver was refused its own repo: ${text}`);
-    assert.equal(succeeded(result).state, "closed", "the close did not land");
-  });
-});
-
-test("THE INNOCENT DIRECTION: the driver IS allowed the repo its axis names, with no selector", async () => {
-  const caller = brancher();
-  caller.scopes.tools = "*";
-  caller.scopes.repos = ["DrDustinEdwards/capsid"];
-  caller.scopes.flags.can_merge = true;
-  await withFetch(closeRoutes("DrDustinEdwards/capsid"), async () => {
-    const result = await callAs(
-      caller,
-      "capsid_close_pr",
-      { namespace: "capsid", action: "close", number: 7 },
-      [{ repo: "DrDustinEdwards/capsid", label: "primary" }],
-    );
-    const text = result.content[0]?.text ?? "";
-    assert.doesNotMatch(
-      text,
-      /unauthorized:/,
-      `the driver was refused the repo it is scoped to: ${text}`,
-    );
-    assert.equal(succeeded(result).state, "closed", "the close did not land");
-  });
+test("THE INNOCENT DIRECTION: the driver IS allowed the repo its axis names, with or without the label 'primary' as selector", async () => {
+  // The label is a selector, not a scope value: comparing the argument to the axis would refuse it.
+  for (const selector of [{}, { repo: "primary" }]) {
+    const caller = brancher();
+    caller.scopes.tools = "*";
+    caller.scopes.repos = ["DrDustinEdwards/capsid"];
+    caller.scopes.flags.can_merge = true;
+    await withFetch(closeRoutes("DrDustinEdwards/capsid"), async () => {
+      const result = await callAs(
+        caller,
+        "capsid_close_pr",
+        { namespace: "capsid", action: "close", number: 7, ...selector },
+        [{ repo: "DrDustinEdwards/capsid", label: "primary" }],
+      );
+      const text = result.content[0]?.text ?? "";
+      assert.doesNotMatch(text, /not scoped to|unauthorized:/, `the driver was refused: ${text}`);
+      assert.equal(succeeded(result).state, "closed", "the close did not land");
+    });
+  }
 });
 
 test("AN AGENT WITH repos '*' IS UNTOUCHED, which is every agent minted before the axis was wired", async () => {

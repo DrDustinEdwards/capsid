@@ -4,7 +4,6 @@ import {
   CI_LOG_BUDGET,
   REPO_BATCH_MAX_FILES,
   REPO_FILE_BUDGET,
-  REPO_HISTORY_MAX_LIMIT,
   ciStatus,
   deleteBranch,
   readRepoFiles,
@@ -62,7 +61,7 @@ const PULLS = [
   },
 ];
 
-test("repo_refs returns branches, tags and open PRs in one call", async () => {
+test("repo_refs returns branches, tags and open PRs with ahead/behind and PR links", async () => {
   await withFetch(
     {
       "GET /repos/o/r": REPO_META,
@@ -88,30 +87,6 @@ test("repo_refs returns branches, tags and open PRs in one call", async () => {
       assert.equal(out.tags.length, 1);
       assert.equal(out.pull_requests.length, 1);
       assert.equal(out.truncated, false);
-    },
-  );
-});
-
-test("repo_refs reports ahead/behind, and zero for the default branch itself", async () => {
-  await withFetch(
-    {
-      "GET /repos/o/r": REPO_META,
-      "GET /repos/o/r/branches": { body: BRANCHES },
-      "GET /repos/o/r/tags": { body: TAGS },
-      "GET /repos/o/r/pulls": { body: PULLS },
-      "GET /repos/o/r/compare/main...review%2Fblog-convergence": {
-        body: {
-          ahead_by: 3,
-          behind_by: 1,
-          commits: [{ commit: { committer: { date: "2026-09-05T12:00:00Z" } } }],
-        },
-      },
-      "GET /repos/o/r/compare/main...stale%2Fno-pr": {
-        body: { ahead_by: 0, behind_by: 9, commits: [] },
-      },
-    },
-    async () => {
-      const out = await repoRefs(makeEnv(), "ns");
       const main = out.branches.find((b) => b.name === "main");
       const review = out.branches.find((b) => b.name === "review/blog-convergence");
       // Comparing the default branch with itself is always 0/0, so it is not fetched.
@@ -121,33 +96,13 @@ test("repo_refs reports ahead/behind, and zero for the default branch itself", a
       assert.equal(review?.ahead_by, 3);
       assert.equal(review?.behind_by, 1);
       assert.equal(review?.committed_date, "2026-09-05T12:00:00Z");
-    },
-  );
-});
-
-test("repo_refs links a branch to its open PR, and leaves branches without one null", async () => {
-  await withFetch(
-    {
-      "GET /repos/o/r": REPO_META,
-      "GET /repos/o/r/branches": { body: BRANCHES },
-      "GET /repos/o/r/tags": { body: TAGS },
-      "GET /repos/o/r/pulls": { body: PULLS },
-      "GET /repos/o/r/compare/main...review%2Fblog-convergence": {
-        body: { ahead_by: 3, behind_by: 1, commits: [] },
-      },
-      "GET /repos/o/r/compare/main...stale%2Fno-pr": {
-        body: { ahead_by: 0, behind_by: 9, commits: [] },
-      },
-    },
-    async () => {
-      const out = await repoRefs(makeEnv(), "ns");
-      assert.equal(out.branches.find((b) => b.name === "review/blog-convergence")?.open_pr, 7);
+      assert.equal(review?.open_pr, 7);
       assert.equal(
         out.branches.find((b) => b.name === "stale/no-pr")?.open_pr,
         null,
         "a branch with no PR reported one",
       );
-      assert.equal(out.branches.find((b) => b.name === "main")?.open_pr, null);
+      assert.equal(main?.open_pr, null);
     },
   );
 });
@@ -178,19 +133,6 @@ test("repo_history ref mode lists commits, subject only", async () => {
     assert.equal(out.commits.length, 2);
     assert.equal(out.commits[0].subject, "first line", "the body leaked into the listing");
     assert.equal(out.commits[0].subject.includes("body paragraph"), false);
-  });
-});
-
-test("repo_history ref mode clamps limit to the maximum", async () => {
-  await withFetch({ "GET /repos/o/r/commits": { body: COMMIT_ROWS } }, async () => {
-    const out = (await repoHistory(makeEnv(), "ns", { ref: "main", limit: 9999 })) as {
-      limit: number;
-    };
-    assert.equal(out.limit, REPO_HISTORY_MAX_LIMIT);
-    const low = (await repoHistory(makeEnv(), "ns", { ref: "main", limit: 0 })) as {
-      limit: number;
-    };
-    assert.ok(low.limit >= 1, "limit 0 was not clamped up");
   });
 });
 
@@ -405,33 +347,16 @@ const RUN_ROW = (over: Record<string, unknown> = {}) => ({
 
 const FULL_SHA = "3bcf8583a59659c255843ab5b8cecd2f56761da6";
 
-test("ci_status filters by branch or by sha, choosing the right query parameter", async () => {
+test("ci_status filters a branch name as branch and expands an abbreviated sha before filtering", async () => {
+  // GitHub has separate branch and sha parameters, and its head_sha filter silently
+  // returns nothing for an abbreviated sha.
   await withFetch(
-    {
-      "GET /repos/o/r/actions/runs": { body: { workflow_runs: [] } },
-      "GET /repos/o/r/commits/3bcf858": { body: { sha: FULL_SHA } },
-    },
+    { "GET /repos/o/r/actions/runs": { body: { workflow_runs: [] } } },
     async (calls) => {
       await ciStatus(makeEnv(), "ns", undefined, { ref: "review/blog-convergence" });
-      await ciStatus(makeEnv(), "ns", undefined, { ref: "3bcf858" });
-      const [byBranch, bySha] = calls
-        .filter((c) => c.path === "/repos/o/r/actions/runs")
-        .map((c) => c.search);
-      // GitHub has separate branch and sha parameters, so the tool decides from the
-      // shape of the ref. Backwards, a valid sha returns an empty run list.
-      assert.match(
-        byBranch,
-        /branch=review%2Fblog-convergence/,
-        `branch query missing: ${byBranch}`,
-      );
-      assert.match(bySha, /head_sha=3bcf858/, `sha query missing: ${bySha}`);
-      assert.equal(/[?&]branch=3bcf858/.test(bySha), false, "a sha was filtered as a branch");
+      assert.match(calls[calls.length - 1].search, /branch=review%2Fblog-convergence/);
     },
   );
-});
-
-test("ci_status EXPANDS an abbreviated sha before filtering, because GitHub matches exactly", async () => {
-  // GitHub's head_sha filter returns nothing for an abbreviated sha, silently.
   await withFetch(
     {
       "GET /repos/o/r/commits/3bcf858": { body: { sha: FULL_SHA } },

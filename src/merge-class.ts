@@ -8,7 +8,7 @@ import { isMoneyPath } from "./scope";
 const MERGE_CLASSES = ["auto", "approve", "typed", "seat", "wait"] as const;
 export type MergeClass = (typeof MERGE_CLASSES)[number];
 
-export const PATH_CLASSES = [
+const PATH_CLASSES = [
   "docs",
   "dashboard-css",
   "tests",

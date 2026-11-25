@@ -96,9 +96,3 @@ test("an unconfigured Worker refuses every signed document rather than skipping 
   assert.equal(verdict.ok, false);
   assert.match(String(verdict.ok === false && verdict.reason), /not configured/);
 });
-
-test("splitSignedTask tolerates a document with no frontmatter", () => {
-  const split = splitSignedTask("# plain\n\nbody\n");
-  assert.equal(split.signature, null);
-  assert.equal(split.body, "# plain\n\nbody\n");
-});

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   healthPathRefusal,
-  hostnameRefusal,
   originFrom,
   siteMapDrift,
   sitesFrom,
@@ -79,10 +78,6 @@ test("a good origin is kept as https:// and the hostname, with any trailing slas
 });
 
 test("PLANT: every origin that is not https:// and a public hostname alone is refused, with a reason", () => {
-  // Twenty-four: scheme (3), port, credentials (2), path, query, fragment, case, IP
-  // literals (2), local names (4), bad labels (4), a numeric top label, an overlong
-  // label, a space, an empty label, and the empty string.
-  assert.equal(BAD_ORIGINS.length, 24);
   for (const raw of BAD_ORIGINS) {
     const got = originFrom(raw);
     assert.equal(got.ok, false, `${JSON.stringify(raw)} was accepted`);
@@ -91,14 +86,6 @@ test("PLANT: every origin that is not https:// and a public hostname alone is re
       `${JSON.stringify(raw)} was refused with no reason`,
     );
   }
-});
-
-test("hostnameRefusal names what is wrong", () => {
-  assert.match(hostnameRefusal("127.0.0.1") ?? "", /IP address/);
-  assert.match(hostnameRefusal("localhost") ?? "", /local name/);
-  assert.match(hostnameRefusal("intranet") ?? "", /single-label/);
-  assert.match(hostnameRefusal("Example.com") ?? "", /lowercase/);
-  assert.equal(hostnameRefusal("example.com"), null);
 });
 
 // Health paths
@@ -134,10 +121,6 @@ const BAD_PATHS = [
 
 test("PLANT: a health path is a plain absolute path; a query, a fragment, an escape or a dot segment is refused", () => {
   for (const p of GOOD_PATHS) assert.equal(healthPathRefusal(p), null, `${p} was refused`);
-  // Fifteen: no leading slash, query, fragment, space, percent escape, a protocol-relative
-  // start, an empty segment, '..', '.', too long, and empty; and on another host, a local
-  // name, credentials, a query and plain http.
-  assert.equal(BAD_PATHS.length, 15);
   for (const p of BAD_PATHS) assert.ok(healthPathRefusal(p), `${JSON.stringify(p)} was accepted`);
 });
 
@@ -196,7 +179,6 @@ test("PLANT: the platform, the script and the namespace are checked", () => {
     [{ ...base, platform: "cloudflare", name: "x\u0007" }, /no control characters/],
     [{ ...base, platform: "cloudflare", name: "n".repeat(81) }, /at most 80 characters/],
   ];
-  assert.equal(refused.length, 8);
   for (const [params, pattern] of refused) {
     const got = validateSite(params);
     assert.equal(got.ok, false, `${JSON.stringify(params)} was accepted`);

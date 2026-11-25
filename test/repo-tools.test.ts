@@ -48,19 +48,15 @@ const TWO_REPOS = [
   { repo: "owner/legacy-repo", label: "legacy" },
 ];
 
-test("resolveRepo selects by label", async () => {
-  const ref = await resolveRepo(makeEnv(TWO_REPOS), "ns", "legacy");
-  assert.equal(ref.full, "owner/legacy-repo");
-});
-
-test("resolveRepo selects by full owner/name", async () => {
-  const ref = await resolveRepo(makeEnv(TWO_REPOS), "ns", "owner/legacy-repo");
-  assert.equal(ref.full, "owner/legacy-repo");
-});
-
-test("resolveRepo defaults to the primary when no selector is given", async () => {
-  const ref = await resolveRepo(makeEnv(TWO_REPOS), "ns");
-  assert.equal(ref.full, "owner/primary-repo");
+test("resolveRepo selects by label, by full owner/name, and defaults to the primary", async () => {
+  for (const [selector, want] of [
+    ["legacy", "owner/legacy-repo"],
+    ["owner/legacy-repo", "owner/legacy-repo"],
+    [undefined, "owner/primary-repo"],
+  ] as const) {
+    const ref = await resolveRepo(makeEnv(TWO_REPOS), "ns", selector);
+    assert.equal(ref.full, want, String(selector));
+  }
 });
 
 test("resolveRepo rejects an unmapped selector with the valid values", async () => {
@@ -81,24 +77,16 @@ test("parseReposList accepts a valid array and defaults the label to primary", (
   assert.deepEqual(result, { list: [{ repo: "a/b", label: "primary" }] });
 });
 
-test("parseReposList rejects a non-array", () => {
-  const result = parseReposList('{"repo":"a/b"}');
-  assert.ok("error" in result && /non-empty JSON array/.test(result.error));
-});
-
-test("parseReposList rejects an empty array", () => {
-  const result = parseReposList("[]");
-  assert.ok("error" in result && /non-empty JSON array/.test(result.error));
-});
-
-test("parseReposList rejects a malformed owner/name", () => {
-  const result = parseReposList('[{"repo":"not-a-repo"}]');
-  assert.ok("error" in result && /owner\/name/.test(result.error));
-});
-
-test("parseReposList rejects invalid JSON", () => {
-  const result = parseReposList("{not json");
-  assert.ok("error" in result && /invalid repos JSON/.test(result.error));
+test("parseReposList rejects a non-array, an empty array, a bad owner/name and invalid JSON", () => {
+  for (const [input, message] of [
+    ['{"repo":"a/b"}', /non-empty JSON array/],
+    ["[]", /non-empty JSON array/],
+    ['[{"repo":"not-a-repo"}]', /owner\/name/],
+    ["{not json", /invalid repos JSON/],
+  ] as const) {
+    const result = parseReposList(input);
+    assert.ok("error" in result && message.test(result.error), input);
+  }
 });
 
 test("requireSinglePrimary demands exactly one primary", () => {

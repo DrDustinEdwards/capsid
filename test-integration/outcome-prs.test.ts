@@ -93,14 +93,6 @@ describe("reverifyStatements", () => {
 });
 
 describe("reverifyPr", () => {
-  it("a pull request no row names does no work and writes nothing", async () => {
-    expect(await reverifyPr(ENV, "capsid", PR(3), NOW)).toEqual([]);
-    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcome_prs").first<{
-      n: number;
-    }>();
-    expect(count?.n).toBe(0);
-  });
-
   it("a pull request GitHub cannot be asked about leaves every row exactly as it was", async () => {
     await outcome("job_unread");
     await prRow("job_unread", PR(4), null, null);

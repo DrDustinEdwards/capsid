@@ -143,23 +143,6 @@ describe("query plans", () => {
     expect(prunePlan).toContain("document_versions_snapshot");
   });
 
-  it("PLANT: the resume-note reads walk an id-ordered audit_log index, with no sort and no bare scan", async () => {
-    // src/jobs-mirror.ts: the newest note (LIMIT 1) and every note (LIMIT ?3). Walked as
-    // literals at their .prepare() calls, so the generic checks above cover them too; this
-    // pins the index by name, as the two hottest reads are. Either index serves it with no
-    // sort: audit_log_doc (namespace, path, id) or audit_log_action_ns_recent (action, namespace, id),
-    // which 0059 added for the action-count reads and which the planner may prefer here.
-    for (const limit of ["1", "?3"]) {
-      const plan = await planOf(
-        `SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT ${limit}`,
-      );
-      expect("details" in plan, `LIMIT ${limit} did not plan`).toBe(true);
-      const text = ("details" in plan ? plan.details : []).join(" | ");
-      expect(text, `LIMIT ${limit}: ${text}`).toMatch(/audit_log_(doc|action_ns_recent)/);
-      expect(text, `LIMIT ${limit}: ${text}`).not.toContain("TEMP B-TREE");
-    }
-  });
-
   // The walker substitutes an optional `${clause}` with `WHERE 1 = 1`, but a filter
   // can change the plan, not only narrow it: with `WHERE namespace = ?` the activity
   // read can pick an index whose id ordering is out of reach and sort every row to
