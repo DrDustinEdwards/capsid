@@ -148,7 +148,7 @@ Capsid serves 18 tools over two MCP servers. The count is derived from `TOOL_GRA
 | `capsid_admin_run_controls`      | admin      | Preview and perform administrative controls with a single-use token.              |
 | `capsid_admin_manage_switches`   | admin      | Operator keys, policy signing, the job breaker and the overnight switch.          |
 
-Adding a tool requires a recorded ruling (CLAUDE.md, rule 1).
+Adding a tool requires a recorded ruling (CLAUDE.md, Tool surface).
 
 ## HTTP interface
 
