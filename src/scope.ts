@@ -16,71 +16,48 @@ import {
 } from "./portfolio-docs";
 import { MINUTE_MS, HOUR_MS } from "./time";
 
-// The one enforcement point: every tool call, and every repo mutation inside one, is checked here
-// and nowhere else. A per-tool gate in each handler can be omitted by a new tool, cannot see writes
-// a module away (the queue, the auto-merge tick), and must be widened at N sites.
+// The one enforcement point: every tool call and repo mutation is checked here. A per-tool gate can
+// be omitted by a new tool and cannot see writes a module away (the queue, the auto-merge tick).
 
-// What each tool requires, stated once. The registrar enforces this table and
-// src/tool-annotations.ts derives readOnlyHint from it, so the two cannot disagree. "action" means
-// the requirement depends on the action argument.
+// What each tool requires. The registrar enforces it and tool-annotations.ts derives readOnlyHint
+// from it. "action" means the requirement depends on the action argument.
 export type ToolRequirement = "read" | "write" | "action" | "admin" | "admin_read";
 
-// Capsid (11) and Capsid Admin (8): src/tools/surface.ts.
 export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   capsid_start_session: "read",
   capsid_find_docs: "read",
   capsid_read_doc: "read",
   capsid_write_doc: "write",
   capsid_delete_doc: "write",
-  // gather reads, finalize archives and report writes, each checked by the handler
-  // where the namespace is known.
   capsid_lint_namespace: "action",
   capsid_read_repo: "read",
-  // The CI log tail beyond the summary needs write, checked by the handler.
   capsid_inspect_repo: "read",
   capsid_close_pr: "write",
-  // list reads; every other action changes the queue.
   capsid_work_jobs: "action",
-  // Capsid's status (src/status.ts).
   capsid_read_status: "read",
 
-  // What needs the seat, across every namespace and repo. It only reads.
   capsid_admin_whats_next: "admin_read",
-  // The namespace-to-repo mapping is the authorization boundary. A write-grant driver that could
-  // edit it could remap its own namespace onto any repo the App reaches and, with a repos axis of
-  // "*", immediately read and write it.
+  // The namespace-to-repo mapping is the authorization boundary: a write driver that could edit it
+  // could remap its namespace onto any repo the App reaches.
   capsid_admin_manage_namespaces: "admin",
   // The credential control plane. An agent that could mint, revoke or re-scope another
-  // could widen itself.
+  // An agent that could mint or re-scope another could widen itself.
   capsid_admin_manage_agents: "admin",
-  // Claims apart from verified outcomes. It only reads; it spans every namespace and
-  // every agent, and its export is the whole dataset.
   capsid_admin_read_claims: "admin_read",
-  // The watcher's last pass, Cloudflare Access and Email Routing, Workers Builds, and the
-  // secrets and data model (secret names, never values).
-  // It only reads, and spans every namespace's sites, CI runs and Cloudflare state.
   capsid_admin_read_ops: "admin_read",
-  // The administrator's controls (preview, then perform with a signed single-use
-  // token). A control revokes an agent, resumes a job or edits a site, so a caller
-  // that could use one could widen itself.
+  // A control revokes an agent, resumes a job or edits a site, so a caller using one could widen itself.
   capsid_admin_run_controls: "admin",
-  // sign_policy decides whether this Worker may merge without a human, breaker_reset
-  // reopens a namespace's queue and overnight starts unattended sessions. None of those
-  // is a driver's work.
+  // None of sign_policy, breaker_reset or overnight is a driver's work.
   capsid_admin_manage_switches: "admin",
 };
 
-// Fail closed: a tool with no entry requires the write grant, so a tool added without
-// touching this table is refused to a read-only caller rather than waved through.
-// test/invariants.test.ts asserts the table and the registrations name the same set,
-// so the fallback is a backstop and not the normal path.
+// Fail closed: a tool with no entry requires write. test/invariants.test.ts keeps the table and
+// the registrations in step, so this is a backstop.
 export function requiredGrant(tool: string): ToolRequirement {
   return Object.hasOwn(TOOL_GRANTS, tool) ? TOOL_GRANTS[tool] : "write";
 }
 
-// What each action requires, for an "action" tool whose requirement depends on nothing
-// but the action. The registrar reads this table. An unlisted action takes `default`,
-// so a new action is refused to a driver until listed.
+// An unlisted action takes `default`, so a new action is refused to a driver until listed.
 export const TOOL_ACTION_GRANTS: Record<
   string,
   { default: ToolRequirement; actions: Record<string, ToolRequirement> }
@@ -93,18 +70,14 @@ export function requiredForAction(tool: string, action: string | undefined): Too
   return Object.hasOwn(spec.actions, action) ? spec.actions[action] : spec.default;
 }
 
-// The OAuth scopes of the admin login (src/routes.ts consent page): every grant reads, and
-// writes only when the box was ticked. An agent key's grants map onto the same two.
 export const SCOPES = mcpScopes("capsid");
 
-// For an "action" tool, the actions that only read; every other action writes.
 export const READ_ACTIONS: Record<string, readonly [string, ...string[]]> = {
   capsid_work_jobs: ["list"],
   capsid_lint_namespace: ["gather"],
 };
 
-// The scope a call needs, from TOOL_GRANTS (never from readOnlyHint): read for a read or admin_read
-// tool and for a read action, write for everything else.
+// From TOOL_GRANTS, never readOnlyHint.
 export function declaredScope(tool: string, action: string | undefined): string {
   const requirement = requiredForAction(tool, action);
   if (requirement === "read" || requirement === "admin_read") return SCOPES.read;
@@ -113,9 +86,8 @@ export function declaredScope(tool: string, action: string | undefined): string 
   return SCOPES.write;
 }
 
-// The family's grant gate (site-runtime authorizeCall; area 11, S3 and A13) on every tool call,
-// deciding on declaredScope against the scopes the caller's grants map to. The caller is already
-// resolved by Capsid's own door, so only the scopes decide. A refusal is worded by checkScope.
+// The family's grant gate (site-runtime authorizeCall) on every tool call. Only scopes decide: the
+// caller is already resolved by Capsid's own door.
 export function sharedGrantRefusal(
   agent: Agent,
   tool: string,
@@ -136,8 +108,6 @@ export function sharedGrantRefusal(
   );
 }
 
-// A requirement as the part of a ScopeNeed it decides. The registrar and every route
-// use this one mapping, so "admin" means the same thing wherever it is enforced.
 export function needFor(requirement: ToolRequirement): Pick<ScopeNeed, "grant" | "admin"> {
   if (requirement === "admin") return { grant: "write", admin: true };
   if (requirement === "admin_read") return { grant: "read", admin: true };
@@ -147,51 +117,32 @@ export function needFor(requirement: ToolRequirement): Pick<ScopeNeed, "grant" |
 
 export interface ScopeNeed {
   tool: string;
-  // A capsid_work_jobs call as the registrar saw it: the job id it names, and whether it
-  // asks for more than one job's row (a view, the stale view or a status filter). Only
-  // the registrar sets it, before every handler; a bench run key is bound by it
-  // (benchRunRefusal).
+  // As the registrar saw it; a bench run key is bound by it (benchRunRefusal).
   call?: { jobId?: string; filtered: boolean };
-  // The action, for a tool whose action decides what it does. Present means the tools
-  // axis may narrow this call to the actions it names (allowsToolAction).
   action?: string;
-  // The namespace this call touches. `undefined` means the call names none, which is
-  // not the same as "allowed" (see namespaceRefusal).
+  // `undefined` means the call names none, which is not "allowed" (see namespaceRefusal).
   namespace?: string;
-  // The resolved repo, "owner/name", never the selector the caller passed. The `repo` argument is a
-  // selector (a label like "primary", or owner/name), but the repos axis holds owner/name entries,
-  // so comparing the selector to the axis refuses legitimate labels and skips the axis when
-  // omitted.
+  // Resolved owner/name, never the caller's selector: the repos axis holds owner/name, so comparing a
+  // label like "primary" would refuse legitimate calls.
   repo?: string;
-  // The document path a call names, for the one exception to the namespace axis: a
-  // read of a portfolio document in capsid (portfolioReadAdmits).
   path?: string;
   grant?: AgentGrant;
-  // The caller must be the admin identity, not merely hold the write grant. Set by
-  // the registrar for a tool whose TOOL_GRANTS entry is "admin" or "admin_read".
   admin?: boolean;
-  // The action is a risky admin action (STEP_UP): an OAuth session needs a recent
-  // sign-in. Set by the registrar.
   stepUp?: boolean;
-  // Flags whose absence refuses the call. Every one is checked, and the refusal
-  // names the FIRST missing one.
+  // The refusal names the first missing flag.
   flags?: readonly ScopeFlag[];
 }
 
-// The work queue's tool, named once: the handlers' re-checks
-// (src/tools/jobs.ts, src/jobs-schema.ts) ask about it.
 export const JOBS_TOOL = "capsid_work_jobs";
 
-// Why a flag is needed, so a refusal tells the caller what to ask for.
 const FLAG_REASON: Record<ScopeFlag, string> = {
   can_merge: "merging a pull request can trigger a deploy on a repo that deploys on push",
   can_touch_protected:
     "an autonomy policy document decides what this Worker may do without a human, so writing one is a ruling",
 };
 
-// Order is deliberate: tool, grant, admin, namespace, repo, flags. A caller that
-// cannot use the tool is told that, not that its namespace is out of scope, which
-// would leak which namespaces exist.
+// Order is deliberate: a caller that cannot use the tool is told that, not that its namespace is
+// out of scope, which would leak which namespaces exist.
 export function checkScope(agent: Agent, need: ScopeNeed): string | null {
   if (agent.benchRun) {
     const bound = benchRunRefusal(agent.benchRun, agent.actor, need);
@@ -199,8 +150,7 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
   }
   const scopes = agent.scopes;
   if (!allowsToolAction(scopes.tools, need.tool, need.action)) {
-    // Name the qualified tool.action that failed. A caller told it is not scoped to
-    // 'capsid_work_jobs' after being minted with capsid_work_jobs in its list would look for the wrong bug.
+    // Name the qualified tool.action so the caller does not look for the wrong bug.
     const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
     return `unauthorized: ${agent.actor} is not scoped to the '${asked}' tool. Its tool scope is ${describeScope(scopes.tools)}.`;
   }
@@ -210,8 +160,7 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
       `A read-only caller can use the read tools and nothing else.`
     );
   }
-  // Before the namespace check, so a driver calling an admin-only tool on its own
-  // namespace is told the tool is admin only.
+  // Before the namespace check, so a driver on its own namespace is told the tool is admin only.
   if (need.admin && !agent.admin) {
     const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
     return `unauthorized: '${asked}' is admin only and ${agent.actor} is not the admin. ${adminReason(need.tool)} Ask the admin to do it.`;
@@ -243,9 +192,6 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
   return null;
 }
 
-// What a bench run key may do (src/bench-run-key.ts): claim its one job and list that job by id;
-// complete and fail end the run's own account of its job (complete only with a reproduction,
-// src/jobs-seat.ts completeAsCaller).
 const BENCH_RUN_ACTIONS: readonly string[] = ["claim", "list", "complete", "fail"];
 
 function benchRunRefusal(
@@ -266,8 +212,7 @@ function benchRunRefusal(
   return null;
 }
 
-// The one exception to the namespace axis (src/portfolio-docs.ts): any caller may read the
-// portfolio documents in capsid, because every driver is told to follow them.
+// The one exception to the namespace axis: every driver is told to follow the portfolio documents.
 function portfolioReadAdmits(need: ScopeNeed): boolean {
   if (need.namespace !== PORTFOLIO_DOCS.namespace) return false;
   if (!isPortfolioTool(need.tool, need.action) || requiredGrant(need.tool) !== "read") return false;
@@ -277,14 +222,12 @@ function portfolioReadAdmits(need: ScopeNeed): boolean {
   return true;
 }
 
-// Whether this caller reaches `namespace` only through the portfolio exception, so a listing
-// handler must keep only the portfolio documents.
 export function portfolioOnly(agent: Agent, namespace: string | undefined): boolean {
   return namespace === PORTFOLIO_DOCS.namespace && !allowsScope(agent.scopes.namespaces, namespace);
 }
 
-// STEP-UP, for Capsid Admin: the admin actions that change who may do what, or that cannot be taken
-// back, need a recent Access sign-in (a grant lives for weeks and refreshes without a person).
+// Step-up: admin actions that change who may do what or cannot be undone need a recent Access
+// sign-in (a grant refreshes for weeks without a person).
 const STEP_UP_IDLE_MS = 2 * HOUR_MS;
 const STEP_UP_MAX_MS = 12 * HOUR_MS;
 
@@ -301,12 +244,10 @@ export function needsStepUp(tool: string, action: string | undefined): boolean {
   return actions === "*" || (action !== undefined && actions.includes(action));
 }
 
-// The last successful step-up action is kept in KV, because each MCP request builds a fresh Agent.
+// KV, because each MCP request builds a fresh Agent.
 const stepUpKey = (actor: string, signedInAt: number): string =>
   `step-up:last:${actor}:${signedInAt}`;
 
-// The time of this session's last successful step-up action, or undefined when there is none or KV
-// cannot say.
 export async function readLastStepUp(
   kv: KVNamespace,
   actor: string,
@@ -328,8 +269,7 @@ export async function readLastStepUp(
   }
 }
 
-// Called only after a step-up action succeeded. The action is already done, so a KV
-// failure is logged and never fails it; the cost is that the idle clock is not reset.
+// Called only after a step-up action succeeded: a KV failure is logged and never fails it.
 export async function recordStepUp(
   kv: KVNamespace,
   agent: Agent,
@@ -373,8 +313,6 @@ function stepUpRefusal(agent: Agent, need: ScopeNeed, now: number): string | nul
   return `step-up required: '${asked}' changes who may do what or cannot be taken back. ${rule} Here ${why}. ${fix}`;
 }
 
-// Why each admin-only thing is admin only, for the refusal. An "admin" requirement
-// with no entry here fails the test that reads this table.
 const ADMIN_REASON: Record<string, string> = {
   capsid_admin_whats_next:
     "It reads what waits on the seat across every namespace and every mapped repo (blocked jobs, questions, open pull requests and their CI, stale work, failed checks), which is wider than any one caller's scope.",
@@ -398,15 +336,11 @@ function adminReason(tool: string): string {
     : "It acts on more than one namespace's scope.";
 }
 
-// The policy override is itself scoped: `allow_improve_paths`, which lets a document write reach an
-// autonomy policy document (capsid/policy/), needs these flags. The argument keeps the improve
-// loop's name, from when it also opened the loop's documents.
+// `allow_improve_paths` lets a document write reach an autonomy policy document (capsid/policy/).
 export const IMPROVE_OVERRIDE_FLAGS = ["can_touch_protected"] as const;
 
-// Money paths: a repo path that names a billing or payment surface, matched by name. A tripwire,
-// not an authorization boundary. Broad on purpose and portfolio-wide: a false positive costs one
-// refusal naming the flag, a false negative is a payment file edited by a credential nobody scoped
-// for it.
+// Money paths, matched by name: a tripwire, not an authorization boundary. Broad on purpose: a false
+// positive costs one refusal, a false negative is a payment file edited by an unscoped credential.
 const MONEY_PATH =
   /(^|\/)(billing|payments?|checkout|invoices?|pricing|subscriptions?|stripe|payouts?|refunds?)(\/|[-_.]|$)/i;
 
@@ -414,25 +348,19 @@ export function isMoneyPath(path: string): boolean {
   return MONEY_PATH.test(path);
 }
 
-// Every flag a repo mutation needs, derived from the call, in one function so the
-// repo write tools cannot each decide a different answer.
 export function repoWriteFlags(
   tool: string,
   action: string | undefined,
   args: { force?: boolean },
 ): ScopeFlag[] {
   const flags: ScopeFlag[] = [];
-  // close deletes the head branch, so a plain write grant could destroy the only copy
-  // of a branch somebody else pushed. That is the same blast radius as merge, so it
-  // needs can_merge too. Not deleting on close would leave stale branches behind. A tag
-  // or a release can start a deploy as a merge can.
+  // close deletes the head branch (merge's blast radius); a tag or release can start a deploy.
   if (
     tool === "capsid_close_pr" &&
     (action === "merge" || action === "close" || action === "tag" || action === "release")
   )
     flags.push("can_merge");
-  // A forced branch delete too: force lifts the open-PR refusal, so it could delete
-  // another agent's open PR head. A delete without force needs no flag.
+  // force lifts the open-PR refusal, so it could delete another agent's open PR head.
   if (tool === "capsid_close_pr" && action === "delete_branch" && args.force === true)
     flags.push("can_merge");
   return flags;

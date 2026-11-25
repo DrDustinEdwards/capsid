@@ -23,26 +23,21 @@ import { base64url, fromBase64urlText, hmacSha256Hex } from "@dustinedwards/site
 import { isSameOriginPath } from "@dustinedwards/site-runtime/url";
 import { isolationVerdict, originRefusal } from "@dustinedwards/site-runtime/origin";
 
-// Capsid Portal's own session.
-
 export const PORTAL_PATH = "/portal";
 export const PORTAL_PREFIX = "/portal/";
 export const PORTAL_CALLBACK_PATH = "/portal/callback";
 
 const PORTAL_SESSION_COOKIE = "capsid_portal";
-// The double-submit CSRF cookie (OpsFeed.csrf). Minted when absent or malformed and
-// then left alone, never rotated per poll, so a preview and its perform carry one
-// value (src/ops-feed.ts).
+// Minted when absent or malformed, then left alone: never rotated per poll, so a preview and its
+// perform carry one value (src/ops-feed.ts).
 export const PORTAL_CSRF_COOKIE = "capsid_portal_csrf";
 export const PORTAL_SESSION_TTL_SECONDS = 24 * 60 * 60;
-// The browser keeps the cookie an idle hour past its expiry, so a request after the
-// expiry is still timed: an idle one ends the Access session rather than passing a
-// silent sign-in.
+// The browser keeps the cookie an idle hour past its expiry, so a request after expiry is still
+// timed and an idle one ends the Access session rather than passing a silent sign-in.
 const PORTAL_COOKIE_MAX_AGE = PORTAL_SESSION_TTL_SECONDS + ADMIN_IDLE_SECONDS;
 
-// The Portal's half of the Access login. The state stored against the token is the Portal path to
-// return to. The callback and state cookie follow the host: on portal.dustinedwards.info the
-// callback is /callback, which the host rewrite hands to PORTAL_CALLBACK_PATH;
+// The state stored against the token is the Portal path to return to. On portal.dustinedwards.info
+// the callback is /callback, which the host rewrite hands to PORTAL_CALLBACK_PATH.
 function portalLogin(url: URL): LoginFlow {
   return {
     callbackPath: publicPortalPath(url, PORTAL_CALLBACK_PATH),
@@ -55,19 +50,17 @@ function portalLogin(url: URL): LoginFlow {
 
 export interface PortalUser {
   email: string;
-  // From the Access ID token's name claim, when the identity provider sent one.
   name?: string;
 }
 
 interface SessionPayload extends PortalUser {
-  // The session id: random, one per sign-in, what sign-out ends.
   sid: string;
-  // The sign-in time, epoch milliseconds.
   at: number;
   exp: number;
 }
 
-// The session's signing key: COOKIE_ENCRYPTION_KEY under its own label (confirmKeys), as the confirmations and the idle cookie each have, so the root secret signs nothing itself. A new label signs every Portal session out once.
+// COOKIE_ENCRYPTION_KEY under its own label (confirmKeys), so the root secret signs nothing itself; a
+// new label signs every Portal session out once.
 const SESSION_LABEL = "portal-session";
 const sessionKey = async (secret: string): Promise<string> =>
   (await confirmKeys({ COOKIE_ENCRYPTION_KEY: secret }, SESSION_LABEL))[0];
@@ -95,17 +88,14 @@ export async function portalSessionCookie(
   );
 }
 
-// The Set-Cookie values that sign this browser out: the session and CSRF cookies, same name, path
-// and attributes, Max-Age=0.
 export function portalSignOutCookies(cookiePath: string = PORTAL_PATH): string[] {
   return [PORTAL_SESSION_COOKIE, PORTAL_CSRF_COOKIE].map((name) =>
     capsidCookie(name, "", cookiePath, 0),
   );
 }
 
-// The verified payload, expired or not, or null: a bad signature or shape, an email no longer
-// admitted (so changing ADMIN_EMAIL or CO_OWNER_EMAILS invalidates every outstanding Portal
-// cookie), or a session that was signed out or ended idle.
+// Null for a bad signature or shape, an email no longer admitted (so changing ADMIN_EMAIL or
+// CO_OWNER_EMAILS invalidates every cookie), or a session signed out or ended idle.
 const verified = new WeakMap<Request, Promise<SessionPayload | null>>();
 function verifiedSession(request: Request, env: Env): Promise<SessionPayload | null> {
   let found = verified.get(request);
@@ -147,7 +137,6 @@ async function verifySession(request: Request, env: Env): Promise<SessionPayload
   return payload;
 }
 
-// The session's user, or null for anything that does not verify or has expired.
 export async function readPortalSession(
   request: Request,
   env: Env,
@@ -170,12 +159,10 @@ export async function endPortalSession(env: Env, sid: string, now: Date): Promis
     .run();
 }
 
-/** The id of the request's verified session, expired or not, or null. */
 export async function portalSessionId(request: Request, env: Env): Promise<string | null> {
   return (await verifiedSession(request, env))?.sid ?? null;
 }
 
-/** The auth event line for a Portal sign-out (POST /portal/api/sign-out). */
 export async function logPortalSignOut(email: string): Promise<void> {
   logEvent(OWASP_EVENTS.signOut, {
     message: "Portal sign-out",
@@ -184,9 +171,7 @@ export async function logPortalSignOut(email: string): Promise<void> {
   });
 }
 
-// site-runtime's adminIdle around the Portal's routes, as the sites use withAdminIdle around
-// /admin. The Portal's sign-in is not an Access token on the request, so it passes adminIdle its
-// own session:
+// The Portal's sign-in is not an Access token on the request, so it passes adminIdle its own session.
 export async function withPortalIdle(
   request: Request,
   env: Env,
@@ -233,9 +218,6 @@ export async function withPortalIdle(
   return out;
 }
 
-// What the top bar shows for the signed-in person: the name from their Access identity, else the
-// local part of their email, never a fixed label. Initials are the first letters of the first and
-// last word.
 export function portalDisplay(user: PortalUser): { name: string; initials: string } {
   const name = user.name?.trim() || user.email.split("@")[0] || user.email;
   const words = name.split(/[\s._-]+/).filter(Boolean);
@@ -302,14 +284,13 @@ export async function handlePortalCallback(
   return new Response(null, { status: 302, headers });
 }
 
-// A bearer token is refused, not redirected: an agent key presented to the Portal cannot follow a login redirect, and a 302 to Access would look from its side like the Portal being down.
+// A bearer token is refused, not redirected: an agent key cannot follow a login redirect, and a 302 to
+// Access would look to it like the Portal being down.
 const BEARER_REFUSAL =
   "forbidden: Capsid Portal admits the administrator's Access session only. An agent key authenticates to /ops/mcp, not to this page; the same state is served by capsid_read_status action status and capsid_work_jobs there. Open the Portal in a browser to sign in as the administrator.";
 
 export type PortalGate = { ok: true; user: PortalUser } | { ok: false; response: Response };
 
-// Every Portal route but the callback answers to this: a 403 for any Authorization header, the
-// Access sign-in with no session, else the administrator.
 export async function portalGate(
   request: Request,
   env: Env,
@@ -338,15 +319,11 @@ export async function portalGate(
   return { ok: true, user };
 }
 
-/** A query value, trimmed; an empty or absent one is null (no filter), not the empty string. */
 export function queryParam(url: URL, name: string): string | null {
   const raw = url.searchParams.get(name)?.trim();
   return raw ? raw : null;
 }
 
-// A Portal API route behind the gate: `run` is called only once the administrator is signed in
-// (with the user, ahead of any extra arguments the caller passes), and a request that is not gets
-// the gate's own response.
 export function behindGate<A extends unknown[]>(
   run: (request: Request, env: Env, now: Date, user: PortalUser, ...rest: A) => Promise<Response>,
 ) {
@@ -361,7 +338,8 @@ export function behindGate<A extends unknown[]>(
   };
 }
 
-// The address a Portal request came from, for its audit row. Cloudflare's edge sets CF-Connecting-IP and replaces any client value; one that is not an IPv4 or IPv6 address is recorded as null.
+// Cloudflare's edge sets CF-Connecting-IP and replaces any client value; anything not an IPv4 or IPv6
+// address is recorded as null.
 const ADDRESS = /^[0-9A-Fa-f:.]{2,45}$/;
 export function sourceAddress(request: Request): string | null {
   const raw = request.headers.get("CF-Connecting-IP")?.trim() ?? "";

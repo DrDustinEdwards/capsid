@@ -1,8 +1,5 @@
-// Capsid's served tools, read at build from the same registrations the Worker makes
-// (src/tools/surface.ts), so the tools page can only show what Capsid serves. Every operation is
-// defined against a context that holds nothing: a definition stores a description, an input
-// schema and a handler, and no handler is ever called here. The source is public, so nothing on
-// the tools page is more than the repo already says.
+// Read at build from the Worker's own registrations (src/tools/surface.ts), against a context that holds nothing: no
+// handler is ever called here. The source is public, so the tools page says no more than the repo does.
 import { defineAdminOperations } from "../../src/tools/admin.ts";
 import { defineAgentOperations } from "../../src/tools/agents.ts";
 import { defineClaimsOperations } from "../../src/tools/claims.ts";
@@ -32,7 +29,7 @@ import { TOOL_GRANTS } from "../../src/scope.ts";
  * @typedef {{ name: string, server: "Capsid" | "Capsid Admin", title: string, description: string, grant: string, hints: { readOnlyHint: boolean, destructiveHint: boolean, idempotentHint: boolean, openWorldHint: boolean }, actions: Action[], params: Param[] }} Tool
  */
 
-/** A parameter's type in words, from its JSON Schema. @param {any} s @returns {string} */
+/** @param {any} s @returns {string} */
 function typeOf(s) {
   if (!s || typeof s !== "object") return "any";
   if (s.enum) return "one of";
@@ -43,7 +40,7 @@ function typeOf(s) {
   return s.type ?? "any";
 }
 
-/** The fixed values a parameter takes, if it names them. @param {any} s @returns {string[]} */
+/** @param {any} s @returns {string[]} */
 function valuesOf(s) {
   if (!s || typeof s !== "object") return [];
   if (s.enum) return s.enum.map(String);
@@ -65,7 +62,7 @@ function param(key, type) {
   };
 }
 
-/** Every tool Capsid and Capsid Admin serve, in the order tools/list publishes them. @returns {Tool[]} */
+/** @returns {Tool[]} */
 export function servedTools() {
   const ops = new Operations();
   /** @type {Array<{ name: string, config: any }>} */
@@ -107,7 +104,6 @@ export function servedTools() {
     defineAdminOperations,
   ])
     define(server, ctx);
-  // As a writer sees it: every action of every tool.
   registerCapsidTools(server, ops, false);
   registerCapsidAdminTools(server, ops);
   const composites = new Map(COMPOSITES.map((c) => [c.name, c]));

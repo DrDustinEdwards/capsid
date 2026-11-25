@@ -1,10 +1,6 @@
-// The numbers page: every public number Capsid computes (docs/public-data.md), each as a sentence,
-// a picture and the table behind it, with the weekly trends where the document carries them.
-// Enarratio draws each whole figure on the server (title, finding, caption, source, "Show data"),
-// in Capsomer's chart frame; Capsomer's chart-enhance (src/explorer.js) draws the bar, line and
-// area charts again at their column's width from the spec frameHtml writes beside each, so a phone
-// keeps 12 px text, and adds tooltips and keyboard reading. No chart takes a color of its own, which would need a style attribute the policy
-// refuses. Pure.
+// Enarratio draws each figure on the server; chart-enhance (src/explorer.js) redraws bar, line and area charts at
+// their column's width from the spec frameHtml writes beside each, so a phone keeps 12 px text. No chart takes a
+// color of its own: that needs a style attribute the policy refuses. Pure.
 import { frameHtml } from "capsomer/behavior/chart-frame";
 import { progressRing } from "enarratio";
 import { areaChart, barChart, lineChart } from "enarratio/lite";
@@ -13,13 +9,11 @@ import { weekEnds, weekLabels } from "./home.mjs";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { layout, minutes, pageHead, percent, readingBox, scroller } from "./pages.mjs";
 
-/** Where every number on the page comes from: the public stats document (docs/public-data.md). */
 const source = {
   name: "Capsid's public stats",
   href: "https://mcp.dustinedwards.info/public/stats/v1.json",
 };
 
-/** A rate as a ring: its title, the sentence that says it, and the table behind it. */
 const ring = (
   /** @type {string} */ id,
   /** @type {string} */ title,
@@ -41,19 +35,14 @@ const ring = (
     }),
   );
 
-/**
- * The daily numbers: each a sentence, a picture and the table behind it (design section 4).
- * Used whole on the numbers page.
- * @param {any} stats
- */
+/** @param {any} stats */
 export function numbersHtml(stats) {
   const j = stats.jobs;
   const v = stats.verification;
   const g = stats.gates;
   const weeks = weekLabels(stats);
   const ends = weekEnds(stats).map((d) => d.toISOString().slice(0, 10));
-  // The bars name each week by its day, with its month at the first, the newest and wherever the
-  // month changes, so eight labels fit under eight bars.
+  // Each week is named by its day, with its month at the first, the newest and wherever the month changes.
   const days = weeks.map((/** @type {string} */ w, /** @type {number} */ i) =>
     i && i < weeks.length - 1 && w.split(" ")[1] === weeks[i - 1].split(" ")[1]
       ? w.split(" ")[0]
@@ -63,11 +52,10 @@ export function numbersHtml(stats) {
     (/** @type {number} */ a, /** @type {number} */ b) => a + b,
     0,
   );
-  // Under Enarratio's 480 the server's drawing scales to a phone's width instead of scrolling
-  // inside a frame no keyboard can reach (axe, scrollable-region-focusable, on the phone project),
-  // and chart-enhance draws it again at the column's width.
+  // Under Enarratio's 480 the server's drawing scales to a phone's width instead of scrolling inside a frame no
+  // keyboard can reach (axe, scrollable-region-focusable); chart-enhance redraws it at the column's width.
   const width = 440;
-  /** A chart and the redraw spec beside it: the same options, less the functions JSON drops. */
+  // The redraw spec has the same options, less the functions JSON drops.
   const drawn = (/** @type {"bar" | "line" | "area"} */ chart, /** @type {any} */ options) => {
     const draw = { bar: barChart, line: lineChart, area: areaChart }[chart];
     return frameHtml(draw(options), {

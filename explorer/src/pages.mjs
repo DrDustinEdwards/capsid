@@ -1,5 +1,5 @@
-// The explorer's pages, as HTML strings from the public model and numbers (capsid/research/design-system-explorer.md, section 4). Pure: no file, network or clock; build.mjs writes what these return.
-// Every address is a prerendered page with its content in the HTML. A private system has a page that says so, so no link 404s, and every system page links to the same system on dustinedwards.info (section 4, "Deep links both ways"). Times of day never appear: the documents carry a date and nothing finer.
+// Pure: no file, network or clock; build.mjs writes what these return. A private system has a page that says so, so no
+// link 404s. Times of day never appear: the documents carry a date and nothing finer.
 import { modelMapData, systemMapHtml, tiesOf } from "capsomer/behavior/system-map";
 import { patchSvg } from "capsomer/behavior/manual";
 import { familyFooterHtml } from "capsomer/behavior/family-footer";
@@ -28,7 +28,7 @@ import { toolPages } from "./tools.mjs";
 
 export const SITE = "https://dustinedwards.info";
 export const ORIGIN = "https://capsid.dustinedwards.info";
-/** The IndexNow key, served as /<key>.txt (build.mjs) and sent by indexnow.mjs after a deploy. Public by design. */
+// Public by design: served as /<key>.txt (build.mjs).
 export const INDEXNOW_KEY = "a2cbc5ceca2a712d80485582eb13b926";
 
 const RING_NAMES = { core: "Runs everything", shared: "Shared parts", used: "What people use" };
@@ -51,12 +51,11 @@ export const containersPath = (id) => `/s/${id}/containers/`;
 export const sitePath = (id) => `${SITE}/systems/${id}`;
 /** @param {string} id */
 export const flowPath = (id) => `/flows/${id}/`;
-/** A flow's step, counted from 1, as the design writes it (/flows/job-life/4/). @param {string} id @param {number} n */
+/** @param {string} id @param {number} n */
 export const stepPath = (id, n) => `/flows/${id}/${n}/`;
-/** Where a part is listed: its row on its system's parts page. @param {{ id: string, system: string }} c */
+/** @param {{ id: string, system: string }} c */
 export const partPath = (c) => `${containersPath(c.system)}#part-${c.id}`;
 
-/** The sections every page leads to, in the bar at the top and the footer. */
 export const NAV = [
   ["/", "Overview"],
   ["/systems/", "Systems"],
@@ -67,10 +66,9 @@ export const NAV = [
 ];
 
 const NAMES = Object.fromEntries(NAV);
-/** The pages that list a kind of thing, written as CollectionPage. */
 const LISTS = ["/systems/", "/flows/", "/tools/", "/code/"];
 
-/** The bar's sections by the paths under them, for Prelum's sectionOf; the last, with no root, is none. */
+// The last, with no root, is none.
 const NAV_SECTIONS = [
   ...NAV.map(([href, heading]) => ({
     id: href,
@@ -81,11 +79,11 @@ const NAV_SECTIONS = [
   { id: "", heading: "", to: null, roots: [] },
 ];
 
-/** The section a path belongs to, for the bar's aria-current: a system's code page is under Code. @param {string} path */
+// A system's code page is under Code.
+/** @param {string} path */
 const navSection = (path) =>
   /^\/s\/[^/]+\/code\//.test(path) ? "/code/" : sectionOf(path, NAV_SECTIONS);
 
-/** The card every page shares (src/og-card.png), drawn by og-card.mjs. */
 export const CARD = {
   url: "/assets/og-card.png",
   width: 1200,
@@ -109,12 +107,9 @@ const ICON_LINKS = iconLinks()
   )
   .join("\n");
 
-/**
- * The page around a body: one stylesheet set, the theme script and one module script, no inline script or style, so the policy in _headers needs no hash (JSON-LD is data, not script).
- * The head's tags are Prelum's, with the production origin, so the 404 says noindex and claims no canonical. `title` is before ", Capsid"; `parent` sits between the section and the page in its trail.
- * A wide page's sections set their own width (the front page's full-bleed parts). `noindex` keeps the search page out of search: its results are already listed.
- * @param {{ title: string, description: string, path: string, body: string, asOf: string, wide?: boolean, data?: Record<string, unknown>[], fullTitle?: boolean, parent?: [string, string], noindex?: boolean }} page
- */
+// No inline script or style, so the policy in _headers needs no hash (JSON-LD is data, not script). The 404 says
+// noindex and claims no canonical; `noindex` keeps the search page out of search, its results being already listed.
+/** @param {{ title: string, description: string, path: string, body: string, asOf: string, wide?: boolean, data?: Record<string, unknown>[], fullTitle?: boolean, parent?: [string, string], noindex?: boolean }} page */
 export function layout({
   title,
   description,
@@ -176,10 +171,8 @@ ${footer(asOf)}
 `;
 }
 
-/**
- * The family letterhead (capsomer/site-header): the mark, search, the theme button and the sections in a second row, Home first. explorer.js wires it.
- * @param {string} here the current section @param {string} path
- */
+// explorer.js wires it.
+/** @param {string} here the current section @param {string} path */
 function header(here, path) {
   const current = NAV.find(([href]) => href === here || href === path)?.[1];
   return letterheadHtml({
@@ -191,33 +184,29 @@ function header(here, path) {
   });
 }
 
-/** Every section's number, as the NASA Graphics Standards Manual numbers its parts: the section is n.0 and each heading n.1, n.2 and on. */
+// The section is n.0 and each heading n.1, n.2 and on, as the NASA Graphics Standards Manual numbers its parts.
 const SECTIONS = [...NAV, ["/search/", "Search"]].map(([href, label], i) => ({
   href,
   label,
   no: i + 1,
 }));
 
-/** A section by its own path. @param {string} href */
+/** @param {string} href */
 export const sectionAt = (href) => SECTIONS.find((section) => section.href === href);
 
-/** The section a page is numbered in: search is a section of its own here. @param {string} path */
+// Search is a section of its own here.
+/** @param {string} path */
 const sectionFor = (path) => sectionAt(path === "/search/" ? path : navSection(path));
 
-/**
- * A page's head, Capsomer's running head: its section's number and name over the manual's rule (a plain head, so it never stacks a second dark slab under the letterhead).
- * The site is named in the header and title block, so not again here.
- * @param {string} path
- */
+// A plain head, so it never stacks a second dark slab under the letterhead; the site is named in the header, not here.
+/** @param {string} path */
 export function manualHead(path) {
   const section = sectionFor(path);
   if (!section) return "";
   return `<div class="cap-running-head" aria-hidden="true"><span class="cap-running-head-name"><span class="cap-running-head-no">${section.no}</span>${section.label}</span></div>`;
 }
 
-/**
- * A page's title block, boxed like the foot of an Apollo flight plan; n.0 for a section's own page. @param {string} path @param {string} asOf
- */
+/** @param {string} path @param {string} asOf */
 export function titleBlock(path, asOf) {
   const section = sectionFor(path);
   if (!section) return "";
@@ -226,12 +215,9 @@ export function titleBlock(path, asOf) {
   return `<dl class="cap-form-boxes title-block" aria-hidden="true">${cell("Site", ORIGIN.replace("https://", ""))}${cell("Section", `${section.no} ${section.label}`)}${cell("Data of", escapeHtml(asOf))}${cell("Page", section.href === path ? `${section.no}.0` : String(section.no), true)}</dl>`;
 }
 
-/**
- * Each visible second-level heading of a page numbered in its section, n.1 onwards, in reading
- * order. A heading kept for screen readers alone keeps no number, nor does one inside a Capsomer
- * component (a drawing's own lists) or one marked plain (a flow's steps, swapped in place).
- * @param {string} body @param {string} path
- */
+// A heading kept for screen readers alone keeps no number, nor does one inside a Capsomer component or one marked
+// plain (a flow's steps, swapped in place).
+/** @param {string} body @param {string} path */
 export function numbered(body, path) {
   const section = sectionFor(path);
   if (!section) return body;
@@ -241,9 +227,7 @@ export function numbered(body, path) {
   );
 }
 
-/**
- * The family footer every dustinedwards.info site ends with (capsomer/family-footer), with Capsid's own part under its teal stripe. @param {string} asOf
- */
+/** @param {string} asOf */
 function footer(asOf) {
   /** @param {{ href: string, label: string, no: number }} s */
   const link = ({ href, label, no }) =>
@@ -261,10 +245,7 @@ function footer(asOf) {
   return `<footer class="foot"><div class="cap-page">${familyFooterHtml({ site: "capsid", center, statement: STATEMENT_PATH })}</div></footer>`;
 }
 
-/**
- * A page's heading block: the trail to it (a direction strip, as the manual's signs point the way, 6.2), its title and its lead, on the manual's layout grid (5.1).
- * @param {Array<[string, string]>} trail earlier pages as [href, name] @param {string} here @param {string} title @param {string} [lead] html
- */
+/** @param {Array<[string, string]>} trail earlier pages as [href, name] @param {string} here @param {string} title @param {string} [lead] html */
 export function pageHead(trail, here, title, lead) {
   const crumbs = trail.length
     ? `<nav class="cap-direction crumbs" aria-label="Breadcrumb"><ol>${trail.map(([href, name]) => `<li><a href="${href}">${escapeHtml(name)}</a></li>`).join("")}<li><span aria-current="page">${escapeHtml(here)}</span></li></ol></nav>`
@@ -272,52 +253,35 @@ export function pageHead(trail, here, title, lead) {
   return `<div class="page-head cap-layout-grid">${crumbs}<h1>${title}</h1>${lead ? `<p class="lead">${lead}</p>` : ""}</div>`;
 }
 
-/**
- * A flow's steps as blocks round a Saturn V: one a step, filled for those done, lit for the one shown.
- * @param {number} total @param {number} n
- */
+/** @param {number} total @param {number} n */
 export const rollBlocks = (total, n) =>
   `<ol class="cap-roll" aria-hidden="true">${Array.from({ length: total }, (_, i) => `<li data-state="${i + 1 < n ? "done" : i + 1 === n ? "now" : "ahead"}"></li>`).join("")}</ol>`;
 
-/**
- * A flow's patch (Capsomer's patchSvg): its name round the top, its number round the foot and its steps as dots.
- * @param {Flow} f @param {string} no the flow's number, as 3.1
- */
+/** @param {Flow} f @param {string} no the flow's number, as 3.1 */
 const patch = (f, no) =>
   patchSvg({ id: f.id, name: f.name, foot: `Capsid ${no}`, count: f.steps.length, unit: "steps" });
 
-/** A headline figure as one of Capsomer's form boxes, linked to where it is counted. @param {string} value @param {string} label @param {string} [href] */
+/** @param {string} value @param {string} label @param {string} [href] */
 export const readingBox = (value, label, href) =>
   `<div class="cap-form-boxes-box"><dt>${href ? `<a href="${href}">${escapeHtml(label)}</a>` : escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
 
-/** The map's data, each system linking to its explorer page: the same as dustinedwards.info's (Capsomer's modelMapData). */
 export const mapData = (/** @type {any} */ model) => modelMapData(model, systemPath);
 
-/**
- * Capsomer's system map over the whole model, every flow included: the network, or with `system` one system (level 2),
- * the same component and data as dustinedwards.info's /systems.
- * @param {any} model @param {import("capsomer/behavior/system-map").SystemMapOptions} options
- */
+/** @param {any} model @param {import("capsomer/behavior/system-map").SystemMapOptions} options */
 const familyMap = (model, options) =>
   systemMapHtml({ ...mapData(model), flows: mapFlows(flowsOf(model)) }, options);
 
-/**
- * A table wider than a phone scrolls in its own box, which a keyboard can reach and a screen reader names, rather than widening the page.
- * @param {string} id @param {string} inner @param {string} label
- */
+// A table wider than a phone scrolls in its own box, which a keyboard can reach, rather than widening the page.
+/** @param {string} id @param {string} inner @param {string} label */
 export const scroller = (id, inner, label) =>
   `<div class="scroller" id="${id}" role="region" aria-label="${escapeHtml(label)}" tabindex="0">${inner}</div>`;
 
-/**
- * One reading: a figure over what it counts, linked to where it is told in full. @param {string} value @param {string} label @param {string} [href]
- */
+/** @param {string} value @param {string} label @param {string} [href] */
 export const reading = (value, label, href) =>
   `<div class="reading"><dt>${href ? `<a href="${href}">${escapeHtml(label)}</a>` : escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
 
-/**
- * A step's name and what it says. The model writes each step as "Name: what happens"; a step
- * written without a name is called by its number. @param {{ n: number, text: string }} st
- */
+// The model writes each step as "Name: what happens"; one without a name is called by its number.
+/** @param {{ n: number, text: string }} st */
 export function stepWords(st) {
   const [head, ...rest] = st.text.split(": ");
   const said = rest.length ? rest.join(": ") : st.text;
@@ -338,10 +302,7 @@ export const percent = (/** @type {number | null} */ rate) => {
 export const minutes = (/** @type {number | null} */ m) =>
   m === null ? "not enough data yet" : m < 120 ? `${m} minutes` : `${Math.round(m / 60)} hours`;
 
-/**
- * @param {any} model @param {string} id @param {string} asOf @param {any[]} [maps] its code maps, if it has any
- * @param {any} [home] the system whose code pages hold its repo, when it shares one
- */
+/** @param {any} model @param {string} id @param {string} asOf @param {any[]} [maps] its code maps, if it has any @param {any} [home] the system whose code pages hold its repo, when it shares one */
 export function systemPage(model, id, asOf, maps = [], home) {
   const s = model.systems.find((/** @type {any} */ x) => x.id === id);
   if (!s) throw new Error(`no system ${id}`);
@@ -389,7 +350,6 @@ export function systemPage(model, id, asOf, maps = [], home) {
     : s.private
       ? "Private: its repo is not public."
       : "";
-  // Level 2 of the network map: what uses it, its parts and what it uses, each tie with its verbs, and the flows over its parts.
   const drawing = `<div class="map-host">${familyMap(model, { id: "system-map", system: id, label: `${s.name} in the network`, headingLevel: 3 })}</div>`;
   const body = `${pageHead(
     [
@@ -415,11 +375,8 @@ ${maps.length ? riskiest(id, maps) : ""}`;
   });
 }
 
-/**
- * A system's own parts, inside its boundary; its `external` containers (Agents, GitHub) are
- * what it works with outside it (Dustin, 2026-10-11: external boxes, outside the boundary).
- * @param {any[]} parts
- */
+// `external` containers (Agents, GitHub) are what it works with outside its boundary.
+/** @param {any[]} parts */
 const ownParts = (parts) => parts.filter((c) => c.kind !== "external");
 
 /** @param {any} model @param {string} id @param {string} asOf */
@@ -473,7 +430,7 @@ ${flowLinks(model, id)}`;
   });
 }
 
-/** The page of every system: the network as hexagons (a plain map a tab away), and a table to sort and filter. @param {any} model @param {Map<string, any[]>} bySystem @param {string} asOf */
+/** @param {any} model @param {Map<string, any[]>} bySystem @param {string} asOf */
 export function systemsPage(model, bySystem, asOf) {
   const map = familyMap(model, {
     id: "family",
@@ -533,12 +490,9 @@ ${scroller(
  * @typedef {{ id: string, name: string, description?: string, steps: Step[] }} Flow
  */
 
-/**
- * A flow's steps read against the model: each step's edge, its two ends and the parts it lights. Everything is public (toPublic; a private system only lacks its repo link),
- * so the build stops only for a line the map lacks or a part it does not hold (design section 4, "Animated flows").
- * @param {any} model @param {any} flow
- * @returns {Flow}
- */
+// Everything is public (a private system only lacks its repo link), so the build stops only for a line the map
+// lacks or a part it does not hold (design section 4).
+/** @param {any} model @param {any} flow @returns {Flow} */
 export function resolveFlow(model, flow) {
   const edges = new Map(model.relationships.map((/** @type {any} */ r) => [r.id, r]));
   const parts = new Map(model.containers.map((/** @type {any} */ c) => [c.id, c]));
@@ -577,11 +531,11 @@ export function resolveFlow(model, flow) {
   return { id: flow.id, name: flow.name, description: flow.description, steps };
 }
 
-/** Every flow in the model, resolved. @param {any} model @returns {Flow[]} */
+/** @param {any} model @returns {Flow[]} */
 export const flowsOf = (model) =>
   (model.flows ?? []).map((/** @type {any} */ f) => resolveFlow(model, f));
 
-/** The flows whose steps touch a part of one system, as a section, or nothing. @param {any} model @param {string} id */
+/** @param {any} model @param {string} id */
 function flowLinks(model, id) {
   const flows = flowsOf(model).filter((f) =>
     f.steps.some((st) => st.touches.some((p) => p.system === id)),
@@ -592,7 +546,7 @@ function flowLinks(model, id) {
 </section>`;
 }
 
-/** What a part is to a step, in words. @param {Step} st @param {Part} p */
+/** @param {Step} st @param {Part} p */
 function role(st, p) {
   const end = p.id === st.from.id || p.id === st.to.id;
   if (end && p.id === st.toward) return "step arrives";
@@ -600,7 +554,7 @@ function role(st, p) {
   return "also used";
 }
 
-/** The step list, each step a link, the one shown marked. @param {Flow} f @param {number} [current] */
+/** @param {Flow} f @param {number} [current] */
 function stepList(f, current) {
   return `<ol class="flow-steps" data-swap="steps">${f.steps
     .map((st) => {
@@ -610,10 +564,7 @@ function stepList(f, current) {
     .join("")}</ol>`;
 }
 
-/**
- * Every flow in the map's words: each step's line, the end it moves toward and the parts it also lights.
- * @param {Flow[]} flows
- */
+/** @param {Flow[]} flows */
 const mapFlows = (flows) =>
   flows.map((f) => ({
     id: f.id,
@@ -628,10 +579,8 @@ const mapFlows = (flows) =>
     })),
   }));
 
-/**
- * The system a flow is drawn on: the one whose parts it touches most, the first touched on a tie.
- * @param {any} model @param {Flow} f
- */
+// The first touched on a tie.
+/** @param {any} model @param {Flow} f */
 function flowHome(model, f) {
   /** @type {Map<string, number>} */
   const n = new Map();
@@ -640,10 +589,7 @@ function flowHome(model, f) {
   return model.systems.find((/** @type {any} */ s) => s.id === best);
 }
 
-/**
- * The parts of a flow's system, with one step lit as the script would leave it (Capsomer's system map, level 2,
- * parts only). @param {any} model @param {Flow} f @param {number} n @param {string} id @param {2 | 3} level
- */
+/** @param {any} model @param {Flow} f @param {number} n @param {string} id @param {2 | 3} level */
 function flowMap(model, f, n, id, level) {
   const home = flowHome(model, f);
   return systemMapHtml(
@@ -659,7 +605,7 @@ function flowMap(model, f, n, id, level) {
   );
 }
 
-/** A flow's own page: what it is, its system's parts with the flow on them, and every step. @param {any} model @param {Flow} f @param {string} asOf */
+/** @param {any} model @param {Flow} f @param {string} asOf */
 export function flowPage(model, f, asOf) {
   const stage = flowStage(model, [f], f, "flow-map");
   const no = `${sectionAt("/flows/")?.no}.${flowsOf(model).findIndex((x) => x.id === f.id) + 1}`;
@@ -684,11 +630,8 @@ ${stage ? `<div class="flow-stage" data-ui>${stage}</div>` : ""}
   });
 }
 
-/**
- * A flow's steps as numbered bands, each its name, what happens and the parts it touches, leading
- * to its step's page; brief, the names alone, for the list of every flow, whose own pages tell the rest.
- * @param {Flow} f @param {boolean} [brief]
- */
+// brief: the names alone, for the list of every flow.
+/** @param {Flow} f @param {boolean} [brief] */
 export const bands = (f, brief = false) =>
   `<ol class="bands${brief ? " bands-brief" : ""}">${f.steps
     .map((st) => {
@@ -699,12 +642,8 @@ export const bands = (f, brief = false) =>
     })
     .join("")}</ol>`;
 
-/**
- * The parts of the system a flow runs over, its first step lit, and a Play button that steps it in place, with no
- * change of address (src/explorer.js, player).
- * @param {any} model @param {Flow[]} flows every flow the drawing can switch to @param {Flow} shown @param {string} id
- * @param {boolean} [play] whether a Play button follows it (the tour steps it by scrolling instead)
- */
+// Play steps it in place, with no change of address (src/explorer.js, player).
+/** @param {any} model @param {Flow[]} flows every flow the drawing can switch to @param {Flow} shown @param {string} id @param {boolean} [play] whether a Play button follows it (the tour steps it by scrolling instead) */
 export function flowStage(model, flows, shown, id, play = true) {
   const map = flowMap(model, shown, 1, id, 2);
   const host = `<div class="map-host flow-map" data-flow="${escapeHtml(shown.id)}" data-step="1" data-steps="${shown.steps.length}" data-player>${map}</div>`;
@@ -713,7 +652,7 @@ export function flowStage(model, flows, shown, id, play = true) {
 <p class="hero-play"><button class="cap-btn" type="button" data-autoplay hidden>Play</button></p>`;
 }
 
-/** Every flow, with what it touches and its first steps. @param {any} model @param {string} asOf */
+/** @param {any} model @param {string} asOf */
 export function flowsIndexPage(model, asOf) {
   const flows = flowsOf(model);
   const body = `${pageHead([], "Flows", "What runs, step by step")}
@@ -734,11 +673,9 @@ ${bands(f, true)}
   });
 }
 
-/**
- * One step's heading, sentence and parts. The shown step is read; every other step is laid in the same grid cell, unseen and out of the accessibility tree,
- * so the section is as tall as the longest step and stepping never moves the drawing below it (design section 6, CLS). The unseen copies carry no id and no link.
- * @param {Step} st @param {number} total @param {Map<string, any>} systems @param {boolean} shown @param {string} name the flow's
- */
+// Every other step is laid in the same grid cell, unseen and out of the accessibility tree, so the section is as tall
+// as the longest step and stepping never moves the drawing (design section 6, CLS); the copies carry no id or link.
+/** @param {Step} st @param {number} total @param {Map<string, any>} systems @param {boolean} shown @param {string} name the flow's */
 function stepText(st, total, systems, shown, name) {
   const link = (/** @type {string} */ href, /** @type {string} */ text, cls = "") =>
     shown
@@ -761,16 +698,12 @@ ${rollBlocks(total, st.n)}
 </div>`;
 }
 
-/**
- * One step of a flow: where it is, what happens, its parts, Back and Next, and the system's parts with the step lit. Without script every step is a page of its own.
- * @param {any} model @param {Flow} f @param {number} n @param {string} asOf
- */
+/** @param {any} model @param {Flow} f @param {number} n @param {string} asOf */
 export function stepPage(model, f, n, asOf) {
   const st = f.steps[n - 1];
   if (!st) throw new Error(`flow ${f.id} has no step ${n}`);
   const total = f.steps.length;
   const systems = new Map(model.systems.map((/** @type {any} */ s) => [s.id, s]));
-  // Every flow is drawn on the parts of the system it runs over, the step's parts lit.
   const map = flowMap(model, f, n, "family", 3);
   const nav = [
     n > 1
@@ -810,13 +743,10 @@ export function stepPage(model, f, n, asOf) {
   });
 }
 
-/** The explorer's accessibility statement, at the slash like every page here. */
 const STATEMENT_PATH = "/accessibility/";
 
-/**
- * The accessibility statement (devkit-a11y S6): Prelum's, with this site's facts; no limitation of its own is open (devkit-a11y run of 2026-11-01).
- * @param {string} asOf
- */
+// Prelum's statement with this site's facts; no limitation of its own is open (devkit-a11y).
+/** @param {string} asOf */
 export function accessibilityPage(asOf) {
   const statement = accessibilityStatement({
     siteName: "The Capsid explorer",
@@ -848,12 +778,7 @@ export function notFoundPage(asOf) {
   });
 }
 
-/**
- * Every page the explorer serves, as [path, html]: front page, systems, parts, flows and steps, code pages and the 404.
- * @param {any} model @param {any} stats @param {any} [code] the public code document
- * @param {any[]} [tools] the served tools (src/surface.mjs)
- * @returns {Array<[string, string]>}
- */
+/** @param {any} model @param {any} stats @param {any} [code] @param {any[]} [tools] @returns {Array<[string, string]>} */
 export function allPages(model, stats, code = null, tools = []) {
   const asOf = stats.as_of;
   const bySystem = codeBySystem(model, code);
@@ -867,7 +792,6 @@ export function allPages(model, stats, code = null, tools = []) {
     ["/code/", codeIndexPage(model, bySystem, totals, asOf)],
     ["/search/", searchPage(asOf)],
   ];
-  // Every system with parts has a parts page, a private one included.
   for (const s of model.systems) {
     pages.push([
       systemPath(s.id),
@@ -887,6 +811,6 @@ export function allPages(model, stats, code = null, tools = []) {
   return pages;
 }
 
-/** The search index: every page worth finding, as the search page's script reads it. @param {any} model @param {any} code @param {any[]} tools */
+/** @param {any} model @param {any} code @param {any[]} tools */
 export const searchDocument = (model, code, tools) =>
   searchIndex(model, codeBySystem(model, code), flowsOf(model), tools);
