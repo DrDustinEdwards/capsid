@@ -169,8 +169,10 @@ jobs:
       health-url: https://capsid.dustinedwards.info/health
       verify-command: node "$DEVKIT_DIR/bin/verify-deploy.mjs" https://capsid.dustinedwards.info
       working-directory: explorer
+      # It starts in explorer/ and every step after the cd runs from the repo root: a subshell around the cd left the
+      # build in explorer/, looking for explorer/explorer/package.json (#1093 to #1099).
       pre-deploy: >-
-        (cd .. && node "$GITHUB_WORKSPACE/.devkit/bin/deploy-install.mjs") &&
+        cd .. && node "$GITHUB_WORKSPACE/.devkit/bin/deploy-install.mjs" &&
         npm --prefix explorer run build &&
         node explorer/wrangler-config.mjs explorer/dist > explorer/wrangler.json
       sha-var: DEPLOY_SHA
