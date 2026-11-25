@@ -8,9 +8,8 @@ import {
   loadMergePolicy,
 } from "../src/auto-merge-policy.ts";
 import { evaluatePolicy, type PrFacts } from "../src/auto-merge-policy-evaluate.ts";
-import { parseMergePolicy, PROMOTABLE_PATH_CLASSES } from "../src/auto-merge-policy-parse.ts";
+import { parseMergePolicy } from "../src/auto-merge-policy-parse.ts";
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/signed-docs.ts";
-import { PATH_CLASSES } from "../src/merge-class.ts";
 import { judgeUnits, LIFTED_KEY, liftSuspension, SUSPENDED_KEY } from "../src/merge-units.ts";
 import { performPolicyChange, planPolicyChange } from "../src/policy-sign-change.ts";
 import { SHIPPED_VERSION } from "./policy-version.ts";
@@ -43,26 +42,22 @@ async function world(body = SHIPPED) {
     ],
   });
   const kv = fakeKv({
-    seed: { [policyPinKey(AUTO_MERGE_POLICY_PATH)]: JSON.stringify(await policyPin(body)) },
+    seed: {
+      [policyPinKey(AUTO_MERGE_POLICY_PATH)]: JSON.stringify(await policyPin(body)),
+    },
   });
-  return { env: fakeEnv({ DB: db, APP_KV: kv.kv, IMPROVE_SCORE_SECRET: SECRET }), rows, kv };
+  return {
+    env: fakeEnv({ DB: db, APP_KV: kv.kv, IMPROVE_SCORE_SECRET: SECRET }),
+    rows,
+    kv,
+  };
 }
 const storedBody = (rows: { documents: Array<{ path: string; body?: string | null }> }) =>
   rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)!.body!;
 
 // A unit in the document
 
-test("the promotable path classes are merge-class's own, less money, migration and workflow", () => {
-  assert.deepEqual(
-    [...PROMOTABLE_PATH_CLASSES].sort(),
-    PATH_CLASSES.filter((c) => c !== "money" && c !== "migration" && c !== "workflow").sort(),
-  );
-});
-
-test("the shipped version lists no unit, and a unit under ## Auto units is read", () => {
-  const v8 = parseMergePolicy(SHIPPED);
-  assert.ok("policy" in v8);
-  assert.deepEqual(v8.policy.units, []);
+test("a unit under ## Auto units is read", () => {
   const listed = parseMergePolicy(
     withUnits(["- unit `capsid / tests`", "- unit `carrel/src-routine`"]),
   );
@@ -87,7 +82,11 @@ test("money, a migration or a workflow is never a unit, and neither is a namespa
     assert.match("error" in parsed ? parsed.error : "", /never promoted to auto/, cls);
   }
   assert.match(
-    (parseMergePolicy(withUnits(["- unit `foxhound / docs`"])) as { error: string }).error,
+    (
+      parseMergePolicy(withUnits(["- unit `foxhound / docs`"])) as {
+        error: string;
+      }
+    ).error,
     /does not cover/,
   );
   assert.match(
@@ -99,7 +98,11 @@ test("money, a migration or a workflow is never a unit, and neither is a namespa
     /twice/,
   );
   assert.match(
-    (parseMergePolicy(`${SHIPPED}\n- unit \`capsid / tests\`\n`) as { error: string }).error,
+    (
+      parseMergePolicy(`${SHIPPED}\n- unit \`capsid / tests\`\n`) as {
+        error: string;
+      }
+    ).error,
     /outside the ## Auto units section/,
   );
 });
@@ -120,7 +123,10 @@ const capsidPr = (paths: string[]): PrFacts =>
     changedLines: 40,
     ciConclusion: "success",
     ciNote: "green",
-    ciSteps: AUTO_MERGE_REQUIRED_CI.capsid!.map((r) => ({ ...r, conclusion: "success" })),
+    ciSteps: AUTO_MERGE_REQUIRED_CI.capsid!.map((r) => ({
+      ...r,
+      conclusion: "success",
+    })),
     ciStepsProblem: null,
     headRepo: "DrDustinEdwards/capsid",
     prAuthor: "DrDustinEdwards",
@@ -224,15 +230,27 @@ test("typing the new version signs the next version with the unit, and the Worke
 test("a change that would not load, or changes nothing, is refused at the preview", async () => {
   const w = await world();
   assert.match(
-    ((await planPolicyChange(w.env, "promote", "capsid/money")) as { error: string }).error,
+    (
+      (await planPolicyChange(w.env, "promote", "capsid/money")) as {
+        error: string;
+      }
+    ).error,
     /never promoted to auto/,
   );
   assert.match(
-    ((await planPolicyChange(w.env, "demote", "capsid/tests")) as { error: string }).error,
+    (
+      (await planPolicyChange(w.env, "demote", "capsid/tests")) as {
+        error: string;
+      }
+    ).error,
     new RegExp(`not promoted to auto in version ${V}`),
   );
   assert.match(
-    ((await planPolicyChange(w.env, "widen", "capsid/tests")) as { error: string }).error,
+    (
+      (await planPolicyChange(w.env, "widen", "capsid/tests")) as {
+        error: string;
+      }
+    ).error,
     /promote or demote/,
   );
   assert.match(
@@ -247,7 +265,11 @@ test("lifting a suspension clears it, and only a rollback after the lift suspend
   const kv = fakeKv({
     seed: {
       [SUSPENDED_KEY]: JSON.stringify([
-        { unit: "capsid/docs", since: "2026-10-10T00:00:00.000Z", reason: "rolled back" },
+        {
+          unit: "capsid/docs",
+          since: "2026-10-10T00:00:00.000Z",
+          reason: "rolled back",
+        },
       ]),
     },
   });

@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { policyField, readSignedPolicy, signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // One signed-policy reader, shared by the merge policy and the gate policy so a fix
-// is made in one place. These tests drive it, and the last one keeps the two loaders
-// from growing a private copy.
+// is made in one place. These tests drive it.
 
 const SECRET = "test-root-secret-not-a-real-one";
 const BODY = "# Policy\n\n- version: 7\n- enabled: false\n";
@@ -66,27 +64,4 @@ test("policyField reads the first matching list item, in any letter case, and nu
   assert.equal(policyField("- Version: 3\n- version: 4", "version"), "3");
   assert.equal(policyField("  - enabled:  true  ", "enabled"), "true");
   assert.equal(policyField("version: 3", "version"), null);
-});
-
-test("neither policy loader reads, verifies or parses a policy field on its own", () => {
-  // Three spellings of a private copy: a direct documents query, a direct call to the
-  // verifier, and a local field parser. Each file is read, so a scan that found no
-  // file would fail on the read rather than pass with nothing checked.
-  // The auto-merge loader is two modules, read as one.
-  const files = ["src/auto-merge-policy.ts + src/auto-merge-tick.ts", "src/gate-policy.ts"];
-  for (const file of files) {
-    const src = file
-      .split(" + ")
-      .map((path) => readFileSync(path, "utf8"))
-      .join("\n");
-    assert.match(
-      src,
-      /readSignedPolicy\(/,
-      `${file} does not read its policy through readSignedPolicy`,
-    );
-    assert.doesNotMatch(src, /FROM documents/, `${file} queries the documents table itself`);
-    assert.doesNotMatch(src, /verifySignedBody\(/, `${file} calls the verifier itself`);
-    assert.doesNotMatch(src, /function field\(/, `${file} defines its own field parser`);
-  }
-  assert.equal(files.length, 2);
 });

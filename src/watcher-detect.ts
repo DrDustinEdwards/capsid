@@ -370,7 +370,7 @@ export function siteDownFindings(prev: OpsSnapshot | null, probes: SiteProbe[]):
 // The CPU threshold: a Worker that used more than a million CPU milliseconds in the most
 // recent complete hour, a thirtieth of the Workers Paid plan's monthly allowance. Normal
 // hours stay under 100,000 on every site.
-export const CPU_HOUR_LIMIT_MS = 1_000_000;
+const CPU_HOUR_LIMIT_MS = 1_000_000;
 
 type WatchedSite = { namespace: string; name: string };
 
@@ -412,8 +412,8 @@ export function siteCpuFindings(
 // The error-rate threshold (capsid/research/design-ops-console.md, approved): more
 // than 1 percent of requests errored in the most recent complete hour, over at least
 // 100 requests, so a quiet site's single error is not an alert.
-export const ERROR_RATE_THRESHOLD = 0.01;
-export const ERROR_RATE_MIN_REQUESTS = 100;
+const ERROR_RATE_THRESHOLD = 0.01;
+const ERROR_RATE_MIN_REQUESTS = 100;
 
 // A site whose Worker errored on more than ERROR_RATE_THRESHOLD of its requests in the most recent
 // complete hour, the last of its hourly buckets. An error is an invocation that threw or a returned

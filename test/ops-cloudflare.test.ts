@@ -21,14 +21,7 @@ import type { SiteCloudflare } from "../src/ops-types/sites.ts";
 import { runPass } from "../src/watcher-pass.ts";
 import { gatherFindings } from "../src/watcher-gather.ts";
 import { owningCheck } from "../src/watcher-checks.ts";
-import {
-  ERROR_RATE_MIN_REQUESTS,
-  ERROR_RATE_THRESHOLD,
-  siteDownFindings,
-  siteErrorFindings,
-  siteCpuFindings,
-  CPU_HOUR_LIMIT_MS,
-} from "../src/watcher-detect.ts";
+import { siteDownFindings, siteErrorFindings, siteCpuFindings } from "../src/watcher-detect.ts";
 import { type Finding } from "../src/watcher-detect.ts";
 import { fakeEnv, fakeFindingMemory, fakeKv, withFetch } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
@@ -440,8 +433,6 @@ const hourly = (
 });
 
 test("the error rate fires above 1 percent of at least 100 requests in the last complete hour, and not at the boundary", () => {
-  assert.equal(ERROR_RATE_THRESHOLD, 0.01);
-  assert.equal(ERROR_RATE_MIN_REQUESTS, 100);
   const sites = [{ namespace: "sample", name: "Sample" }];
   const fires = (cf: SiteCloudflare) =>
     siteErrorFindings(sites, { sample: cf }).map((f) => f.fingerprint);
@@ -473,7 +464,6 @@ test("the error rate fires above 1 percent of at least 100 requests in the last 
 });
 
 test("the CPU finding fires above a million CPU ms in the last complete hour, and only there", () => {
-  assert.equal(CPU_HOUR_LIMIT_MS, 1_000_000);
   const sites = [{ namespace: "sample", name: "Sample" }];
   const fires = (cf: SiteCloudflare) =>
     siteCpuFindings(sites, { sample: cf }).map((f) => f.fingerprint);

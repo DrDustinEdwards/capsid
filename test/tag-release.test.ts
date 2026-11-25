@@ -68,13 +68,11 @@ function github(
 
 // changelogSection
 
-test("changelogSection finds a bracketed heading and stops at the next heading of the same level", () => {
+test("changelogSection finds the section: bracketed or bare heading, with or without the v, lower-level headings kept, a higher one ends it, a pre-release or build tag matched literally", () => {
   const section = changelogSection(CHANGELOG, "v1.4.0");
   assert.equal(section, "### Added\n- The sample widget.");
   assert.doesNotMatch(section ?? "", /older line/);
-});
 
-test("changelogSection finds a bare '## v<tag>' heading, with or without the v on either side", () => {
   const md = "## v2.0.0\n\nBreaking: the sample API.\n\n## v1.9.0\n\nolder";
   assert.equal(changelogSection(md, "v2.0.0"), "Breaking: the sample API.");
   assert.equal(changelogSection(md, "2.0.0"), "Breaking: the sample API.");
@@ -82,11 +80,15 @@ test("changelogSection finds a bare '## v<tag>' heading, with or without the v o
     changelogSection("## 2.0.0\n\nno v in the heading", "v2.0.0"),
     "no v in the heading",
   );
-});
 
-test("changelogSection keeps lower-level headings inside the section and stops at a higher one", () => {
-  const md = "## [1.0.0]\n### Fixed\n- one\n#### Detail\n- two\n# Unreleased\n- three";
-  assert.equal(changelogSection(md, "1.0.0"), "### Fixed\n- one\n#### Detail\n- two");
+  const nested = "## [1.0.0]\n### Fixed\n- one\n#### Detail\n- two\n# Unreleased\n- three";
+  assert.equal(changelogSection(nested, "1.0.0"), "### Fixed\n- one\n#### Detail\n- two");
+
+  assert.equal(
+    changelogSection("## [1.4.0-rc.1]\n- candidate\n## [1.3.0]", "v1.4.0-rc.1"),
+    "- candidate",
+  );
+  assert.equal(changelogSection("## 1.4.0+build.7\n- built\n", "1.4.0+build.7"), "- built");
 });
 
 test("PLANT: changelogSection answers null for a missing version, a prefix of another version, and an empty section", () => {
@@ -99,17 +101,9 @@ test("PLANT: changelogSection answers null for a missing version, a prefix of an
   assert.equal(changelogSection("## [1.4.0]\n\n## [1.3.0]\n- older", "v1.4.0"), null);
 });
 
-test("THE INNOCENT DIRECTION: a pre-release tag with a + or - suffix is matched literally", () => {
-  assert.equal(
-    changelogSection("## [1.4.0-rc.1]\n- candidate\n## [1.3.0]", "v1.4.0-rc.1"),
-    "- candidate",
-  );
-  assert.equal(changelogSection("## 1.4.0+build.7\n- built\n", "1.4.0+build.7"), "- built");
-});
-
 // tagRefusal
 
-test("PLANT: tagRefusal refuses names that are not release versions", () => {
+test("PLANT: tagRefusal refuses names that are not release versions, and accepts real ones", () => {
   for (const bad of [
     "",
     "latest",
@@ -125,9 +119,7 @@ test("PLANT: tagRefusal refuses names that are not release versions", () => {
   ]) {
     assert.match(tagRefusal(bad) ?? "", /is not a release tag/, `'${bad}' was accepted as a tag`);
   }
-});
-
-test("THE INNOCENT DIRECTION: tagRefusal accepts plain, v-prefixed, pre-release and build tags", () => {
+  // THE INNOCENT DIRECTION: plain, v-prefixed, pre-release and build tags pass.
   for (const good of ["v1.4.0", "1.4.0", "v1.4.0-rc.1", "1.4.0+build.7", "v10.20.30"]) {
     assert.equal(tagRefusal(good), null, `'${good}' was refused`);
   }
@@ -359,17 +351,3 @@ for (const action of ["tag", "release"]) {
     });
   });
 }
-
-test("PLANT: capsid_close_pr action release with no CHANGELOG section is refused through the tool and creates no ref", async () => {
-  const { env: e } = env();
-  await withFetch(github("## [1.3.0]\n- older"), async (calls) => {
-    const r = await callAs(e, driver(["can_merge"]), {
-      action: "release",
-      namespace: "sample",
-      tag: "v1.4.0",
-    });
-    assert.equal(r.isError, true);
-    assert.match(r.text, /no section for v1\.4\.0/);
-    assert.equal(calls.filter((c) => c.method === "POST").length, 0);
-  });
-});

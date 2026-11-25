@@ -20,8 +20,6 @@ import {
 //
 // THE REFILES THIS FILE REPRODUCES (job queue: watcher dedupe). The only memory the
 // watcher had of a finding was an open job with the fingerprint in its title, so:
-//   - the site-map drift finding was filed again within an hour of the seat
-//     superseding it, because a superseded job is not open;
 //   - ci-red was filed 13 times between 2026-09-20 and 09-23, because its fingerprint
 //     carried the head sha and every red commit was a new finding.
 
@@ -72,27 +70,7 @@ beforeEach(async () => {
   }
 });
 
-describe("reproduction: the refiles the watcher's memory exists to stop", () => {
-  it("REPRODUCE: a superseded site-map drift finding is not filed again on the next pass", async () => {
-    const first = await pass(NOW, SITE_MAP_DRIFT());
-    expect(first.posted).toHaveLength(1);
-    const [job] = await watcherJobs("site-map-drift-");
-    expect(job.status).toBe("queued");
-
-    // The seat withdraws it while the drift still holds.
-    await env.DB.prepare(
-      "UPDATE jobs SET status = 'superseded', result_summary = 'withdrawn by the seat', updated_at = ?2 WHERE id = ?1",
-    )
-      .bind(job.id, at(0.5).toISOString())
-      .run();
-
-    const second = await pass(at(1), SITE_MAP_DRIFT());
-    expect(second.posted, "a finding a person ended was filed again while it still held").toEqual(
-      [],
-    );
-    expect(await watcherJobs("site-map-drift-")).toHaveLength(1);
-  });
-
+describe("reproduction: the refile the watcher's memory exists to stop", () => {
   it("REPRODUCE: a red CI whose head sha changes is one incident, filed once", async () => {
     const first = await pass(
       NOW,
@@ -124,6 +102,15 @@ describe("reproduction: the refiles the watcher's memory exists to stop", () => 
       jobs[0].status,
       "the incident's job was closed as cleared while the branch was still red",
     ).toBe("queued");
+
+    // The head shas are the incident's evidence, newest last.
+    const row = await findingRow("ci-red-sample");
+    expect(row).toMatchObject({ state: "open", seen_count: 2 });
+    const evidence = JSON.parse(row!.evidence) as EvidenceEntry[];
+    expect(evidence.map((e) => e.lines.find((l) => l.startsWith("head sha: ")))).toEqual([
+      "head sha: aaaaaaa1111111111111111111111111111111aa",
+      "head sha: bbbbbbb2222222222222222222222222222222bb",
+    ]);
   });
 });
 
@@ -181,33 +168,6 @@ describe("the finding's row across jobs", () => {
       reopen_after: null,
       seen_count: 4,
     });
-  });
-
-  it("a red CI's head shas are its evidence, newest last", async () => {
-    await pass(
-      NOW,
-      ciFindings(
-        "sample",
-        [redRun("aaaaaaa1111111111111111111111111111111aa", NOW, CI_RED_HOURS + 1)],
-        NOW,
-      ),
-    );
-    const later = at(3);
-    await pass(
-      later,
-      ciFindings(
-        "sample",
-        [redRun("bbbbbbb2222222222222222222222222222222bb", later, CI_RED_HOURS + 0.5)],
-        later,
-      ),
-    );
-    const row = await findingRow("ci-red-sample");
-    expect(row).toMatchObject({ state: "open", seen_count: 2 });
-    const evidence = JSON.parse(row!.evidence) as EvidenceEntry[];
-    expect(evidence.map((e) => e.lines.find((l) => l.startsWith("head sha: ")))).toEqual([
-      "head sha: aaaaaaa1111111111111111111111111111111aa",
-      "head sha: bbbbbbb2222222222222222222222222222222bb",
-    ]);
   });
 
   it("a job the watcher itself cleared, whose row missed the move, stays quiet from when the job cleared", async () => {

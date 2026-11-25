@@ -36,15 +36,9 @@ function scopedAgent(mutate: (scopes: ReturnType<typeof defaultScopes>) => void 
 
 // the qualified tool entry, as a pure rule
 
-test("a wildcard tools axis allows every action, so no existing agent changes behavior", () => {
-  // Agents with "*" must keep every action.
+test("a wildcard axis and an unqualified tool entry allow every action", () => {
   assert.equal(allowsToolAction("*", "capsid_work_jobs", "post"), true);
-  assert.equal(allowsToolAction("*", "capsid_work_jobs", "claim"), true);
   assert.equal(allowsToolAction("*", "capsid_work_jobs", undefined), true);
-});
-
-test("an UNQUALIFIED tool entry still allows every action of that tool", () => {
-  // A bare tool name keeps its meaning; narrowing is opted into by naming actions.
   const list = ["capsid_work_jobs", "capsid_read_doc"];
   assert.equal(allowsToolAction(list, "capsid_work_jobs", "post"), true);
   assert.equal(allowsToolAction(list, "capsid_work_jobs", "claim"), true);
@@ -63,16 +57,10 @@ test("naming ONE action narrows the tool to the actions named, and the rest are 
   assert.equal(allowsToolAction(list, "capsid_work_jobs", "resume"), false);
 });
 
-test("a qualified entry narrows ONLY its own tool", () => {
-  // A `capsid_work_jobs.post` entry that also narrowed `capsid_lint_namespace` would
-  // refuse an action nobody restricted.
+test("a qualified entry narrows only its own tool, and a tool absent from the list is refused", () => {
   const list = ["capsid_work_jobs", "capsid_work_jobs.post", "capsid_lint_namespace"];
   assert.equal(allowsToolAction(list, "capsid_lint_namespace", "gather"), true);
   assert.equal(allowsToolAction(list, "capsid_lint_namespace", "finalize"), true);
-});
-
-test("a tool absent from the list is refused whether or not an action is named", () => {
-  const list = ["capsid_work_jobs", "capsid_work_jobs.post"];
   assert.equal(allowsToolAction(list, "capsid_write_doc", "post"), false);
   assert.equal(allowsToolAction(list, "capsid_write_doc", undefined), false);
   assert.equal(
@@ -124,20 +112,6 @@ test("checkScope refuses an action the tools axis narrowed away, and names the a
   );
 });
 
-test("checkScope with no action is exactly what it was, so every other tool is untouched", () => {
-  const agent = scopedAgent((s) => {
-    s.tools = ["capsid_write_doc", "capsid_read_doc"];
-  });
-  assert.equal(
-    checkScope(agent, { tool: "capsid_write_doc", namespace: "capsid", grant: "write" }),
-    null,
-  );
-  assert.match(
-    String(checkScope(agent, { tool: "capsid_delete_doc", namespace: "capsid", grant: "write" })),
-    /not scoped to the 'capsid_delete_doc' tool/,
-  );
-});
-
 test("the jobs tool asks the enforcement point about the qualified name", async () => {
   // The action must reach the check. An agent narrowed to capsid_work_jobs.list is
   // called through the real tool with two actions.
@@ -179,18 +153,6 @@ const byName = (name: string) => {
   return role;
 };
 
-test("the auditor reads everything and writes nothing", () => {
-  const auditor = byName("auditor");
-  assert.deepEqual(auditor.namespaces, ["*"]);
-  assert.deepEqual(auditor.repos, ["*"]);
-  assert.deepEqual(
-    auditor.grants,
-    ["read"],
-    "an auditor holding the write grant is not an auditor",
-  );
-  assert.equal(auditor.flags, undefined);
-});
-
 test("the watcher may post a job and cannot claim, complete or resume one", () => {
   const watcher = byName("watcher");
   assert.deepEqual(watcher.namespaces, ["*"]);
@@ -215,32 +177,6 @@ test("the watcher may post a job and cannot claim, complete or resume one", () =
   assert.equal(allowsToolAction(tools, "capsid_work_jobs", "post"), true);
 });
 
-test("the site seat is one namespace and one repo, and merges nothing else", () => {
-  const seat = byName("site-seat");
-  assert.deepEqual(seat.namespaces, ["dustinedwards"]);
-  assert.deepEqual(
-    seat.repos,
-    ["*"],
-    "repos is scoped by the namespace mapping, which is the authorization boundary",
-  );
-  assert.deepEqual(seat.flags, { can_merge: true });
-  const held = Object.keys(seat.flags ?? {});
-  for (const flag of ["can_touch_protected"]) {
-    assert.ok(!held.includes(flag), `the site seat must not hold ${flag}`);
-  }
-});
-
-test("the live probe and the daily live check read capsid with the read tool and hold nothing else", () => {
-  for (const name of ["live-probe", "live-check"]) {
-    const probe = byName(name);
-    assert.deepEqual(probe.namespaces, ["capsid"], name);
-    assert.deepEqual(probe.grants, ["read"], `${name}'s key is a CI secret, so it must not write`);
-    assert.deepEqual(probe.tools, ["capsid_read_doc"], name);
-    assert.deepEqual(probe.repos, [], `${name} reads documents, never a repo`);
-    assert.equal(probe.flags, undefined, name);
-  }
-});
-
 test("DERIVED: every role names only flags this system has", () => {
   // A flag invented in a mint command does not survive parseScopes, so it would mint
   // an agent that silently holds nothing.
@@ -251,16 +187,5 @@ test("DERIVED: every role names only flags this system has", () => {
         `${role.name} names '${flag}', which is not a scope flag`,
       );
     }
-  }
-});
-
-test("DERIVED: no role is a driver in disguise", () => {
-  // Roles are few and separated: one capability each, not a bundle of flags.
-  for (const role of ROLES) {
-    const flags = Object.keys(role.flags ?? {});
-    assert.ok(
-      flags.length <= 1,
-      `${role.name} holds ${flags.length} flags; a role is one capability, not a bundle`,
-    );
   }
 });

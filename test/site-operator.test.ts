@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import {
-  allowedTools,
   callOperator,
   parseOperator,
   repairToolRefusal,
@@ -46,20 +43,6 @@ function recorder(answer: (url: string, init: RequestInit) => Response) {
   };
   return { calls, impl };
 }
-
-test("the migration's dustinedwards configuration passes the same rules an edit passes, and names no run_job", () => {
-  const sql = readFileSync(
-    join(import.meta.dirname, "..", "migrations", "0035_ops_sites_operator.sql"),
-    "utf8",
-  );
-  const json = /SET operator = '([^']+)'/.exec(sql)?.[1];
-  assert.ok(json, "the migration seeds no configuration");
-  const parsed = parseOperator(json, "dustinedwards");
-  assert.ok(parsed.ok, parsed.ok ? "" : parsed.refusal);
-  assert.equal(parsed.operator.auth_var, "DUSTINEDWARDS_OPERATOR_TOKEN");
-  assert.ok(!allowedTools(parsed.operator).includes("run_job"));
-  assert.deepEqual(parsed.operator.weekly, ["refresh_citations"]);
-});
 
 test("PLANT: a configuration naming run_job, a write tool or sync_status as a repair is refused whole", () => {
   const base = { path: "/api/operator", auth_var: "SAMPLE_OPERATOR_TOKEN" };

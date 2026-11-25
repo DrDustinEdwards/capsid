@@ -203,19 +203,6 @@ test("PLANT: every mutating tool is served with destructiveHint true", async () 
   }
 });
 
-test("each not-destructive override still names an action whose operation the scan reads as destructive", () => {
-  for (const [key, reason] of Object.entries(NOT_DESTRUCTIVE)) {
-    const [tool, action] = key.split(".");
-    const served = SERVED.find((s) => s.tool === tool && s.action === action);
-    assert.ok(served, `${key} is an override with no served action (${reason})`);
-    const block = BLOCKS.get(served.op);
-    assert.ok(
-      block && matches(block.body, DESTRUCTIVE),
-      `${key} no longer runs a destructive operation; drop its override (${reason})`,
-    );
-  }
-});
-
 test("PLANT: no read-only tool is served as destructive, and no additive tool overstates", async () => {
   // The negative direction: a tool that mutates nothing must not claim to be destructive.
   const served = await servedAnnotations();

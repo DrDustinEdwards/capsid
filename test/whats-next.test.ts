@@ -174,6 +174,9 @@ test("waiting_on_seat is set only for a non-draft, green, mergeable pull request
       [7],
     );
     assert.equal(r.pull_requests.repos_read, 1);
+    // When every part reads, only the watcher's missing pass (the fake KV holds no snapshot) is unchecked.
+    assert.deepEqual(r.not_checked, ["the watcher has written no pass yet"]);
+    assert.equal(r.as_of, NOW.toISOString());
   });
 });
 
@@ -260,18 +263,6 @@ test("PLANT: a namespace mapping that cannot be read, and a stale read that fail
     );
     assert.equal(r.pull_requests.repos_read, 0);
     assert.equal(calls.length, 0);
-  });
-});
-
-test("THE INNOCENT DIRECTION: when every part reads, not_checked names only the watcher's missing pass", async () => {
-  await withFetch(github("o/r", [{ number: 1, checks: GREEN, detail: CLEAN }]), async () => {
-    const r = await whatsNext(
-      env(db({ namespaces: [{ namespace: "sample", repos: repos("o/r") }] })),
-      NOW,
-    );
-    // The fake KV holds no watcher snapshot, which is itself something not checked.
-    assert.deepEqual(r.not_checked, ["the watcher has written no pass yet"]);
-    assert.equal(r.as_of, NOW.toISOString());
   });
 });
 

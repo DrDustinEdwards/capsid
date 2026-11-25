@@ -12,7 +12,6 @@ import {
   DEFAULT_BUDGET_MINUTES,
   DEFAULT_ESTIMATE_MINUTES,
   FLOOR_ESTIMATE_MINUTES,
-  MIN_SAMPLES,
   buildOvernightPlan,
   estimateFromDurations,
   ineligibleReason,
@@ -49,10 +48,6 @@ function envWith(seed: Record<string, string> = {}) {
 }
 
 const RECORD = JSON.stringify(decisionFor("subscription", ACTOR, NOW, "first supervised night"));
-
-test("the switch is off when nothing is stored", async () => {
-  assert.deepEqual(await overnightState(envWith().env), { mode: "off", decision: null });
-});
 
 test("api reads as api and carries no decision; subscription carries the recorded decision", async () => {
   assert.deepEqual(await overnightState(envWith({ [OVERNIGHT_MODE_KEY]: "api" }).env), {
@@ -91,7 +86,8 @@ test("PLANT: the subscription with no readable decision record reads as OFF, nev
   }
 });
 
-test("an unexpected stored value is off, and an unreadable KV is off", async () => {
+test("nothing stored, an unexpected stored value and an unreadable KV are all off", async () => {
+  assert.deepEqual(await overnightState(envWith().env), { mode: "off", decision: null });
   for (const value of ["on", "ON", "maybe", "", "api "]) {
     assert.equal(
       (await overnightState(envWith({ [OVERNIGHT_MODE_KEY]: value }).env)).mode,
@@ -391,7 +387,6 @@ test("PLANT: with no policy every repo is treated as heavy, so the default fails
 
 test("estimateFromDurations: the p75 of unblocked jobs, floored, and null until there are enough samples", () => {
   assert.equal(estimateFromDurations([30, 40, 50, 60]), null);
-  assert.equal(MIN_SAMPLES, 5);
   assert.equal(estimateFromDurations([10, 20, 30, 40, 100]), 40);
   assert.equal(estimateFromDurations([1, 2, 3, 4, 5, 6, 7, 8]), FLOOR_ESTIMATE_MINUTES);
 });

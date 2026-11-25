@@ -34,9 +34,7 @@ test("the capped summary names the cap and KEEPS what the driver said", () => {
     /the push needs a human/,
     "a cap that discards the driver's summary throws away what the human has to decide about",
   );
-});
-
-test("capping an empty summary still says why the job stopped", () => {
+  // An empty summary still says why the job stopped.
   assert.match(cappedSummary(null), new RegExp(RETRY_CAP_REASON));
   assert.match(cappedSummary(""), new RegExp(RETRY_CAP_REASON));
 });

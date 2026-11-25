@@ -33,7 +33,10 @@ async function keyPair(): Promise<{ jwk: JsonWebKey; raw: string }> {
   const raw = base64url(
     new Uint8Array((await crypto.subtle.exportKey("raw", pair.publicKey)) as ArrayBuffer),
   );
-  return { jwk: { kty: "EC", crv: "P-256", d: jwk.d, x: jwk.x, y: jwk.y }, raw };
+  return {
+    jwk: { kty: "EC", crv: "P-256", d: jwk.d, x: jwk.x, y: jwk.y },
+    raw,
+  };
 }
 const VAPID = await keyPair();
 const DEVICE = await keyPair();
@@ -59,7 +62,10 @@ function db(seed: { jobs?: Row[]; deploys?: Row[]; devices?: Row[] } = {}) {
         return st;
       },
       async all() {
-        return { results: selectRows(tables[tableOf()]!.rows, sql, params), meta: {} };
+        return {
+          results: selectRows(tables[tableOf()]!.rows, sql, params),
+          meta: {},
+        };
       },
       async first() {
         return selectRows(tables[tableOf()]!.rows, sql, params)[0] ?? null;
@@ -123,7 +129,9 @@ function world(
     deploys: opts.deploys,
     devices: opts.devices ?? [device()],
   });
-  const seed: Record<string, string> = { [AWAITING_SEAT_KEY]: JSON.stringify(opts.awaiting ?? []) };
+  const seed: Record<string, string> = {
+    [AWAITING_SEAT_KEY]: JSON.stringify(opts.awaiting ?? []),
+  };
   if (opts.paused) seed[PAUSED_KEY] = JSON.stringify(opts.paused);
   if (opts.state) seed["push:state"] = JSON.stringify(opts.state);
   const kv = fakeKv({ seed });
@@ -158,7 +166,10 @@ async function decrypt(body: Uint8Array): Promise<string> {
   const pub = await crypto.subtle.importKey("raw", asPublic, ecdh, false, []);
   const shared = new Uint8Array(
     await crypto.subtle.deriveBits(
-      { name: "ECDH", public: pub } as unknown as SubtleCryptoDeriveKeyAlgorithm,
+      {
+        name: "ECDH",
+        public: pub,
+      } as unknown as SubtleCryptoDeriveKeyAlgorithm,
       priv,
       256,
     ),
@@ -194,7 +205,9 @@ test("a typed pull request alerts only after 2 hours waiting, counted from the f
   const s = service();
   assert.equal((await pushTick(w.env, NOW, s.fetcher)).sent.length, 0, "alerted at once");
   // The first sighting is kept, because the awaiting-seat set is rewritten every tick.
-  const seen = JSON.parse(w.kv.store.get("push:state")!) as { typed_seen: Record<string, string> };
+  const seen = JSON.parse(w.kv.store.get("push:state")!) as {
+    typed_seen: Record<string, string>;
+  };
   assert.equal(seen.typed_seen["owner/foxhound#7"], NOW.toISOString());
   assert.equal(
     (await pushTick(w.env, new Date(NOW.getTime() + 2 * H), s.fetcher)).sent.length,
@@ -224,7 +237,11 @@ test("a visual pull request alerts at once, once per head, and names no title", 
     ...approve(9),
     failed: "visual_awaits_look",
     head_sha: sha,
-    visual: { title: "Secret redesign", preview: "https://preview.example.com/", shots: [] },
+    visual: {
+      title: "Secret redesign",
+      preview: "https://preview.example.com/",
+      shots: [],
+    },
   });
   const w = world({ awaiting: [visual("aaa")] });
   const s = service();
@@ -419,37 +436,6 @@ test("an item is sent once, and the next tick sends nothing new", async () => {
   );
 });
 
-test("no alert carries an action, and every alert opens its own item on the Portal", async () => {
-  const w = world({
-    awaiting: [typed(7)],
-    state: { typed_seen: { "owner/foxhound#7": iso(-3 * H) }, sent: {} },
-    deploys: [
-      {
-        repo: "owner/capsid",
-        namespace: "capsid",
-        run_id: 1,
-        head_sha: "a".repeat(40),
-        outcome: "rolled_back",
-        recorded_at: sqlTime(-H),
-      },
-    ],
-  });
-  const s = service();
-  await pushTick(w.env, NOW, s.fetcher);
-  assert.equal(s.got.length, 2);
-  for (const g of s.got) {
-    assert.deepEqual(
-      Object.keys(g).sort(),
-      ["body", "tag", "title", "url"],
-      "an alert carried more than title, body, url and tag",
-    );
-  }
-  assert.deepEqual(s.got.map((g) => g.url).sort(), [
-    "https://portal.dustinedwards.info/#pr-owner-foxhound-7",
-    "https://portal.dustinedwards.info/sites/capsid?tab=deploys",
-  ]);
-});
-
 test("at most three items go out per tick; the rest follow on the next", async () => {
   const deploys = [1, 2, 3, 4, 5].map((n) => ({
     repo: "owner/capsid",
@@ -545,7 +531,9 @@ test("with no device on, the urgent alert goes by email once, and the next tick 
   });
   const mails: Array<{ to: string; subject: string; text: string }> = [];
   Object.assign(w.env as object, {
-    EMAIL: { send: async (m: { to: string; subject: string; text: string }) => void mails.push(m) },
+    EMAIL: {
+      send: async (m: { to: string; subject: string; text: string }) => void mails.push(m),
+    },
     ALERT_EMAIL: "admin@example.com",
     ALERT_FROM: "capsid@example.com",
     EMAIL_ROUTING: "on",

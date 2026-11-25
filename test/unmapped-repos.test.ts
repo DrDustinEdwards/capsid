@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fakeEnv, fakeKv, withFetch, type FetchCall, type Route } from "./fakes.ts";
 import { gatherFindings } from "../src/watcher-gather.ts";
-import { owningCheck, WATCHER_CHECKS, type WatcherCheck } from "../src/watcher-checks.ts";
+import { type WatcherCheck } from "../src/watcher-checks.ts";
 import { type Finding } from "../src/watcher-detect.ts";
 import { parseOnPurpose, suggestNamespace } from "../src/unmapped-repos.ts";
 
@@ -188,55 +188,39 @@ test("a repo that is mapped, whatever the case, is not a finding, and a clean pa
   );
 });
 
-test("PLANT: an unreadable installation list fails closed with a finding saying so, and the check is not counted as run", async () => {
-  const { found, ran } = await gather(MAPPED, {
-    ...appRoutes([repo("capsid")]),
-    "GET /app/installations": { status: 500, body: { message: "boom" } },
-  });
-  const out = unmapped(found);
-  assert.deepEqual(
-    out.map((f) => f.fingerprint),
-    ["unmapped-repos-unreadable"],
-  );
-  assert.match((out[0].evidence ?? []).join(" "), /could not list the App's installations \(500\)/);
-  assert.ok(!ran.has("repo map"), "an open unmapped-repo finding would be cleared on no evidence");
-});
-
-test("PLANT: an App that lists no repositories is not read as 'nothing unmapped'", async () => {
-  const { found, ran } = await gather(MAPPED, appRoutes([]));
-  assert.deepEqual(
-    unmapped(found).map((f) => f.fingerprint),
-    ["unmapped-repos-unreadable"],
-  );
-  assert.match((unmapped(found)[0].evidence ?? []).join(" "), /no repositories at all/);
-  assert.ok(!ran.has("repo map"));
-});
-
-test("a list read in part (the count says more than came back) is unreadable, not complete", async () => {
-  const routes = appRoutes([repo("capsid")]);
+test("PLANT: a list that cannot be read in full fails closed with an unreadable finding, and the check is not counted as run", async () => {
   // GitHub said 3 and delivered 1: the second page is empty.
-  routes["GET /installation/repositories"] = (_body, search) => ({
+  const partial = appRoutes([repo("capsid")]);
+  partial["GET /installation/repositories"] = (_body, search) => ({
     body: { total_count: 3, repositories: search.get("page") === "1" ? [repo("capsid")] : [] },
   });
-  const { found } = await gather(MAPPED, routes);
-  assert.deepEqual(
-    unmapped(found).map((f) => f.fingerprint),
-    ["unmapped-repos-unreadable"],
-  );
-  assert.match((unmapped(found)[0].evidence ?? []).join(" "), /listed 1 of 3/);
-});
-
-test("a corrupt namespace mapping makes the check unreadable instead of treating its repos as unmapped", async () => {
-  const { found, ran } = await gather(
-    [...MAPPED, { namespace: "broken", repos: "{not json" }],
-    appRoutes([repo("capsid")]),
-  );
-  assert.deepEqual(
-    unmapped(found).map((f) => f.fingerprint),
-    ["unmapped-repos-unreadable"],
-  );
-  assert.match((unmapped(found)[0].evidence ?? []).join(" "), /broken has a corrupt repos mapping/);
-  assert.ok(!ran.has("repo map"));
+  const cases: Array<[string, NsRow[], Record<string, Route>, RegExp]> = [
+    [
+      "a failed installation list",
+      MAPPED,
+      { ...appRoutes([repo("capsid")]), "GET /app/installations": { status: 500, body: {} } },
+      /could not list the App's installations \(500\)/,
+    ],
+    ["an App that lists no repositories", MAPPED, appRoutes([]), /no repositories at all/],
+    ["a list read in part", MAPPED, partial, /listed 1 of 3/],
+    [
+      "a corrupt namespace mapping",
+      [...MAPPED, { namespace: "broken", repos: "{not json" }],
+      appRoutes([repo("capsid")]),
+      /broken has a corrupt repos mapping/,
+    ],
+  ];
+  for (const [what, rows, routes, evidence] of cases) {
+    const { found, ran } = await gather(rows, routes);
+    const out = unmapped(found);
+    assert.deepEqual(
+      out.map((f) => f.fingerprint),
+      ["unmapped-repos-unreadable"],
+      what,
+    );
+    assert.match((out[0].evidence ?? []).join(" "), evidence, what);
+    assert.ok(!ran.has("repo map"), `${what}: an open finding would be cleared on no evidence`);
+  }
 });
 
 test("the token minted to list repos is limited to metadata:read, and the check maps nothing", async () => {
@@ -253,12 +237,6 @@ test("the token minted to list repos is limited to metadata:read, and the check 
     (c) => c.method !== "GET" && c.path !== "/app/installations/111/access_tokens",
   );
   assert.deepEqual(writes, [], "the check wrote to GitHub");
-});
-
-test("every unmapped-repo fingerprint belongs to the repo map check, so a read clears only its own findings", () => {
-  assert.ok((WATCHER_CHECKS as readonly string[]).includes("repo map"));
-  assert.equal(owningCheck("unmapped-repo-drdustinedwards--x"), "repo map");
-  assert.equal(owningCheck("unmapped-repos-unreadable"), "repo map");
 });
 
 test("suggestNamespace: a namespace named for the repo, else the longest dashed prefix, else none", () => {

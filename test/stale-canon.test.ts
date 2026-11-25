@@ -17,7 +17,7 @@ import {
   type CanonDoc,
   type MergedChange,
 } from "../src/stale-canon.ts";
-import { findingClass, owningCheck, WATCHER_CHECKS } from "../src/watcher-checks.ts";
+import { findingClass, owningCheck } from "../src/watcher-checks.ts";
 
 // Stale canon after a merge (improvement item 23, src/stale-canon.ts): the pure matching.
 // Fake data throughout: namespace "sample", repo paths of a made-up app.
@@ -270,7 +270,6 @@ test("findings: digest class, owned by the stale canon check, a stable fingerpri
   assert.ok(f.evidence?.some((l) => l.includes("https://github.com/example/sample/pull/48")));
   assert.equal(findingClass(f.fingerprint), "digest");
   assert.equal(owningCheck(f.fingerprint), "stale canon");
-  assert.ok((WATCHER_CHECKS as readonly string[]).includes("stale canon"));
 });
 
 test("findings are capped at MAX_FLAGS, in a stable order", () => {

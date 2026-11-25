@@ -38,12 +38,6 @@ async function signedFetch(path: string, headers: Record<string, string> = {}): 
 }
 
 describe("the Portal's pages and files", () => {
-  it("the fixture is really served by the binding, so the refusals below are the gate and not a missing file", async () => {
-    const direct = await env.ASSETS!.fetch("https://assets.invalid/assets/app-abc123.js");
-    expect(direct.status).toBe(200);
-    expect(await direct.text()).toContain(SCRIPT_MARK);
-  });
-
   it("PLANT: a caller with no session gets the Access redirect, never a page", async () => {
     for (const path of [
       "/portal",

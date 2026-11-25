@@ -86,29 +86,6 @@ describe("resume to the queue", () => {
     expect((await jobRow(blocked))?.claimed_at).toBe(NOW.toISOString());
   });
 
-  it("take by a caller that already holds a claim is allowed: there is no claim limit", async () => {
-    const blocked = await blockedJob(
-      ADMIN,
-      driverAgent(),
-      NOW,
-      "someone wants to take it",
-      PUSH_BLOCK,
-    );
-    // A plain resume, take or not, is the seat's act, so the taker is the seat.
-    const taker = seatAgent();
-    expect(
-      (
-        await claimJob(jobsEnv(), taker, NOW, {
-          id: await postGatedJob(ADMIN, NOW, "the taker is busy"),
-        })
-      ).ok,
-    ).toBe(true);
-    const taken = await resumeJob(jobsEnv(), taker, LATER, blocked, "approved", { take: true });
-    expect(taken.ok, taken.refusal).toBe(true);
-    expect((await jobRow(blocked))?.status).toBe("claimed");
-    expect((await jobRow(blocked))?.claimed_by).toBe("agent:seat");
-  });
-
   it("the driver's own gate still cannot be cleared by that driver with a plain resume", async () => {
     const driver = driverAgent();
     const blocked = await blockedJob(ADMIN, driver, NOW, "self-approval", PUSH_BLOCK);

@@ -115,12 +115,6 @@ test("an action named after the span is kept, not doubled", () => {
   assert.equal(rewriteProse('`manage_pr` action "merge"').text, "`capsid_close_pr` action `merge`");
 });
 
-test("PLANT: an old split tool named with no action it can map is reported, never guessed", () => {
-  const r = rewriteProse("Use `manage_pr` here.");
-  assert.equal(r.text, "Use `manage_pr` here.");
-  assert.equal(r.unmapped.length, 1);
-});
-
 test("a split tool whose actions all moved to one new tool is renamed bare; a file name is not a tool", () => {
   assert.equal(
     rewriteProse("Use `delete_namespace` with preview first.").text,
@@ -137,9 +131,11 @@ test("PLANT: a column is not an action, and a split tool named bare is all of it
     "`list.limit`",
   ])
     assert.equal(rewriteProse(text).text, text);
-  const r = rewriteProse("the others `improve_run` writes");
-  assert.equal(r.text, "the others `improve_run` writes");
-  assert.equal(r.unmapped.length, 1);
+  for (const text of ["the others `improve_run` writes", "Use `manage_pr` here."]) {
+    const r = rewriteProse(text);
+    assert.equal(r.text, text);
+    assert.equal(r.unmapped.length, 1, text);
+  }
 });
 
 test("the renamed tools' action lists are the ones src serves", async () => {

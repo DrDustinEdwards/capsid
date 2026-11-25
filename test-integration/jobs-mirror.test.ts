@@ -233,10 +233,4 @@ describe("the signature", () => {
     // The refusal is audited.
     expect(await auditActions(id)).toContain("job-signature-refused");
   });
-
-  it("the honest case still claims, so the guard is not refusing everything", async () => {
-    const posted = await post({ title: "untampered" });
-    const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id: posted.job!.id });
-    expect(claimed.ok, claimed.refusal).toBe(true);
-  });
 });

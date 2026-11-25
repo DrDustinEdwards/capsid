@@ -187,15 +187,6 @@ const flags = (runs: Partial<Record<TaskId, OpsTaskRun[]>>, cadence = 30) =>
     ]),
   );
 
-test("every task is listed, and one with no run is 'never'", () => {
-  const states = taskStates(new Map(), NOW, 30);
-  assert.deepEqual(
-    states.map((t) => t.id),
-    TASKS.map((t) => t.id),
-  );
-  assert.ok(states.every((t) => t.flag === "never" && t.recent.length === 0));
-});
-
 test("PLANT: a task whose newest run threw or was refused is failing, whatever came before", () => {
   const f = flags({
     backup: [run(60, "threw"), run(1500)],

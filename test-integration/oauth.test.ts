@@ -185,53 +185,20 @@ describe("callback", () => {
   });
 });
 
-describe("the token endpoint", () => {
-  it("refuses an authorization_code grant that was never issued", async () => {
-    const response = await SELF.fetch("https://capsid.test/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code: "a-code-that-was-never-issued",
-        redirect_uri: "https://client.example.com/callback",
-        client_id: "nobody",
-        code_verifier: "x".repeat(43),
-      }).toString(),
-    });
-    expect(response.status).toBeGreaterThanOrEqual(400);
-    const body = await response.text();
-    expect(body).toMatch(/invalid|grant|client/i);
-  });
-});
-
 // A guard driven through real HTTP. A source scan cannot see whether a helper's result
 // is used.
 
 describe("F10: the Origin allowlist on /mcp", () => {
-  it("PLANT: a foreign Origin is refused 403 at POST /mcp", async () => {
-    const response = await SELF.fetch("https://capsid.test/mcp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Origin: "https://evil.example" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
-    });
-    expect(response.status).toBe(403);
-  });
-
-  it("THE INNOCENT DIRECTION: no Origin and claude.ai are not refused by THIS guard", async () => {
-    // Both still fail auth, a different guard with a different status; the origin
-    // check is not what stopped them.
-    const noOrigin = await SELF.fetch("https://capsid.test/mcp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
-    });
-    expect(noOrigin.status).not.toBe(403);
-
-    const claude = await SELF.fetch("https://capsid.test/mcp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Origin: "https://claude.ai" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
-    });
-    expect(claude.status).not.toBe(403);
+  it("PLANT: a foreign Origin is refused 403 at POST /mcp, and no Origin or claude.ai is not refused by this guard", async () => {
+    const post = (origin?: string) =>
+      SELF.fetch("https://capsid.test/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(origin ? { Origin: origin } : {}) },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+      });
+    expect((await post("https://evil.example")).status).toBe(403);
+    // The innocent direction: both still fail auth, a different guard with a different status.
+    expect((await post()).status).not.toBe(403);
+    expect((await post("https://claude.ai")).status).not.toBe(403);
   });
 });

@@ -170,30 +170,23 @@ test("PLANT: a stored report is not a subject of the next report", () => {
 
 // What counts as a repo path.
 
-test("PLANT: a dotfile that exists is not reported missing", () => {
+test("PLANT: a dotfile that exists is not reported missing, and one that does not is still drift", () => {
   // A word-boundary match would capture `.github/workflows/ci.yml` as
   // `github/workflows/ci.yml` and report it absent.
   const docs = [
-    doc({ path: "core.md", body: "see .github/workflows/ci.yml and .claude/settings.local.json" }),
+    doc({
+      path: "core.md",
+      body: "see .github/workflows/ci.yml and .claude/settings.local.json and .github/workflows/gone.yml",
+    }),
   ];
   const repoPaths = new Set([".github/workflows/ci.yml", ".claude/settings.local.json"]);
   const report = buildTruthReport({ ...base, docs, repoPaths });
   const drift = report.checks.find((c) => c.check === "doc_vs_code_drift")!;
-  assert.equal(drift.subjects, 2, "both dotted paths are subjects, with their dots");
-  assert.deepEqual(drift.findings, [], "and both resolve, because they exist");
-});
-
-test("a dotted path that does NOT exist is still drift", () => {
-  // The other direction: the dotfile handling must not switch the check off.
-  const docs = [doc({ path: "core.md", body: "see .github/workflows/gone.yml" })];
-  const report = buildTruthReport({
-    ...base,
-    docs,
-    repoPaths: new Set([".github/workflows/ci.yml"]),
-  });
-  const drift = report.checks.find((c) => c.check === "doc_vs_code_drift")!;
-  assert.equal(drift.findings.length, 1);
-  assert.equal(drift.findings[0].subject, ".github/workflows/gone.yml");
+  assert.equal(drift.subjects, 3, "all three dotted paths are subjects, with their dots");
+  assert.deepEqual(
+    drift.findings.map((f) => f.subject),
+    [".github/workflows/gone.yml"],
+  );
 });
 
 test("a Capsid document path is not a repo path", () => {

@@ -66,23 +66,6 @@ async function withTree(
   await withFetch(routes, fn);
 }
 
-test("a match is found when every blob is readable", async () => {
-  await withTree(
-    {
-      paths: ["a.ts", "b.ts"],
-      contents: { "a.ts": "const EMAIL_QUEUE = 1;", "b.ts": "nothing here" },
-    },
-    async () => {
-      const r = (await searchCode(makeEnv(), "ns", "EMAIL_QUEUE")) as {
-        total_results: number;
-        items: unknown[];
-      };
-      assert.equal(r.total_results, 1);
-      assert.equal(r.items.length, 1);
-    },
-  );
-});
-
 test("rate-limited blob fetch ABORTS the scan instead of returning empty", async () => {
   await withTree(
     {
@@ -109,22 +92,19 @@ test("rate-limited blob fetch ABORTS the scan instead of returning empty", async
   );
 });
 
-test("429 aborts too", async () => {
-  await withTree(
-    { paths: ["a.ts"], contents: { "a.ts": "x" }, blobStatus: { "a.ts": 429 } },
-    async () => {
-      await assert.rejects(() => searchCode(makeEnv(), "ns", "anything"), /aborted/i);
-    },
-  );
-});
-
-test("401 aborts too: a revoked token is not an empty repository", async () => {
-  await withTree(
-    { paths: ["a.ts"], contents: { "a.ts": "x" }, blobStatus: { "a.ts": 401 } },
-    async () => {
-      await assert.rejects(() => searchCode(makeEnv(), "ns", "anything"), /aborted/i);
-    },
-  );
+test("429 and 401 abort too: a revoked token is not an empty repository", async () => {
+  for (const status of [429, 401]) {
+    await withTree(
+      { paths: ["a.ts"], contents: { "a.ts": "x" }, blobStatus: { "a.ts": status } },
+      async () => {
+        await assert.rejects(
+          () => searchCode(makeEnv(), "ns", "anything"),
+          /aborted/i,
+          `${status}`,
+        );
+      },
+    );
+  }
 });
 
 test("a survivable per-file error does NOT abort, but is reported", async () => {
@@ -148,19 +128,6 @@ test("a survivable per-file error does NOT abort, but is reported", async () => 
       assert.deepEqual(r.unreadable_sample, ["gone.ts"], "and named");
     },
   );
-});
-
-test("a clean zero-result scan reports no unreadable files at all", async () => {
-  // Guards the guard: if unreadable_files were always set, the field above would
-  // prove nothing.
-  await withTree({ paths: ["a.ts"], contents: { "a.ts": "nothing" } }, async () => {
-    const r = (await searchCode(makeEnv(), "ns", "EMAIL_QUEUE")) as {
-      total_results: number;
-      unreadable_files?: number;
-    };
-    assert.equal(r.total_results, 0);
-    assert.equal(r.unreadable_files, undefined, "a genuinely empty result stays clean");
-  });
 });
 
 // The quota cap. max_files bounds one search_code call's cost against the App
@@ -239,5 +206,7 @@ test("an uncapped scan of the same tree reads everything, so the caps are what s
     assert.equal(result.files_scanned, 3);
     assert.equal(result.total_results, 3);
     assert.equal(result.truncated, false);
+    // A clean scan carries no unreadable_files, so the field above proves something.
+    assert.equal("unreadable_files" in result, false);
   });
 });

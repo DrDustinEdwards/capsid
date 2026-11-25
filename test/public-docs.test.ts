@@ -17,7 +17,7 @@ const docFiles = () => {
   return files;
 };
 
-test("PLANT: no public doc carries a secret, a key or a real credential", () => {
+test("PLANT: no public doc carries a secret, a key, a credential or an infrastructure identifier", () => {
   // A hash is included because a stored sha256 is a key's verifier.
   const forbidden: Array<[RegExp, string]> = [
     [/sk-ant-[A-Za-z0-9_-]{10,}/, "an Anthropic key"],
@@ -33,9 +33,6 @@ test("PLANT: no public doc carries a secret, a key or a real credential", () => 
       assert.doesNotMatch(text, pattern, `docs/${file} contains ${what}`);
     }
   }
-});
-
-test("PLANT: no public doc carries private infrastructure identifiers", () => {
   // A Cloudflare resource id is not a secret, but a public doc does not need one; the
   // example config carries placeholders for this reason.
   for (const file of docFiles()) {

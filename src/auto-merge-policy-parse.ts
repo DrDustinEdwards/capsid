@@ -20,7 +20,7 @@ const ALLOW_ITEM = /^- allow `([^`]+)`/;
 const UNIT_ITEM = /^- unit `([^`]+)`/;
 const UNITS_HEADING = /^##\s+Auto units\s*$/i;
 
-export const PROMOTABLE_PATH_CLASSES: readonly string[] = [
+const PROMOTABLE_PATH_CLASSES: readonly string[] = [
   "docs",
   "dashboard-css",
   "tests",

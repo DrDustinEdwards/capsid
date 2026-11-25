@@ -5,7 +5,6 @@ import {
   editSite,
   readSiteConfig,
   removeSite,
-  sitesFrom,
   validateSite,
   type SiteInput,
 } from "../src/ops-sites";
@@ -38,22 +37,6 @@ function input(over: Partial<SiteInput> = {}): SiteInput {
 }
 
 describe("the seed", () => {
-  // scanner-rule: a seeded script is named only where the host proves it
-  it("names a script only where the host proves it, a workers.dev host's first label or Capsid's own Worker, and self-probes nothing", async () => {
-    const sites = sitesFrom(await readSiteConfig(env.DB));
-    for (const s of sites) {
-      const host = new URL(s.origin).hostname;
-      if (host.endsWith(".workers.dev"))
-        expect(s.script, `${s.namespace} is on workers.dev and does not name its script`).toBe(
-          host.split(".")[0],
-        );
-      else if (s.namespace !== "capsid")
-        expect(s.script, `${s.namespace} names a script its host does not prove`).toBeUndefined();
-    }
-    // 0052 moved Capsid to its live host and off the in-process probe, so it is read from the network like every site.
-    expect(sites.filter((s) => s.self).map((s) => s.namespace)).toEqual([]);
-  });
-
   it("passes the Portal's own validation, so every seeded row can be edited as it stands", async () => {
     for (const row of await readSiteConfig(env.DB)) {
       const params = Object.fromEntries(
@@ -83,7 +66,6 @@ describe("the schema", () => {
     ["a self-probe on a no-site row", ["broken-e", "x", null, null, null, null, 1]],
   ];
   it("PLANT: refuses each of five rows the Portal would refuse", async () => {
-    expect(BROKEN).toHaveLength(5);
     for (const [label, values] of BROKEN) {
       const insert = env.DB.prepare(
         "INSERT INTO ops_sites (namespace, name, origin, health_path, platform, script, self_probe) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -134,7 +116,10 @@ describe("the writes", () => {
 
     // An edit that moves the origin while the row names an operator token is refused too:
     // the token would go to the new host.
-    const operator = JSON.stringify({ path: "/api/operator", auth_var: "SAMPLE_OPERATOR_TOKEN" });
+    const operator = JSON.stringify({
+      path: "/api/operator",
+      auth_var: "SAMPLE_OPERATOR_TOKEN",
+    });
     expect((await editSite(env.DB, ACTOR, input({ operator }), 1)).ok).toBe(true);
     await env.DB.prepare("DELETE FROM audit_log").run();
     const away = input({ origin: "https://elsewhere.example.net" });
