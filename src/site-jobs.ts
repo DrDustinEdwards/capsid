@@ -94,7 +94,7 @@ export async function runCapsidJob(env: Env, name: CapsidJob, rethrow: boolean):
   return { ok: true, line: `capsid ${name}: ran, nothing to record` };
 }
 
-// A run now never runs in the click's request, which is cancelled when the client disconnects (waitUntil adds 30 s;
+// A run now never runs in the click's request, which is canceled when the client disconnects (waitUntil adds 30 s;
 // a dump cut there held its lease an hour, 2026-11-25). The next TICK_CRON runs the ask with the cron's 15-minute wall.
 const RUN_NOW_KEY = (name: CapsidJob) => `capsid:run-now:${name}`;
 const RUN_NOW_TTL_SECONDS = 86400;
