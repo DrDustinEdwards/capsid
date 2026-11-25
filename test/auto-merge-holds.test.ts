@@ -15,7 +15,7 @@ import {
   type Env,
 } from "./auto-merge-fixtures.ts";
 
-// An approved PR the policy leaves open merges on Dustin's approval. pr_approvals is not modelled by the fake D1, so it is
+// An approved PR the policy leaves open merges on Dustin's approval. pr_approvals is not modeled by the fake D1, so it is
 // answered here and each state move the executor batches is applied to it.
 
 type ApprovalRow = {
