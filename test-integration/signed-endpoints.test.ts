@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { MAX_REPORT_BYTES } from "../src/signed-requests";
 import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_REPORT_PATH, OFFACCOUNT_SITES } from "../src/offaccount";
 import { env } from "cloudflare:test";
+import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The backup credential endpoint end to end, against a real D1 and a real KV.
 // /backup/credential is a write path not behind OAuth. The key is derived from a root
@@ -15,23 +16,11 @@ import { env } from "cloudflare:test";
 
 const ROOT = "integration-root-secret-not-a-real-one";
 
-async function hmacHex(key: string, message: string): Promise<string> {
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
-  return [...new Uint8Array(signature)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 // The derivation, spelled the way scripts/derive-backup-key.mjs spells it. A key
 // derivation is a contract with other repos, so a changed context string fails here.
-const backupKey = () => hmacHex(ROOT, "capsid-backup-credential:v1");
+const backupKey = () => hmacSha256Hex(ROOT, "capsid-backup-credential:v1");
 // A key from the same root under another context, which must not verify here.
-const otherKey = () => hmacHex(ROOT, "capsid-other-credential:v1");
+const otherKey = () => hmacSha256Hex(ROOT, "capsid-other-credential:v1");
 
 // /backup/credential reads X-Backup-Timestamp and X-Backup-Signature, not the
 // X-Improve-* pair, which stops a captured improve request being replayed at the
@@ -39,7 +28,7 @@ const otherKey = () => hmacHex(ROOT, "capsid-other-credential:v1");
 async function backupPost(key: string, body: unknown, path = "/backup/credential") {
   const text = JSON.stringify(body);
   const ts = new Date().toISOString().replace(/\.\d+Z$/, "Z");
-  const signature = await hmacHex(key, `${ts}.${text}`);
+  const signature = await hmacSha256Hex(key, `${ts}.${text}`);
   return SELF.fetch(`https://capsid.test${path}`, {
     method: "POST",
     headers: {
@@ -83,7 +72,7 @@ describe("/backup/credential", () => {
       headers: {
         "Content-Type": "application/json",
         "X-Improve-Timestamp": ts,
-        "X-Improve-Signature": await hmacHex(await backupKey(), `${ts}.${text}`),
+        "X-Improve-Signature": await hmacSha256Hex(await backupKey(), `${ts}.${text}`),
       },
       body: text,
     });

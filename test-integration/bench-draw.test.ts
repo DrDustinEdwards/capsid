@@ -1,40 +1,12 @@
-import { env, SELF } from "cloudflare:test";
+import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { BENCH_ENABLED_KEY } from "../src/bench";
+import { post } from "./bench-fixture";
 
 // The registration lock (src/bench.ts drawRefusal, handleBenchDraw; migrations/0049)
 // against a real D1. Its own file, because a recorded registration changes what every
 // later start in the same storage may do: test-integration/bench.test.ts runs its pilot
 // tasks with no registration.
-
-async function hmacHex(key: string, message: string): Promise<string> {
-  const k = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function post(path: string, body: Record<string, unknown>) {
-  const text = JSON.stringify({ jti: crypto.randomUUID(), ...body });
-  const ts = new Date().toISOString().replace(/\.\d+Z$/, "Z");
-  return SELF.fetch(`https://capsid.test${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Bench-Timestamp": ts,
-      "X-Bench-Signature": await hmacHex(
-        "integration-bench-secret-not-a-real-one",
-        `${ts}.${text}`,
-      ),
-    },
-    body: text,
-  });
-}
 
 let n = 0;
 async function registerTask(split: string): Promise<string> {

@@ -7,8 +7,7 @@ import type { OpsFeed } from "../src/ops-types/feed.ts";
 // The Problems list's rows, tiered (dashboard/src/lib/derive.ts, attentionList and
 // blockedOrder; the folding is Capsomer's arrange, tested there; capsid/research/audit-ui-patterns.md, rulings 3 and
 // 10). Built on the dashboard's own sample feed (fake data), reshaped per test.
-const { attentionList, blockedOrder, STALE_BLOCKED_MS } =
-  await import("../dashboard/src/lib/derive.ts");
+const { attentionList, blockedOrder } = await import("../dashboard/src/lib/derive.ts");
 
 const SAMPLE = readFileSync(
   join(import.meta.dirname, "..", "dashboard", "dev", "sample-feed.json"),
@@ -88,7 +87,6 @@ test("PLANT: blocked jobs are ordered by priority, then newest; over 7 days they
     { ...base, id: "job_000000000006", priority: 0, updated_at: at(8) },
     { ...base, id: "job_000000000007", priority: 0, updated_at: at(12) },
   ];
-  assert.equal(STALE_BLOCKED_MS, 7 * DAY);
   const o = blockedOrder(f.live.jobs, now);
   assert.deepEqual(
     o.blocked.map((j) => j.id.slice(-1)),

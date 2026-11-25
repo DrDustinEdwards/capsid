@@ -1,7 +1,9 @@
-import { env, SELF } from "cloudflare:test";
+import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { BENCH_ENABLED_KEY, BENCH_MAX_RUNNING } from "../src/bench";
 import { BENCH_REPEATS } from "../src/bench-slots";
+import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { post } from "./bench-fixture";
 
 // The paired comparison's three signed endpoints (src/bench.ts) against a real D1 and
 // KV: the task freeze, the off switch, the running cap's single-statement INSERT, the
@@ -10,34 +12,6 @@ import { BENCH_REPEATS } from "../src/bench-slots";
 // improve-key request the wrong-key test sends.
 
 const ROOT = "integration-root-secret-not-a-real-one";
-
-async function hmacHex(key: string, message: string): Promise<string> {
-  const k = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-const benchKey = async () => "integration-bench-secret-not-a-real-one";
-
-async function post(path: string, body: Record<string, unknown>, key?: string) {
-  const text = JSON.stringify({ jti: crypto.randomUUID(), ...body });
-  const ts = new Date().toISOString().replace(/\.\d+Z$/, "Z");
-  return SELF.fetch(`https://capsid.test${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Bench-Timestamp": ts,
-      "X-Bench-Signature": await hmacHex(key ?? (await benchKey()), `${ts}.${text}`),
-    },
-    body: text,
-  });
-}
 
 let n = 0;
 async function registerTask(over: Record<string, unknown> = {}): Promise<string> {
@@ -79,7 +53,7 @@ async function score(run_id: string, body: Record<string, unknown>) {
 
 describe("bench endpoints", () => {
   it("refuse a request signed with an improve score key", async () => {
-    const scoreKey = await hmacHex(ROOT, "capsid-improve-score:v1:capsid");
+    const scoreKey = await hmacSha256Hex(ROOT, "capsid-improve-score:v1:capsid");
     const response = await post(
       "/bench/start",
       { task_id: "x", arm: "baseline", gh_run: "1.1" },

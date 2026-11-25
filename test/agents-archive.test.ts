@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { mintAgent, listAgents } from "../src/agents-admin.ts";
 import {
@@ -12,6 +10,7 @@ import {
 import { resolveAgent } from "../src/agents.ts";
 
 import { agentSummaries } from "../src/status.ts";
+import { d1, migratedDb } from "./sqlite-d1.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // Revoked agents are archived in place and keep their history (job_24e460427d6c). The
@@ -19,48 +18,11 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 // drive the real statements through a small D1 shape, rather than the D1 fake, which
 // models no subquery or UNION.
 
-const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
 const NOW = new Date("2026-10-10T12:00:00Z");
 const ACTOR = "agent:watcher";
 
-// prepare, bind, first, all, run and batch, which is all these readers call.
-function d1(db: DatabaseSync): D1Database {
-  const statement = (sql: string, params: unknown[] = []) => {
-    const s = db.prepare(sql);
-    const args = params as Array<string | number | null>;
-    return {
-      bind: (...next: unknown[]) => statement(sql, next),
-      first: async () => (s.get(...args) as Record<string, unknown> | undefined) ?? null,
-      all: async () => ({ results: s.all(...args).map((r) => ({ ...r })) }),
-      run: async () => {
-        const r = s.run(...args);
-        return { meta: { changes: Number(r.changes) } };
-      },
-    };
-  };
-  return {
-    prepare: (sql: string) => statement(sql),
-    batch: async (stmts: Array<ReturnType<typeof statement>>) => {
-      db.exec("BEGIN");
-      try {
-        const out = [];
-        for (const st of stmts) out.push(await st.run());
-        db.exec("COMMIT");
-        return out;
-      } catch (err) {
-        db.exec("ROLLBACK");
-        throw err;
-      }
-    },
-  } as unknown as D1Database;
-}
-
 function fresh(): { raw: DatabaseSync; db: D1Database } {
-  const raw = new DatabaseSync(":memory:");
-  for (const name of readdirSync(MIGRATIONS)
-    .filter((f) => f.endsWith(".sql"))
-    .sort())
-    raw.exec(readFileSync(join(MIGRATIONS, name), "utf8"));
+  const raw = migratedDb();
   return { raw, db: d1(raw) };
 }
 
