@@ -91,21 +91,13 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   const takesNote = TAKES_NOTE.has(req.action);
   const [note, setNote] = useState("");
   const typesConfirm = TYPED_CONFIRM.has(req.action);
-  const [typedVersion, setTypedVersion] = useState("");
-  // The preview opens without the version, so it can name it; the press that signs previews again with the typed version bound into the token, then performs.
-  const shownParams = useRef<Record<string, string>>({});
-  const signedVersion = useRef("");
+  const signParams = useRef(req.params);
   const step = useTwoStep({
-    preview: (params: Record<string, string>) => {
-      shownParams.current = params;
-      return previewAction(csrf, { action: req.action, params });
-    },
+    preview: (params: Record<string, string>) =>
+      previewAction(csrf, { action: req.action, params }),
     perform: (shown: PortalPreview) =>
       typesConfirm
-        ? runAction(csrf, {
-            action: req.action,
-            params: { ...shownParams.current, confirm: signedVersion.current },
-          })
+        ? runAction(csrf, { action: req.action, params: signParams.current })
         : performAction(csrf, shown.token),
     onDone: (r: PortalPerformed) => finish(r),
     onSignedOut: () => finish("signed-out"),
@@ -137,13 +129,13 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   };
 
   const runSign = () => {
-    const version = (confirmRef.current?.value ?? typedVersion).trim();
+    const version = (confirmRef.current?.value ?? "").trim();
     if (!version) {
       setError({ text: "Type the version shown above.", expired: false, field: true });
       confirmRef.current?.focus();
       return;
     }
-    signedVersion.current = version;
+    signParams.current = { ...req.params, confirm: version };
     void runPerform();
   };
 
@@ -315,10 +307,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
             <Field
               label="Version to sign"
               required
-              help={
-                req.confirmHelp ??
-                "The version named above. It decides what merges with no human, so it is typed, not clicked."
-              }
+              help={req.confirmHelp}
               error={fieldError}
               announce
             >
@@ -328,9 +317,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
                 type="text"
                 inputMode="numeric"
                 autoComplete="off"
-                value={typedVersion}
                 readOnly={busy}
-                onChange={(e) => setTypedVersion(e.target.value)}
               />
             </Field>
           </form>

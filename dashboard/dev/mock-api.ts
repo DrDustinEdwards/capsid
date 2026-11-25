@@ -1437,7 +1437,6 @@ function plan(
           400,
           `${unit} is not promoted to auto in version ${from}, so there is nothing to remove.`,
         );
-      // As the Worker: the preview takes no version, and one typed is checked; the perform needs it.
       const typed = (params.confirm ?? "").trim();
       if (typed && typed !== to)
         throw new Refusal(
@@ -1460,15 +1459,11 @@ function plan(
             ? `${unit} is added under ## Auto units.`
             : `${unit} is removed from ## Auto units: its pull requests wait for an approval again.`,
         ],
-        apply: (st) => {
-          if (!typed)
-            throw new Refusal(400, `Type ${to} as confirm to sign it. Nothing was signed.`);
-          st.policy = { version: to, units };
-        },
+        apply: (st) => void (st.policy = { version: to, units }),
       };
     }
-    // The mock's repo says version 8 against the stored 7, so the typed version is checked
-    // as the Worker checks it and a perform writes nothing.
+    // The mock's repo says version 8 against the stored 7; a typed version is checked as the
+    // Worker checks it, and a perform writes nothing.
     case "sign_policy_from_repo": {
       const typed = (params.confirm ?? "").trim();
       if (typed && typed !== "8")
@@ -1485,11 +1480,8 @@ function plan(
           "Lines changed: 1 removed, 1 added.",
           "- - version: 7",
           "+ - version: 8",
-          "Type 8 as confirm to sign it.",
         ],
-        apply: () => {
-          if (!typed) throw new Refusal(400, "Type 8 as confirm to sign it. Nothing was signed.");
-        },
+        apply: () => {},
       };
     }
     case "unit_resume": {
