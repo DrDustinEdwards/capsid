@@ -157,15 +157,15 @@ jobs:
     concurrency:
       group: explorer-deploy
       cancel-in-progress: false
-    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@ffdb0473473df6eb30d902a6843107af42a4f706 # v0.59.5
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@5ced133321446a944c4e0cc98291eaa54d446a56 # v0.60.0
     with:
       worker-name: capsid
       health-url: https://capsid.dustinedwards.info/health
       verify-command: node "$DEVKIT_DIR/bin/verify-deploy.mjs" https://capsid.dustinedwards.info
       working-directory: explorer
-      install: cd .. && npm ci && npm ci --prefix explorer
       pre-deploy: >-
-        cd .. && npm --prefix explorer run build &&
+        cd .. && npm ci --ignore-scripts &&
+        npm --prefix explorer run build &&
         node explorer/wrangler-config.mjs explorer/dist > explorer/wrangler.json
       sha-var: DEPLOY_SHA
       # Gradual rollout (D4): the new version takes 10% of traffic for 10 minutes before the live gate judges it and it
