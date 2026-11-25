@@ -51,7 +51,7 @@ export const NEVER: ReadonlyArray<{ pattern: RegExp; why: string }> = [
   },
 ];
 
-export function deniedReason(command: string): string | null {
+function deniedReason(command: string): string | null {
   for (const { pattern, why } of NEVER) {
     if (pattern.test(command)) return why;
   }
