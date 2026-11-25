@@ -4,10 +4,6 @@ import { CARREL_SCRIPT, SITE_SECRET, carrelSecretName, setSiteKey } from "../src
 import { fakeEnv } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
-// Set a site key (src/site-key.ts), served as the Portal-only site_key_rotate control. A new key is
-// minted and set on the site's Worker, then on Carrel. Its value is never returned,
-// logged or audited, on success or on failure.
-
 const ACCOUNT = "0123456789abcdef0123456789abcdef";
 const TOKEN = "sample-secrets-token";
 const SECRETS = (script: string) =>
@@ -21,7 +17,6 @@ interface Audit {
   params: string;
 }
 
-// ops_sites answered by namespace, and audit_log INSERTs captured with their bound values.
 function siteDb(opts: { script?: string | null; platform?: string; failAudit?: boolean } = {}) {
   const audits: Audit[] = [];
   const row = {
@@ -94,7 +89,6 @@ function cloudflare(site: Answer, carrel: Answer) {
   return { impl, calls };
 }
 
-// Every line written to the console while fn runs.
 async function captured<T>(fn: () => Promise<T>): Promise<{ value: T; lines: string[] }> {
   const lines: string[] = [];
   const saved = {
@@ -113,8 +107,6 @@ async function captured<T>(fn: () => Promise<T>): Promise<{ value: T; lines: str
     Object.assign(console, saved);
   }
 }
-
-// The value is never shown
 
 const OUTCOMES: Array<[string, Answer, Answer]> = [
   ["both sides take it", OK, OK],
@@ -167,8 +159,6 @@ test("PLANT: the value stays out of the logs when the audit insert itself fails"
     assert.equal(line.includes(key), false, `the minted value was logged: ${line}`);
   assert.equal(JSON.stringify(value).includes(key), false);
 });
-
-// Order
 
 test("THE INNOCENT DIRECTION: the site is set first, then Carrel, with the same value, and the answer says they match", async () => {
   const { db, audits } = siteDb();
@@ -237,8 +227,6 @@ test("when Carrel alone fails, the answer says the two sides differ and to call 
   assert.match(r.note, /THE TWO SIDES DIFFER.*Call again/s);
 });
 
-// No token
-
 test("PLANT: with CF_SECRETS_TOKEN unset, nothing is minted and nothing is fetched", async (t) => {
   const random = t.mock.method(crypto, "getRandomValues");
   for (const env of [
@@ -277,11 +265,8 @@ test("PLANT: a site row with no Cloudflare script mints nothing and fetches noth
   assert.equal(cf.calls.length, 0);
 });
 
-// Who is the admin is deployment configuration: ADMIN_EMAIL (the primary owner) and
-// CO_OWNER_EMAILS, Worker secrets read by site-runtime isAdminEmail and set only in
-// Cloudflare. The one place Capsid writes a Worker secret is putSecret here, so no
-// route or tool can name the owner as long as that stays the only writer and the only
-// names it writes are the site key's.
+// Admin identity is deployment configuration (ADMIN_EMAIL, CO_OWNER_EMAILS), set only in Cloudflare. putSecret is the only
+// Worker-secret writer, so no route can name the owner while it writes only the site key's names.
 test("no Capsid code can set ADMIN_EMAIL or CO_OWNER_EMAILS: the only secret write is the site key's, under fixed names", () => {
   const writers = sourceFiles()
     // A write sends the type in a body; the secrets and data model only reads the word back.

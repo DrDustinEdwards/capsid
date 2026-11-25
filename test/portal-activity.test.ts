@@ -3,11 +3,8 @@ import { test } from "node:test";
 import { activityFilterFrom, loadActivity } from "../src/portal-activity.ts";
 import { fakeD1 } from "./fakes.ts";
 
-// Recent activity: the last 50 audit rows, filterable by namespace and actor. The
-// filter comes from a browser's query string, so it is untrusted input reaching SQL,
-// and the defense is that both values are bound rather than interpolated. The tests
-// check the statement's shape, because a bound parameter that becomes a template
-// literal passes every results-only test.
+// The filter comes from a query string, so both values must be bound, not interpolated. The tests check
+// the statement's shape, because a template literal passes every results-only test.
 
 function filterOf(url: string) {
   const parsed = activityFilterFrom(new URL(url));
@@ -60,6 +57,3 @@ test("the filter values are BOUND, never interpolated into the statement", async
   );
   assert.ok(read.params.includes("agent:x"));
 });
-
-// The LIMIT, the newest-first order and the two filter clauses are proven by the rows
-// they return from a real audit_log: test-integration/portal-activity.test.ts.

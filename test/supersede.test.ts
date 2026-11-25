@@ -5,9 +5,6 @@ import { SUPERSEDE_ACTOR, SUPERSEDE_MAX, supersedePass } from "../src/supersede.
 import { fakeEnv } from "./fakes.ts";
 import { d1, migratedDb } from "./sqlite-d1.ts";
 
-// The pass runs against the real migrations in Node's SQLite, so the snapshot, the
-// status change and the audit row are what D1 would hold.
-
 function fresh(): { raw: DatabaseSync; env: never } {
   const raw = migratedDb();
   return { raw, env: fakeEnv({ DB: d1(raw) }) };
@@ -106,8 +103,8 @@ test("one pass changes at most a bounded number and says there are more", async 
 });
 
 test("PLANT: an edge to a canon document never marks it superseded", async () => {
-  // A driver may write edges in its own namespace but may not change its core.md or
-  // decisions.md, so the pass must not change them for it (Grok audit 2026-10, M4).
+  // A driver may write edges in its own namespace but may not change its core.md or decisions.md,
+  // so the pass must not change them for it.
   const { raw, env } = fresh();
   for (const p of ["new.md", "core.md", "decisions.md", "old.md"]) put(raw, p);
   link(raw, "new.md", "supersedes", "core.md");

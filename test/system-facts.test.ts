@@ -7,9 +7,6 @@ import { readResources } from "../src/system-facts-store.ts";
 import { toPublicVersions, versionDrift } from "../src/system-versions.ts";
 import type { SharedCodeView } from "../src/ops-types/feed.ts";
 
-// The versions and secrets models (src/system-facts.ts). Sample data only: example-org
-// repos, sample systems and Workers.
-
 const parsed = parseSystemModel({
   version: 1,
   systems: [

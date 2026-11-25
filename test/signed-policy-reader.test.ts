@@ -3,9 +3,6 @@ import { test } from "node:test";
 import { policyField, readSignedPolicy, signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// One signed-policy reader, shared by the merge policy and the gate policy so a fix
-// is made in one place. These tests drive it.
-
 const SECRET = "test-root-secret-not-a-real-one";
 const BODY = "# Policy\n\n- version: 7\n- enabled: false\n";
 

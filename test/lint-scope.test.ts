@@ -6,10 +6,8 @@ import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch, type FetchCall } from "./fakes.ts";
 
-// capsid_lint_namespace is filtered to the caller's namespace and may not read outside it, except
-// capsid/conventions.md, which every caller's lint reads as its
-// rules. Otherwise a scoped caller learns through dangling edges whether documents in
-// other namespaces exist, and the repo tree is read with no check against its repos axis.
+// capsid_lint_namespace may not read outside the caller's namespace except capsid/conventions.md, or a
+// scoped caller learns through dangling edges whether other namespaces' documents exist.
 
 const OWN_REPO = "example/sample-repo";
 
@@ -124,8 +122,6 @@ test("PLANT: gather for a caller scoped to one namespace gets the capsid rules a
     const result = await call(client, { namespace: "sample" });
     assert.ok(!result.isError, text(result));
     const packet = JSON.parse(text(result));
-    // capsid/conventions.md is exempt from the filter: it is
-    // the rules every caller's lint runs under.
     assert.deepEqual(
       packet.rules,
       RULES,

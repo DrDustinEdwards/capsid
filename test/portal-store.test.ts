@@ -5,9 +5,6 @@ import { test } from "node:test";
 import { D1_CAP_BYTES, sizeFrom } from "../src/ops-live.ts";
 import type { OpsFeed } from "../src/ops-types/feed.ts";
 
-// The D1 store's size against its cap (capsid/decisions.md 2026-09-30, "admin panels
-// review adopted", item 5): read from the jobs read's meta.size_after, shown on Backups,
-// and a warning in Needs attention from half the cap.
 const { attentionItems } = await import("../dashboard/src/lib/derive.ts");
 const { storeUse } = await import("../dashboard/src/lib/store.ts");
 

@@ -3,9 +3,6 @@ import { test } from "node:test";
 import { hostRefusal, MCP_HOST, servedOnMcpHost } from "../src/mcp-host.ts";
 import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope-routes.ts";
 
-// The host rules (src/mcp-host.ts) without the Worker: what the MCP host serves.
-// test-integration/mcp-host.test.ts runs them through the whole Worker.
-
 const at = (host: string, path: string) => hostRefusal(new Request(`https://${host}${path}`));
 
 test("PLANT: the MCP host serves every machine route and nothing else", () => {
@@ -45,9 +42,8 @@ test("PLANT: the MCP host serves every machine route and nothing else", () => {
   }
 });
 
-// The path list is kept by hand, and a route left off it is a 404 in production while every
-// test that calls the handler passes: /bench/repro shipped that way on
-// 2026-10-23. Every declared route outside the Portal must be on it.
+// The path list is kept by hand, and a route left off it is a 404 in production while every handler test passes
+// (/bench/repro shipped that way). Every declared route outside the Portal must be on it.
 test("PLANT: the MCP host serves every declared route outside the Portal", () => {
   for (const path of [...Object.keys(UNGATED_ROUTES), ...Object.keys(ROUTE_GRANTS)]) {
     if (path === "/portal" || path.startsWith("/portal/")) continue;

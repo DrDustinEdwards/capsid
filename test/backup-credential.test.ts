@@ -21,10 +21,8 @@ import { R2 } from "../scripts/bindings.mjs";
 import { fakeEnv, withFetch } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
-// The off-account backup credential. The Amazon copy job in the
-// private capsid-backups repo holds no long-lived R2 secret: it signs a request
-// with a backup-specific derived key and receives a one-hour object-read-only
-// credential scoped to backups/json/ on capsid-media, from its own parent token.
+// The Amazon copy job in the private capsid-backups repo holds no long-lived R2 secret: it signs a request with a derived key and receives a
+// one-hour object-read-only credential scoped to backups/json/ on capsid-media.
 
 test("verification refuses a bad signature and admits a good one", async () => {
   const env = fakeEnv({ IMPROVE_SCORE_SECRET: "root-secret" });
@@ -238,9 +236,6 @@ test("an audit log is minted on its own bucket and tool-calls/ alone; a body can
     );
   }
 });
-
-// The refusal each signed endpoint returns is checked against the real Worker in
-// test-integration/signed-endpoints.test.ts.
 
 // scanner-rule: the backup parent key has one reader. Only the minting module and the env
 // declaration may name it.

@@ -8,10 +8,8 @@ import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_TRENDS_PATH } from "../src/portal-trends";
 import { readTrends } from "../src/trends";
 
-// The trends route's SQL against the D1 the migrations build, and its R2 listing. The
-// series are read at a fixed time in 2030, so nothing another test wrote falls in the
-// window. No GitHub is reachable here, so every CI repo is in not_read, which is the case
-// the route must say rather than draw as green. Fake data only: namespace "sample".
+// Fixed time in 2030 so no other test's rows fall in the window. No GitHub is reachable, so every CI repo is in not_read,
+// which the route must say rather than draw as green.
 
 const NOW = new Date("2030-01-16T12:00:00.000Z"); // a Wednesday; its week starts 2030-01-14
 const SECRET = "integration-portal-trends-key";
@@ -48,16 +46,12 @@ async function touch(kind: string, actorKind: string, at: string): Promise<void>
 
 describe("the trends series", () => {
   it("PLANT: minutes, the queue and merges are counted from the rows that happened", async () => {
-    // Minutes: two writes four minutes apart and a touch, one session of 5 minutes; a
-    // driver's write is not the administrator's.
     await audit("access:admin@example.com", "job-resumed", "2030-01-15 09:00:00");
     await audit("access:admin@example.com", "job-superseded", "2030-01-15 09:04:00");
     await touch("resume", "human", "2030-01-15T09:04:30.000Z");
     await touch("note", "human", "2030-01-15T09:04:40.000Z");
     await audit("agent:sample-driver", "job-claimed", "2030-01-15 15:00:00");
 
-    // Queue: one job open since before the window, one posted and ended inside it, one
-    // posted and still queued, one that ended before the window.
     await job(
       "job_00000000000a",
       "blocked",
@@ -68,8 +62,6 @@ describe("the trends series", () => {
     await job("job_00000000000c", "queued", "2030-01-15T08:00:00.000Z", "2030-01-15T08:00:00.000Z");
     await job("job_00000000000d", "failed", "2029-12-01T00:00:00.000Z", "2029-12-20T00:00:00.000Z");
 
-    // Merges this week: one by the policy, one by an approval, one by the seat, one closed
-    // from the Portal and one from chat; a comment is none of these.
     await audit("system:auto-merge", "auto-merged", "2030-01-14 10:00:00");
     await audit("system:executor", "approved-merged", "2030-01-14 11:00:00");
     // The policy's merge also closed an approval it held: the same merge, counted once.
@@ -92,7 +84,6 @@ describe("the trends series", () => {
     )
       .bind("a".repeat(40))
       .run();
-    // Three more deploys for the DORA measures: two that shipped and one whose gate could not run.
     for (const [id, outcome] of [
       [8, "verified"],
       [9, "verified"],
@@ -105,7 +96,6 @@ describe("the trends series", () => {
         .run();
     }
 
-    // Backups: one complete run today, one run with no marker.
     await env.MEDIA.put("backups/json/2030-01-16T03-10-00-000Z/_complete.json", "{}");
     await env.MEDIA.put("backups/json/2030-01-15T03-10-00-000Z/documents.json", "[]");
 
@@ -113,9 +103,8 @@ describe("the trends series", () => {
 
     expect(t.minutes.weeks.map((w) => w.week)).toEqual(["2030-W02", "2030-W03"]);
     const thisWeek = t.minutes.weeks[1]!;
-    // The 09:00 session: 09:00 to 09:04:40, plus a minute, rounds to 6. The administrator's
-    // own merge, two closes and the comment on Monday (below) are four more one-minute
-    // sessions, an hour apart. The driver's write is none of them.
+    // 09:00 to 09:04:40 plus a minute rounds to 6; the administrator's own merge, two closes and comment on Monday are four more
+    // one-minute sessions an hour apart. The driver's write is none of them.
     expect(thisWeek).toMatchObject({ start: "2030-01-14", sessions: 5, minutes: 10, decisions: 1 });
 
     const day = (d: string) => t.queue.find((q) => q.day === d)!;
@@ -126,7 +115,6 @@ describe("the trends series", () => {
     expect(day("2030-01-15")).toMatchObject({ posted: 1, ended: 0, open: 2 });
 
     expect(t.merges.weeks[1]).toMatchObject({ auto: 1, approved: 1, seat: 1, closed: 2 });
-    // Deploy frequency, change failure rate (1 refused of 3 decided) and time to restore (F4).
     expect(t.deploys.repos).toEqual([
       {
         repo: "example-org/sample",

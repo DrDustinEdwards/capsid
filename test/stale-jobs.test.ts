@@ -12,10 +12,6 @@ import {
 } from "../src/stale-jobs.ts";
 import { fakeKv } from "./fakes.ts";
 
-// The stale view's rules (stale jobs D5) and the shape of the cache the merge-resume
-// step writes for it. Each rule is driven to a row and to no row, so no rule is only
-// ever seen passing. The view against a real D1 is test-integration/stale-jobs.test.ts.
-
 const NOW = new Date("2026-10-08T06:00:00.000Z");
 const ago = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
 const HOUR = 60 * 60 * 1000;

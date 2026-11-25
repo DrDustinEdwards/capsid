@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { auditDetail } from "../src/audit-detail.ts";
 
-// What an audit row recorded, as the Activity drawer shows it (src/audit-detail.ts):
-// the reason, a field-by-field before and after, the other fields by name, and never a
-// hash, a signature or a nested value.
+// The Activity drawer shows the reason and a field-by-field before and after, never a hash, a signature or a nested value.
 
 const MARKER = "PLANTED-SECRET-5b1e";
 

@@ -14,11 +14,6 @@ import { readSecretNames } from "../src/ops-cloudflare.ts";
 import type { Env } from "../src/env.ts";
 import type { SiteOperator } from "../src/ops-types/sites.ts";
 
-// A site's operator API (job_09e5f6cbf782): the configuration's rules, the two allowlists,
-// the one call, the watcher's repair plan and rate limit, and the convergence view's
-// parsing. The writes, the control and the watcher step run against real D1 and KV in
-// test-integration/site-repair.test.ts.
-
 const TOKEN = "sample-operator-token-for-tests-only-0000";
 const OPERATOR: SiteOperator = {
   path: "/api/operator",
@@ -79,7 +74,6 @@ test("PLANT: a configuration naming run_job, a write tool or sync_status as a re
     assert.equal(got.ok, false, `${label} was accepted`);
     if (!got.ok) assert.match(got.refusal, pattern, label);
   }
-  // A further host of a namespace may use that namespace's token, as carrel-mcp does.
   assert.ok(parseOperator(JSON.stringify(base), "sample-mcp").ok);
   assert.equal(parseOperator(JSON.stringify(base), "other-sample").ok, false);
   assert.equal(repairToolRefusal("sync_media"), null);

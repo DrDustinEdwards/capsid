@@ -5,18 +5,14 @@ import { test } from "node:test";
 import { TABLES } from "../../src/backup.ts";
 import { AUTHORITATIVE } from "../../src/counts.ts";
 
-// The doc-drift lint. Run by `npm run lint:docs` (and `npm run lint:repo`), in the checks
-// job of .github/workflows/ci.yml; not part of `npm test`. These read prose, so they
-// fail when a document falls behind the code rather than when the Worker misbehaves.
-// Each count is derived from its source of truth (TABLES, migrations/, docs/,
-// src/counts.ts), so the next drift fails here.
+// Run by `npm run lint:docs` in CI's checks job, not `npm test`: these read prose and fail when a document
+// falls behind the code, each count derived from its source of truth.
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-// The runbook is the Restore section of docs/backups.md, which runs to the end of
-// that file. Asserted non-empty so a renamed heading fails loudly instead of
-// scanning an empty string.
+// The runbook runs to the end of docs/backups.md; asserted non-empty so a renamed heading fails loudly
+// instead of scanning an empty string.
 function restoreRunbook(): string {
   const doc = read("docs/backups.md");
   const from = doc.indexOf("## Restore");
@@ -147,7 +143,6 @@ test("the README links every document under docs/", () => {
 });
 
 test("the README states the authoritative tool count", () => {
-  // src/counts.ts derives the count from TOOL_GRANTS and the README quotes it.
   const readme = read("README.md");
   assert.match(
     readme,
@@ -156,10 +151,8 @@ test("the README states the authoritative tool count", () => {
   );
 });
 
-// CLAUDE.md is the one file every session in this repo loads whole, so it holds what is
-// true of this repo alone and stays small (capsid/repo-structure.md, layer 8: under 5KB).
-// Detail lives in .claude/rules/, path-scoped so it loads only when a session touches the
-// files it is about (job_c13dc0d4f22f).
+// CLAUDE.md loads whole in every session, so it holds only what is true of this repo and stays under 5KB;
+// detail lives in path-scoped .claude/rules/.
 const CLAUDE_MD_CAP_BYTES = 5 * 1024;
 
 test("CLAUDE.md stays under 5KB", () => {

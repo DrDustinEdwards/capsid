@@ -11,11 +11,6 @@ import {
 } from "../src/policy-sign-repo.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// sign_policy_from_repo (src/policy-sign.ts): the stored, signed auto-merge policy written
-// from docs/policy/auto-merge.md on the default branch. Proves: a file that would not load
-// is refused; a file that changed after the preview is refused; and the perform snapshots
-// the prior version and audits.
-
 const SECRET = "policy-from-repo-test-secret";
 const ACTOR = "access:admin@example.com";
 const SHIPPED = readFileSync(
@@ -129,7 +124,6 @@ test("PLANT: a repo change after the preview is refused, and nothing is signed o
   await withFetch(repoRoutes(repo), async () => {
     const plan = await planPolicyFromRepo(w.env);
     assert.ok(plan.ok, plan.ok ? "" : plan.error);
-    // Someone merges another edit to the file between the preview and the perform.
     repo.text = `${repo.text.trimEnd()}\n\nAn amendment merged after the preview.\n`;
     const signedBefore = stored(w.rows);
     const done = await performPolicyFromRepo(w.env, ACTOR, NEXT, plan.newSha);
@@ -149,15 +143,12 @@ test("PLANT: the perform snapshots the prior version, writes and signs the file,
     assert.ok(plan.ok, plan.ok ? "" : plan.error);
     const done = await performPolicyFromRepo(w.env, ACTOR, NEXT, plan.newSha);
     assert.ok(done.ok, done.ok ? "" : done.error);
-    // Written exactly, and signed.
     const { signature, body } = splitSignedTask(stored(w.rows));
     assert.ok(signature, "the new version is not signed");
     assert.equal(body, repo.text);
-    // The prior version is in document_versions, whole.
     const snap = w.rows.versions.filter((v) => v.path === AUTO_MERGE_POLICY_PATH);
     assert.equal(snap.length, 1, "the prior version was not snapshotted exactly once");
     assert.equal(splitSignedTask(snap[0]!.body as string).body, SHIPPED);
-    // An audit row names the actor, both hashes and the signature.
     const audit = auditRows(w.rows).filter((a) => a.action === "policy-loaded-from-repo");
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.actor, ACTOR);
@@ -179,7 +170,6 @@ test("PLANT: the perform snapshots the prior version, writes and signs the file,
       },
     );
     assert.equal(JSON.parse(String(audit[0]!.params)).signature, signature);
-    // The anti-rollback pin moved to the new body, and the Worker loads it.
     assert.deepEqual(JSON.parse(w.kv.puts.at(-1)!.value), await policyPin(repo.text));
     const loaded = await loadMergePolicy(w.env);
     assert.ok("policy" in loaded, "error" in loaded ? loaded.error : "");

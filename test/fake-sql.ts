@@ -1,13 +1,6 @@
-// The D1 fake's WHERE, SET and SELECT evaluator, part of the one D1 fake in
-// test/fakes.ts. It applies every predicate, so a handler that dropped one fails.
-//
-// It covers the statement shapes src/ writes and no more: comparisons, IS, IN, LIKE,
-// GLOB, AND, OR and parentheses in a WHERE; bound markers, literals, COALESCE, substr,
-// datetime('now'), `||` and `+` in a value; single-table SELECTs with COUNT and SUM
-// aggregates, GROUP BY, ORDER BY and LIMIT. Anything else throws, so a new shape is a
-// loud failure to model rather than a filter silently ignored. A subquery (EXISTS,
-// IN (SELECT ...)) and a JOIN are refused here: the callers that issue one are modeled
-// by name in fakes.ts.
+// Part of the one D1 fake in test/fakes.ts: it applies every predicate, so a handler that dropped one fails. Only the
+// statement shapes src/ writes are covered; anything else throws, so a new shape is a loud failure to model, and subqueries
+// and JOINs are refused (their callers are modeled by name in fakes.ts).
 
 export type Row = Record<string, unknown>;
 
@@ -277,8 +270,6 @@ export function applySet(clause: string, ctx: EvalContext & { row: Row }): Row {
   return patch;
 }
 
-// single-table SELECT
-
 interface SelectParts {
   list: string;
   table: string;
@@ -383,8 +374,6 @@ export function selectRows(table: Row[], sql: string, params: unknown[]): Row[] 
     Object.fromEntries(items.map((i) => [i.name, evalExpr(i.expr, { ...ctx, row })])),
   );
 }
-
-// writes
 
 export interface TableSpec {
   rows: Row[];

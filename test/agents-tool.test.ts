@@ -86,12 +86,10 @@ test("mint returns the key ONCE and stores only its hash", async () => {
   const stored = insert.params.map(String);
   assert.ok(!stored.includes(key), "THE PLAINTEXT KEY REACHED THE DATABASE");
   assert.ok(stored.includes(await sha256Hex(key)), "the row does not carry the key's sha256");
-  // It waits for a click in the Portal (security review round 4, finding 1).
   assert.match(insert.sql, /pending\)\s*VALUES \([^)]*, 1\)/i, "a minted key was born active");
   assert.equal((body.agent as { pending: boolean }).pending, true);
   assert.match(String(body.note), /Activate/);
 
-  // Audit-logged with the scopes, and with the hash rather than the key.
   const audit = statements(d1).find((r) => /INSERT INTO audit_log/i.test(r.sql));
   assert.ok(audit, "mint was not audit-logged");
   const params = JSON.stringify(audit.params);
@@ -104,9 +102,7 @@ test("mint returns the key ONCE and stores only its hash", async () => {
 });
 
 test("PLANT: a mint that names no repos gets the NAMESPACE MAPPING, not the wildcard", async () => {
-  // defaultScopes has repos "*", so the handler must derive the repos from the
-  // namespace mapping. Driven through a real MCP
-  // capsid_admin_manage_agents call.
+  // defaultScopes has repos "*", so the handler must derive repos from the namespace mapping (driven through a real capsid_admin_manage_agents call).
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
   const body = parse(
     await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }),
@@ -153,7 +149,6 @@ test("AN EXPLICIT repos LIST IS STILL EXACTLY WHAT THE CALLER ASKED FOR, wildcar
 });
 
 test("PLANT: a mint for a namespace that maps no repos is REFUSED rather than widened", async () => {
-  // Fail closed rather than fall back to the wildcard.
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"), []);
   const result = await call({
     action: "mint",
@@ -207,8 +202,7 @@ test("A MINTED AGENT CANNOT MINT, REVOKE OR RE-SCOPE ANOTHER", async () => {
 });
 
 test("a read-only caller is never served the agents tool, so the admin check is never reached", async () => {
-  // The tool needs the write grant, so it is not registered for a read grant (src/scope.ts
-  // toolListed; area 11, T7) and the call is refused by the protocol.
+  // The tool needs the write grant, so it is not registered for a read grant (src/scope.ts toolListed) and the call is refused by the protocol.
   const { call, close } = await connect(grantAgent("read", "opkey:0123456789ab"));
   await assert.rejects(call({ action: "list" }), /not found/i);
   await close();

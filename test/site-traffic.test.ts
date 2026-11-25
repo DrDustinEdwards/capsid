@@ -3,10 +3,6 @@ import { test } from "node:test";
 import { siteTraffic } from "../src/site-traffic.ts";
 import { fakeEnv } from "./fakes.ts";
 
-// The traffic report for a namespace's site (src/site-traffic.ts), served as
-// capsid_inspect_repo action traffic: the 404s Cloudflare's edge recorded for the
-// namespace's own host, scanners' probes last.
-
 const NOW = new Date("2026-10-25T12:00:00.000Z");
 const ROW = {
   namespace: "sample",

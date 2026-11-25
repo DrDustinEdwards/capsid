@@ -19,13 +19,8 @@ import {
   seedGatePolicy,
 } from "./jobs-fixture";
 
-// The human-touch log (migrations/0023, src/job-touches.ts) on a real D1: each
-// transition that a person or a policy makes writes its touch in the same guarded batch,
-// waited_ms is SQLite's own julianday arithmetic from the latest gate, a transition the
-// guard refuses writes no touch, and the table refuses to be rewritten.
-//
-// job_touches is append-only, so it cannot be emptied between tests the way jobs is:
-// every read below is keyed on the job id, and every job is new.
+// The human-touch log (migrations/0023) on a real D1: each person or policy transition writes its touch in the same guarded batch,
+// and waited_ms is SQLite's julianday arithmetic. job_touches is append-only, so reads are keyed on the job id and every job is new.
 
 // The admin's Access login: a person, and the seat by its flags.
 const ADMIN = grantAgent("write", "access:admin@example.com");
@@ -220,7 +215,6 @@ describe("job_touches", () => {
   });
 
   it("release, supersede and the seat's fail each write their kind", async () => {
-    // Release a job that came back off a gate, so its wait is measured.
     const released = await blocked();
     expect(
       (
@@ -254,7 +248,6 @@ describe("job_touches", () => {
       held_by: "agent:capsid-driver",
     });
 
-    // Supersede a queued job that never hit a gate: no wait to measure.
     const superseded = await post();
     const s = await supersedeJob(jobsEnv(), ADMIN, at("2026-09-29T04:00:00.000Z"), superseded, {
       reason: "reposted with a corrected body",
@@ -264,7 +257,6 @@ describe("job_touches", () => {
       { kind: "supersede", actor_kind: "human", waited_ms: null },
     ]);
 
-    // The seat failing a blocked job ends the gate's wait.
     const failed = await blocked();
     const f = await adminFailJob(
       jobsEnv(),
@@ -280,7 +272,6 @@ describe("job_touches", () => {
   });
 
   it("PLANT: a refused resume writes no touch row", async () => {
-    // The claimant approving its own gate is refused before any batch.
     const id = await blocked();
     const refused = await resumeJob(
       jobsEnv(),

@@ -15,12 +15,8 @@ import { portalCsrf } from "../src/ops-feed.ts";
 import { PORTAL_HOST } from "../src/portal-host.ts";
 import { fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
-// Capsid Portal's callback through the shared Access for SaaS login (src/access-login.ts),
-// design PR 3 of capsid/research/design-capsid-access-login.md. The MCP callback is
-// covered in test-integration/oauth-round-trip.test.ts. The Portal runs the same
-// module with its own callback path, cookie name and Path, KV prefix and restart hint,
-// so these drive a real round trip: start, then call back with Access's token and
-// JWKS endpoints stubbed and a real RS256 ID token signed here.
+// The Portal callback through the shared Access login (src/access-login.ts), a real round trip with Access's
+// token and JWKS endpoints stubbed and a real RS256 ID token signed here.
 
 const ORIGIN = "https://capsid.example";
 const SECRET = "portal-login-test-cookie-secret";
@@ -48,9 +44,8 @@ function env(overrides: Record<string, unknown> = {}) {
   } as never;
 }
 
-// Stubs Access for one sign-in (devkit ./access): the token endpoint answers with an ID
-// token carrying the nonce the flow sent (or `claims` over it), the JWKS endpoint with
-// the key. Returns the token requests' bodies.
+// Stubs Access's token and JWKS endpoints; the ID token carries the nonce the flow sent, or `claims` over it.
+// Returns the token requests' bodies.
 async function stubPortalAccess(
   authorizationUrl: string,
   claims: Record<string, unknown> = {},
@@ -142,8 +137,7 @@ test("the admin completes the login: session cookie carries the email, state coo
 });
 
 test("PLANT: a stored return path that would leave the origin lands on the Portal's home instead", async () => {
-  // Grok audit 2026-10 C1: /portal//attacker.example passed the check, and on the Portal
-  // host the Location became the protocol-relative //attacker.example.
+  // Open redirect: /portal//attacker.example passed the check, and the Location became the protocol-relative //attacker.example.
   for (const origin of [ORIGIN, "https://portal.dustinedwards.info"]) {
     const e = env();
     const res0 = await startPortalLogin(
@@ -276,9 +270,8 @@ test("Access reporting a refused sign-in on the callback gets no session and nev
   assert.equal(res.headers.get("Set-Cookie"), null);
 });
 
-// PLANT: the return clamp. A stored return path outside the Portal lands on /portal/,
-// so a bad KV write cannot become an open redirect. /portalx shares the prefix and
-// must not pass; /console is the old address, which no longer answers.
+// PLANT: the return clamp. A stored return path outside the Portal must not become an open redirect;
+// /portalx shares the prefix and must not pass.
 for (const stored of [
   "/portalx",
   "/console",
@@ -340,11 +333,8 @@ test("on the Portal host the login sends Access /callback, scopes its cookies to
   );
 });
 
-// PLANT: host-only cookies. The Portal's cookies must never carry a Domain attribute, on
-// either host: Domain=dustinedwards.info would hand the session to every subdomain of the
-// family, the public sites included (capsid/decisions.md 2026-10-01). Every cookie the
-// Portal sets is collected here: the login state, the session, the sign-out pair and the
-// CSRF cookie, on workers.dev and on the Portal host.
+// PLANT: host-only cookies. Domain=dustinedwards.info would hand the session to every family subdomain,
+// the public sites included.
 test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to its host's Portal path", async () => {
   const seen: Array<{ host: string; cookie: string }> = [];
   for (const [origin, path] of [
@@ -385,8 +375,7 @@ test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to 
       );
     }
   }
-  // Two hosts, each: the state cookie, the session and the cleared state, the two sign-out
-  // cookies and the CSRF cookie. A count, so a cookie that stops being collected fails.
+  // A count, so a cookie that stops being collected fails.
   assert.equal(seen.length, 12);
 });
 
@@ -418,7 +407,6 @@ test("a co-owner completes the login: the cookie carries her email and verifies 
     null,
     "a cookie signed with COOKIE_ENCRYPTION_KEY itself verified",
   );
-  // The same cookie stops verifying when she is taken off the list.
   const removed = await readPortalSession(
     new Request(`${ORIGIN}/portal/`, {
       headers: { Cookie: setCookies(res)[0].split(";")[0] },
@@ -429,8 +417,7 @@ test("a co-owner completes the login: the cookie carries her email and verifies 
   assert.equal(removed, null);
 });
 
-// G4: an hour with no request ends the Portal session and the Access session, through
-// site-runtime's adminIdle (withPortalIdle). The timing itself is tested in site-runtime.
+// An hour with no request ends the Portal and Access sessions (site-runtime's adminIdle); the timing is tested there.
 test("PLANT: an hour with no request sends the browser to Access's logout and ends the session; an active one is let through", async () => {
   const e = env();
   const signedIn = new Date("2026-09-28T12:00:00.000Z");
@@ -441,7 +428,6 @@ test("PLANT: an hour with no request sends the browser to Access's logout and en
   const handled: string[] = [];
   const handle = async () => (handled.push("served"), new Response("ok"));
 
-  // A request 30 minutes in is served and records itself.
   const first = await withPortalIdle(
     new Request(`${ORIGIN}/portal/`, { headers: { Cookie: session } }),
     e,
@@ -454,7 +440,6 @@ test("PLANT: an hour with no request sends the browser to Access's logout and en
     ?.split(";")[0];
   assert.ok(seen, "an active request did not record itself");
 
-  // 80 minutes in, 50 after the last request: still active.
   const second = await withPortalIdle(
     new Request(`${ORIGIN}/portal/`, {
       headers: { Cookie: `${session}; ${seen}` },

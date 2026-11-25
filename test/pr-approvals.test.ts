@@ -4,11 +4,6 @@ import { AWAITING_SEAT_KEY, type AwaitingSeat } from "../src/auto-merge-tick.ts"
 import { performApproval, planApproval } from "../src/pr-approvals.ts";
 import { fakeKv, withFetch } from "./fakes.ts";
 
-// The approval record (docs/design/design-merge-pipeline.md section 3, PR 3): what
-// approve_pr will approve, and what it refuses, from the awaiting-seat set's classes, the
-// heads GitHub reports now and the open approvals. The writes against real D1, through the
-// Worker's controls, are in test-integration/portal-actions.test.ts.
-
 const ACTOR = "access:admin@example.com";
 const CLICK = `portal-approve_pr by ${ACTOR}`;
 const HEAD_A = "a".repeat(40);
@@ -36,8 +31,6 @@ interface Recorded {
   params: unknown[];
 }
 
-// D1 for the reads planApproval makes (the namespace's repos, the open approvals) and a
-// record of every statement the perform batches.
 function db(open: Array<{ id: number; pr: number; head_sha: string }> = []) {
   const recorded: Recorded[] = [];
   const prepare = (sql: string) => {
@@ -83,7 +76,6 @@ function env(set: AwaitingSeat[], open: Array<{ id: number; pr: number; head_sha
   return { env: { DB: d1, APP_KV: kv } as never, recorded };
 }
 
-// GitHub's answer for each pull request: open, at the head given.
 const pulls = (heads: Record<number, string>, extra: Record<number, object> = {}) =>
   Object.fromEntries(
     Object.entries(heads).map(([n, sha]) => [
@@ -281,7 +273,6 @@ test("approving again at a new head voids the open approval and writes both rows
     "no approval row was written",
   );
   const insert = recorded.find((r) => r.sql.includes("INSERT INTO pr_approvals"))!;
-  // The unit it counts toward (src/merge-units.ts): the namespace and the tick's path class.
   assert.deepEqual(insert.params, [
     "owner/repo",
     41,

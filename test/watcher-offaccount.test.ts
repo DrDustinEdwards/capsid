@@ -17,11 +17,8 @@ import {
   type OffaccountSiteReport,
 } from "../src/offaccount.ts";
 
-// The Amazon copy check (capsid/rulings/backups-offaccount-2026-10-10.md item 6). The age
-// is the dump's own timestamp, the run id, so a copy run that is green and copies nothing
-// still reads as stale; a report that stops arriving is its own finding, or the last good
-// report would hide a dead copy for ever; and a copy far off its usual size is a gutted or
-// runaway dump that its age alone would call healthy.
+// Age is the dump's own timestamp, so a green run that copies nothing still reads stale; a report that stops arriving is its own finding;
+// a copy far off its usual size is a gutted or runaway dump that age alone would call healthy.
 
 const NOW = new Date("2026-11-05T14:00:00Z");
 const runId = (hoursAgo: number) =>
@@ -177,6 +174,5 @@ test("a report must name every site and only known ones, each line well formed",
   const { capsid: _left, ...short } = all;
   assert.match(refusal(short), /leaves out: capsid/);
   assert.match(refusal({ ...all, capsid: { ...site, newest: "yesterday" } }), /capsid: expected/);
-  // A copy with no size, or a size with no copy, is a malformed line.
   assert.match(refusal({ ...all, capsid: { ...site, bytes: null } }), /capsid: expected/);
 });

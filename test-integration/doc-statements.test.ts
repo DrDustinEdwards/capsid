@@ -2,12 +2,8 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { docStatements } from "../src/doc-statements";
 
-// The system document writer (a job's mirror document) snapshots the live row, not the body its caller
-// pre-read. The job claim path waits on GitHub between that read and the batch, so a
-// write landing in the gap must still be snapshotted.
-//
-// Here rather than in test/ because the snapshot is an INSERT ... SELECT from the live
-// row, and the node fake does not evaluate that SQL.
+// The system document writer snapshots the live row, not the body its caller pre-read: a write landing between the claim path's
+// GitHub wait and the batch must still be snapshotted. Here, not test/, because the node fake does not evaluate the INSERT ... SELECT.
 
 const NS = "sample";
 
@@ -33,7 +29,6 @@ describe("docStatements snapshots the row the table holds at commit", () => {
     )
       .bind(NS, path)
       .first<{ id: number; title: string | null; body: string | null }>();
-    // A write lands between the pre-read and the batch.
     await env.DB.prepare(
       "UPDATE documents SET body = 'lorem edited in the gap' WHERE namespace = ?1 AND path = ?2",
     )
@@ -101,8 +96,6 @@ describe("docStatements snapshots the row the table holds at commit", () => {
   });
 });
 
-// The rest of rule 5 on this path, read back from the rows.
-//
 // The wide dashes are built from code points, never written as literals:
 // capsid/conventions.md bans the characters from source.
 const EM_DASH = String.fromCharCode(0x2014);

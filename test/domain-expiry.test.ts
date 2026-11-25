@@ -12,7 +12,6 @@ import {
 import { owningCheck } from "../src/watcher-checks.ts";
 import { fakeKv } from "./fakes.ts";
 
-// Domain registration expiry by RDAP (job_5ac1139641e0, design-portal-insight.md section 5).
 // Sample domains on example TLDs only; the RDAP answers are fixtures in RFC 9083's shape.
 
 const NOW = new Date("2026-10-10T12:00:00.000Z");

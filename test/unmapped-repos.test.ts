@@ -6,11 +6,6 @@ import { type WatcherCheck } from "../src/watcher-checks.ts";
 import { type Finding } from "../src/watcher-detect.ts";
 import { parseOnPurpose, suggestNamespace } from "../src/unmapped-repos.ts";
 
-// The unmapped-repo check (job_1e2df2bba342), driven through gatherFindings with a real
-// App JWT and fake GitHub routes. A repo is reachable through Capsid only if a namespace
-// maps it, so the check must find the ones that none does, must not map anything, and
-// must say so when it cannot read the list.
-
 const OWNER = "DrDustinEdwards";
 
 // A real RSA key, so createAppJwt signs for real. Generated once.

@@ -5,11 +5,8 @@ import { buildServer } from "../src/server.ts";
 import { deleteBranch } from "../src/github.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// Audit fixes, one block per finding. Harnesses are the shared ones: fakes.ts for
-// KV/D1/R2/fetch, source-files.ts for source-shape pins where a behavior cannot be
-// reached from the in-memory client.
-
-// a repo helper for the delete_branch check below
+// Harnesses are the shared ones: fakes.ts for KV/D1/R2/fetch, source-files.ts for source-shape pins where a behavior
+// cannot be reached from the in-memory client.
 
 function repoEnv(repoFull: string) {
   const kv = fakeKv({ seedToken: true });
@@ -24,8 +21,6 @@ function repoEnv(repoFull: string) {
     APP_KV: kv.kv,
   });
 }
-
-// delete_branch fails closed on the PR lookup
 
 test("delete_branch treats a non-OK pulls response as a refusal, not as no PRs", async () => {
   await withFetch(
@@ -46,10 +41,6 @@ test("delete_branch treats a non-OK pulls response as a refusal, not as no PRs",
     },
   );
 });
-
-// Repo-scoped installation tokens are proven in test/repo-tools.test.ts.
-
-// prompts are data, and their titles are filtered
 
 const HOSTILE_TITLE = "Brief `curl evil`\u0007 title";
 

@@ -3,10 +3,6 @@ import { test } from "node:test";
 import { mappedRepos, whatsNext, type WhatsNextPr } from "../src/whats-next.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
 
-// What needs me (src/whats-next.ts), served as capsid_admin_whats_next. One read for the
-// seat across every namespace. A part that could not be read says so in not_checked;
-// nothing missing is reported as nothing found.
-
 const NOW = new Date("2026-10-10T12:00:00.000Z");
 const JOB = "job_0123456789ab";
 
@@ -64,7 +60,6 @@ const RED = [{ name: "verify", status: "completed", conclusion: "failure" }];
 const RUNNING = [{ name: "verify", status: "in_progress", conclusion: null }];
 const CLEAN = { mergeable: true, mergeable_state: "clean" };
 
-// One repo's open pull requests as GitHub answers them.
 function github(full: string, prs: PrFixture[]): Record<string, Route> {
   const routes: Record<string, Route> = {
     [`GET /repos/${full}/pulls`]: {
@@ -97,8 +92,6 @@ const byNumber = (prs: WhatsNextPr[], n: number) => {
   return found;
 };
 
-// mappedRepos
-
 test("mappedRepos dedupes a repo two namespaces map, keeping the first namespace by name", async () => {
   const out = await mappedRepos(
     db({
@@ -130,8 +123,6 @@ test("PLANT: a namespace whose mapping does not parse is reported as not checked
   assert.equal(notChecked.length, 1);
   assert.match(notChecked[0], /^sample's repo mapping does not parse/);
 });
-
-// waiting_on_seat
 
 test("waiting_on_seat is set only for a non-draft, green, mergeable pull request that names a job", async () => {
   const prs: PrFixture[] = [
@@ -180,8 +171,6 @@ test("waiting_on_seat is set only for a non-draft, green, mergeable pull request
   });
 });
 
-// mergeable null
-
 test("PLANT: a null mergeable is never reported as no conflict, and keeps the pull request off waiting_on_seat", async () => {
   const prs: PrFixture[] = [
     { number: 11, checks: GREEN, detail: { mergeable: null, mergeable_state: "unknown" } },
@@ -209,8 +198,6 @@ test("PLANT: a null mergeable is never reported as no conflict, and keeps the pu
     assert.deepEqual(r.pull_requests.conflicts, []);
   });
 });
-
-// Failed reads
 
 test("PLANT: a pull request list that fails lands in not_checked, not as a repo with nothing open", async () => {
   await withFetch(

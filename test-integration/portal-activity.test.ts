@@ -5,12 +5,10 @@ import { postJob } from "../src/jobs";
 import { ACTIVITY_LIMIT, loadActivity } from "../src/portal-activity";
 import { seedCapsidNamespace } from "./jobs-fixture";
 
-// THE PORTAL'S RECENT ACTIVITY, read from a real audit_log. The node tests read the
-// statement's text for the LIMIT and the two filter clauses; these seed more rows than
-// the limit, across two namespaces and two actors, and assert which rows come back.
+// Real audit_log: the node tests read the statement text; these seed more rows than the limit across two
+// namespaces and two actors and assert which rows come back.
 
-// Twice the limit, so the act-b filter alone (two rows in three) also matches more
-// rows than the limit.
+// Twice the limit, so the act-b filter alone (two rows in three) also matches more rows than the limit.
 const TOTAL = ACTIVITY_LIMIT * 2;
 
 async function seed(): Promise<void> {
@@ -32,8 +30,7 @@ async function seed(): Promise<void> {
 describe("loadActivity against a real audit_log", () => {
   it("returns the newest ACTIVITY_LIMIT rows, newest first, and only those, whatever the filters", async () => {
     await seed();
-    // Every row in the table, not only the seeded ones, so a row another test left
-    // behind cannot make the expectation disagree with the store.
+    // Every row in the table, so a row another test left behind cannot disagree with the store.
     const { results: all } = await env.DB.prepare(
       "SELECT actor, namespace, path FROM audit_log ORDER BY id DESC",
     ).all<{
@@ -84,10 +81,8 @@ describe("loadActivity against a real audit_log", () => {
   });
 });
 
-// Reported 2026-09-29: "job-posted" twice, same actor, same second, same path. Both rows
-// are real and intended: a job transition writes one audit row for the job (params carry
-// job_id) and one for its mirror document (params carry bytes and sha256), as every
-// document write does. The Activity read says which is which.
+// Two identical-looking "job-posted" rows are intended: a job transition writes one audit row for the job (params carry
+// job_id) and one for its mirror document (params carry bytes and sha256). The Activity read says which is which.
 describe("a job transition's two audit rows", () => {
   it("PLANT: are told apart, the job's row and its mirror document's", async () => {
     await seedCapsidNamespace();
@@ -129,8 +124,6 @@ describe("a job transition's two audit rows", () => {
   });
 });
 
-// The Activity drawer's read: one row by id, its params turned into named fields here and
-// never handed out raw (src/audit-detail.ts).
 describe("one audit row by id", () => {
   it("PLANT: comes back alone with its reason and its before and after, and its hash is withheld", async () => {
     const params = {

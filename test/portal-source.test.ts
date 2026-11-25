@@ -2,10 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sourceAddress } from "../src/portal-auth.ts";
 
-// The address a Portal click came from (src/portal-auth.ts, sourceAddress), recorded in
-// its audit row. Cloudflare's edge sets CF-Connecting-IP; anything that is not an
-// address is recorded as null rather than stored as given.
-
 const from = (value: string | null) =>
   sourceAddress(
     new Request("https://capsid.example/portal/api/actions/perform", {

@@ -11,9 +11,6 @@ import { type Finding } from "../src/watcher-detect.ts";
 import type { FindingRow } from "../src/watcher-findings.ts";
 import { fakeFindingMemory } from "./fakes.ts";
 
-// What a finding is for (job_2c92174d5bff item 5): only job-class findings post jobs; the
-// digest and attention classes are remembered and shown, and file nothing.
-
 const NOW = new Date("2026-10-12T12:00:00.000Z");
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3_600_000).toISOString();
 

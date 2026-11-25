@@ -5,9 +5,7 @@ import { buildServer } from "../src/server";
 import { defaultScopes } from "../src/agents-schema";
 import type { Agent } from "../src/agents";
 
-// The portfolio documents (src/portfolio-docs.ts) against real SQLite: the GLOB and
-// json_each narrowing that the unit fake models by name, and FTS5 search, which the
-// fake answers with fixed rows.
+// Real SQLite: the GLOB and json_each narrowing the unit fake models by name, and FTS5 search, which the fake answers with fixed rows.
 
 function carrelDriver(): Agent {
   const scopes = defaultScopes(["carrel"]);

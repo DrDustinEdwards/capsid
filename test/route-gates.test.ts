@@ -58,18 +58,10 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 import { buildAdminServer, buildServer } from "../src/server.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
-// Every route goes through the one enforcement point, or says why it does not. A
-// route that checks only the write grant lets a driver minted for one namespace act
-// across every namespace.
-//
-// The routes themselves are driven through the whole Worker in
-// test-integration/route-gates.test.ts. node --test cannot load src/routes.ts, so
-// what stays here is the one direction no request can show: every path defaultHandler
-// dispatches on is in one of the two tables.
+// A route that checks only the write grant lets a driver minted for one namespace act across all of them. Routes
+// run through the Worker in test-integration/; node cannot load src/routes.ts, so this checks every path is in a table.
 
 const ROUTES = readFileSync(join(import.meta.dirname, "..", "src", "routes.ts"), "utf8");
-
-// every route
 
 const PATH_CONSTANTS: Record<string, string> = {
   REPORT_PATH,
@@ -174,11 +166,7 @@ test("every route in defaultHandler is either gated through checkScope or listed
         `route ${path} is listed as ungated with no real reason`,
       );
   }
-  // The other direction, that no table entry is stale, is driven through the Worker in
-  // test-integration/route-gates.test.ts.
 });
-
-// the table is the whole statement
 
 async function servedActions(build: typeof buildServer, name: string): Promise<string[]> {
   const server = build(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
@@ -203,12 +191,9 @@ test("capsid_read_status serves status and the versions model, as reads, and the
     "capsid_read_status's action list changed; decide its requirement here and in TOOL_ACTION_GRANTS",
   );
   assert.equal(requiredForAction("capsid_read_status", "status"), "read");
-  // The versions model is the public document (/public/versions/v1.json), so a read.
   assert.equal(requiredForAction("capsid_read_status", "versions"), "read");
 
   const admin = await servedActions(buildAdminServer, "capsid_admin_manage_switches");
-  // The overnight run's switch (src/overnight.ts) and the queue's circuit breaker
-  // (src/job-breaker.ts) are among them.
   assert.deepEqual(
     [...admin].sort(),
     ["breaker_reset", "overnight", "sign_policy"],

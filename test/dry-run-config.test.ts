@@ -12,9 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-// scripts/dry-run-config.mjs builds an offline config for `npm run types`. It used to write wrangler.jsonc, the file a deploy reads, so running it
-// on a machine with the real (gitignored) config replaced that config with the
-// example plus pins, with no backup. It now writes wrangler.dryrun.jsonc.
+// It used to write wrangler.jsonc, the file a deploy reads, replacing a real (gitignored) config
+// with no backup. It now writes wrangler.dryrun.jsonc.
 
 const ROOT = join(import.meta.dirname, "..");
 const SCRIPT = join(ROOT, "scripts", "dry-run-config.mjs");

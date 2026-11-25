@@ -6,9 +6,6 @@ import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2 } from "./fakes.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// The agent inventory is in capsid_read_status action status, which a session calls at the start of a
-// run and the console renders, so last_seen is seen by someone who can act on it.
-
 async function statusEnv(agents: Array<Record<string, unknown>>) {
   const d1 = fakeD1({ agents });
   return fakeEnv({
@@ -69,10 +66,6 @@ test("the report never carries a key or the stored verifier", async () => {
   );
 });
 
-// The auto-merge safety meter (src/merge-safety.ts) rides on capsid_read_status action status from the
-// report the tick keeps, so asking costs one KV read.
-
-// The auto-merge safety meter (src/merge-safety.ts) rides on capsid_read_status action status.
 test("capsid_read_status action status carries the auto-merge safety meter, null before the first pass, and a scoped caller sees its own namespaces", async () => {
   const empty = await capsidStatus(await statusEnv([]));
   assert.equal(empty.merge_safety, null);

@@ -5,10 +5,8 @@ import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { driverAgent, jobsEnv, seedCapsidNamespace } from "./jobs-fixture";
 
-// required_scopes at the claim and the resume, on the real path. test/jobs-agents.test.ts
-// drives `missingForJob` directly, which stays green if the `if (missing)` block is
-// dropped. Integration, because "the job stays queued" is a claim about what a real
-// keyed UPDATE did.
+// required_scopes at the claim and the resume, on the real path: test/jobs-agents.test.ts calls `missingForJob` directly and stays green
+// if the `if (missing)` block is dropped; "the job stays queued" is a claim about what a real keyed UPDATE did.
 
 const SEAT = "github:DrDustinEdwards";
 const NOW = new Date("2026-09-13T12:00:00.000Z");
@@ -120,7 +118,6 @@ describe("required_scopes on the real queue transitions", () => {
   });
 
   it("PLANT: a job scoped to another namespace is not claimed by this namespace's driver", async () => {
-    // The other axis missingForJob compares, on the same real path.
     const posted = await post({ required_scopes: { flags: ["can_merge"] } });
     const refused = await claimJob(
       jobsEnv(),

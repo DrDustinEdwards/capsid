@@ -13,13 +13,8 @@ import {
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// The vocabulary of a scoped credential: the table, the tool and the enforcement point
-// all read one module, and this file asserts that module against the migration that
-// stores it.
-//
-// Parsing fails closed. A scopes column that is empty, truncated, malformed, or of an
-// unexpected type resolves to the least privilege there is, not to "no restrictions
-// found, allow everything".
+// Parsing fails closed: a scopes column that is empty, truncated, malformed or of an unexpected type resolves to least privilege,
+// not to "no restrictions found, allow everything".
 
 const MIGRATION = readFileSync(
   join(import.meta.dirname, "..", "migrations", "0008_agents.sql"),

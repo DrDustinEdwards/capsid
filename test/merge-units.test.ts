@@ -11,15 +11,10 @@ import {
 } from "../src/merge-units.ts";
 import { fakeKv } from "./fakes.ts";
 
-// Earned promotion and demotion (docs/design/design-merge-pipeline.md section 7, PR 9;
-// DECIDE 9 and 10 of 2026-10-09). Proves: a fixture with 20 clean merges proposes; one
-// rollback suspends the unit. Report-only: nothing here widens anything.
-
 const NOW = new Date("2026-10-11T12:00:00.000Z");
 const DAY = 86_400_000;
 const at = (daysAgo: number) => new Date(NOW.getTime() - daysAgo * DAY).toISOString();
 
-/** `n` merged approvals in one unit, spread evenly over `spanDays`. */
 function merges(
   n: number,
   spanDays: number,

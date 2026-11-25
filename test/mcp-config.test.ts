@@ -3,13 +3,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-// CLAUDE.md, public repo rule. The committed .mcp.json names Capsid's /ops/mcp for a
-// cloud session, where the Claude Code network secret adds the driver key on the way
-// out (job_a7d6f6009242). The key is never inside the session and never in this file.
+// Public repo rule: the committed .mcp.json names Capsid's /ops/mcp, where the Claude Code network secret adds
+// the driver key on the way out, so no key sits in the session or in this file.
 
 const FILE = join(import.meta.dirname, "..", ".mcp.json");
 
-/** Why a committed .mcp.json text is refused, or [] when it carries no credential. */
 function credentialViolations(text: string): string[] {
   const out: string[] = [];
   const config = JSON.parse(text) as { mcpServers?: Record<string, Record<string, unknown>> };
@@ -19,7 +17,6 @@ function credentialViolations(text: string): string[] {
   }
   if (/authorization/i.test(text)) out.push("names an Authorization value");
   if (/bearer\s/i.test(text)) out.push("carries a Bearer value");
-  // Key-shaped: a long unbroken run of key characters, the way a minted key or a token reads.
   if (/[A-Za-z0-9_\-+/=.]{32,}/.test(text.replace(/https:\/\/[^"\s]+/g, "")))
     out.push("carries a key-shaped string");
   return out;

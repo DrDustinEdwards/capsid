@@ -12,10 +12,6 @@ import {
   type SystemModel,
 } from "../src/system-model.ts";
 
-// The public document (docs/public-data.md). Every system is published whole, private
-// ones included; a system whose repo GitHub does not report public
-// carries no repo link, so its repo's address never reaches the document.
-
 const ROOT = join(import.meta.dirname, "..");
 const SECRET_REPO = "example-org/sample-private-7f3a9c";
 
@@ -144,7 +140,6 @@ test("a private system is published whole but for its repo link, whatever GitHub
       name,
     );
   }
-  // GitHub says public: the link is shown.
   const open = toPublic(
     fixture(),
     new Map([
@@ -170,7 +165,6 @@ test("the published schema is strict, so a key toPublic did not write fails the 
   );
 });
 
-// The committed model: the CI half of the drift check (design section 1).
 const MODEL = JSON.parse(readFileSync(join(ROOT, "system", "model.json"), "utf8"));
 
 test("system/model.json passes its schema, and the schema refuses what it should", () => {
@@ -200,7 +194,6 @@ test("system/model.schema.json is the schema the code enforces", () => {
   );
 });
 
-// Flows (design section 4): ordered steps over relationships the model already has.
 test("a flow step must ride a relationship in the model, toward one of its ends, lighting only containers", () => {
   const broken = structuredClone(MODEL);
   broken.containers.push({

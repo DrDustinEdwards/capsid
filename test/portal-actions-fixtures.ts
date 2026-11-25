@@ -24,8 +24,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fromBase64urlText } from "@dustinedwards/site-runtime/encoding";
 
-// approve_pr reads the pull request's head from GitHub at preview and at perform. Only
-// that read is answered; nothing in this file reaches GitHub otherwise.
+// Only the GitHub read of the pull request's head is answered; nothing else here reaches GitHub.
 const APPROVED_HEAD = "a".repeat(40);
 const passThrough = globalThis.fetch;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -64,9 +63,8 @@ const DRIVER_SCOPES = JSON.stringify({
   flags: {},
 });
 
-// ops_sites and ops_packages, which the fake D1 does not model, are answered here from
-// these rows; pr_approvals answers with no open approval. The writes run against real D1
-// in test-integration/portal-actions.test.ts and test-integration/ops-sites.test.ts.
+// ops_sites and ops_packages, which the fake D1 does not model, are answered from these rows;
+// the writes run against real D1 in test-integration/.
 export const site = (over: Partial<OpsSiteConfig>): OpsSiteConfig =>
   ({
     script: null,
@@ -88,7 +86,6 @@ const SITE_ROWS = [
     self_probe: true,
     revision: 3,
   }),
-  // A site that opted into Capsid calling its operator API.
   site({
     namespace: "sample",
     name: "Sample",
@@ -148,8 +145,7 @@ function withSites(db: D1Database): D1Database {
   });
 }
 
-// The signed auto-merge policy, as shipped (docs/policy/auto-merge.md), for
-// sign_policy_change: signed with the world's key, so it loads as the Worker's copy does.
+// The signed auto-merge policy as shipped, signed with the world's key so it loads as the Worker's copy does.
 const POLICY_BODY = readFileSync(
   join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"),
   "utf8",
@@ -217,7 +213,6 @@ export function world(opts: { adminEmail?: string; coOwners?: string } = {}): {
       job("job_parked000001", "parked", { result_summary: "comes back when the design is ruled" }),
     ],
   });
-  // A pull request the tick classed approve, for approve_pr, and the App's token for its repo.
   const kv = fakeKv({
     seed: {
       [AWAITING_SEAT_KEY]: JSON.stringify([
@@ -412,7 +407,6 @@ export const EVERY_ACTION = [
   ["site_key_rotate", { namespace: "capsid" }],
 ] as const;
 
-// The audit rows a perform wrote, as "<action> by <actor>".
 export function auditRows(d1: FakeD1): string[] {
   return d1.recorded
     .filter((r) => /INSERT INTO audit_log/i.test(r.sql))

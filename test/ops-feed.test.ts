@@ -30,10 +30,6 @@ import {
   withPortalSessionEnds,
 } from "./fakes.ts";
 
-// The Watch Floor feed and its Refresh (src/ops-feed.ts). The live reads are driven
-// against real D1 in test-integration/ops-feed.test.ts, which also counts them; these
-// cover the shaping, the gate, the header and the rate limit.
-
 const SECRET = "ops-feed-test-cookie-secret";
 const NOW = new Date("2026-09-28T12:00:00.000Z");
 
@@ -55,8 +51,6 @@ const job = (over: Partial<JobFeedRow> = {}): JobFeedRow => ({
   ...over,
 });
 
-// Shaping
-
 test("a blocked job's summary is split into what it waits on and the exact command", () => {
   // The summary exactly as blockJob writes it.
   const summary = `waiting on the push\n\n${RESUME_MARKER}\n\n    git push -u origin feat/x`;
@@ -67,7 +61,6 @@ test("a blocked job's summary is split into what it waits on and the exact comma
   const noCommand = opsJobFrom(job({ status: "blocked", result_summary: "a reason only" }));
   assert.equal(noCommand.waits_on, "a reason only");
   assert.equal(noCommand.command, null);
-  // A job that is not blocked carries neither, whatever its summary says.
   const done = opsJobFrom(job({ status: "done", result_summary: summary }));
   assert.equal(done.waits_on, null);
   assert.equal(done.command, null);
@@ -93,7 +86,6 @@ test("a watcher job's fingerprint is read exactly as openWatcherFingerprints rea
     const shaped = opsJobFrom(job({ id: row.id, title: row.title, posted_by: WATCHER_ACTOR }));
     assert.equal(shaped.finding?.fingerprint ?? null, fromWatcher.get(row.id) ?? null, row.title);
   }
-  // Anyone else's bracketed title is not a finding.
   assert.equal(opsJobFrom(job({ title: "mine [not-a-finding]" })).finding, null);
 });
 
@@ -159,8 +151,6 @@ test("refresh_allowed_at is two minutes after the last on-demand pass, and null 
   assert.equal(refreshAllowedAt(new Date(NOW.getTime() - 120_000).toISOString(), NOW), null);
 });
 
-// The gate
-
 function env(kv = fakeKv(), db: unknown = recordingDb().db) {
   return fakeEnv({
     APP_KV: kv.kv,
@@ -174,7 +164,6 @@ function env(kv = fakeKv(), db: unknown = recordingDb().db) {
   });
 }
 
-// A D1 stub that answers every read with no rows and records every batch.
 function recordingDb() {
   const batches: Array<Array<{ sql: string; params: unknown[] }>> = [];
   const stmt = (sql: string, params: unknown[] = []) => ({
@@ -215,8 +204,6 @@ test("the feed answers a signed-in administrator with the feed, uncached", async
   assert.deepEqual(body, { ...FEED, csrf: body.csrf, user: { name: "admin", initials: "A" } });
 });
 
-// Who is signed in (the top bar's avatar)
-
 test("portalDisplay: another person gets their own name and initials, never a fixed label", () => {
   assert.deepEqual(portalDisplay({ email: "jane.q.public@example.com" }), {
     name: "jane.q.public",
@@ -232,11 +219,8 @@ test("portalDisplay: another person gets their own name and initials, never a fi
   });
 });
 
-// The Portal's CSRF value
-
 const CSRF_VALUE = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 
-// A signed request that also carries a Portal CSRF cookie.
 async function signedWithCsrf(
   path: string,
   csrf: string,
@@ -337,8 +321,6 @@ test("the feed and the refresh refuse a bearer with 403 and send an anonymous re
   }
 });
 
-// The refresh
-
 const gathered = async (): Promise<Gathered> => ({
   findings: [],
   ran: new Set(["health"] as const),
@@ -390,7 +372,6 @@ test("PLANT: the refresh runs a watcher pass even when the cadence says one is n
     "the rate-limit stamp was not written",
   );
 
-  // The click's own audit row, naming the administrator.
   const audit = batches.flat().find((s) => /INSERT INTO audit_log/.test(s.sql));
   assert.ok(audit, "the refresh wrote no audit row");
   assert.equal(audit.params[0], "access:admin@example.com");

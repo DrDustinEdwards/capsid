@@ -5,10 +5,8 @@ import { gatherFindings } from "../src/watcher-gather.ts";
 import { type WatcherCheck } from "../src/watcher-checks.ts";
 import { type Finding } from "../src/watcher-detect.ts";
 
-// The watcher's health checks, driven through gatherFindings and the real repo
-// readers. healthFindings is tested as a pure function elsewhere; a gathering error
-// swallowed by attempt() would hand it null and report nothing. The property under
-// test is "the finding reaches the queue".
+// healthFindings is pure elsewhere; here a gathering error swallowed by attempt() would hand it null and report
+// nothing. The property: the finding reaches the queue.
 
 const OWNER = "DrDustinEdwards";
 const REPO = "capsid";
@@ -17,10 +15,7 @@ const DEPLOYED = "b".repeat(40);
 const LIVE_SCHEMA = "0015_outcome_prs.sql";
 const NEWER = "0016_jobs_retry_cap.sql";
 
-// A D1 that answers exactly the queries /health and resolveRepo make, and throws on
-// anything else. Everything else gatherFindings reads (capsidStatus)
-// fails into attempt(), which is the path a real outage takes, so those checks are
-// absent from the result rather than faked.
+// Answers exactly the queries /health and resolveRepo make and throws on anything else; capsidStatus and the rest fail into attempt() as in a real outage, so those checks are absent, not faked.
 function healthDb(schema: string, repos = [{ repo: `${OWNER}/${REPO}`, label: "primary" }]) {
   const stmt = (sql: string) => {
     const first = async () => {
@@ -50,9 +45,7 @@ function env(schema: string, repos?: Array<{ repo: string; label: string }>) {
   });
 }
 
-// GitHub as the real readers ask for it. The commits route is served too, so a
-// watcher that reads master head through repo_history with a ref is not failed by
-// the harness.
+// GitHub as the real readers ask for it; the commits route is served too so a watcher reading master head through repo_history with a ref is not failed by the harness.
 const commit = (sha: string) => ({
   sha,
   commit: { message: "m", author: { name: "a", date: "2026-09-16T00:00:00Z" } },
@@ -116,7 +109,6 @@ test("A DEPLOYED SHA THAT IS NOT MASTER HEAD REACHES THE QUEUE through gatherFin
   );
 });
 
-// Master head's CI run, served for the head sha the watcher asks about and nothing else.
 const headRuns = (status: string, conclusion: string | null): Record<string, Route> => ({
   [`GET /repos/${OWNER}/${REPO}/actions/runs`]: (_body, params) => ({
     body: {
@@ -185,9 +177,7 @@ test("a live schema AT the newest migration is not a finding, so the check is no
   );
 });
 
-// A check whose read failed is not reported as run, so runPass does not clear the jobs
-// it owns. In this harness the status read and every roster CI
-// read fail, while /health, master head and the migrations listing succeed.
+// A check whose read failed is not reported as run, so runPass does not clear the jobs it owns; here the status read and every roster CI read fail while the rest succeed.
 test("gatherFindings reports only the checks whose reads succeeded", async () => {
   const { ran, failures } = await gather(NEWER);
   assert.ok(

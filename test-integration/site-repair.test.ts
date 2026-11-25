@@ -10,10 +10,8 @@ import { readSiteBackups, runSiteBackups } from "../src/site-backup";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { PortalConvergence } from "../src/ops-types/views";
 
-// The site repairs against a real D1 and KV with every migration applied (job_09e5f6cbf782,
-// migrations/0035): the watcher's repair step, its rate limit and its red and green mail,
-// and the control refusing what the Worker must never call. The site's operator API and
-// health route are answered by a fake fetch; no request leaves the test.
+// Real D1 and KV with every migration applied: the watcher's repair step, its rate limit and mail, and the control refusing what the Worker must never call.
+// The site's operator API and health route are a fake fetch; no request leaves the test.
 
 const EMAIL = "admin@example.com";
 const TOKEN = "integration-operator-token-0000000000000";
@@ -39,7 +37,6 @@ function siteEnv(over: Record<string, unknown> = {}): { env: Env; mails: Mail[] 
   return { env: e, mails };
 }
 
-// A site whose pages drift until sync_pages runs, and whose other answers are fixed.
 function fakeSite(opts: { drift?: string[]; repairs?: boolean } = {}) {
   let drift = opts.drift ?? ["pages-drift"];
   const calls: string[] = [];
@@ -92,7 +89,6 @@ beforeEach(async () => {
 describe("the watcher's site repairs", () => {
   it("repairs a mapped drift, re-checks, records the call, and raises nothing when it settles", async () => {
     const { env: e, mails } = siteEnv();
-    // The weekly tool has run, so this pass is the repair alone.
     await env.APP_KV.put("site-weekly:dustinedwards:refresh_citations", NOW.toISOString());
     const site = fakeSite();
     const report = await watchSites(e, await config(), "agent:watcher", site.impl, NOW);
@@ -132,7 +128,6 @@ describe("the watcher's site repairs", () => {
       "dustinedwards.info is unhealthy and self-repair did not settle it",
     ]);
 
-    // Still red next pass: no second mail. Green after: one recovery mail.
     await watchSites(e, await config(), "agent:watcher", site.impl, later(30));
     expect(mails).toHaveLength(1);
     const green = fakeSite({ drift: [] });

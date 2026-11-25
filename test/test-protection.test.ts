@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { weakenedTests } from "../src/test-protection.ts";
 
-// Narrow test protection: what a pull request takes away from its tests.
-
 const mod = (filename: string, patch: string) => ({
   filename,
   status: "modified",

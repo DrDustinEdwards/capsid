@@ -6,11 +6,6 @@ import { checkScope, needsStepUp, readLastStepUp, STEP_UP, TOOL_GRANTS } from ".
 import { buildAdminServer } from "../src/server.ts";
 import { fakeD1, fakeEnv, fakeKv, type FakeKv } from "./fakes.ts";
 
-// The step-up (src/scope.ts STEP_UP): a risky Capsid Admin action needs an Access
-// sign-in or a successful step-up action in the last 2 hours, and never more than 12
-// hours after the sign-in, from an OAuth session. A key holder has no session and is not
-// stepped up. The refusal comes from checkScope, before the handler runs.
-
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const STALE = 3 * HOUR;

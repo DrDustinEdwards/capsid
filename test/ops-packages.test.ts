@@ -6,7 +6,6 @@ import type { OpsPackageConfig } from "../src/ops-types/sites.ts";
 import { isoWeek } from "../src/time.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// The Packages panel's pure parts and its per-pass read, against a fake of each source.
 // The response shapes are the ones the live endpoints returned on 2026-09-30.
 
 test("a package name is npm's: lowercase, URL-safe, optionally scoped", () => {
@@ -36,7 +35,6 @@ test("a repository is owner/name, and a former name is a different npm name", ()
   assert.equal(validatePackage({ name: "enarratio", repo: "https://github.com/x/y" }).ok, false);
   assert.equal(validatePackage({ name: "enarratio", formerly: "enarratio" }).ok, false);
   assert.equal(validatePackage({ name: "enarratio", formerly: "Abscissa" }).ok, false);
-  // Blank optional fields are absent, not empty strings.
   assert.deepEqual(validatePackage({ name: "enarratio", repo: " ", formerly: "" }), {
     ok: true,
     pkg: { name: "enarratio", repo: null, formerly: null },

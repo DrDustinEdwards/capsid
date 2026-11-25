@@ -7,14 +7,8 @@ import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { defaultScopes, noFlags, type AgentScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// The namespace-remap escalation, closed in both directions. A namespace-scoped
-// driver with the write grant must not be able to call capsid_admin_manage_namespaces
-// action "update" on its own namespace, add any repo the GitHub App reaches, and then read and write it.
-//
-// Both halves are tested, because either alone leaves a hole: admin-gating the
-// mapping without narrowing the repos axis means one forgotten admin call re-opens it,
-// and narrowing the axis without gating the mapping leaves the boundary editable by
-// the party it binds.
+// A write-grant driver must not call capsid_admin_manage_namespaces "update" on its own namespace, add any repo the App
+// reaches and read it. Both halves are tested: either alone leaves a hole (a forgotten admin call, or a boundary editable by the party it binds).
 
 function agentWith(scopes: Partial<AgentScopes>, admin = false): Agent {
   return {
@@ -34,8 +28,6 @@ function agentWith(scopes: Partial<AgentScopes>, admin = false): Agent {
     row: null,
   } as Agent;
 }
-
-// half one: the mapping is admin work
 
 const tool = "capsid_admin_manage_namespaces";
 test(`${tool}.update refuses a minted agent and names why, and admits the admin`, () => {
@@ -71,9 +63,8 @@ test("the admin refusal comes BEFORE the namespace refusal", () => {
   assert.doesNotMatch(refusal, /not scoped to the 'foxhound' namespace/);
 });
 
-// The registrar applies it, over a real connection to Capsid Admin. The assertions above call
-// checkScope directly with `admin: true`; this proves the registrar turns a
-// TOOL_GRANTS entry of "admin" into that need.
+// The assertions above call checkScope with `admin: true`; this proves the registrar turns a TOOL_GRANTS entry of "admin"
+// into that need.
 
 interface ToolResult {
   isError?: boolean;
@@ -123,7 +114,6 @@ test("END TO END: a driver is refused capsid_admin_manage_namespaces update thro
   assert.equal(result.isError, true, "a driver remapped its own namespace");
   const text = result.content.map((c) => c.text).join("");
   assert.match(text, /admin only/);
-  // The refusal names the escalation, so a log shows what was attempted.
   assert.match(text, /widen itself/);
 });
 
@@ -137,7 +127,6 @@ test("END TO END: a driver is refused capsid_admin_manage_namespaces register th
 });
 
 test("END TO END: the admin still maps namespaces", async () => {
-  // The admin is not locked out of the tool.
   const result = await callAs(adminAgentForEmail("admin@example.com"), "update", {
     namespace: "capsid",
     repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]),
@@ -155,11 +144,7 @@ test("END TO END: the admin still maps namespaces", async () => {
   assert.deepEqual(out.repos, [{ repo: "DrDustinEdwards/capsid", label: "primary" }]);
 });
 
-// half two: the repos axis refuses independently of the mapping
-
 test("PLANT: a driver narrowed to its own repos is refused on another, remap or not", () => {
-  // Even if the mapping named capsid-backups, a driver whose axis lists only its own
-  // repo is refused here, whatever the mapping says.
   const driver = agentWith({ repos: ["DrDustinEdwards/capsid"] });
   assert.equal(
     checkScope(driver, {
@@ -181,5 +166,3 @@ test("PLANT: a driver narrowed to its own repos is refused on another, remap or 
   assert.ok(refusal, "a narrowed driver reached a repo outside its axis");
   assert.match(refusal, /not scoped to the 'DrDustinEdwards\/capsid-backups' repo/);
 });
-
-// the mint script derives the axis rather than copying the mapping

@@ -4,10 +4,6 @@ import { REASON_MAX, runTask, taskStates, TASKS, type TaskId } from "../src/task
 import type { OpsTaskRun } from "../src/ops-types/feed.ts";
 import { fakeEnv } from "./fakes.ts";
 
-// The run ledger's recorder and its flags (src/task-runs.ts). The SQL itself, the
-// prune and the per-task read run against real D1 in test-integration/task-runs.test.ts,
-// and every cron branch writing its row in test-integration/scheduled.test.ts.
-
 interface Bound {
   sql: string;
   args: unknown[];

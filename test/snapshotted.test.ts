@@ -4,13 +4,8 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 
-// capsid_write_doc's write AND restore actions REPORT `snapshotted` FROM THE SNAPSHOT
-// THEY TOOK (audit 2026-09-25, item E1-20, finding F3-8). Both used to answer snapshotted: true whenever their
-// pre-read found a row. With confirm: true and no if_match no guard is armed, so a row
-// deleted between the pre-read and the batch is snapshotted by nothing and the upsert
-// recreates it; the response still said a snapshot was taken. Nothing is lost (the
-// delete snapshotted it), but the response was wrong. The same race against real
-// SQLite is in test-integration/snapshotted.test.ts.
+// The write and restore actions must report `snapshotted` from the snapshot they took, not from the pre-read: with
+// confirm: true and no if_match, a row deleted in between is recreated by the upsert with no snapshot.
 
 async function call(opts: FakeD1Options, name: string, args: Record<string, unknown>) {
   const fake = fakeD1(opts);

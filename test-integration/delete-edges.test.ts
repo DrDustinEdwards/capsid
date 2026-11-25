@@ -3,12 +3,8 @@ import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
 
-// A delete records the edges it removes, including one added just before its batch.
-// The audit row is the only place a deleted document's edges survive.
-//
-// The edges are recorded by an INSERT ... SELECT json_group_array inside the batch,
-// which the node fake does not evaluate. The race is staged by wrapping the real D1:
-// the first batch() call inserts an edge and then runs the handler's batch unchanged.
+// A delete records the edges it removes, including one added just before its batch (the audit row is the only place they survive).
+// The INSERT ... SELECT json_group_array is not evaluated by the node fake; the race is staged by wrapping D1 so the first batch() inserts an edge.
 
 const EDGE = {
   from_ns: "sample",

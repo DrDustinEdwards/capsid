@@ -3,9 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-// A suite that is never run reads as coverage it does not give, so this asserts from
-// the unit suite that the integration suite is typed and in the CI workflow. It does
-// not run vitest itself.
+// A suite that is never run reads as coverage it does not give, so this asserts from the unit
+// suite that the integration suite is typed and in the CI workflow.
 
 const ROOT = join(import.meta.dirname, "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");

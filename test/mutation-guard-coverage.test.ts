@@ -9,16 +9,10 @@ import { buildServer } from "../src/server.ts";
 import { defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
 
-// Enumerate every site. A guard that lands in all but one mutation handler is not
-// a fix, so this file finds the mutation entry points by scanning for what makes a
-// handler a mutation, not by listing today's tools. A new tool that writes
-// `documents` fails the build until it has a plant here. test/path-mutation.test.ts
-// does the same for pathMutation.
-
-// A handler mutates the document store if it inserts a documents row or calls the
-// one path-mutation helper. Matched by shape rather than by tool name. The handlers
-// are operations (src/tools/operations.ts) that the served tools dispatch to, so the
-// scan reads the operation blocks and each plant is driven through the served tool and
+// A guard that lands in all but one mutation handler is not a fix, so entry points are found by scanning for what
+// makes a handler mutate (a documents insert or pathMutation), not by listing tools: a new writer fails until it has a plant.
+//
+// The scan reads the operation blocks (src/tools/operations.ts) and each plant is driven through the served tool and
 // action that runs it (test/served.ts).
 const MUTATION_MARKERS = [/INSERT INTO documents/i, /\bdocumentUpsert\(/, /\bpathMutation\(/];
 
@@ -26,9 +20,7 @@ function mutationTools() {
   return operationBlocks().filter((t) => MUTATION_MARKERS.some((re) => re.test(t.body)));
 }
 
-// The served call for an operation: its tool, and the action that picks it where the
-// tool takes one. Exactly one served entry point per operation, so a second one added
-// later fails here rather than going unplanted.
+// Exactly one served entry point per operation, so a second one added later fails here rather than going unplanted.
 function servedCall(
   op: string,
   args: Record<string, unknown>,
@@ -42,9 +34,6 @@ function servedCall(
   const { tool, action } = served[0];
   return { tool, args: action === undefined ? args : { action, ...args } };
 }
-
-// Every mutation entry point, driven over MCP: one plant per operation the scan finds,
-// at a signed policy document. A real call exercises the guard, the opt-in and the flag.
 
 const POLICY_DOC = "policy/auto-merge.md";
 
@@ -180,8 +169,6 @@ test("THE INNOCENT DIRECTION: with the opt-in and the flag, every tool that take
     assert.ok(recorded.length > 0, `${tool} committed nothing`);
   }
 });
-
-// the guard itself, at both ends of a move
 
 test("PLANT: a move INTO or OUT OF the policy prefix is refused at either end", () => {
   assert.ok(policyWriteRefusal("capsid", "policy/planted.md", false));

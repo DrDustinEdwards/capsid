@@ -20,12 +20,8 @@ import {
   auditRows,
 } from "./portal-actions-fixtures.ts";
 
-// The Portal's controls (src/portal-actions.ts): a preview that writes nothing and
-// signs what it previewed, then a perform that carries only that token. The job
-// transitions themselves are driven through the Worker against real D1 in
-// test-integration/portal-actions.test.ts; these cover the checks in front of them.
-
-// The absences
+// A preview writes nothing and signs what it previewed; a perform carries only that token.
+// Job transitions run against real D1 in test-integration/portal-actions.test.ts.
 
 test("PLANT: a merge or a mint is refused at preview and at perform, even fully signed, and writes nothing", async () => {
   for (const action of ["merge", "manage_pr", "mint", "mint_agent"]) {
@@ -78,11 +74,9 @@ for (const [label, opts] of [
   });
 }
 
-// Every action: a preview that states what will change, signs it, and writes nothing
 for (const [action, params] of EVERY_ACTION) {
-  // namespace_remove's plan is the delete's reader, json_each and all, which the node fake
-  // does not evaluate (test/namespace-delete.test.ts); its preview and perform run against
-  // real D1 in test-integration/portal-actions.test.ts.
+  // namespace_remove's plan reads through json_each, which the node fake does not evaluate;
+  // it runs against real D1 in test-integration/portal-actions.test.ts.
   if (action === "namespace_remove") continue;
   test(`PLANT: ${action} preview states what will change, signs it, and writes NOTHING`, async () => {
     const w = world();
@@ -104,8 +98,6 @@ for (const [action, params] of EVERY_ACTION) {
   });
 }
 
-// The concrete lines, where they name what the state holds now
-
 test("a resume preview says the job goes to the queue, and why, when its claimant is a shared identity", async () => {
   const w = world();
   w.d1.rows.jobs[0].claimed_by = "access:admin@example.com";
@@ -113,8 +105,6 @@ test("a resume preview says the job goes to the queue, and why, when its claiman
   assert.match(body.changes[0], /blocked -> queued/);
   assert.match(body.changes[0], /access:admin@example.com is a shared identity/);
 });
-
-// Preview refusals against the current state
 
 test("preview refuses what the mutator would refuse, and writes nothing", async () => {
   for (const [action, params, pattern] of [
@@ -145,8 +135,6 @@ test("preview refuses what the mutator would refuse, and writes nothing", async 
     wroteNothing(w, `${action} refused preview`);
   }
 });
-
-// The automation switches: a reason in both directions, and an Undo that says so
 
 const SWITCH_CASES = [
   ["overnight", { value: "api" }],

@@ -3,10 +3,6 @@ import { test } from "node:test";
 import { pathRefusal, siteCheck } from "../src/site-check.ts";
 import { fakeEnv } from "./fakes.ts";
 
-// The live site check (src/site-check.ts), served as capsid_inspect_repo action site:
-// the site's health route, one page, and a 401 probe, all on the site's own configured
-// origin. Statuses and verdicts come back; no text the site sent does.
-
 const NOW = new Date("2026-10-10T12:00:00.000Z");
 const ORIGIN = "https://sample.example.com";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -42,7 +38,6 @@ const ROW: SiteRowFixture = {
   }),
 };
 
-// ops_sites, answered by namespace. Any other statement is a test failure, not a quiet null.
 function siteEnv(rows: SiteRowFixture[]) {
   const reads: string[] = [];
   const db = {
@@ -115,8 +110,6 @@ function healthyAnswers(probeStatus: number): Record<string, Answer> {
   };
 }
 
-// Paths
-
 test("PLANT: pathRefusal refuses a path with '..', one not starting with /, and one with a query or a scheme, and accepts ordinary site paths", () => {
   for (const good of [
     "/",
@@ -163,8 +156,6 @@ test("PLANT: siteCheck refuses a bad page or probe before reading the database o
   assert.equal(s.calls.length, 0, "a refused path fetched the site");
 });
 
-// No site row
-
 test("PLANT: a namespace with no site row is refused, naming capsid_admin_run_controls, and nothing is fetched", async () => {
   const { env } = siteEnv([]);
   const s = site(healthyAnswers(401));
@@ -172,7 +163,6 @@ test("PLANT: a namespace with no site row is refused, naming capsid_admin_run_co
     () => siteCheck(env, "sample", {}, s.impl, NOW),
     /sample has no site configured.*capsid_admin_run_controls control site_add/s,
   );
-  // A row that declares no site (origin null) is refused the same way.
   const bare = siteEnv([
     {
       ...ROW,
@@ -189,8 +179,6 @@ test("PLANT: a namespace with no site row is refused, naming capsid_admin_run_co
   );
   assert.equal(s.calls.length, 0);
 });
-
-// The 401 probe
 
 for (const status of [401, 403]) {
   test(`THE INNOCENT DIRECTION: the operator API answering ${status} is reported as refused, as it must`, async () => {
@@ -266,8 +254,6 @@ test("a probe with no answer reports null, never refused", async () => {
   assert.match(r.probe.note, /^no answer:/);
 });
 
-// The origin
-
 test("PLANT: only the site's configured origin is fetched, for every read", async () => {
   const { env } = siteEnv([ROW]);
   const s = site(healthyAnswers(401));
@@ -305,8 +291,6 @@ test("THE INNOCENT DIRECTION: the health route, the page and the probe are each 
   assert.equal(r.checked_at, NOW.toISOString());
 });
 
-// No body text
-
 test("PLANT: no text from any response body appears in the result, OPEN or refused", async () => {
   for (const status of [200, 401]) {
     const { env } = siteEnv([ROW]);
@@ -322,7 +306,6 @@ test("PLANT: no text from any response body appears in the result, OPEN or refus
       `body text reached the result (probe ${status})`,
     );
   }
-  // A page and a health route that fail leak no body text either.
   const { env } = siteEnv([ROW]);
   const answers = healthyAnswers(401);
   answers[`GET ${ORIGIN}/health`] = { status: 500, body: MARKER };

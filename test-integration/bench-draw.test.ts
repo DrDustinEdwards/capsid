@@ -3,10 +3,8 @@ import { describe, expect, it } from "vitest";
 import { BENCH_ENABLED_KEY } from "../src/bench";
 import { post } from "./bench-fixture";
 
-// The registration lock (src/bench.ts drawRefusal, handleBenchDraw; migrations/0049)
-// against a real D1. Its own file, because a recorded registration changes what every
-// later start in the same storage may do: test-integration/bench.test.ts runs its pilot
-// tasks with no registration.
+// The registration lock (src/bench.ts, migrations/0049) against a real D1, in its own file: a recorded
+// registration changes what every later start in the same storage may do; bench.test.ts runs with none.
 
 let n = 0;
 async function registerTask(split: string): Promise<string> {
@@ -51,16 +49,12 @@ describe("the registration lock", () => {
     // A planted arm calls no model and is never locked.
     expect((await start(a, "check-gold")).status).toBe(200);
 
-    // A pilot task cannot be drawn, and a refused batch appends nothing.
     expect((await draw(1, [a, pilot])).status).toBe(409);
     expect((await draw(1, [a, b])).status).toBe(200);
-    // The same batch again is a no-op; a different task at a recorded position is refused.
     expect(await (await draw(1, [a, b])).json()).toMatchObject({ added: 0, size: 2 });
     expect((await draw(1, [b, a])).status).toBe(409);
-    // Appending goes on from the end, and a gap is refused.
     expect((await draw(4, [c])).status).toBe(409);
     expect(await (await draw(2, [b, c])).json()).toMatchObject({ added: 1, size: 3 });
-    // Another registration is refused.
     expect((await draw(4, [off], { ...REG, seed: "1" })).status).toBe(409);
 
     expect((await start(a)).status).toBe(200);

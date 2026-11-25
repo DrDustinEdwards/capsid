@@ -5,10 +5,6 @@ import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// capsid_close_pr merge with `sha`: the caller names the head it reviewed, GitHub merges
-// only that commit, and a moved head comes back as a refusal. Driven through the tool
-// handler.
-
 function db() {
   const statement = (sql: string) => {
     const stmt = {
@@ -114,9 +110,8 @@ test("a sha on an action other than merge is refused, before any GitHub write", 
   });
 });
 
-// A chat approval (src/chat-approval.ts): Dustin's "yes" in a Claude chat, linked by
-// approved_in, is written to pr_approvals after the merge, so the approval record and the
-// merge units see it.
+// A chat approval (Dustin's "yes", linked by approved_in) is written to pr_approvals after the merge, so the
+// approval record and the merge units see it.
 test("capsid_close_pr merge with approved_in records the chat approval after the merge, and needs sha", async () => {
   const batches: string[][] = [];
   const recording = {

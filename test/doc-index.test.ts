@@ -12,9 +12,8 @@ import {
 import { fakeEnv, fakeKv } from "./fakes.ts";
 import { d1, migratedDb } from "./sqlite-d1.ts";
 
-// AI Search reads the meaning index's rows from D1 itself, so these run the real
-// migrations (the FTS triggers included) in Node's SQLite, and AI Search is an in-memory
-// fake that records what it was asked.
+// AI Search reads the meaning index's rows from D1 itself, so these run the real migrations
+// (FTS triggers included) in Node's SQLite, with AI Search as an in-memory fake.
 
 const DAY1 = new Date("2026-10-15T12:00:00Z");
 
@@ -62,7 +61,7 @@ function fakeSearch(
       return { id: INDEX_INSTANCE };
     },
     jobs: {
-      // A sync already running answers a new request with itself (seen live 2026-11-14).
+      // A sync already running answers a new request with itself.
       create: async () => {
         const at = opts.running ? new Date(Date.now() - 60_000) : new Date(Date.now() + 1000);
         jobs.push(`job-${jobs.length + 1}`);
@@ -137,8 +136,6 @@ test("the index query runs on the real schema, marks the canon and keeps AI Sear
   assert.doesNotMatch(INDEX_QUERY, /;|--|\/\*|\?|\bORDER BY\b|\bLIMIT\b|\breplace\(/i);
   assert.ok(INDEX_QUERY.length <= 10_000);
 });
-
-// Hybrid search
 
 const chunk = (
   doc_id: number,

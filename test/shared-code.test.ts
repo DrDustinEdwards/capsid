@@ -12,9 +12,6 @@ import {
   type SharedConfig,
 } from "../src/shared-code.ts";
 
-// The Shared code view's rules (job_584b4e7f2824), on what was read rather than on GitHub.
-// Sample data only: example-org repos, namespace "sample".
-
 const NOW = new Date("2026-10-10T07:00:00.000Z");
 const TAGS = ["v0.1.0", "v0.2.0", "v0.3.0", "v0.10.0", "latest", "v0.3.0-rc.1"];
 
@@ -166,9 +163,6 @@ test("a package whose tags could not be read says why, and still lists who uses 
     "behind is unknown, not zero, without the tags",
   );
 });
-
-// Release tracking (Capsid improvement list, item 13): the version in each package's own
-// package.json, whether it is tagged, and npm's latest.
 
 test("the version decision: tagged by either spelling, the next release, never backwards, and a pre-release left alone", () => {
   assert.deepEqual(releaseDecision("0.10.0", TAGS), { kind: "tagged", tag: "v0.10.0" });

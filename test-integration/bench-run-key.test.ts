@@ -10,14 +10,8 @@ import { postJob } from "../src/jobs";
 import { buildServer } from "../src/server";
 import { post } from "./bench-fixture";
 
-// THE RUN KEY'S RECORDED NEGATIVE TEST (the methods paper's protocol, section 4, "The run
-// key"): a treatment run's own key can claim its one job, read it by id, and complete it
-// with a reproduction or fail it, and every other call is refused: list, search, document read and write, every other job action,
-// another run's job and another namespace. It stops resolving once the run is scored,
-// and the score step closes the job (src/bench.ts finishBenchRun).
-//
-// Against a real D1, through resolveAgent and the served tools, so it is the key as the
-// agent would hold it, not a hand-built caller.
+// The run key's recorded negative test (protocol section 4): a treatment run's key claims, reads and completes
+// its one job, every other call is refused, and it stops resolving once the run is scored.
 
 const POSTER = grantAgent("write", "github:sample");
 const jobsEnv = () => env as unknown as Parameters<typeof postJob>[0];
@@ -116,7 +110,6 @@ describe("the run key", () => {
     });
     const { client, call } = await connect(agent!);
 
-    // Its own job: read by id, claimed, read again.
     const before = await call("capsid_work_jobs", { action: "list", id: job });
     expect(before.ok, before.text).toBe(true);
     expect(before.text).toContain("fix the sample bug");
@@ -124,7 +117,6 @@ describe("the run key", () => {
     expect(claimed.ok, claimed.text).toBe(true);
     expect((await call("capsid_work_jobs", { action: "list", id: job })).ok).toBe(true);
 
-    // Everything else is refused.
     const refused: Array<[string, Record<string, unknown>]> = [
       ["capsid_work_jobs", { action: "list" }],
       ["capsid_work_jobs", { action: "list", namespace: "bench" }],
@@ -155,7 +147,6 @@ describe("the run key", () => {
         `is the run key of bench run ${run.run_id} and may only claim, read, complete or fail its own job`,
       );
     }
-    // The refused calls changed nothing: the job is still claimed by the run, the others untouched.
     const rows = await env.DB.prepare(
       "SELECT id, status, claimed_by FROM jobs WHERE id IN (?1, ?2, ?3) ORDER BY id",
     )
@@ -168,7 +159,6 @@ describe("the run key", () => {
     });
     await client.close();
 
-    // The score step finishes the run and closes its job in one step, and the key stops resolving.
     const scored = await post("/bench/score", {
       run_id: run.run_id,
       hidden: counts,
@@ -188,7 +178,6 @@ describe("the run key", () => {
       result_summary: `Superseded: ${BENCH_CLOSE_REASON}`,
     });
     expect(await resolve(run.run_key)).toBeNull();
-    // The other run's key still works, on its own job only.
     expect((await resolve(other.run_key))?.benchRun).toEqual({ run: other.run_id, job: otherJob });
   });
 
@@ -202,7 +191,6 @@ describe("the run key", () => {
     const { client, call } = await connect((await resolve(done.run_key))!);
     expect((await call("capsid_work_jobs", { action: "claim", id: doneJob })).ok).toBe(true);
 
-    // No receipt yet, then a receipt that did not pass: both refused, with the receipt's reason.
     const tryComplete = () =>
       call("capsid_work_jobs", { action: "complete", id: doneJob, result_summary: "fixed" });
     for (const receipt of [null, { passed: false, reason: "your test did not fail on the base" }]) {
@@ -255,7 +243,6 @@ describe("the run key", () => {
         })
       ).status,
     ).toBe(200);
-    // The score step leaves a job the agent closed as it is.
     expect(
       (
         await post("/bench/score", {
@@ -337,7 +324,6 @@ describe("the run key", () => {
         .first<{ n: number }>())!.n,
     ).toBe(0);
 
-    // A second report finds the run closed and writes nothing.
     expect(
       (
         await post("/bench/score", {

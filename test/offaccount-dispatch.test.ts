@@ -3,10 +3,8 @@ import { test } from "node:test";
 import { offaccountDispatchTick } from "../src/offaccount-dispatch.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
 
-// The nightly Amazon copy's fallback start (src/offaccount-dispatch.ts): GitHub's schedule
-// can be hours late, so the tick starts the workflow itself, once a day, and never twice. A
-// daily probe asks for a branch that does not exist: GitHub answers 422 to an App that may
-// dispatch and 403 to one that may not, and starts nothing.
+// GitHub's schedule can be hours late, so the tick starts the workflow itself, once a day. A daily probe asks for a missing
+// branch: GitHub answers 422 to an App that may dispatch and 403 to one that may not, and starts nothing.
 
 const RUNS = "GET /repos/DrDustinEdwards/capsid-backups/actions/workflows/offaccount.yml/runs";
 const DISPATCH =
@@ -14,8 +12,6 @@ const DISPATCH =
 const LATE = new Date("2026-11-08T11:30:00.000Z");
 
 const PROBE_REF = "permission-probe-no-such-ref";
-// The dispatch endpoint as GitHub answers it: the probe's missing branch is a 422 for an App
-// allowed to dispatch, a real branch starts a run, and a forbidding answer is every call's.
 const dispatch =
   (real: number, probe = 422): Route =>
   (body) => ({ status: (body as { ref?: string }).ref === PROBE_REF ? probe : real });

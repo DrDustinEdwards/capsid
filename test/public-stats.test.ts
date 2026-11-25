@@ -9,9 +9,6 @@ import {
 } from "../src/public-stats.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// The public aggregate numbers (docs/public-data.md). Ruling 3: counts and rates only,
-// never a title, body, name, email, error text or time of day.
-
 const NOW = new Date("2026-10-11T00:05:00Z");
 const DAY = 86_400_000;
 const daysAgo = (d: number, hour = 12) =>

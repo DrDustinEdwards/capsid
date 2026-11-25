@@ -4,9 +4,6 @@ import { modelDrift, type DriftFacts } from "../src/model-drift.ts";
 import type { InstalledRepo } from "../src/github/client.ts";
 import type { SystemModel } from "../src/system-model.ts";
 
-// The model's daily drift check (docs/public-data.md): system/model.json against the
-// namespace mapping, the App's repo list and the watched sites, both ways.
-
 const MODEL: SystemModel = {
   version: 1,
   systems: [

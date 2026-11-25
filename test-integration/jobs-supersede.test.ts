@@ -31,16 +31,11 @@ import {
   jobsEnv,
 } from "./jobs-fixture";
 
-// The work queue against a real D1 (jobs.test.ts): supersede, guarded batches and the 0045 key revocation.
-
 beforeEach(resetJobs);
 
 describe("supersede", () => {
-  // A job the seat replaced before any work was done on it.
-  //
-  // The legacy callers above are admin, so a holder check tested with them would pass
-  // whether or not it existed. These two have the admin bit and can_merge taken away,
-  // as a minted driver does.
+  // A job the seat replaced before any work was done on it. Legacy callers are admin, so a holder check tested with them
+  // passes either way; these two have the admin bit and can_merge removed, as a minted driver does.
   const PLAIN_DRIVER = plain(DRIVER);
   const PLAIN_OTHER = plain(OTHER);
 
@@ -103,7 +98,6 @@ describe("supersede", () => {
     expect(stored?.claimed_by).toBe(DRIVER_ACTOR);
     expect(await outcomeCount(old.job!.id)).toBe(0);
     expect((await mirror(old.job!.id))!.status).toBe("closed");
-    // The holder is free to claim again: a superseded job is not a held claim.
     const next = await post({ title: "the next one" });
     const reclaimed = await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: next.job!.id });
     expect(reclaimed.ok, reclaimed.refusal).toBe(true);
@@ -118,7 +112,6 @@ describe("supersede", () => {
     expect(out.ok).toBe(false);
     expect(out.refusal).toMatch(new RegExp(`is held by ${DRIVER_ACTOR}`));
     expect((await jobRow(old.job!.id))?.status).toBe("claimed");
-    // The seat may supersede a claimed job it does not hold.
     const bySeat = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, {
       reason: "reposted",
     });

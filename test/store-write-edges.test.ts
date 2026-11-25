@@ -6,11 +6,6 @@ import { signPolicyDocument } from "../src/policy-sign.ts";
 import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy.ts";
 import { fakeD1, fakeEnv, fakeKv, type DocRow, type FakeD1Options } from "./fakes.ts";
 
-// Dash normalization on append and patch, and the body guard on sign_policy.
-// Recording a delete's edges inside the batch is in
-// test-integration/delete-edges.test.ts, because only real SQLite evaluates the
-// INSERT ... SELECT json_group_array that records them.
-
 // Built from its code point so this file carries no literal wide dash.
 const EM = String.fromCharCode(0x2014);
 

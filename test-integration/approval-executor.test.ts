@@ -4,9 +4,8 @@ import type { Env } from "../src/env";
 import { executeApproval, expireStaleApprovals, readOpenApprovals } from "../src/approval-executor";
 import type { PrFacts } from "../src/auto-merge-policy-evaluate";
 
-// The executor's SQL against a real D1 with migrations/0037 applied: the read of the open
-// approvals, a state move with its audit row, and the 7-day sweep. The decisions are tested
-// through the tick in test/auto-merge.test.ts.
+// The executor's SQL against a real D1 with migrations/0037 applied; its decisions are tested in
+// test/auto-merge.test.ts.
 
 const NOW = new Date("2026-10-10T12:00:00.000Z");
 const A = "a".repeat(40);

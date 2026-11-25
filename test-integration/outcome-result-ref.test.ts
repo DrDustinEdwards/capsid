@@ -6,11 +6,8 @@ import { grantAgent } from "../src/agents";
 import { reverifySweep } from "../src/outcome-prs-sweep";
 import { dropSampleToken, jobsEnv, seedSampleRepo } from "./jobs-fixture";
 
-// A pull request named only in result_ref is verified against GitHub, whoever completes
-// the job (job_d5262df1dc32). Before the fix, verification read evidence.prs and nothing
-// else, so a complete that sent result_ref and no evidence recorded every verified
-// field false for a merged, green pull request. Real D1; GitHub is a fetch stub, the
-// way test-integration/job-outcomes.test.ts drives it.
+// A pull request named only in result_ref is verified against GitHub whoever completes the job. Before the fix,
+// verification read only evidence.prs, so such a complete recorded every verified field false.
 
 const NS = "sample";
 const PR = "https://github.com/example/sample/pull/3";
@@ -22,7 +19,6 @@ const SEAT = grantAgent("write", SEAT_ACTOR);
 const NOW = new Date("2026-10-05T12:00:00.000Z");
 const LATER = new Date("2026-10-05T13:00:00.000Z");
 
-// What GitHub says about example/sample#3: merged, 2 commits, 3 files, one green run.
 function stubGitHub(): { calls: string[] } {
   const calls: string[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -148,7 +144,6 @@ describe("a pull request named only in result_ref is verified", () => {
       row?.files_changed,
       row?.ci_green,
     ]).toEqual([1, 1, 2, 3, 1]);
-    // Who completed it is its own record, apart from the outcome.
     const claim = await env.DB.prepare(
       "SELECT agent FROM job_claims WHERE job_id = ?1 AND action = 'complete'",
     )
@@ -197,8 +192,7 @@ describe("a pull request named only in result_ref is verified", () => {
   });
 });
 
-// Rows the bug already wrote. The sweep reads GitHub for them and corrects them through
-// an audit row, never by hand.
+// Rows the bug already wrote: the sweep corrects them through an audit row, never by hand.
 describe("the sweep corrects outcomes recorded before the fix", () => {
   const UNVERIFIED = JSON.stringify({
     prs_opened: false,
@@ -245,7 +239,6 @@ describe("the sweep corrects outcomes recorded before the fix", () => {
     const params = JSON.parse(audit.results[0].params);
     expect(params.before).toMatchObject({ commits: null, ci_green: null, verified: UNVERIFIED });
     expect(params.after).toMatchObject({ commits: 2, files_changed: 3, ci_green: 1 });
-    // A second sweep finds nothing left to correct.
     expect((await reverifySweep(jobsEnv(), LATER)).backfilled).toBe(0);
   });
 

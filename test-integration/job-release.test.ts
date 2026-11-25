@@ -5,9 +5,8 @@ import { adminFailJob, claimJob, failAsCaller, postJob, releaseJob } from "../sr
 import { grantAgent, type Agent } from "../src/agents";
 import { driverAgent, jobRow, jobsEnv, seatAgent, seedCapsidNamespace } from "./jobs-fixture";
 
-// The seat stepping in on a claimed job whose holder is gone: release it to the queue,
-// or fail it. Against a real D1, because both are one guarded batch keyed on the holder
-// the seat read, and every assertion reads the rows back.
+// The seat stepping in on a claimed job whose holder is gone: release or fail it, against a real D1, because both are one guarded
+// batch keyed on the holder the seat read.
 
 const POSTER = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-09-26T06:00:00.000Z");

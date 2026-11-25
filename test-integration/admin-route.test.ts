@@ -10,18 +10,8 @@ import { stubAccess } from "@dustinedwards/devkit/access";
 import { cimdClient, cimdResponse } from "./cimd-stub";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// CAPSID ADMIN ON ITS OWN ROUTES (capsid/rulings/mcp-2026-10-10.md, amendment answer 2),
-// through the WHOLE Worker: the host rules, the OAuth provider, src/routes.ts
-// handleOperatorAdminMcp and src/index.ts apiHandler. The unit tests prove what each
-// server registers; this proves which server each route builds for which caller.
-//
-//   /ops/mcp/admin  a key. 401 with none, 403 for any key (no minted key is the admin),
-//                   both before a server is built.
-//   /ops/mcp        Capsid's 11 and no capsid_admin_ tool.
-//   /mcp/admin      the administrator's OAuth session, which lists the 8 admin tools.
-//
-// The calls are the ones .claude/rules/deploy.md names: initialize,
-// notifications/initialized, tools/list, in the 2025-11-25 era.
+// Capsid Admin on its own routes through the whole Worker (host rules, OAuth provider, handleOperatorAdminMcp):
+// the unit tests prove what each server registers; this proves which server each route builds for which caller.
 
 const ORIGIN = "https://mcp.dustinedwards.info";
 const ERA = "2025-11-25";
@@ -62,22 +52,17 @@ interface RpcAnswer {
   message: { result?: Record<string, unknown>; error?: { code: number; message: string } } | null;
 }
 
-// A JSON-RPC answer from a JSON body, or from the data: line of an event stream.
 function rpcMessage(text: string): RpcAnswer["message"] {
   try {
     return JSON.parse(text);
-  } catch {
-    // Not JSON: read it as an event stream below.
-  }
+  } catch {}
   for (const line of text.split(/\r?\n/)) {
     if (!line.startsWith("data:")) continue;
     try {
       const parsed = JSON.parse(line.slice(5).trim());
       if (parsed && typeof parsed === "object" && ("result" in parsed || "error" in parsed))
         return parsed;
-    } catch {
-      // A data line that is not JSON is not the answer; keep reading.
-    }
+    } catch {}
   }
   return null;
 }
@@ -106,8 +91,6 @@ async function rpc(
   return { status: response.status, text, message: rpcMessage(text) };
 }
 
-// initialize, notifications/initialized, tools/list. Returns the server's name and the
-// listed tool names.
 async function listTools(
   path: string,
   bearer: string,
@@ -171,8 +154,6 @@ describe("/ops/mcp serves Capsid and no Capsid Admin tool", () => {
   });
 });
 
-// The OAuth flow as test-integration/oauth-round-trip.test.ts runs it: a CIMD client,
-// consent, the stubbed Access sign-in, and the code exchange with PKCE.
 const cookieValues = (response: Response): string[] =>
   response.headers.getSetCookie().map((c) => c.split(";")[0]);
 

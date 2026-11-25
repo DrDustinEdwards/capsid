@@ -10,8 +10,7 @@ import type { Inbox } from "../src/inbox";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { jobsEnv } from "./jobs-fixture";
 
-// "What needs Dustin, per app" (job_84e901d8eb71), driven through the whole Worker with the
-// credentials a caller would present: GET /ops/inbox, and the same answer in improve_status.
+// "What needs Dustin, per app", through the whole Worker with the credentials a caller would present: GET /ops/inbox and improve_status.
 // Everything planted is sample data: namespace "sample", example.com.
 
 const ORIGIN = "https://capsid.test";
@@ -233,8 +232,7 @@ describe("improve_status carries the same answer per namespace", () => {
   });
 });
 
-// What an app reports about itself (src/inbox-report.ts; Dustin's answers 2026-10-10),
-// posted with the app's own key and read back through GET /ops/inbox and improve_status.
+// What an app reports about itself (src/inbox-report.ts), posted with its own key and read back through GET /ops/inbox and improve_status.
 describe("POST /ops/inbox/report", () => {
   const CAPSID_ORIGIN = "https://mcp.dustinedwards.info";
   const report = (bearer: string | null, body: unknown) =>

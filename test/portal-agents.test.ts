@@ -4,9 +4,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { OpsFeed } from "../src/ops-types/feed.ts";
 
-// The Agents page's two lists (dashboard/src/lib/agents.ts, job_24e460427d6c): the roster
-// is live credentials only, and the Archive tab holds every revoked one, the next to move
-// first, then the archived, newest move first.
 const { archiveAgents, rosterAgents } = await import("../dashboard/src/lib/agents.ts");
 
 const SAMPLE = readFileSync(

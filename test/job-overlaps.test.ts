@@ -2,9 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { overlapLine, overlapsOf, prUrlsIn } from "../src/job-overlaps.ts";
 
-// Overlap warnings (Track A D1): the intersection and the line the seat reads. The reads
-// from GitHub are in test-integration/job-overlaps.test.ts.
-
 test("a file changed by the named pull request and by another open one is an overlap, oldest first", () => {
   const found = overlapsOf(
     [{ number: 134, paths: ["src/jobs.ts", "docs/a.md"] }],

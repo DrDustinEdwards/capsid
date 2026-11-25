@@ -27,20 +27,17 @@ import type { SystemModel } from "../src/system-model";
 import { gatherRuleDocItems, RULE_DOC_CAP_BYTES } from "../src/rule-docs";
 import { jobsEnv } from "./jobs-fixture";
 
-// The daily maintenance pass against a real D1 (job_549550d73d4e). The rules are planted
-// one at a time beside a clean job each must leave alone.
+// The daily maintenance pass against a real D1. The rules are planted one at a time beside a clean job each must leave alone.
 
 const ADMIN = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-10-08T12:00:00.000Z");
 const PR = "https://github.com/example-org/sample/pull/7";
-// The pull request rules read GitHub; here every repo has no open pull request, so the job
-// rules are seen alone. The pull request rules are tested in test/maintenance.test.ts.
+// The PR rules read GitHub (tested in test/maintenance.test.ts); here no repo has an open PR, so the job rules are seen alone.
 const NO_PRS: PrReaders = {
   openPrs: async () => ({ repo: "example-org/sample", prs: [], problem: null }),
   failingStep: async () => ({ step: null, problem: "not called" }),
 };
-// The branch rules read GitHub too; here every repo has only its default branch. They are
-// tested in test/maintenance.test.ts.
+// The branch rules read GitHub too (test/maintenance.test.ts); here every repo has only its default branch.
 const NO_BRANCHES: BranchReaders = {
   plan: async () => ({
     owner: "example-org",
@@ -57,8 +54,7 @@ const NO_BRANCHES: BranchReaders = {
   prune: async () => ({ deleted: [], skipped: [], remaining: 0 }),
 };
 
-// The undeployed-merge rule reads the watcher snapshot; here there are no sites, so the
-// rule is quiet with nothing to compare. It is tested in test/maintenance.test.ts.
+// The undeployed-merge rule reads the watcher snapshot (test/maintenance.test.ts); here there are no sites, so it is quiet.
 const NO_DEPLOYS: DeployReaders = {
   snapshot: async () => ({ sites: [] }) as never,
   defaultHead: async () => {
@@ -67,8 +63,7 @@ const NO_DEPLOYS: DeployReaders = {
 };
 // The model drift check has its own tests (test/model-drift.test.ts); here it reads nothing.
 const NO_DRIFT = async () => ({ items: [], read: 0 });
-// The release-tag rule reads each shared package's repo; here there is none to read. It
-// is tested in test/maintenance-releases.test.ts.
+// The release-tag rule (test/maintenance-releases.test.ts) reads each shared package's repo; here there is none.
 const notCalled = async (): Promise<never> => {
   throw new Error("not called");
 };

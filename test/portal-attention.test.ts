@@ -4,9 +4,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { OpsFeed } from "../src/ops-types/feed.ts";
 
-// The Problems list's rows, tiered (dashboard/src/lib/derive.ts, attentionList and
-// blockedOrder; the folding is Capsomer's arrange, tested there; capsid/research/audit-ui-patterns.md, rulings 3 and
-// 10). Built on the dashboard's own sample feed (fake data), reshaped per test.
 const { attentionList, blockedOrder } = await import("../dashboard/src/lib/derive.ts");
 
 const SAMPLE = readFileSync(
@@ -42,7 +39,6 @@ test("PLANT: missing data, a check that could not run, unread CI, drift and sile
   const { items } = list(f, now);
   assert.ok(items.filter((r) => r.tone !== "nodata").length >= 4);
   const titles = items.filter((r) => r.tone === "nodata").map((r) => r.title);
-  // The sample feed has each kind once.
   assert.ok(titles.includes("Sample G: no Cloudflare data"), titles.join(" | "));
   assert.ok(
     titles.some((t) => t.startsWith("Check 'cf-deploys' could not run")),
@@ -53,7 +49,6 @@ test("PLANT: missing data, a check that could not run, unread CI, drift and sile
     titles.some((t) => t.startsWith("Site map drift")),
     titles.join(" | "),
   );
-  // A silent driver opens that agent, and folds with the others into one notice.
   const silent = items.find((r) => r.title.startsWith("sample-d-driver has been silent"));
   assert.equal(silent?.href, "/open/agent:sample-d-driver");
   assert.equal(silent?.group, "silent");

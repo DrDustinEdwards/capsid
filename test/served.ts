@@ -1,10 +1,6 @@
 import { COMPOSITES, SINGLE_TOOLS } from "../src/tools/surface.ts";
 import { requiredForAction, type ToolRequirement } from "../src/scope.ts";
 
-// Which served tool and action runs each operation, and what that action requires, read
-// from the surface itself (src/tools/surface.ts), so the scanners follow the surface
-// rather than a copy of it.
-
 export interface Served {
   tool: string;
   action: string | undefined;
@@ -26,7 +22,6 @@ export function servedAs(op: string): Served[] {
   return out;
 }
 
-/** Every operation a served tool runs, with the tool and action. */
 export function servedOperations(): Array<Served & { op: string }> {
   const out: Array<Served & { op: string }> = [];
   for (const [tool, single] of Object.entries(SINGLE_TOOLS))

@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
 
-// conventions-read (job_3396ab4fb746), against real SQLite: the NOT EXISTS window, the
-// row's address, and that last_actor is still the document's last writer.
+// conventions-read against real SQLite: the NOT EXISTS window, the row's address, and that last_actor is
+// still the document's last writer.
 
 async function call(name: string, args: Record<string, unknown>, actor = "test:reader") {
   const server = buildServer(env as never, "read", actor);
