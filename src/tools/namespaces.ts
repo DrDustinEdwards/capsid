@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { IMPROVE_OVERRIDE_FLAGS } from "../scope";
-import { surfaceOf } from "./surface";
+import { toolSurfaceOf } from "./surface";
 import { NAMESPACE_DELETE_MAX_DOCUMENTS } from "../namespace-delete";
 import { performNamespaceDelete, previewNamespaceDelete } from "../namespace-delete-perform";
 import { registerNamespace, registerRepos, updateNamespace, updateRepos } from "../namespace-admin";
@@ -122,7 +122,7 @@ export function defineNamespaceOperations(server: McpServer, ctx: ToolCtx): void
       // permission, the argument only the caller's intent.
       if (opts.allowImprovePaths) {
         const overrideRefusal = ctx.scope({
-          ...surfaceOf("delete_namespace", "perform"),
+          ...toolSurfaceOf("delete_namespace", "perform"),
           namespace: ns,
           flags: IMPROVE_OVERRIDE_FLAGS,
         });

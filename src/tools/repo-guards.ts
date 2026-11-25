@@ -1,6 +1,6 @@
 import { fail, ok, type ToolCtx } from "./docs";
 import { repoWriteFlags } from "../scope";
-import { surfaceOf } from "./surface";
+import { toolSurfaceOf } from "./surface";
 import { resolveRepo } from "../github/client";
 import { auditStatement } from "../store-guards";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
@@ -14,7 +14,10 @@ export function repoGuards(ctx: ToolCtx) {
   // redirect every driver scoped to the old repo. One D1 read per repo call.
   const scopedRepo = async (op: string, namespace: string, selector: string | undefined) => {
     const resolved = await resolveRepo(env, namespace, selector);
-    return { resolved, refusal: ctx.scope({ ...surfaceOf(op), namespace, repo: resolved.full }) };
+    return {
+      resolved,
+      refusal: ctx.scope({ ...toolSurfaceOf(op), namespace, repo: resolved.full }),
+    };
   };
 
   const guardedRead = async (
@@ -58,7 +61,7 @@ export function repoGuards(ctx: ToolCtx) {
     }
     // The check names the served tool and action: without the action an agent minted
     // ["capsid_close_pr", "capsid_close_pr.delete_branch"] could merge.
-    const served = intent.surface ?? surfaceOf(action, intent.action);
+    const served = intent.surface ?? toolSurfaceOf(action, intent.action);
     const refusal = ctx.scope({
       tool: served.tool,
       namespace,

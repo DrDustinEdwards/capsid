@@ -12,7 +12,7 @@ import {
   docPath,
 } from "../limits";
 import { ok, fail, type ToolCtx } from "./docs";
-import { surfaceOf } from "./surface";
+import { toolSurfaceOf } from "./surface";
 import { isConventionsDoc, recordConventionsRead } from "../conventions-read";
 import {
   describePortfolioDocs,
@@ -364,7 +364,7 @@ export function defineBacklinksOperation(server: McpServer, ctx: ToolCtx): void 
       const readable = incoming.filter(
         (e) =>
           ctx.scope({
-            ...surfaceOf("backlinks"),
+            ...toolSurfaceOf("backlinks"),
             grant: "read",
             namespace: e.from_ns,
             path: e.from_path,
