@@ -130,10 +130,6 @@ const capsidPr = (paths: string[]): PrFacts =>
     ciStepsProblem: null,
     headRepo: "DrDustinEdwards/capsid",
     prAuthor: "DrDustinEdwards",
-    jobId: "job_4c0ecc28548b",
-    jobClaimedBy: "agent:capsid-driver",
-    jobStatus: "done",
-    jobPrUrls: ["https://github.com/DrDustinEdwards/capsid/pull/23"],
   }) as PrFacts;
 const AUTHORS = ["DrDustinEdwards"];
 

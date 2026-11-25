@@ -6,15 +6,12 @@ import { getDefaultBranch, resolveRepo } from "./github/client";
 import { systemAudit } from "./doc-statements";
 import { listOpenPrs, type OpenPr } from "./auto-merge-tick-facts";
 import {
-  auditDeclineOnChange,
-  declineParams,
   judgeOnePr,
   type AutoMergeOutcome,
   type PausedNamespaces,
   type Suspended,
 } from "./auto-merge-tick-judge";
-import { type PolicyCheck, loadMergePolicy } from "./auto-merge-policy";
-import { jobIdFromBody } from "./auto-merge-policy-evaluate";
+import { loadMergePolicy } from "./auto-merge-policy";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { isVisual, visualDetails, type VisualPr } from "./visual-pr";
 import { expireStaleApprovals, readOpenApprovals, type OpenApproval } from "./approval-executor";
@@ -144,53 +141,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     }
 
     for (const pr of prs) {
-      // A PR whose body names no job is declined before any GitHub read when its namespace has no
-      // promoted unit (the reads share the rate limit). With one, its files are read so the PR can merge
-      // on the unit (policy version 10).
       const visual = isVisual(pr);
-      const hasUnit = policy.units.some((u) => u.startsWith(`${namespace} / `));
-      if (!jobIdFromBody(pr.body ?? "") && !visual && !approvals.has(pr.number) && !hasUnit) {
-        const skipped = {
-          failed: "body_names_job" as const,
-          why: "the PR body names no job id, and no unit in its namespace has earned unattended merging, so a person approves it. Its files and checks were not read.",
-          passed: [] as PolicyCheck[],
-        };
-        outcomes.push({
-          namespace,
-          repo: `${owner}/${repo}`,
-          number: pr.number,
-          merged: false,
-          head_sha: pr.head.sha,
-          ...skipped,
-        });
-        try {
-          const skippedFacts = {
-            repo: `${owner}/${repo}`,
-            number: pr.number,
-            headSha: pr.head.sha,
-          };
-          await auditDeclineOnChange(
-            env,
-            skippedFacts,
-            skipped.failed,
-            systemAudit(
-              env.DB,
-              "auto-merge-declined",
-              namespace,
-              declineParams(policy.version, skippedFacts, skipped, now),
-            ),
-          );
-        } catch (err) {
-          logEvent(
-            "AUTO_MERGE",
-            {
-              message: `AUTO_MERGE could not audit the decline of ${owner}/${repo}#${pr.number}: ${errorMessage(err)}`,
-            },
-            { level: "error" },
-          );
-        }
-        continue;
-      }
       // One PR that throws does not end the tick (a 405, a failed read, a D1 error would abort every
       // later PR, leave no audit row and skip the awaiting-seat write). It is reported as not merged
       // with the error.

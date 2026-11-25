@@ -15,10 +15,7 @@ export const POLICY_CHECKS = [
   "no_migration_workflow_lockfile",
   "paths_allowed_for_namespace",
   "head_in_base_repo",
-  "body_names_job",
   "pr_author_allowed",
-  "job_handed_on",
-  "pr_recorded_for_job",
   "base_is_default_branch",
   "size_within_cap",
   "ci_green",
@@ -104,15 +101,14 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   { pattern: /(^|\/)Makefile$/i, why: "build glue CI executes" },
   { pattern: /(^|\/)\.husky\//i, why: "a git hook CI may run" },
   { pattern: /(^|\/)\.gitmodules$/i, why: "submodules the checkout would fetch and run" },
-  // pr_recorded_for_job trusts result_ref and job_outcome_prs because only the job's holder writes
-  // them; these sources write them, so a green PR that loosened either could record any PR against any job.
+  // The job queue's own sources: they hold claims and the records of what a job's holder did.
   {
     pattern: /^src\/jobs(-[a-z]+)*\.ts$/i,
-    why: "the job transitions that write result_ref, which pr_recorded_for_job reads",
+    why: "the job transitions, which write claims and results",
   },
   {
     pattern: /^src\/outcome-prs(-[a-z]+)*\.ts$/i,
-    why: "the writer of job_outcome_prs, which pr_recorded_for_job reads",
+    why: "the writer of job_outcome_prs",
   },
 ];
 

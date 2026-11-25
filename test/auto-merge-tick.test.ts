@@ -101,16 +101,7 @@ test("a PR whose files GitHub reports without line counts is declined, not count
   assert.match(outcome.why ?? "", /no line counts/);
 });
 
-test("a PR recorded only in job_outcome_prs still merges", async () => {
-  const { outcome, merges } = await tickFiles(["docs/schema.md"], {
-    job: { result_ref: "capsid/notes/done.md" },
-    outcomePrs: [{ job_id: "job_4c0ecc28548b", pr_url: PR_URL }],
-  });
-  assert.equal(outcome.merged, true, outcome.why ?? "");
-  assert.equal(merges, 1);
-});
-
-test("a fork PR naming a done job is refused by the tick", async () => {
+test("a fork PR is refused by the tick", async () => {
   const { outcome, merges } = await tickWith(
     (await enabledEnv()).env,
     tickRoutes(["docs/schema.md"], "attacker/capsid"),
@@ -276,12 +267,12 @@ test("a file list GitHub truncates, or a page that fails partway, is refused, no
   assert.match(partial.outcome.why ?? "", /502/);
 });
 
-// one PR cannot end the tick, and a PR naming no job costs no GitHub read
+// one PR cannot end the tick
 
-const NO_JOB_SHA = "cccc000000000000000000000000000000000000";
+const SECOND_SHA = "cccc000000000000000000000000000000000000";
 const NEW_SHA = "c0ffee00123456789012345678901234567890cd";
 
-function twoPrRoutes(mergeRoute: unknown, noJobSha = NO_JOB_SHA) {
+function twoPrRoutes(mergeRoute: unknown, secondSha = SECOND_SHA) {
   const base = tickRoutes(["docs/schema.md"]);
   return {
     ...base,
@@ -290,15 +281,19 @@ function twoPrRoutes(mergeRoute: unknown, noJobSha = NO_JOB_SHA) {
         ...(base[`GET ${OWNER}/pulls`] as { body: unknown[] }).body,
         {
           number: 30,
-          body: "A human's change, no job here.",
+          body: "A second change.",
           head: {
-            sha: noJobSha,
+            sha: secondSha,
             repo: { full_name: "DrDustinEdwards/capsid" },
           },
           base: { ref: "master" },
+          user: { login: "DrDustinEdwards" },
         },
       ],
     },
+    [`GET ${OWNER}/pulls/30/files`]: base[`GET ${OWNER}/pulls/23/files`],
+    [`GET ${OWNER}/commits/${secondSha}/check-runs`]:
+      base[`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`],
     [`PUT ${OWNER}/pulls/23/merge`]: mergeRoute,
   };
 }
@@ -324,24 +319,8 @@ test("a merge GitHub refuses with 405 is audited as failed, and the tick goes on
   }>;
   assert.deepEqual(awaiting.map((a) => [a.number, a.failed]).sort(), [
     [23, "error"],
-    [30, "body_names_job"],
+    [30, "ci_green"],
   ]);
-});
-
-test("a PR whose body names no job is declined without reading its files, checks or CI runs", async () => {
-  const { d1, env } = await enabledEnv();
-  const { report, calls } = await tickWith(env, twoPrRoutes({ body: { sha: MERGED_SHA } }));
-  const skipped = report.outcomes.find((o) => o.number === 30);
-  assert.equal(skipped?.failed, "body_names_job");
-  const aboutPr30 = calls.filter(
-    (c) =>
-      c.path.includes("/pulls/30") ||
-      c.path.includes(NO_JOB_SHA) ||
-      (c.search ?? "").includes(NO_JOB_SHA),
-  );
-  assert.deepEqual(aboutPr30, [], "the tick read GitHub for a PR that names no job");
-  assert.equal(report.outcomes.find((o) => o.number === 23)?.merged, true);
-  assert.equal(declineRows(d1).filter((r) => r.head_sha === NO_JOB_SHA).length, 1);
 });
 
 // A decline is logged when the decision changes: the tick runs every five minutes, and a

@@ -12,7 +12,7 @@ import { factsForPr, type OpenPr } from "./auto-merge-tick-facts";
 
 // Judge one pull request, merge it when the policy passes, and audit the decision.
 
-export function declineParams(
+function declineParams(
   policyVersion: string,
   facts: Pick<PrFacts, "repo" | "number" | "headSha">,
   verdict: {
@@ -57,8 +57,6 @@ function mergeParams(
     repo: facts.repo,
     pr: facts.number,
     head_sha: facts.headSha,
-    job: facts.jobId,
-    driver: facts.jobClaimedBy,
     merge_sha: mergeSha,
     passed,
     at: now.toISOString(),
@@ -75,7 +73,7 @@ const LAST_DECLINE_TTL_SECONDS = 14 * 24 * 60 * 60;
  * Audit a decline unless the same PR was already logged with this head sha and check. A KV failure
  * logs the row anyway: a repeated row is better than a lost one.
  */
-export async function auditDeclineOnChange(
+async function auditDeclineOnChange(
   env: Env,
   facts: { repo: string; number: number; headSha: string },
   failed: string,
@@ -122,14 +120,13 @@ export interface AutoMergeOutcome {
   why: string | null;
   passed: string[];
   // The merge pipeline's class (src/merge-class.ts), report-only; null when the PR's files were
-  // never read (the body names no job, or the tick threw).
+  // never read (the tick threw first).
   merge_class?: Classification | null;
   visual?: VisualPr;
 }
 
 /**
- * Judge one PR (named job, promoted unit, visual or approved), merge it when the policy passes,
- * and audit either way. Pushes exactly one outcome, before its audit row, so a caller can tell a
+ * Judge one PR, merge it when the policy passes, and audit either way. Pushes exactly one outcome, before its audit row, so a caller can tell a
  * PR that was judged from one that threw first.
  */
 export async function judgeOnePr(

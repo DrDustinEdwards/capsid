@@ -1,4 +1,3 @@
-import { PR_URL_SOURCE } from "@dustinedwards/site-runtime/github";
 import {
   allowedPathsFor,
   overSizeCap,
@@ -32,11 +31,6 @@ export interface PrFacts {
   ciStepsProblem: string | null;
   headRepo: string | null;
   prAuthor: string | null;
-  // Resolved from the job id in the PR body; jobClaimedBy is for the audit row only.
-  jobId: string | null;
-  jobClaimedBy: string | null;
-  jobStatus: string | null;
-  jobPrUrls: string[];
 }
 
 export type PolicyVerdict =
@@ -47,16 +41,6 @@ const JOB_ID_IN_BODY = /\bjob_[0-9a-f]{12}\b/;
 
 export function jobIdFromBody(body: string): string | null {
   return JOB_ID_IN_BODY.exec(body ?? "")?.[0] ?? null;
-}
-
-const HANDED_ON_STATUSES = ["blocked", "done"];
-
-// A PR URL as the job records hold it, compared case-insensitively. The match ends at the PR
-// number, so pull/23 never matches pull/234.
-const PR_URL = new RegExp(PR_URL_SOURCE, "g");
-
-function normalizedPrUrls(text: string | null): string[] {
-  return [...(text ?? "").matchAll(PR_URL)].map((m) => m[0].toLowerCase());
 }
 
 // Named separately from the refused list because their consequence is not local (a migration runs
@@ -151,15 +135,6 @@ export function evaluatePolicy(
   }
   passed.push("head_in_base_repo");
 
-  const earned = !facts.jobId && promoted !== null;
-  if (!facts.jobId && !earned) {
-    return no(
-      "body_names_job",
-      "the PR body names no job id, and its unit has not earned unattended merging, so a person approves it.",
-    );
-  }
-  passed.push("body_names_job");
-
   const author = facts.prAuthor?.toLowerCase() ?? null;
   if (!author || !allowedAuthors.some((a) => a.toLowerCase() === author)) {
     return no(
@@ -168,29 +143,6 @@ export function evaluatePolicy(
     );
   }
   passed.push("pr_author_allowed");
-
-  if (earned) {
-    passed.push("job_handed_on", "pr_recorded_for_job");
-  } else {
-    if (!facts.jobStatus || !HANDED_ON_STATUSES.includes(facts.jobStatus)) {
-      return no(
-        "job_handed_on",
-        `${facts.jobId} is ${facts.jobStatus ?? "in no status"}, not blocked or done, so it has not handed a PR on.`,
-      );
-    }
-    passed.push("job_handed_on");
-
-    // The PR itself must be recorded against the job, or anyone could name a finished job in a PR
-    // body.
-    const url = `https://github.com/${facts.repo}/pull/${facts.number}`.toLowerCase();
-    if (!facts.jobPrUrls.some((recorded) => normalizedPrUrls(recorded).includes(url))) {
-      return no(
-        "pr_recorded_for_job",
-        `${facts.jobId}'s holder never recorded this PR against it (neither its result_ref nor its outcome PRs name ${url}), so it is not shown to be that job's work.`,
-      );
-    }
-    passed.push("pr_recorded_for_job");
-  }
 
   if (facts.baseRef !== facts.defaultBranch) {
     return no(
