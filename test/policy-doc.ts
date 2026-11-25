@@ -6,7 +6,6 @@ import {
   requiredCiLabel,
 } from "../src/auto-merge-policy";
 
-/** A policy document that loadMergePolicy accepts: the code's own checks, paths and CI steps. */
 export const policyDocument = (
   version: string | number,
   { enabled = true, authors = ["DrDustinEdwards"] } = {},

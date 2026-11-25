@@ -9,10 +9,6 @@ import {
 } from "../src/search-console.ts";
 import { fakeEnv } from "./fakes.ts";
 
-// Search Console for a namespace's site (src/search-console.ts), served as
-// capsid_inspect_repo action search. The namespace picks the property; the caller never
-// names one, and an inspected URL must be on the namespace's own host.
-
 const NOW = new Date("2026-10-18T12:00:00.000Z");
 const ORIGIN = "https://www.sample.example.com";
 
@@ -114,7 +110,6 @@ test("pickProperty prefers the longest Domain property covering the host, then t
     ),
     "https://www.sample.example.com/",
   );
-  // A suffix that is not a parent domain does not match.
   assert.equal(
     pickProperty("https://notexample.com", [
       { siteUrl: "sc-domain:example.com", permissionLevel: "siteOwner" },

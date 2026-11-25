@@ -15,16 +15,13 @@ import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
 import { applyWrite, selectRows, type Row, type TableSpec } from "./fake-sql.ts";
 import { fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
-// Phone alerts (docs/design/design-merge-pipeline.md section 5, PR 7; DECIDE 5 and 6 of
-// 2026-10-09): exactly seven triggers, each sent once, never with an Approve button, never
-// with a title. The encryption itself is in test/web-push.test.ts.
+// Exactly seven triggers, each sent once, never with an Approve button, never with a title.
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
 const H = 3_600_000;
 const iso = (ms: number) => new Date(NOW.getTime() + ms).toISOString();
 const sqlTime = (ms: number) => iso(ms).replace("T", " ").slice(0, 19);
 
-// A P-256 key pair for VAPID and one for the device, made fresh for the file.
 async function keyPair(): Promise<{ jwk: JsonWebKey; raw: string }> {
   const pair = (await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, [
     "deriveBits",
@@ -43,7 +40,6 @@ const DEVICE = await keyPair();
 const AUTH = base64url(crypto.getRandomValues(new Uint8Array(16)));
 const ENDPOINT = "https://fcm.googleapis.com/fcm/send/device-1";
 
-// D1 over the generic evaluator in test/fake-sql.ts, so every WHERE is applied.
 function db(seed: { jobs?: Row[]; deploys?: Row[]; devices?: Row[] } = {}) {
   const tables: Record<string, TableSpec> = {
     jobs: { rows: seed.jobs ?? [], unique: [["id"]] },
@@ -197,8 +193,6 @@ async function decrypt(body: Uint8Array): Promise<string> {
   );
   return new TextDecoder().decode(padded.slice(0, padded.lastIndexOf(2)));
 }
-
-// The seven triggers
 
 test("a typed pull request alerts only after 2 hours waiting, counted from the first tick that saw it", async () => {
   const w = world({ awaiting: [typed(7)] });
@@ -357,8 +351,6 @@ test("a job at the correction cap alerts; a question alerts only past 4 hours on
     assert.doesNotMatch(g.body, /secret title/, "an alert carried a job's title");
 });
 
-// Each sent once, never a button
-
 test("a site alerts when down on two probes in a row and when back, once each, and degraded once a day per failing check", async () => {
   const w = world();
   const s = service();
@@ -400,7 +392,7 @@ test("a site alerts when down on two probes in a row and when back, once each, a
     [],
     "a growing age is the same check",
   );
-  // REPLAY (U3, 2026-10-31): keyed by site, a cron that failed later the same day never pushed.
+  // Keyed by site, a cron that failed later the same day never pushed.
   assert.deepEqual(await step(30, probe("degraded", "cron; backup: 39h old")), [
     "site-degraded:sample:cron:2026-10-11",
   ]);
@@ -452,8 +444,6 @@ test("at most three items go out per tick; the rest follow on the next", async (
   assert.match(first.note, /2 more next tick/);
   assert.equal((await pushTick(w.env, NOW, s.fetcher)).sent.length, 2);
 });
-
-// Devices and keys
 
 test("a 410 marks the device gone, and the item is kept for a later device", async () => {
   const w = world({
@@ -546,8 +536,6 @@ test("with no device on, the urgent alert goes by email once, and the next tick 
   assert.equal(again.sent.length, 0);
   assert.equal(mails.length, 1, "a mailed alert was mailed again");
 });
-
-// The Portal's route
 
 const SECRET = "push-test-cookie-secret";
 const CSRF = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";

@@ -16,8 +16,6 @@ import {
   driverBlockedJob,
 } from "./jobs-fixture";
 
-// The work queue against a real D1 (jobs.test.ts): resume, the resume note and the retry cap.
-
 beforeEach(resetJobs);
 
 describe("the resume note", () => {
@@ -37,7 +35,6 @@ describe("the resume note", () => {
     };
   }
 
-  // The seat releases the job some time later, and a minted driver claims it.
   async function releasedThenClaimed(id: string) {
     const later = new Date(NOW.getTime() + 3_600_000);
     expect((await releaseJob(jobsEnv(), SEAT_AGENT, later, id, "the holder is gone")).ok).toBe(
@@ -66,8 +63,8 @@ describe("the resume note", () => {
     expect(claimed.resume_note?.by).toBe(SEAT);
   });
 
-  // A question block (Track A D4): the session asks, the Worker fixes the command, every
-  // reader can tell it from a gate, and the answer is a resume note the driver keeps.
+  // A question block: the session asks, the Worker fixes the command, every reader can tell it from a gate,
+  // and the answer is a resume note the driver keeps.
   async function claimedJob(title: string) {
     const posted = await post({ title });
     const id = posted.job!.id;
@@ -129,7 +126,6 @@ describe("the resume note", () => {
     const beat = await listJobs(jobsEnv(), { namespace: "capsid", id: id });
     expect(beat.resume_notes?.map((n) => n.reason)).toEqual(["keep the old route"]);
     expect(beat.resume_notes?.[0]?.note).toContain("add /ready beside it");
-    // A second question and answer: the first answer is still there.
     await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "And the metrics path?", question: true });
     await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "leave metrics out");
     const later = await listJobs(jobsEnv(), { namespace: "capsid", id: id });
@@ -139,8 +135,7 @@ describe("the resume note", () => {
     ]);
   });
 
-  // Every resume note, not only the latest (docs/work-queue.md; Track A 2a): an approval
-  // given at one resume is still there after the next.
+  // Every resume note, not only the latest: an approval given at one resume is still there after the next.
   async function resumedThrice(title: string) {
     const id = await driverBlockedJob(title);
     for (const reason of [
@@ -267,7 +262,6 @@ describe("the resume note", () => {
     const claimed = await releasedThenClaimed(id);
     expect(claimed.resume_note?.note).toBe(LONG_NOTE);
 
-    // The mirror rewritten by the claim reads the note back from the audit row.
     const after = await env.DB.prepare(
       "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
     )
@@ -302,13 +296,8 @@ describe("the retry cap, where the block is written", () => {
 });
 
 describe("the retry cap, where resume reads it", () => {
-  // SQLite applies the increment and sums corrections_count over every row that
-  // shares (namespace, title).
-  //
-  // Named agents rather than the legacy key: a legacy write key resolves to the admin,
-  // and the admin is the one caller the cap lets through. The resumer is a can_merge
-  // seat, because a plain resume is the seat's act and a driver's is refused before the
-  // cap is read.
+  // Named agents, not the legacy key (it resolves to the admin, the one caller the cap lets through); the resumer is a can_merge seat,
+  // because a driver's plain resume is refused before the cap is read. SQLite sums corrections_count over (namespace, title).
   function agentNamed(name: string, admin = false, canMerge = false): Agent {
     const scopes = defaultScopes(["capsid"]);
     scopes.grants = ["read", "write"];

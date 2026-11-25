@@ -11,8 +11,7 @@ import {
   handleClientDocument,
 } from "../src/oauth-client-docs.ts";
 
-// The verify-live probe's client document served by the Worker at a path that names no
-// branch (job_bf05bc756c5e). It must be one the provider accepts, and say the same as the
+// The probe's client document at a path that names no branch must be one the provider accepts and say the same as the
 // file it replaces, apart from its own URL.
 
 const ORIGIN = "https://capsid.example";

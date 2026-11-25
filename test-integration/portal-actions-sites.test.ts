@@ -22,8 +22,6 @@ import {
   performToken,
 } from "./portal-actions-fixtures";
 
-// The Portal's project and site actions and reads through the Worker (portal-actions.test.ts).
-
 beforeEach(resetPortal);
 
 describe("the project actions against real D1", () => {
@@ -108,8 +106,7 @@ describe("the site actions against real D1", () => {
     });
     expect(unregistered.status).toBe(400);
     expect(await unregistered.text()).toMatch(/neither a registered namespace nor a further host/);
-    // A further host of a registered namespace (<namespace>-<host>) is a site row the
-    // watcher accepts, so the add previews.
+    // A further host of a registered namespace (<namespace>-<host>) is a site row the watcher accepts.
     const host = await call(PORTAL_PREVIEW_PATH, {
       method: "POST",
       body: {
@@ -194,7 +191,6 @@ describe("the Portal's reads", () => {
     const all = (await (await call(PORTAL_ACTIVITY_PATH)).json()) as PortalActivity;
     expect(all.rows.map((r) => r.path)).toEqual(["c.md", "b.md", "a.md"]);
 
-    // The drawer's read: one row by id, with its detail and without its params.
     const one = (await (
       await call(`${PORTAL_ACTIVITY_PATH}?id=${all.rows[1]!.id}`)
     ).json()) as PortalActivity;

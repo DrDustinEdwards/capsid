@@ -6,12 +6,8 @@ import { defaultScopes, type AgentGrant } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// JOBS.LIST RETURNED EVERY SIGNED BODY (2026-09-16 source audit).
-//
-// A job body is the executable prompt a driver runs with shell and repo credentials.
-// list was SELECT * and returned rows whole, so any caller holding READ on a namespace
-// read every prompt queued in it. The body now comes back from claim, and from list
-// only when one job is named by id and the caller holds write.
+// A list that was SELECT * returned every signed job body (an executable prompt) to any READ caller;
+// the body now comes only from claim, or from list for one job named by id with write.
 
 const BODY = "---\ncapsid-task-signature: abc\n---\nthe executable prompt";
 

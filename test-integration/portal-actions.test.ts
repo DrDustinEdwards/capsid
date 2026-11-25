@@ -23,10 +23,7 @@ import {
 } from "./portal-actions-fixtures";
 import { CASES } from "./portal-actions-cases";
 
-// The Portal's controls through the whole Worker against a real D1 and KV: every action
-// previewed, checked to have written nothing, then performed from its token, and the
-// rows it wrote read back. The refusals were carried over from the old page's
-// job-action tests when /console was deleted, so none of its cases lost coverage.
+// Every action previewed, checked to have written nothing, then performed from its token and read back.
 
 beforeEach(resetPortal);
 
@@ -65,9 +62,7 @@ describe("every action, previewed then performed through the Worker", () => {
       expect(body.feed.live.namespaces.map((n) => n.name)).toEqual([...APP_ROSTER]);
       await CASES[action].after(params);
 
-      // The rows written are the rows the preview said would be. A job transition
-      // writes its action twice, once for the job and once for its mirror document, so
-      // the comparison is of distinct "<action> by <actor>" lines.
+      // A job transition writes its action twice (the job and its mirror document), so compare distinct "<action> by <actor>" lines.
       const written = (await auditRows()).filter((r) => !auditBefore.some((b) => b.id === r.id));
       expect([...new Set(written.map((r) => `${r.action} by ${r.actor}`))].sort()).toEqual(
         [...preview.audit].sort(),

@@ -1,11 +1,8 @@
 import { gunzipSync } from "node:zlib";
-// The one set of fakes (KV, R2, D1, fetch, Env) every test uses. KV list() answers
-// in one page; no test drives a second page.
+// The one set of fakes (KV, R2, D1, fetch, Env) every test uses. KV list() answers in one page; no test drives a second.
 //
-// The D1 fake is row-backed: WHERE clauses resolve against the bound values, so a
-// handler asking for the wrong row gets nothing back. A fake that cannot disagree
-// with the handler cannot test it.
-// improve_jti, the one improve table left, is the live replay cache (loopTableExec below).
+// The D1 fake is row-backed: WHERE resolves against the bound values, so a handler asking for the wrong row gets nothing
+// back. A fake that cannot disagree with the handler cannot test it.
 import type { OpsFeedData } from "../src/ops-feed.ts";
 import { recordFor, type AgentRecord } from "../src/agent-record.ts";
 import { EXCLUDED as BACKUP_EXCLUDED, TABLES as BACKUP_TABLES } from "../src/backup.ts";
@@ -68,17 +65,13 @@ function loopTableExec(
   throw new Error(`fake: an improve_jti statement the fake does not model: ${text}`);
 }
 
-// KV
-
 export interface FakeKvOptions {
   seed?: Record<string, string>;
   // Answer any gh:token: read with a canned token so a test that is not about
   // token minting does not have to mint one.
   seedToken?: boolean;
-  // Failure injection, which makes the rate limiter's fail-open paths testable.
   failGet?: boolean;
   failPut?: boolean;
-  // Return a value that is not what the caller expects, for the corrupt-counter path.
   corrupt?: string;
 }
 
@@ -127,8 +120,6 @@ export function fakeKv(opts: FakeKvOptions = {}): FakeKv {
   };
 }
 
-// R2
-
 /** The JSON a dump table holds, read the way d1-dump writes it: gzip when the key ends in .gz. */
 export function dumpJson<
   T = { exported_at: string; table: string; rows: Array<Record<string, unknown>> },
@@ -146,8 +137,6 @@ export interface FakeR2 {
   // One entry per delete call, holding the keys that call removed: the backup
   // tests ask both how many calls and which keys.
   deleted: string[][];
-  // One entry per multipart upload started: its key, each part's size in upload
-  // order, and whether it was aborted.
   multipart: Array<{ key: string; parts: number[]; aborted: boolean }>;
   bucket: R2Bucket;
 }
@@ -222,8 +211,6 @@ export function fakeR2(seed: Record<string, string> = {}): FakeR2 {
   return { objects, deleted, multipart, bucket };
 }
 
-// D1
-
 export interface Recorded {
   sql: string;
   params: unknown[];
@@ -262,14 +249,10 @@ export interface FakeD1Options {
   // The pinned FTS probe finds its document. False stands in for an empty or
   // damaged index, which is the case a plain row count cannot see.
   ftsHit?: boolean;
-  // How many rows the FTS index matches. Defaults to 1.
   ftsRows?: number;
-  // Rows the backup prune should report as due, per COUNT statement in order.
   dueCounts?: number[];
-  // A concurrent writer. Runs once, immediately after the handler's pre-read of a
-  // documents row and before its commit-time read and its batch: the window the
-  // write predicate closes. `target` is the (namespace, path) just pre-read, so the
-  // race lands on the document under test.
+  // A concurrent writer, run once after the handler's pre-read of a documents row and before its commit-time read and batch:
+  // the window the write predicate closes. `target` is the (namespace, path) just pre-read.
   raceAfterPreRead?: (rows: FakeD1Rows, target: { namespace: string; path: string }) => void;
   // Throw from batch() for any statement matching this, to drive the "a batch
   // failure is a clean refusal" paths. The guards throw on their own.
@@ -283,7 +266,6 @@ export interface FakeD1Options {
   // Tables sqlite_master lists beyond the ones the migrations create, for the backup's
   // check that the live schema matches TABLES.
   extraTables?: string[];
-  // The scoped credentials (migrations/0008). Absent by default.
   agents?: Array<Record<string, unknown>>;
   // Queue rows, for the readers that look a job up rather than transition it.
   // The queue's own transitions are driven against real SQLite in test-integration.
@@ -291,7 +273,6 @@ export interface FakeD1Options {
   // The PR URLs an outcome named (migrations/0015), for auto-merge's check that a PR
   // was recorded against the job its body names. Absent by default.
   jobOutcomePrs?: Array<{ job_id: string; pr_url: string }>;
-  // Recorded job outcomes (migrations/0011). Absent by default.
   jobOutcomes?: Array<Record<string, unknown>>;
 }
 
@@ -381,18 +362,13 @@ function guardFires(sql: string, params: unknown[], rows: FakeD1Rows): boolean {
   }
   const [namespace, path] = params as [string, string];
   const row = rows.documents.find((d) => d.namespace === namespace && d.path === path);
-  // requireBodyUnchanged: fires unless the row exists AND its body is the expected one.
   if (/AND body IS \?3/i.test(flat)) return !(row && row.body === params[2]);
-  // requireMissing: fires when the row DOES exist.
   if (/WHERE EXISTS/i.test(flat)) return Boolean(row);
-  // requireExists: fires when the row does not.
   return !row;
 }
 
-// snapshotLive (src/store-guards.ts) copies the live row into document_versions and
-// answers RETURNING id with the new version's id, or nothing when the documents row is
-// gone at batch time. write and restore report `snapshotted` from this result. The
-// version row lands, so a test can read the prior body back from rows.versions.
+// snapshotLive (src/store-guards.ts) copies the live row into document_versions and answers RETURNING id with the new
+// version's id, or nothing when the row is gone at batch time; the version row lands so tests can read the prior body back.
 const SNAPSHOT_LIVE =
   /^INSERT INTO document_versions \(document_id, namespace, path, title, body\) SELECT id, namespace, path, title, body FROM documents WHERE namespace = \?1 AND path = \?2 RETURNING id$/i;
 
@@ -435,7 +411,6 @@ function landTouch(params: unknown[], rows: FakeD1Rows): WriteResult {
   return { changes: 1, returning: [] };
 }
 
-// The column defaults migrations 0006 to 0044 give a jobs row.
 const jobDefaults = (): Row => ({
   priority: 0,
   status: "queued",
@@ -456,7 +431,6 @@ const jobDefaults = (): Row => ({
   updated_at: sqliteNow(),
 });
 
-// The table a SELECT reads, from its first FROM.
 const mainTable = (flat: string): string | undefined =>
   /^SELECT .+? FROM (\w+)/is.exec(flat.trim())?.[1];
 

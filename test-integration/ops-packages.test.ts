@@ -10,9 +10,8 @@ import {
 } from "../src/ops-package-config";
 import type { PackageSnapshot } from "../src/ops-types/sites";
 
-// The Packages panel against a real D1 and KV (job_c6e4ab939a54): its configuration is
-// written like the sites', its weekly rows are written once a week, and its history is
-// read on demand in ranges npm will not shorten, joined to a former name, and cached.
+// The Packages panel against a real D1 and KV: configuration written like the sites', weekly rows written once a week,
+// and history read on demand in ranges npm will not shorten, joined to a former name, and cached.
 
 type Env = Parameters<typeof packageHistory>[0];
 const ENV = env as unknown as Env;

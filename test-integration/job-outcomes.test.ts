@@ -9,9 +9,8 @@ import { buildServer } from "../src/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { jobRow, jobsEnv, seedCapsidNamespace } from "./jobs-fixture";
 
-// Jobs as evidence, against a real D1 (migrations/0011). Every property below is a
-// property of the database: "exactly one outcome row per job" is a PRIMARY KEY, and
-// a bar checked at the claim is a refusal a real UPDATE either did or did not perform.
+// Jobs as evidence, against a real D1 (migrations/0011): "exactly one outcome row per job" is a PRIMARY KEY, and a bar checked at the claim
+// is a refusal a real UPDATE did or did not perform.
 
 const SEAT = "github:DrDustinEdwards";
 const DRIVER_ACTOR = "agent:driver-aaaa";
@@ -222,14 +221,11 @@ describe("job outcomes", () => {
     const id = posted.job!.id;
     expect(posted.job!.min_record).toBe(JSON.stringify({ prs_merged: 2 }));
 
-    // This driver has no record, so it is refused and the job stays queued rather
-    // than being failed or handed out.
     const refused = await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/at least 2 merged pull requests/);
     expect((await jobRow(id))?.status).toBe("queued");
 
-    // With a record the Worker verified, the same claim succeeds.
     await plantOutcome("job_history0001", 2, 2, FULLY_VERIFIED);
     const won = await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
     expect(won.ok, won.refusal).toBe(true);
@@ -271,7 +267,6 @@ describe("job outcomes", () => {
     expect(refused.refusal).toMatch(/at least 2 merged pull requests/);
     expect((await jobRow(id))?.status).toBe("blocked");
 
-    // The same caller with a verified record takes it.
     await env.DB.prepare(
       `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
          result_kind, verified, recorded_at)
@@ -344,8 +339,6 @@ describe("job outcomes", () => {
     expect(verified.prs_opened).toBe(false);
   });
 });
-
-// The transition and its records are one batch.
 
 describe("a holder transition commits with every record of it, or not at all", () => {
   const NS = "sample";

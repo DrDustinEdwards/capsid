@@ -17,10 +17,6 @@ import {
 import { reverifyPr } from "../src/outcome-prs.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
 
-// Job outcomes: what node can check without a database (the verification rules, the
-// null-not-zero rule, and the derivation of a row from a job). "Written exactly once"
-// is a PRIMARY KEY property, so test-integration/jobs.test.ts checks it on a real D1.
-
 function job(overrides: Partial<JobRow> = {}): JobRow {
   return {
     id: "job_abc123abc123",
@@ -45,8 +41,6 @@ function job(overrides: Partial<JobRow> = {}): JobRow {
     ...overrides,
   };
 }
-
-// what the row says about itself
 
 test("result_kind is derived from the result ref, not declared by the caller", () => {
   assert.equal(resultKindOf("https://github.com/o/r/pull/7"), "pr");
@@ -80,8 +74,6 @@ test("the duration measures the final stretch, and the row says how many there w
   assert.equal(row.blocked_count, 2);
   assert.equal(row.resumed_count, 2);
 });
-
-// null is not zero
 
 function empty(): EvidenceVerdict {
   return {
@@ -131,7 +123,6 @@ test("a job that reported nothing records NULL everywhere, never zero", async ()
   ] as const) {
     assert.equal(row[field], null);
   }
-  // The counts the Worker knows first-hand are still there.
   assert.equal(row.blocked_count, 0);
   assert.equal(row.agent, "agent:capsid-driver");
   assert.equal(row.namespace, "capsid");
@@ -150,11 +141,8 @@ test("nothing is marked verified when nothing was checked", async () => {
     files_changed: false,
     ci_green: false,
   });
-  // The driver's numbers are kept, but never presented as verified.
   assert.equal(verdict.commits, 9);
 });
-
-// verification against GitHub
 
 const REPOS = [{ repo: "DrDustinEdwards/capsid-mcp", label: "primary" }];
 
@@ -194,8 +182,6 @@ const greenRuns: Route = {
 };
 
 test("GITHUB'S NUMBERS REPLACE THE DRIVER'S, and only then are they marked verified", async () => {
-  // The driver claims two commits and one file; GitHub says three and five, and the
-  // row records GitHub's.
   await withFetch(
     { [`GET ${PR_PATH}`]: prRoute(true), [`GET ${RUNS_PATH}`]: greenRuns },
     async () => {
@@ -261,7 +247,6 @@ test("a pull request GitHub will not answer for leaves prs_opened, commits and f
         2,
         "the driver's number survives; it is the FLAG that must not",
       );
-      // The last named pull request was not read, so CI was not looked up.
       assert.equal(verdict.ci_green, null);
       assert.ok(
         verdict.notes.some((n) => /1 of 2/.test(n)),
@@ -327,7 +312,6 @@ test("CI that has not finished, or has no runs, is not red; a failed run is red,
       const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL] });
       assert.equal(verdict.ci_green, null);
       assert.equal(verdict.verified.ci_green, false);
-      // The pull request counts still verified.
       assert.equal(verdict.verified.prs_merged, true);
     },
   );
@@ -387,9 +371,8 @@ test("PLANT: the re-verify sweep survives a token that cannot be minted (audit 2
   });
 });
 
-// A pull request's identity (job_6092edef11e1). A URL names a number, and a recreated or
-// transferred repo hands its numbers out again, so a later read by URL can land on a
-// different pull request. The row pins the one it named and refuses any other.
+// A URL names a number, and a recreated or transferred repo reissues its numbers, so a later read by
+// URL can land on a different pull request. The row pins the one it named and refuses any other.
 
 const REPO_PATH = "/repos/DrDustinEdwards/capsid-mcp";
 
@@ -610,8 +593,6 @@ test("BACKFILL fails closed: a repo that cannot be read leaves the unpinned row 
   assert.deepEqual(written, []);
 });
 
-// the bar a job can set on a driver's history
-
 test("a CORRUPT min_record refuses: it fails CLOSED", () => {
   // A garbled bar is not the same as no bar; the claim marks such a job failed rather
   // than leasing it to anyone.
@@ -636,7 +617,6 @@ test("PLANT: an agent below the bar is refused, and the refusal names both numbe
   assert.ok(refusal, "an agent with one merged pull request cleared a bar of three");
   assert.match(refusal, /at least 3 merged pull requests/);
   assert.match(refusal, /has 1/, "the refusal does not say what the agent actually has");
-  // The same agent at the bar clears it.
   assert.equal(missingForRecord({ prs_merged: 3 }, bar), null);
   // Singular reads as English rather than as "1 merged pull requests".
   assert.match(
@@ -645,12 +625,8 @@ test("PLANT: an agent below the bar is refused, and the refusal names both numbe
   );
 });
 
-// That the claim and a resume with take both ask the record question is driven against
-// a real D1 in test-integration/job-outcomes.test.ts, one plant per path.
-
-// REPRODUCTION of the observed error: two readable pull requests and one in a repo
-// the namespace does not map (a claude-skills PR on a capsid job). Before the fix the
-// row recorded prs_merged null, ci_green null and every field unverified.
+// Reproduction of an observed error: two readable pull requests and one in a repo the namespace does
+// not map; the row once recorded prs_merged null, ci_green null and every field unverified.
 test("one unreadable pull request does not erase what the readable ones verified", async () => {
   const nine = "/repos/DrDustinEdwards/capsid-mcp/pulls/9";
   await withFetch(

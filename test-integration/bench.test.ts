@@ -5,11 +5,8 @@ import { BENCH_REPEATS } from "../src/bench-slots";
 import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { post } from "./bench-fixture";
 
-// The paired comparison's three signed endpoints (src/bench.ts) against a real D1 and
-// KV: the task freeze, the off switch, the running cap's single-statement INSERT, the
-// close-once UPDATE and the triggers of migrations/0047 are only true of real SQLite.
-// The bench key is the BENCH_SECRET the config binds, used as is; ROOT signs the
-// improve-key request the wrong-key test sends.
+// The signed bench endpoints against real D1 and KV: the running cap's single INSERT, the close-once UPDATE
+// and migrations/0047's triggers are only true of real SQLite. ROOT signs the wrong-key test's request.
 
 const ROOT = "integration-root-secret-not-a-real-one";
 
@@ -140,7 +137,6 @@ describe("bench endpoints", () => {
       expect(response.status, await response.clone().text()).toBe(200);
       return (await response.json()) as { run_id: string; slot: number; attempt: number };
     };
-    // Slot 1 comes back unjudged, so its rerun is the next start; slot 2 scores.
     const first = await startSlot();
     expect(first).toMatchObject({ slot: 1, attempt: 1 });
     expect(
@@ -156,13 +152,11 @@ describe("bench endpoints", () => {
     expect((await score(second.run_id, { hidden: counts(1, 3), claimed_done: true })).status).toBe(
       200,
     );
-    // Slot 3 is still running, so it holds its slot and nothing else may start.
     const third = await startSlot();
     expect(third).toMatchObject({ slot: 3, attempt: 1 });
     const full = await start(task_id);
     expect(full.status).toBe(409);
     expect(await full.text()).toMatch(/has used its baseline runs/);
-    // The other arm on the same task has its own slots, and the planted arms none.
     expect(await startSlot("treatment")).toMatchObject({ slot: 1, attempt: 1 });
     await env.DB.prepare(
       "UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'",
@@ -225,7 +219,6 @@ describe("bench endpoints", () => {
       turns: 40,
     });
     expect((await score(run_id, { hidden: counts(2, 3), claimed_done: true })).status).toBe(409);
-    // The trigger holds even against a direct write.
     await expect(
       env.DB.prepare("UPDATE bench_runs SET false_claim = 0 WHERE id = ?1").bind(run_id).run(),
     ).rejects.toThrow(/never changes/);

@@ -6,10 +6,8 @@ import { defaultScopes } from "../src/agents-schema";
 import { GATE_POLICY_PATH } from "../src/gate-policy";
 import { driverAgent, jobRow, jobsEnv, seatAgent, seedGatePolicy } from "./jobs-fixture";
 
-// The gate policy's resume path, against a real D1. Every job is posted, claimed and
-// blocked through the real queue, the policy document is a real signed row, and every
-// assertion reads the jobs and audit_log rows back. The classifier itself is tested
-// in test/gate-policy.test.ts, where it is pure.
+// The gate policy's resume path against a real D1: jobs go through the real queue, the policy document is a real signed row,
+// and assertions read jobs and audit_log back. The pure classifier is tested in test/gate-policy.test.ts.
 
 const SEAT_POSTER = grantAgent("write", "github:DrDustinEdwards");
 const REPO = "DrDustinEdwards/capsid-mcp";
@@ -56,7 +54,6 @@ async function approvalRow(id: string): Promise<Record<string, unknown> | null> 
   return null;
 }
 
-// A refused resume leaves the row exactly as the block left it.
 async function expectUntouched(id: string, before: Record<string, unknown> | null) {
   const after = await jobRow(id);
   expect(after?.status).toBe("blocked");
@@ -265,7 +262,6 @@ describe("a plain resume", () => {
   });
 
   it("a SEAT or ADMIN that is itself the claimant may still resume its own job", async () => {
-    // The exception is for the caller that can approve gates in the first place.
     const { result } = await plainResume(
       { ...seatAgent(), actor: "agent:capsid-driver" },
       "npm run deploy",
@@ -274,8 +270,7 @@ describe("a plain resume", () => {
   });
 
   it("PLANT: a DIFFERENT driver may not plain-resume another driver's gate, with or without take", async () => {
-    // A sibling driver holds the namespace's write grant, and clearing a deploy, a secret
-    // or a force push is still the seat's approval (Grok audit 2026-10, S1).
+    // A sibling driver holds the namespace's write grant, but clearing a deploy, a secret or a force push is still the seat's approval.
     for (const command of ["npm run deploy", "git push --force origin feat/x"]) {
       for (const take of [false, true]) {
         const { id, before, result } = await plainResume(

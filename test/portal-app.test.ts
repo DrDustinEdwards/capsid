@@ -7,11 +7,8 @@ import { withSecurityHeaders } from "../src/security-headers.ts";
 import { MCP_HOST } from "../src/mcp-host.ts";
 import { fakeEnv, fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
-// Capsid Portal behind its gate (src/portal-app.ts): its server-rendered pages (the tests'
-// stand-in, test/fixtures/portal-pages.ts) and its files, with a fake ASSETS binding that
-// records what it was asked for and a fake API that records what the page read. The same routes
-// run through the whole Worker, with miniflare's real assets router, in
-// test-integration/portal-app.test.ts.
+// A fake ASSETS binding and API record what they were asked; the same routes run through the whole
+// Worker in test-integration/portal-app.test.ts.
 
 const SECRET = "portal-app-test-cookie-secret";
 const NOW = new Date("2026-09-28T12:00:00.000Z");
@@ -62,8 +59,7 @@ async function signed(path: string, headers: Record<string, string> = {}): Promi
   return new Request(`https://capsid.example${path}`, { headers: { ...headers, Cookie: cookie } });
 }
 
-// The Portal's API as the page reads it: what it was asked, answered with a feed that mints the
-// CSRF cookie, as src/ops-feed.ts does on a session's first read.
+// Answers with a feed that mints the CSRF cookie, as src/ops-feed.ts does on a session's first read.
 function fakeApi() {
   const asked: Array<{ path: string; cookie: string | null }> = [];
   const api = async (request: Request) => {
@@ -110,7 +106,6 @@ test("PLANT: nothing is rendered, read or fetched for a caller the Portal gate r
 
 test("a signed-in administrator gets the page rendered with its reads, uncached and untransformed, its CSP carrying the page's nonce", async () => {
   const reads = fakeApi();
-  // As index.ts serves it: through the header layer.
   const res = withSecurityHeaders(
     await handlePortalApp(await signed("/portal/queue"), env(), reads.api, NOW),
     new Request(`https://${MCP_HOST}/portal/queue`),
@@ -129,7 +124,6 @@ test("a signed-in administrator gets the page rendered with its reads, uncached 
     res.headers.get("Content-Security-Policy")?.includes(`'nonce-${nonce}'`),
     "the policy names the page's nonce",
   );
-  // The read went to the Portal's own API with the visitor's session, and its cookie reached the browser.
   assert.equal(reads.asked[0]?.path, "/portal/api/ops");
   assert.match(reads.asked[0]?.cookie ?? "", /capsid_portal/);
   assert.match(res.headers.get("Set-Cookie") ?? "", /capsid_portal_csrf=fresh/);

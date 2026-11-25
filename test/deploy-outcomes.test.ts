@@ -8,10 +8,6 @@ import {
 } from "../src/deploy-outcomes.ts";
 import { owningCheck } from "../src/watcher-checks.ts";
 
-// The memory of a rollback (docs/design/design-merge-pipeline.md section 6, PR 6): what a
-// live gate job's conclusion, its rollback step and its annotations say, and the finding
-// a rollback raises. The read against GitHub and D1 is in test-integration/deploy-outcomes.test.ts.
-
 const A = "a".repeat(40);
 const B = "b".repeat(40);
 const job = (conclusion: string | null, rollback: string | null) => ({
@@ -52,7 +48,6 @@ test("a rollback the guard declined is rollback_skipped, not rolled_back", () =>
     ])?.outcome,
     "rollback_skipped",
   );
-  // A rollback step that succeeded and said nothing is not taken for a rollback.
   assert.equal(outcomeFrom(job("failure", "success"), [])?.outcome, "rollback_skipped");
 });
 

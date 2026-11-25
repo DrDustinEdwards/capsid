@@ -4,9 +4,8 @@ import { gzipSync } from "node:zlib";
 import type { R2Like } from "@dustinedwards/d1-dump";
 import { SITES, drillSite, firstFailure, selectSites } from "../scripts/drill-all.ts";
 
-// scripts/drill-all.ts: the drill over a site's newest complete backup. The bucket is an
-// in-memory R2Like and the drill is the REAL d1-dump CLI on its sqlite backend, so
-// PASS and FAIL are the drill's own verdict. Fake data throughout.
+// The bucket is an in-memory R2Like and the drill is the real d1-dump CLI on sqlite, so PASS
+// and FAIL are the drill's own verdict.
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3_600_000).toISOString();

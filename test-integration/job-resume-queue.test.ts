@@ -13,14 +13,11 @@ import {
   seedCapsidNamespace,
 } from "./jobs-fixture";
 
-// Resume when the job cannot go back to the credential that blocked it: the credential
-// is shared (the admin identity every chat tab connects as, or a legacy operator key)
-// and so names no particular session. The job goes back to the queue with its approval,
-// and the next free session claims it. A driver that holds other claims is no reason.
+// Resume when the job cannot go back to the credential that blocked it (shared: the admin identity or a legacy operator key):
+// the job returns to the queue with its approval and the next free session claims it.
 
 const ADMIN = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-09-26T06:00:00.000Z");
-// How a job blocks on its push.
 const PUSH_BLOCK = { reason: "waiting on the push", command: "git push -u origin feat/x" };
 const LATER = new Date("2026-09-26T07:00:00.000Z");
 

@@ -8,13 +8,8 @@ import { CANARY_CLIENT, OAUTH_KV } from "../scripts/bindings.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// The live-gate canary. Gate 2b reads one long-lived client: record from OAUTH_KV
-// every run, so a lost client record is detected within the schedule interval rather
-// than at the owner's next failed connect.
-//
-// The gate must tell why the canary is absent. That is why it reads KV directly
-// rather than driving /authorize: through the Worker, a missing client and a KV
-// outage are the same error page.
+// Gate 2b reads one long-lived client: record from OAUTH_KV every run, so a lost record is detected within the schedule interval. It reads KV directly
+// rather than driving /authorize, where a missing client and a KV outage are the same error page.
 
 const read = (p: string) => readFileSync(join(import.meta.dirname, p), "utf8");
 
@@ -33,8 +28,6 @@ type Reply = {
   json?: () => Promise<unknown>;
 };
 
-// A KV REST API stand-in covering the two endpoints the check uses: the value read
-// and the key listing that carries the expiry.
 function fakeKvApi(opts: {
   value?: string | null;
   valueStatus?: number;
@@ -55,7 +48,6 @@ function fakeKvApi(opts: {
         text: async () => opts.value ?? "",
       } as Reply;
     }
-    // the /keys?prefix= listing
     if (opts.throwOnList) throw new Error(opts.throwOnList);
     if (opts.listStatus && opts.listStatus !== 200)
       return { ok: false, status: opts.listStatus, json: async () => null } as Reply;
@@ -154,13 +146,9 @@ test("a foreign or truncated value at the right key is not accepted", async () =
   }
 });
 
-// The wiring.
-
 test("gate 2b is wired into the run and counted", () => {
   const gate = read("../scripts/verify-live.mjs");
   assert.match(gate, /await gateCanary\(\);/, "gate 2b is defined but never called");
-  // The gate total is pinned in counts.ts and checked by test/counts.test.ts; this
-  // asserts only that the canary is one of the counted gates.
   const labels = new Set([...gate.matchAll(/record\(\s*"([^"]+)"/g)].map((m) => m[1]));
   assert.ok(
     labels.has("2b canary client record"),

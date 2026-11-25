@@ -13,15 +13,14 @@ import {
   TEST_SECRET,
 } from "./jobs-fixture";
 
-// Signed resume notes and block commands (job_9e602b31888f item 4, OWASP ASI07), against
-// a real D1: the tampering these guard against is a changed row, so only real rows show it.
+// Signed resume notes and block commands against a real D1: the tampering these guard against is a changed
+// row, so only real rows show it.
 
 const ADMIN = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-09-26T06:00:00.000Z");
 const LATER = new Date("2026-09-26T07:00:00.000Z");
 
 let n = 0;
-// A job `holder` blocked on its push, titled by the count.
 function blockedBy(holder: Agent): Promise<string> {
   return blockedJob(ADMIN, holder, NOW, `job ${++n}`, {
     reason: "waiting on the push",
@@ -116,7 +115,6 @@ describe("resume notes", () => {
   it("list for one id hands on the checked note too", async () => {
     const driver = driverAgent();
     const id = await blockedBy(driver);
-    // The seat's resume returns the job to its driver.
     expect((await resumeJob(jobsEnv(), seatAgent(), LATER, id, "push approved")).ok).toBe(true);
     const beat = await listJobs(jobsEnv(), { namespace: "capsid", id });
     expect(beat.ok, beat.refusal).toBe(true);

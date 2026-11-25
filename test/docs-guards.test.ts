@@ -8,13 +8,6 @@ import type { Agent } from "../src/agents.ts";
 import { fakeEnv } from "./fakes.ts";
 import { d1, migratedDb } from "./sqlite-d1.ts";
 
-// The docs write tools on the real migrations in Node's SQLite: what an edge may point at
-// (Grok audit 2026-10, M4), what the audit row keeps of the edges a write replaces (D6),
-// that no caller writes a job's mirror under jobs/ (M2), and which incoming edges the
-// links read shows (A2). Real SQLite, because the
-// replaced edges are recorded by an INSERT ... SELECT json_group_array that only SQLite
-// evaluates.
-
 function fresh(): DatabaseSync {
   const raw = migratedDb();
   for (const ns of ["sample", "other"])

@@ -5,10 +5,6 @@ import { evaluatePolicy, type PrFacts } from "../src/auto-merge-policy-evaluate.
 import { existingTestEdits, type PrFileRow } from "../src/github/pr-files.ts";
 import { mergeClass, pathClassOf, pathClassOfAll } from "../src/merge-class.ts";
 
-// The merge classes (docs/design/design-merge-pipeline.md section 2, the design's PR 2),
-// report-only. Each class from one field changed on a PR that would otherwise auto-merge,
-// as test/auto-merge.test.ts does for the policy's checks.
-
 const ALLOWED_AUTHORS = ["DrDustinEdwards", "capsid-repo-access[bot]"];
 
 function pr(over: Partial<PrFacts> = {}): PrFacts {
@@ -64,7 +60,6 @@ test("a PR over the size cap is approve, with the reason 'over the size cap', wh
   assert.equal(red.class, "approve");
   assert.equal(red.reasons[0], "over the size cap: 5000 changed lines, more than 1000");
   assert.match(red.reasons.join(" "), /CI is failure: an approval waits for green/);
-  // Money and the seat still outrank it.
   assert.equal(classOf(pr({ changedLines: 5000, changedPaths: ["src/stripe.ts"] })).class, "typed");
   assert.equal(
     classOf(pr({ changedLines: 5000, changedPaths: ["migrations/0041_x.sql"] })).class,

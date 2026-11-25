@@ -7,11 +7,6 @@ import { recordAsCaller } from "../src/jobs.ts";
 import { buildServer } from "../src/server.ts";
 import { queuedJobStore } from "./queued-job-store.ts";
 
-// The jobs "record" action (src/jobs-seat.ts recordAsCaller, src/jobs-holder.ts records
-// mode and recordRefusal), served as capsid_work_jobs action record: the seat writing
-// the outcome of work done on a QUEUED job nobody claimed. The seat only, a queued
-// unheld job only, and the transition writes its audit row in the same batch.
-
 const NOW = new Date("2026-10-10T12:00:00.000Z");
 const ID = "job_0123456789ab";
 const ADMIN = adminAgentForEmail("admin@example.com");
@@ -53,8 +48,6 @@ const ARGS = {
   raw: { result_summary: "Done by hand in the sample repo." },
 };
 
-// The seat records
-
 test("THE INNOCENT DIRECTION: the seat records an outcome on a queued job without a claim", async () => {
   const { d1, env } = store([job()]);
   const r = await recordAsCaller(env, ADMIN, NOW, ID, ARGS);
@@ -85,8 +78,6 @@ test("THE INNOCENT DIRECTION: a can_merge caller is the seat too, and may record
   assert.equal(d1.rows.jobs[0].claimed_by, seat.actor);
 });
 
-// A non-seat caller
-
 test("PLANT: a driver that is not the seat is refused, and nothing is written", async () => {
   const { d1, env } = store([job()]);
   const r = await recordAsCaller(env, driver(), NOW, ID, ARGS);
@@ -106,8 +97,6 @@ test("PLANT: a seat key scoped to another namespace is refused the job", async (
   assert.match(r.refusal ?? "", /cannot record job_0123456789ab \('Sample job'\)/);
   assert.deepEqual(d1.recorded, []);
 });
-
-// A job that is not queued
 
 const NOT_QUEUED: Array<[string, Record<string, unknown>, RegExp]> = [
   [
@@ -156,8 +145,6 @@ test("PLANT: a blank result_summary is refused before anything is written", asyn
   assert.match(r.refusal ?? "", /needs a result_summary/);
   assert.deepEqual(d1.recorded, []);
 });
-
-// Served: capsid_work_jobs action record
 
 async function callAs(env: never, caller: Agent, args: Record<string, unknown>) {
   const server = buildServer(env, caller);

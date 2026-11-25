@@ -5,10 +5,7 @@ import type { PortalLibrary } from "../src/ops-types/views";
 import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_LIBRARY_PATH } from "../src/portal-library";
 
-// The Library's route through the Worker, against the D1 the migrations build, so the
-// search runs on the real FTS5 table and its triggers. The gate itself (a bearer's 403,
-// an anonymous caller's sign-in) is driven for every Portal route in route-gates.test.ts.
-// Fake data only: namespace "sample-library".
+// Real FTS5 table and triggers from the migrations; the gate is driven for every Portal route in route-gates.test.ts.
 
 const ORIGIN = "https://capsid.test";
 const SECRET = "integration-portal-library-key";

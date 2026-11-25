@@ -6,15 +6,8 @@ import { buildServer, type ToolGrant } from "../src/server.ts";
 import { corpusFiles, corpusText, MANIFEST, entriesFor } from "./adversarial/corpus.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch, type Recorded } from "./fakes.ts";
 
-// The adversarial suite. See test/adversarial/corpus.ts for the corpus and the
-// standard its fixtures are held to.
-//
-// A test cannot assert that a model resisted an injection. It can assert the things
-// that decide whether resisting is possible: the payload comes back verbatim, as
-// data rather than in the envelope reserved for the operator speaking, with its
-// provenance beside it, and handling it issues no statement innocent text would not.
-
-// the corpus itself
+// A test cannot assert a model resisted an injection; it asserts what makes resisting possible: the payload comes back verbatim,
+// as data outside the operator's envelope, with provenance beside it, and handling it issues no statement innocent text would not.
 
 test("PLANT: every corpus file has a manifest entry and every entry has a file", () => {
   const onDisk = corpusFiles();
@@ -28,8 +21,6 @@ test("PLANT: every corpus file has a manifest entry and every entry has a file",
   // same result.
   assert.ok(onDisk.length >= 7, `the corpus holds ${onDisk.length} fixtures; the walk is broken`);
 });
-
-// the store: capsid_read_doc and capsid_start_session
 
 const DOC_FIXTURES = entriesFor("document");
 const PROMPT_FIXTURE = entriesFor("prompt")[0];
@@ -71,8 +62,6 @@ function storeRows() {
   return {
     documents,
     namespaces: [{ namespace: "capsid", repos: "[]" }],
-    // The provenance the response should carry: someone other than the operator
-    // wrote every payload row.
     auditLog: DOC_FIXTURES.map((entry) => ({
       namespace: "capsid",
       path: `adversarial/${entry.file}`,
@@ -127,9 +116,8 @@ test("PLANT: read returns a hostile body verbatim, with provenance, and writes n
       assert.equal(typeof parsed.body, "string");
       assert.equal(result.content.length, 1, "one content block, and it is the JSON payload");
 
-      // 3. Provenance: the writer is named on the envelope, which a body cannot
-      //    forge. doc-body-fake-provenance.md writes its own `last_actor:` line to
-      //    test this.
+      // 3. Provenance: the writer is named on the envelope, which a body cannot forge (doc-body-fake-provenance.md writes its own
+      // `last_actor:` line to test this).
       assert.equal(payload.last_actor, "operator:leaked-key", `${entry.file} lost its provenance`);
     }
     // 4. Nothing was executed: documents naming `delete`, `write_repo_file` and
@@ -141,9 +129,8 @@ test("PLANT: read returns a hostile body verbatim, with provenance, and writes n
 });
 
 test("PLANT: brief lists the payloads as stubs with their provenance, carries none of their text, and writes nothing", async () => {
-  // brief puts many documents into one response, beside real canon. The payloads
-  // are filed as open tasks, which brief returns as stubs: a hostile body never
-  // enters the packet, and each stub still names its writer.
+  // brief puts many documents in one response beside real canon: payloads filed as open tasks come back as stubs, so a hostile
+  // body never enters the packet and each stub still names its writer.
   const rows = storeRows();
   for (const doc of rows.documents)
     if (doc.path.startsWith("adversarial/") && doc.type === "note") doc.type = "task";
@@ -186,8 +173,6 @@ test("PLANT: brief lists the payloads as stubs with their provenance, carries no
   }
 });
 
-// prompts/get
-
 test("PLANT: prompts/get returns a hostile prompt body as an embedded resource, not as the user speaking", async () => {
   const { client, close } = await connect();
   try {
@@ -201,10 +186,8 @@ test("PLANT: prompts/get returns a hostile prompt body as an embedded resource, 
       resource?: { text?: string; uri?: string };
     };
 
-    // A `{ type: "text" }` body in a role:user message renders as the human's own
-    // words, so any write-grant session could author the human's turn. An embedded
-    // resource is the protocol's shape for content from a store: same bytes, cited
-    // rather than spoken.
+    // A `{ type: "text" }` body in a role:user message renders as the human's own words, so a write-grant session could author the human's turn;
+    // an embedded resource cites the same bytes rather than speaking them.
     assert.equal(content.type, "resource", "a prompt body must never come back as plain user text");
     assert.match(
       content.resource?.uri ?? "",
@@ -227,8 +210,6 @@ test("PLANT: prompts/get returns a hostile prompt body as an embedded resource, 
     await close();
   }
 });
-
-// the repo surface
 
 const REPO = [{ repo: "o/r", label: "primary" }];
 const repoEnv = () =>
@@ -265,13 +246,10 @@ test("PLANT: a hostile README comes back as a string field, verbatim", async () 
         hostile,
         "and it is verbatim: a mangled payload is a payload two clients disagree about",
       );
-      // Provenance on the repo surface is the resolved repo, on the envelope.
       assert.equal(result.repo, "o/r", "the resolved repo is named beside the content");
     },
   );
 });
-
-// capsid_inspect_repo action ci (the ci_status operation)
 
 const FAILED_RUN = {
   workflow_runs: [

@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isVisual, previewUrl, screenshotUrls } from "../src/visual-pr.ts";
 
-// What Dustin looks at before a visual pull request merges (job_0368576da167).
-
 test("the visual label is read in any letter case, and only that label counts", () => {
   assert.equal(isVisual({ labels: [{ name: "Visual" }] }), true);
   assert.equal(isVisual({ labels: ["visual"] }), true);

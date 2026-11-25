@@ -1,9 +1,7 @@
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// The row-backed fake D1 for the claimless transitions (jobs-record, jobs-unclaimed), with
-// one rewrite: the transition's summary_sig CASE, which test/fake-sql.ts does not model,
-// becomes the branch SQLite takes for a non-null result_summary (every call sends one, and
-// the record path refuses a blank one before it writes). Nothing else in the batch is touched.
+// Row-backed fake D1 for the claimless transitions. It rewrites the summary_sig CASE, which test/fake-sql.ts does
+// not model, to the branch SQLite takes for a non-null result_summary.
 export function queuedJobStore(
   jobs: Array<Record<string, unknown>>,
   env: Record<string, unknown> = {},

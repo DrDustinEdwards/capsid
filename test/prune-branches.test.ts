@@ -3,9 +3,8 @@ import { test } from "node:test";
 import { pruneMergedBranches, pruneVerdict } from "../src/github.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// delete_branch with merged:true (job_8779278b8e91). A branch is pruned only when its latest
-// pull request merged AND its tip is the commit that pull request merged from. Every keep
-// below is a planted case beside the one branch that must go.
+// A branch is pruned only when its latest pull request merged AND its tip is the commit it merged from;
+// every keep is a planted case beside the one branch that must go.
 
 const ONE_REPO = [{ repo: "o/r", label: "primary" }];
 const REPO_META = { body: { default_branch: "main" } };

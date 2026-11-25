@@ -4,11 +4,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { sourceFile } from "./source-files.ts";
 
-// The configuration and the handler must agree. wrangler.jsonc.example declares
-// which crons fire; src/index.ts decides what to do when one does. A cron declared
-// and not handled is a wasted invocation; a cron handled and not declared is a
-// subsystem that never runs. Both are silent, so the two lists are derived from
-// each other here.
+// A cron declared and not handled is a wasted invocation; one handled and not declared never
+// runs. Both are silent, so each list is derived from the other.
 
 const read = (p: string) => readFileSync(join(import.meta.dirname, p), "utf8");
 
@@ -60,7 +57,4 @@ test("every cron the config fires is handled", () => {
   );
 });
 
-// That the three expressions are distinct, and that the handler dispatches on
-// controller.cron (each does only its own work, an unrecognized one does nothing, a
-// throwing branch does not stop a later cron), is driven in
-// test-integration/scheduled.test.ts.
+// Dispatch on controller.cron is driven in test-integration/scheduled.test.ts.

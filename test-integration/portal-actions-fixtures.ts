@@ -21,8 +21,6 @@ import { policyPin, policyPinKey, signTaskBody } from "../src/signed-docs";
 import { seedCapsidNamespace } from "./jobs-fixture";
 import { policyDocument } from "../test/policy-doc";
 
-// The Portal action tests' shared setup (portal-actions.test.ts): the Worker's env, the stubbed fetch, the job builders and the reset.
-
 export const ORIGIN = "https://capsid.test";
 export const SECRET = "integration-portal-cookie-key";
 export const CSRF = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
@@ -30,10 +28,8 @@ export const NOW = new Date();
 export const ACTOR = "access:admin@example.com";
 export const DRIVER = grantAgent("write", "agent:capsid-driver");
 
-// The operator token migrations/0035 names for dustinedwards: set, so site_repair may call.
 export const OPERATOR_TOKEN = "integration-operator-token-0000000000000";
 
-// The Cloudflare token and account site_key_rotate sets a key with (fake, and only stubbed below).
 export const CF_ACCOUNT = "sample-account";
 
 export function workerEnv(): Env {
@@ -46,15 +42,12 @@ export function workerEnv(): Env {
   } as Env;
 }
 
-// site_repair and site_backup reach the site's operator API through the global fetch, and pr_close
-// reaches GitHub. Only those routes are answered here; everything else goes on as before.
+// Only these routes are answered; any other fetch goes on as before.
 export const operatorCalls: Array<{ url: string; auth: string | null; body: string }> = [];
 export const githubCalls: string[] = [];
 export const GITHUB_PR = "https://api.github.com/repos/example/capsid/pulls/41";
-// docs/policy/auto-merge.md on the default branch, for sign_policy_from_repo.
 export const repo = { policy: "" };
-// site_key_rotate's secret writes, each { script, name, text }: the value is read here only
-// to check both sides got the same one and that it reached no audit row.
+// The secret value is read here only to check both sides got the same one and that it reached no audit row.
 export const secretPuts: Array<{ script: string; name: string; text: string }> = [];
 export const SECRETS_URL = new RegExp(
   `^https://api\\.cloudflare\\.com/client/v4/accounts/${CF_ACCOUNT}/workers/scripts/([^/]+)/secrets$`,
@@ -208,7 +201,6 @@ export const KEYS = [
 export async function resetPortal() {
   await resetCapsidDb();
   await seedCapsidNamespace();
-  // A registered namespace with no site row, for site_add.
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind("sample", JSON.stringify([{ repo: "example/sample", label: "primary" }]))
     .run();
@@ -228,7 +220,7 @@ export async function siteRow(namespace: string) {
     .first<Record<string, unknown>>();
 }
 
-// A signed auto-merge policy at version 7 (as shipped since #367), and its pin, as a Worker that has loaded it before holds them: for sign_policy_change.
+// A signed auto-merge policy at version 7 and its pin, as a Worker that has loaded it before holds them.
 export async function signedPolicy(): Promise<void> {
   const body = policyDocument("7");
   const secret = (env as unknown as { IMPROVE_SCORE_SECRET: string }).IMPROVE_SCORE_SECRET;
@@ -243,13 +235,11 @@ export async function signedPolicy(): Promise<void> {
   await env.APP_KV.put(policyPinKey(AUTO_MERGE_POLICY_PATH), JSON.stringify(await policyPin(body)));
 }
 
-// Each action: its params, the state it starts from, and what the perform must leave.
 export type Case = {
   params: () => Promise<Record<string, string>>;
   after: (params: Record<string, string>) => Promise<void>;
 };
 
-/** An open approval list holding PR 41 as one the tick classed approve, with the token to read it. */
 export async function seedAwaitingPr(): Promise<void> {
   await env.DB.prepare("DELETE FROM pr_approvals").run();
   await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
@@ -271,11 +261,9 @@ export async function seedAwaitingPr(): Promise<void> {
   );
 }
 
-/** POST the token a preview returned to perform. */
 export const performToken = (token: string) =>
   call(PORTAL_PERFORM_PATH, { method: "POST", body: { token } });
 
-/** Preview an action, perform its token, and return the preview. */
 export async function previewAndPerform(
   action: string,
   params: Record<string, string>,

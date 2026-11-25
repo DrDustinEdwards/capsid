@@ -52,9 +52,8 @@ test("every table the migrations create is backed up, or excluded by name", () =
   );
 });
 
-// The nightly run refuses a dump with a credential-looking column (d1-dump `credentials`),
-// so a new column named for a token would leave every night incomplete. Read off the real
-// schema: every migration applied in order, as D1 would.
+// The nightly run refuses a dump with a credential-looking column (d1-dump `credentials`), so a new column named for a token would leave
+// every night incomplete. Read off the real schema: every migration applied in order, as D1 would.
 test("the migrated schema passes the credential-column check with CREDENTIAL_ALLOW", () => {
   const db = new DatabaseSync(":memory:");
   const dir = join(import.meta.dirname, "..", "migrations");
@@ -83,14 +82,8 @@ test("every backed-up table exists in the migrations", () => {
   );
 });
 
-// the run itself
-//
-// The fake R2 holds real state and records every delete. A bucket that cannot express
-// a delete would make "refuses to delete the mirror" pass whether or not anything was
-// refused.
-//
-// The fake D1's prune batch reports an inflated meta.changes, because the FTS5
-// triggers inflate it on real D1 and it is the number the run must not read.
+// The fake R2 holds real state and records every delete, so "refuses to delete the mirror" cannot pass vacuously. The fake D1's prune batch
+// reports an inflated meta.changes, as the FTS5 triggers inflate it on real D1; the run must not read it.
 
 function makeEnv(
   dbOpts: FakeD1Options,
@@ -145,7 +138,6 @@ test("a healthy run dumps one object per table, keyed by TABLES", async () => {
     [...r2.objects.keys()].filter((k) => k.startsWith(result.json_prefix)).sort(),
     expected,
   );
-  // Each object carries its own table's rows, not the whole database.
   const dumped = dumpJson(r2, `${result.json_prefix}documents.json.gz`);
   assert.equal(dumped.table, "documents");
   assert.equal(dumped.rows.length, 2);
@@ -175,14 +167,12 @@ test("an empty documents read refuses the prune, loudly, deletes nothing and doe
   assert.equal(result.preflight.documents, 0);
   assert.deepEqual(r2.deleted, [], "the refused run deleted objects");
   for (const key of Object.keys(MIRROR)) assert.ok(r2.objects.has(key), `${key} was wiped`);
-  // Loud, and named, so a log search finds it without knowing the wording.
   assert.ok(
     logged.some((line) => line.includes("BACKUP_PREFLIGHT_REFUSED")),
     logged.join("\n"),
   );
   // The dumps are still written: an export deletes nothing, and an empty dump is
   // the evidence of the day the store looked empty.
-  // Every table, _schema.json and the KV sidecar.
   assert.equal(result.json_keys.length, TABLES.length + 2);
   for (const key of result.json_keys) assert.ok(r2.objects.has(key));
   // A refused run is not marked complete, so it takes no slot in the retention floor.
@@ -275,10 +265,8 @@ test("versions_pruned, audit_pruned and deploys_pruned come from a COUNT, not me
   assert.equal(result.versions_pruned, 3);
   assert.equal(result.audit_pruned, 7);
   assert.equal(result.deploys_pruned, 2);
-  // The count and the delete must carry the identical predicate, or the count is of
-  // a different set of rows than the one that leaves. The prune batch is found by
-  // what it contains rather than by position, so another batch cannot retarget these
-  // assertions.
+  // The count and the delete must carry the identical predicate, or the count is of a different set of rows. The prune batch is found by what
+  // it contains rather than by position, so another batch cannot retarget these assertions.
   const pruneBatch = batches.find((b) =>
     b.some((sql) => sql.startsWith("DELETE FROM document_versions")),
   );
@@ -295,8 +283,6 @@ test("versions_pruned, audit_pruned and deploys_pruned come from a COUNT, not me
   assert.equal(deleteDeploys.replace(/^DELETE FROM/, "SELECT COUNT(*) AS n FROM"), countDeploys);
 });
 
-// the 1000-key delete ceiling
-//
 // R2's bulk delete throws on the 1001st key; 1001 because a chunker with `<` for `<=` passes at 1000.
 const R2_DELETE_CEILING = 1000;
 
@@ -305,7 +291,6 @@ test("no single R2 delete call exceeds R2's 1000-key ceiling", async () => {
   for (let i = 0; i < 1001; i++) {
     seed[`backups/markdown/capsid/stale-${String(i).padStart(5, "0")}.md`] = "gone";
   }
-  // The CSP report prune goes through the same bulk delete.
   for (let i = 0; i < 1200; i++) {
     seed[`reports/csp/2020-01-01/${String(i).padStart(5, "0")}.json`] = "{}";
   }
@@ -327,16 +312,11 @@ test("no single R2 delete call exceeds R2's 1000-key ceiling", async () => {
   assert.deepEqual(leftover, [], "chunking lost keys: stale mirror objects survived the prune");
 });
 
-// one consistent snapshot
-//
 // Reads in separate round trips are separate snapshots; D1's batch is one transaction.
 
 test("every table read whole is read at ONE instant, however many writes land between D1 calls", async () => {
-  // A concurrent writer adds one row to every whole-read table before EACH call the run
-  // makes to D1, tagged with a generation number. Tables read in one batch all carry
-  // the same last generation; tables read in separate round trips carry different ones.
-  // document_versions and audit_log are paged after the batch and have their own
-  // one-instant tests below.
+  // A concurrent writer adds one row to every whole-read table before EACH D1 call, tagged with a generation number: tables read in one batch
+  // share the last generation, tables read separately differ. document_versions and audit_log are paged after the batch and have their own tests below.
   const r2 = fakeR2(MIRROR);
   const kv = fakeKv({});
   const d1 = fakeD1({ documents: DOCS });
@@ -420,10 +400,7 @@ test("every table read whole is read at ONE instant, however many writes land be
   );
 });
 
-// audit_log is paged too
-//
-// It is append-only with an AUTOINCREMENT id, so a MAX(id) bound keeps the snapshot
-// one instant.
+// audit_log is append-only with an AUTOINCREMENT id, so a MAX(id) bound keeps the snapshot one instant.
 
 function auditRow(id: number) {
   return {
@@ -464,12 +441,8 @@ test("audit_log is streamed in pages, every row once and in id order, in the sam
   );
 });
 
-// the streamed table
-//
-// document_versions is too large to read in one batch into a 128MB isolate, so it is
-// paged and written as a multipart upload. These tests hold that the file is
-// byte-identical to a whole-object dump, no row is dropped at a page or part boundary,
-// and the snapshot is still one instant.
+// document_versions is too large to read in one batch into a 128MB isolate, so it is paged and written as a multipart upload; the file must be
+// byte-identical to a whole-object dump, drop no row at a page or part boundary, and stay one instant.
 
 function version(id: number, body: string) {
   return {
@@ -508,9 +481,8 @@ test("the streamed versions dump is byte-identical to the whole-object dump, acr
 });
 
 test("a version written after the snapshot batch is not in the dump", async () => {
-  // The bound is what keeps the dump one instant. Without it, a version written
-  // between the batch and the pages would be in the dump while the document write
-  // that caused it was not, which is the torn shape scripts/dump-invariants.ts checks for.
+  // The bound keeps the dump one instant: without it a version written between the batch and the pages would be dumped while its document write was not
+  // (the torn shape scripts/dump-invariants.ts checks for).
   const r2 = fakeR2(MIRROR);
   const kv = fakeKv({});
   const d1 = fakeD1({ documents: DOCS, versions: [version(1, "a"), version(2, "b")] });
@@ -622,7 +594,6 @@ test("an unreadable KV pin is recorded as unreadable, not as an unset null", asy
   assert.deepEqual(dumped.keys["backup:last-ok"], { unreadable: "KV get timed out" });
 });
 
-// Seeds one run: every table object, plus the completion marker when `marked`.
 // A partial run carries only documents.json, the prefix a run that threw leaves.
 function seedRun(seed: Record<string, string>, id: string, shape: "marked" | "legacy" | "partial") {
   const tables = shape === "partial" ? ["documents"] : [...TABLES];
@@ -639,9 +610,8 @@ function survivingRuns(r2: { objects: Map<string, string | Uint8Array> }, ids: s
 const day = (month: number, d: number) =>
   `2020-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}T00-00-00-000Z`;
 
-// The policy itself is tested in d1-dump, where pruneDumps lives. This holds the wiring: the
-// dump prefix is the one pruned, a run goes whole, the counts come back in the result, and an
-// old run is pruned whatever its shape.
+// The policy is tested in d1-dump, where pruneDumps lives; this holds the wiring: the pruned prefix is the dump prefix, a run goes whole,
+// and an old run is pruned whatever its shape.
 test("dump retention is d1-dump's graduated policy (DUMP_RETENTION) over the backups/json prefix, deleting runs whole", async () => {
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().replace(/[:.]/g, "-");
   const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().replace(/[:.]/g, "-");

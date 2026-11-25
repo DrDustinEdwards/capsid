@@ -1,13 +1,5 @@
-// Lets `node --test` import src/server.ts, which imports its siblings without a
-// file extension ("./github", "./auth").
-//
-// Node's ESM resolver requires the extension; the Worker bundler does not, and every
-// module in src/ is written for the bundler. Appending .ts in src/ would change the
-// production bundle to make a test runnable; this hook exists only in the test
-// process.
-//
-// Registered by the test script via --import. Delete it the day src/ carries
-// explicit extensions.
+// Lets `node --test` import src/*.ts, whose siblings are imported without an extension: the Worker bundler
+// allows that, Node's ESM resolver does not. Test process only; delete once src/ carries explicit extensions.
 import { registerHooks } from "node:module";
 
 // The Portal's pages are the dashboard's build (src/portal-pages.d.ts), which a test does not

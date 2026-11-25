@@ -10,10 +10,8 @@ import {
 import { repoPathProblem } from "../src/limits.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// A repo file path or branch carrying "../.." would escape /repos/<owner>/<repo>/
-// once fetch() parses the string as a URL. A fake fetch keyed on the raw string
-// cannot see the escape, because WHATWG normalization happens inside new URL(), so
-// the tests below read the recorded call's normalized pathname.
+// A path or branch with "../.." escapes /repos/<owner>/<repo>/ once fetch() parses it as a URL, which a fake
+// keyed on the raw string cannot see, so the tests read the recorded call's normalized pathname.
 
 function makeEnv(repos: unknown[]) {
   return fakeEnv({
@@ -28,8 +26,6 @@ function makeEnv(repos: unknown[]) {
 
 const ONE_REPO = [{ repo: "owner/mapped-repo", label: "primary" }];
 
-// The input-level guard.
-
 test("repoPathProblem rejects '.' and '..' segments and control chars, and allows real repo paths", () => {
   assert.ok(repoPathProblem("../../x"));
   assert.ok(repoPathProblem("a/../b"));
@@ -39,7 +35,6 @@ test("repoPathProblem rejects '.' and '..' segments and control chars, and allow
   assert.ok(repoPathProblem("/leading"));
   assert.ok(repoPathProblem("trailing/"));
   assert.ok(repoPathProblem("a//b"));
-  // Real repo paths, including dotted and dotfile names, pass.
   assert.equal(repoPathProblem(".github/workflows/improve-score.yml"), null);
   assert.equal(repoPathProblem(".npmrc"), null);
   assert.equal(repoPathProblem("src/foo.test.ts"), null);
@@ -47,16 +42,11 @@ test("repoPathProblem rejects '.' and '..' segments and control chars, and allow
   assert.equal(repoPathProblem("README.md"), null);
 });
 
-// encodePath refuses a traversal segment.
-
 test("encodePath throws on a '..' segment (old code returned it verbatim)", () => {
   assert.throws(() => encodePath("../../x"), /'\.\.' segment/);
   assert.throws(() => encodePath("a/./b"), /'\.' segment/);
-  // Still encodes ordinary paths.
   assert.equal(encodePath("a/b c/d.md"), "a/b%20c/d.md");
 });
-
-// A repo mapping cannot be a traversal.
 
 test("repoTokenOk and parseReposList reject '..' as an owner/name mapping", () => {
   assert.equal(repoTokenOk("../evil"), false);
@@ -68,12 +58,9 @@ test("repoTokenOk and parseReposList reject '..' as an owner/name mapping", () =
   assert.ok("list" in good);
 });
 
-// The traversal never reaches GitHub.
-
 test("read_repo_file refuses a traversal path and makes no escaping request", async () => {
   await withFetch(
     {
-      // The normalized URL an escaping path would reach.
       "GET /repos/owner/other-repo/contents/secrets.env": {
         body: {
           type: "file",
@@ -89,7 +76,6 @@ test("read_repo_file refuses a traversal path and makes no escaping request", as
         () => readRepoFile(makeEnv(ONE_REPO), "ns", "../../other-repo/contents/secrets.env"),
         /path segment|escapes \/repos/,
       );
-      // No request escaped the mapped repo.
       for (const c of calls) {
         assert.ok(
           c.path.startsWith("/repos/owner/mapped-repo/") ||

@@ -9,13 +9,8 @@ import {
 } from "../src/outcome-prs";
 import { dueForReverify, reverifySweep } from "../src/outcome-prs-sweep";
 
-// OUTCOME MERGE STATE, AGAINST A REAL D1 (job_3e1596235513).
-//
-// These replace source-text tests in test/outcome-prs.test.ts. The rules are about
-// what the SQL does: a count recomputed rather than incremented, a filter and an
-// order on the sweep, a limit that binds. GitHub is never reached here: no namespace
-// is registered, so every pull request read fails, which is the path an unreachable
-// GitHub takes.
+// Outcome merge state against a real D1: the rules are about what the SQL does (a count recomputed, a sweep's filter and order, a binding limit).
+// GitHub is never reached: no namespace is registered, so every PR read fails as an unreachable GitHub would.
 
 type Env = Parameters<typeof reverifySweep>[0];
 const ENV = env as unknown as Env;
@@ -164,16 +159,13 @@ describe("outcomePrStatements", () => {
       { pr_url: PR(2), merged: null, merge_verified_at: null },
       { pr_url: PR(3), merged: 0, merge_verified_at: NOW.toISOString() },
     ]);
-    // The sweep still picks the unread one up, and the closed one, as before.
     const due = (await dueForReverify(ENV, NOW)).map((r) => r.pr_url).sort();
     expect(due).toEqual([PR(2), PR(3)]);
   });
 });
 
-// A PULL REQUEST'S IDENTITY (job_6092edef11e1, migrations/0026). A recreated or
-// transferred repo reuses numbers, so a row pins the pull request it named and a row
-// whose number moved on is marked unverifiable. The decision is made in reverifyPr
-// against GitHub (test/job-outcomes.test.ts); these check what the SQL then does.
+// A pull request's identity (migrations/0026): a recreated or transferred repo reuses numbers, so a row pins the PR it named and a moved-on number is marked unverifiable.
+// reverifyPr decides against GitHub (test/job-outcomes.test.ts); these check what the SQL then does.
 describe("unverifiable rows", () => {
   it("a marked row leaves the sweep and every count, and prs_opened stays the driver's, unverified", async () => {
     await outcome("job_moved", { prs_merged: null });

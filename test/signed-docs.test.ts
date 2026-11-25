@@ -9,9 +9,6 @@ import {
   verifySignedBody,
 } from "../src/signed-docs.ts";
 
-// Signed document integrity: the signed policies (capsid/policy/) and the signed job
-// bodies use this envelope. A write-grant key must not be able to author one.
-
 const ROOT = "test-root-secret-not-a-real-one";
 const WHAT = "policy document";
 

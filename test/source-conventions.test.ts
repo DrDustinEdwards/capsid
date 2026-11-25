@@ -6,22 +6,12 @@ import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// One definition, imported. Conventions about the shape of src/ rather than the
-// behavior of any one module: each guard asks whether a fact is still stated once,
-// and scans all of src/ rather than a list of files where a copy might appear.
-//
-// That the backup prune still reaps the report prefix the CSP sink stored under until
-// 2026-10-20 is driven in test-integration/csp-report.test.ts: an aged report is reaped.
-
 // scanner-rule: quality audit 6.6 and 1.1, one definition imported everywhere
 test("every secret compare goes through safeEqual, in every file", () => {
-  // The specific compares, still where they belong.
   const accessLogin = sourceFiles().find((f) => f.name === "access-login.ts")!.text;
   assert.match(accessLogin, /await safeEqual\(await sha256Hex\(stateCookie\), signIn\.binding\)/);
 
-  // And no file anywhere has gone back to a short-circuiting compare of a secret.
-  // Matched by shape rather than by the spellings that exist today, so a new secret
-  // compared with !== is caught.
+  // No file may compare a secret with a short-circuiting compare. Matched by shape, so a new secret compared with !== is caught.
   const offenders = sourceFiles().flatMap((f) =>
     f.text
       .split("\n")

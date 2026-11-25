@@ -4,10 +4,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { OpsFeed } from "../src/ops-types/feed.ts";
 
-// Every stop in the command menu (dashboard/src/lib/stops.ts, built with Capsomer's stopCommand; capsid/decisions.md
-// 2026-09-30, "admin panels review adopted", item 4), on the dashboard's sample feed.
-// Each is listed only while there is something to stop, and each runs the control it
-// stands for: a switch in Settings' Automation panel, or the confirm dialog.
 const { stopCommands } = await import("../dashboard/src/lib/stops.ts");
 
 const SAMPLE = readFileSync(

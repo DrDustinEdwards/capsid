@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { noBloatJobs, npmLockVersions, pnpmLockVersions, workflowPins } from "../src/lockfiles.ts";
 
-// The versions model reads what a repo installed, not only what it asks for. Sample data only.
-
 test("pnpm: a workspace's npm and git dependencies, peers stripped, the git version from packages", () => {
   const lock = [
     "lockfileVersion: '9.0'",

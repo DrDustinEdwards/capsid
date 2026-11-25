@@ -10,10 +10,6 @@ import {
 } from "../src/workers-builds.ts";
 import { fakeEnv } from "./fakes.ts";
 
-// Cloudflare Workers Builds, read (src/workers-builds.ts), served as capsid_admin_read_ops
-// actions builds and build_logs. The token is CF_OPS_TOKEN; a 403 names the permission
-// it lacks rather than reading as no builds.
-
 const ACCOUNT = "0123456789abcdef0123456789abcdef";
 const TOKEN = "sample-token";
 const API = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}`;
@@ -102,8 +98,6 @@ function rawBuild(i: number) {
   };
 }
 
-// Credentials
-
 test("PLANT: with CF_OPS_TOKEN unset, both reads are refused naming it, and nothing is fetched", async () => {
   for (const env of [
     { CF_ACCOUNT_ID: ACCOUNT, DB: NO_DB },
@@ -158,8 +152,6 @@ test("PLANT: a build's commit message is relayed inside an external fence (Grok 
   assert.equal(r?.builds[1].commit_message, null);
 });
 
-// 403
-
 test("PLANT: a 403 from the Builds API says CF_OPS_TOKEN needs Workers CI Read, never 'no builds'", async () => {
   const cf = cloudflare({
     [`${API}/workers/scripts`]: SCRIPTS,
@@ -189,8 +181,6 @@ test("THE INNOCENT DIRECTION: a failure that is not a 403 is reported as itself,
     (err: Error) => /500/.test(err.message) && !/Workers CI Read/.test(err.message),
   );
 });
-
-// limit
 
 test("listBuilds bounds limit to [1, BUILDS_MAX] and defaults it to BUILDS_DEFAULT, in the request and the answer", async () => {
   const asked: string[] = [];
@@ -248,8 +238,6 @@ test("scriptFor resolves a namespace to its site row's script, and refuses a row
   );
   await assert.rejects(() => scriptFor(fakeEnv({ DB: db }), {}), /name the Worker with script/);
 });
-
-// build logs
 
 test("PLANT: buildLogs refuses a build_uuid that is not a uuid before any fetch", async () => {
   const cf = cloudflare({});

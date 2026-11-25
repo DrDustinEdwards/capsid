@@ -17,10 +17,6 @@ import {
 import { revertsTick, REVERTS_STAMP_KEY, revertTargets } from "../src/merge-reverts.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// The auto-merge safety meter and shutoff (src/merge-safety.ts): what a revert names,
-// the weekly counts, the pause, and the resume. The parts that read D1 and GitHub are in
-// test-integration/merge-safety.test.ts.
-
 const NOW = new Date("2026-10-11T12:00:00.000Z");
 const DAY = 86_400_000;
 const at = (daysAgo: number) => new Date(NOW.getTime() - daysAgo * DAY).toISOString();
@@ -50,8 +46,6 @@ const outcome = (
   daysAgo: number,
   ns = "capsid",
 ): OutcomeEvidence => ({ namespace: ns, repo: REPO, pr, outcome: kind, run_at: at(daysAgo) });
-
-// revertTargets
 
 test("revertTargets reads GitHub's revert button, 'reverts #N' in any case, and git's 'This reverts commit <sha>'", () => {
   assert.deepEqual(revertTargets('Revert "Tidy the docs"', "Reverts example/capsid#41", REPO), {
@@ -122,8 +116,6 @@ test("the revert pass runs at most once in 30 minutes, by its KV stamp", async (
   assert.equal(report.ran, false);
   assert.match(report.note, /10 of 30 minutes/);
 });
-
-// countsFrom
 
 test("countsFrom counts the last seven days only, and approved leaves out the policy's own duplicate row", () => {
   const rows: AuditEvidence[] = [
@@ -206,8 +198,6 @@ test("a pull request's bad event is its latest after the lift, so a fresh revert
   );
 });
 
-// judgeShutoff
-
 test("PLANT: two rollbacks of auto-merged pull requests in 7 days pause the namespace", () => {
   const counts = countsFrom(
     [merged(41, 3), merged(42, 3)],
@@ -237,7 +227,6 @@ test("PLANT: a 7-day rate over 3 times a nonzero baseline pauses on one event", 
   );
   const paused = judgeShutoff(counts, {}, {}, NOW);
   assert.match(paused.capsid ?? "", /1 of 4 auto-merged pull request\(s\).*the 1 of 20/);
-  // The same week against a baseline it does not exceed: 1 bad of 4 against 3 bad of 8.
   const mild = countsFrom(
     [
       ...Array.from({ length: 8 }, (_, i) => merged(100 + i, 10 + i)),
@@ -301,8 +290,6 @@ test("a namespace already paused is not paused again", () => {
   assert.deepEqual(judgeShutoff(counts, { capsid: { since: at(1), reason: "x" } }, {}, NOW), {});
 });
 
-// A revert counts as a rollback of an unattended merge
-
 test("PLANT: a revert of an unattended merge suspends its unit, like a rollback", () => {
   const revert = {
     kind: "revert" as const,
@@ -326,11 +313,8 @@ test("PLANT: a revert of an unattended merge suspends its unit, like a rollback"
     /example\/capsid#41 merged unattended and was reverted by example\/capsid#50/,
   );
   assert.equal(report.proposals[0]!.kind, "demote");
-  // Dustin lifted the suspension after the revert merged: it is answered.
   assert.deepEqual(judgeUnits([], [revert], [], NOW, { "capsid/docs": at(0.5) }).suspended, []);
 });
-
-// Resume
 
 function world(paused: object | null = { capsid: { since: at(1), reason: "2 rolled back" } }) {
   const d1 = fakeD1({});

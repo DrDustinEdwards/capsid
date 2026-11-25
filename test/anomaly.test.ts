@@ -3,14 +3,10 @@ import { test } from "node:test";
 import { RATE_FLOOR, anomalyFindings, chicagoHour, type ActionHour } from "../src/anomaly.ts";
 import { owningCheck } from "../src/watcher-checks.ts";
 
-// The anomaly rules (OWASP item 6), each on its own planted case, and the quiet cases
-// that must stay quiet. Sample actors only.
-
 const NOW = new Date("2026-10-10T18:00:00.000Z");
 const hour = (hoursAgo: number) =>
   new Date(NOW.getTime() - hoursAgo * 3600_000).toISOString().slice(0, 13);
 
-// A steady driver: claim, read and write, a few rows an hour, every day for 14 days.
 function steady(actor: string): ActionHour[] {
   const out: ActionHour[] = [];
   for (let h = 30; h < 14 * 24; h += 6)

@@ -9,9 +9,6 @@ import {
 } from "../scripts/tool-names-lib.ts";
 import { COMPOSITES, SINGLE_TOOLS } from "../src/tools/surface.ts";
 
-// The MCP 4 regroup's name mapping and prose reading (scripts/tool-names-lib.ts), which
-// the rule docs lint uses.
-
 const served = new Map<string, Set<string> | null>();
 for (const spec of COMPOSITES) served.set(spec.name, new Set(Object.keys(spec.actions)));
 for (const name of Object.keys(SINGLE_TOOLS)) served.set(name, null);
@@ -96,7 +93,6 @@ test("PLANT: a name that is also a word is rewritten only where the text says it
     r.ambiguous.map((a) => a.text),
     ["`agents`", "`open_pr`", "`namespaces`", "`list`"],
   );
-  // The same names where the text says they are tools.
   assert.equal(rewriteProse("the `agents` tool").text, "the `capsid_admin_manage_agents` tool");
   assert.equal(rewriteProse("call `open_pr`").text, "call `capsid_open_pr` action `open`");
   assert.equal(rewriteProse("see `agents.ts`").text, "see `agents.ts`");

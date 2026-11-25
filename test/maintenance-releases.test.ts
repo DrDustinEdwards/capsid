@@ -13,22 +13,14 @@ import {
 import type { Env } from "../src/env.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
 
-// The maintenance pass's release-tag rule (Capsid improvement list, item 13). A shared
-// package's merged version bump is tagged at the commit that set it, never backwards and
-// never twice, at most RELEASE_TAG_CAP a run, each audit-logged; the seat's switch turns it
-// off. Sample data only: example-org repos, namespace "sample".
-
 const sha = (c: string) => c.repeat(40);
 const C1 = sha("1");
 const C2 = sha("2");
 const C3 = sha("3");
 
-// The rule, on fake readers.
-
 interface Repo {
   version: string | null;
   tags: string[];
-  // Newest first.
   history: Array<{ sha: string; version: string | null }>;
   changelog?: string | null;
   tagFails?: string;
@@ -298,8 +290,6 @@ test("a read or a tag that fails is listed as not checked, writes no audit row, 
     [["releases-not-checked", "capsid"]],
   );
 });
-
-// The real readers, with GitHub faked at fetch: the reads and the one write they make.
 
 const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
 const file = (text: string) => ({

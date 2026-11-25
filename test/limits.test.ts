@@ -4,11 +4,7 @@ import { MAX_PATH, pathProblem, resultRefProblem } from "../src/limits.ts";
 import {} from "../src/github.ts";
 import { sourceFiles } from "./source-files.ts";
 
-// src/limits.ts: the document path grammar and the input bounds.
-
 test("the grammar accepts the paths the store actually holds", () => {
-  // Shapes taken from the live store, including the longest path and the archive/
-  // prefix.
   for (const path of [
     "core.md",
     "conventions.md",
@@ -49,9 +45,8 @@ const isComment = (line: string) => line.startsWith("//") || line.startsWith("*"
 
 // scanner-rule: quality audit 1.1, every tool argument is bounded
 test("every tool argument is bounded: no bare z.string() anywhere in src/", () => {
-  // The whole directory, because a tool schema can be declared in any module.
-  // Excluded: comments, the two primitives in limits.ts the rule is built from, and the
-  // output schemas, which describe answers, not arguments.
+  // The whole directory, because a schema can be declared in any module; excluded are comments,
+  // limits.ts's own primitives and the output schemas, which describe answers, not arguments.
   const offenders = sourceFiles()
     .filter((f) => f.name !== "limits.ts" && !f.name.startsWith("tools/outputs"))
     .flatMap((f) =>
@@ -76,8 +71,6 @@ test("every tool argument is bounded: no bare z.string() anywhere in src/", () =
     "docPath is barely used, so the grammar is probably not wired up",
   );
 });
-
-// The repo fallthrough's bounds, relative to each other.
 
 // result_ref: a document key or a PR URL. `docPath` alone would refuse every URL on
 // the '//' after the scheme.

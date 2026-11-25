@@ -5,9 +5,8 @@ import { editJob } from "../src/jobs-edit.ts";
 import { checkBodyFacts, factClaims, type FactReaders } from "../src/job-fact-check.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// Improvement 24: a body that states a pull request merged, a version tagged or a package
-// version published is checked against GitHub and npm at post and edit. job_d62abdbfc270
-// was told Enarratio 0.3.0 was on npm while it was only staged.
+// Guards a body that claims a merge, tag or published version GitHub or npm does not show (a job was
+// once told Enarratio 0.3.0 was on npm while it was only staged).
 
 const kinds = (body: string) =>
   factClaims(body).map(
@@ -71,7 +70,6 @@ test("code, fences, quotes, block quotes and the DONE WHEN and OUT OF SCOPE part
     "RULES: none",
   ].join("\n");
   assert.deepEqual(kinds(body), []);
-  // A part after DONE WHEN is read again.
   assert.deepEqual(kinds("DONE WHEN: #1 is merged\nDECIDED: #2 is merged"), ["merged:#2"]);
 });
 

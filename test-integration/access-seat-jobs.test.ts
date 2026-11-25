@@ -6,12 +6,8 @@ import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 import { jobsEnv, seedCapsidNamespace } from "./jobs-fixture";
 
-// THE SEAT'S QUEUE ACTIONS AS access:<email>, through the real capsid_work_jobs tool,
-// against a real D1. Since the MCP login moved to Cloudflare Access (#185), the admin reaches the
-// queue as `access:<email>`. The queue recorded claims only for github:, opkey: and
-// agent: actors, so the seat's resume of job_195c11e2667b was refused on 2026-09-28:
-// "'access:...' is not a caller identity this queue can hold a claim for". Each seat
-// action is driven here as that identity.
+// The seat's queue actions as access:<email> through the real capsid_work_jobs tool: the queue once
+// held claims only for github:, opkey: and agent: actors and refused a seat's resume (2026-09-28).
 
 const ADMIN_EMAIL = "admin@example.com";
 const SEAT_ACTOR = `access:${ADMIN_EMAIL}`;
@@ -19,8 +15,6 @@ const SEAT = adminAgentForEmail(ADMIN_EMAIL);
 const DRIVER = grantAgent("write", "agent:access-seat-driver");
 const NOW = new Date("2026-09-28T01:00:00.000Z");
 
-// One call to the capsid_work_jobs tool, as `agent`, through an MCP client on the real
-// server.
 async function jobsTool(
   agent: Agent,
   args: Record<string, unknown>,

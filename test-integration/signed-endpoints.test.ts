@@ -5,26 +5,17 @@ import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_REPORT_PATH, OFFACCOUNT_SITES } from 
 import { env } from "cloudflare:test";
 import { hmacSha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// The backup credential endpoint end to end, against a real D1 and a real KV.
-// /backup/credential is a write path not behind OAuth. The key is derived from a root
-// secret and the replay cache is an `INSERT ... ON CONFLICT DO NOTHING RETURNING`
-// against a real PRIMARY KEY; only this layer proves SQLite accepts it and that the
-// conflict conflicts.
-//
-// The key is derived here the way the Worker derives it, from the same root the
-// config binds, so a signature that verifies is not verifying against a stub.
+// /backup/credential is a write path not behind OAuth. The real D1 proves SQLite accepts the replay cache's INSERT ... ON CONFLICT
+// DO NOTHING RETURNING and that the conflict conflicts; the key is derived as the Worker derives it, so no stub verifies.
 
 const ROOT = "integration-root-secret-not-a-real-one";
 
-// The derivation, spelled the way scripts/derive-backup-key.mjs spells it. A key
-// derivation is a contract with other repos, so a changed context string fails here.
+// A key derivation is a contract with other repos (scripts/derive-backup-key.mjs), so a changed context string fails here.
 const backupKey = () => hmacSha256Hex(ROOT, "capsid-backup-credential:v1");
-// A key from the same root under another context, which must not verify here.
 const otherKey = () => hmacSha256Hex(ROOT, "capsid-other-credential:v1");
 
-// /backup/credential reads X-Backup-Timestamp and X-Backup-Signature, not the
-// X-Improve-* pair, which stops a captured improve request being replayed at the
-// backup mint.
+// Reads X-Backup-Timestamp and X-Backup-Signature, not the X-Improve-* pair, so a captured improve request cannot
+// be replayed at the backup mint.
 async function backupPost(key: string, body: unknown, path = "/backup/credential") {
   const text = JSON.stringify(body);
   const ts = new Date().toISOString().replace(/\.\d+Z$/, "Z");
@@ -98,8 +89,7 @@ describe("/backup/credential", () => {
   });
 });
 
-// The Amazon copy's report: the backup key, its own jti scope, and the report stored for
-// the watcher. A refused report must leave the stored one alone.
+// A refused report must leave the stored one alone.
 describe("/backup/offaccount-report", () => {
   const sites = Object.fromEntries(
     OFFACCOUNT_SITES.map((s) => [

@@ -5,13 +5,8 @@ import { blockJob, claimJob, completeJob, postJob, resumeJob } from "../src/jobs
 import { grantAgent } from "../src/agents";
 import { driverAgent, jobRow, jobsEnv, seedCapsidNamespace, seedGatePolicy } from "./jobs-fixture";
 
-// The driver pushes its own branch and opens its own pull request.
-//
-// On a real D1: a driver claims a job, reaches a branch push, blocks with the command,
-// and sends the job back in on the signed gate policy with no human in between. The
-// audit row must name the class, the job must stay the driver's, and the outcome
-// must count the whole working life. The force-push plant runs the same path and
-// must leave the job blocked for the human.
+// A driver pushes its own branch and opens its own PR on the signed gate policy with no human between: the audit row names the class,
+// the job stays the driver's and the outcome counts the whole working life; the force-push plant must stay blocked.
 
 const SEAT = grantAgent("write", "github:DrDustinEdwards");
 

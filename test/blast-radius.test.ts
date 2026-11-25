@@ -20,13 +20,8 @@ import {
 } from "./source-files.ts";
 import { servedOperations } from "./served.ts";
 
-// The blast-radius suite. One plant per flag, driven through a real MCP connection
-// against a scoped caller, in both directions: the agent without the flag is refused,
-// and the admin holding it is not. A refusal test alone passes against a tool that is
-// broken for everybody.
-//
-// Every refusing plant also asserts the GitHub call count is zero: a repo write that
-// refuses after committing to GitHub has already happened.
+// One plant per flag, through a real MCP connection against a scoped caller, in both directions: a refusal test alone passes against a broken tool.
+// Every refusing plant also asserts zero GitHub calls: a repo write that refuses after committing has already happened.
 
 const REPOS = [{ repo: "o/r", label: "primary" }];
 
@@ -39,8 +34,7 @@ function env() {
   });
 }
 
-// A project driver as docs/bootstrap.md says to mint one: write on its own
-// namespace, and not one flag.
+// A project driver as docs/bootstrap.md mints one: write on its own namespace, no flag.
 function driver(namespace = "capsid", grant: ScopeFlag[] = []): Agent {
   const scopes = defaultScopes([namespace]);
   scopes.grants = ["read", "write"];
@@ -76,8 +70,6 @@ async function callAs(
   return result;
 }
 
-// Every path that needs a flag, one row each: the tool, the arguments that make the
-// call need it, and the flag it needs.
 const PLANTS: Array<{
   flag: ScopeFlag;
   tool: string;
@@ -154,9 +146,8 @@ for (const plant of PLANTS) {
 }
 
 test("PLANT: a driver IS allowed a branch delete without force, which still refuses an open PR's head", async () => {
-  // The unforced delete keeps its own open-PR refusal in src/github/refs.ts, so it
-  // needs no flag. Holding it to can_merge would take branch cleanup away from every
-  // driver.
+  // The unforced delete keeps its own open-PR refusal in src/github/refs.ts and needs no flag; holding it to can_merge would take
+  // branch cleanup from every driver.
   await withFetch({}, async (calls) => {
     const result = await callAs(driver(), "capsid_close_pr", {
       action: "delete_branch",
@@ -231,20 +222,14 @@ test("PLANT: an unscoped tool is refused even when the grant and the namespace a
     number: 7,
   });
   assert.equal(result.isError, true);
-  // The refusal names the action, which shows the registrar populates need.action.
   assert.match(result.content[0].text, /not scoped to the 'capsid_close_pr\.close' tool/);
 });
-
-// The derived half.
 
 // scanner-rule: one enforcement point invariant: no new tool bypasses checkScope. Derived over every
 // registration, including tools added later.
 test("DERIVED: every write tool is on the enforcement point's path", () => {
-  // The registrations are walked, and each write tool must be covered by the
-  // registrar (its requirement is stated) or carry its own check. A served tool is a
-  // one-line registration that dispatches to operations (src/tools/surface.ts), so a
-  // tool's own check lives in the operation blocks it runs, and every one of them must
-  // carry it.
+  // Each write tool must be covered by the registrar (its requirement is stated) or carry its own check; a served tool dispatches to
+  // operations (src/tools/surface.ts), so its own check lives in the operation blocks it runs.
   const ops = new Map(operationBlocks().map((b) => [b.name, b.body]));
   const served = servedOperations();
   const ownCheck = (tool: string): boolean => {
@@ -276,9 +261,7 @@ test("DERIVED: every write tool is on the enforcement point's path", () => {
 // scanner-rule: one enforcement point invariant: a repo mutation carries its flags through guardedWrite.
 // Derived over every GitHub mutation helper and every call site in src/.
 
-// The GitHub mutation helpers, derived from src/github/: every top-level function that
-// sends a POST, PUT, PATCH or DELETE through ghFetch, and every function that calls one,
-// to a fixed point. The exported ones are what the rest of src/ can call.
+// Derived from src/github/: every top-level function that sends POST, PUT, PATCH or DELETE through ghFetch, and every caller, to a fixed point.
 const MUTATING_METHOD = /method:\s*"(?:POST|PUT|PATCH|DELETE)"/;
 function githubMutationHelpers(files: SourceFile[]): string[] {
   const blocks: Array<{ name: string; exported: boolean; body: string }> = [];
@@ -326,9 +309,7 @@ function codeOnly(text: string): string {
     .replace(/^\s*(?:\/\/|\*|\/\*).*$/gm, blank);
 }
 
-// Every call to a mutation helper outside src/github/ that is not inside a guardedWrite
-// callback (guardedWrite( within the 800 characters before it), and every ghFetch outside
-// src/github/ that sends a mutating method itself, as "file: helper".
+// Calls to a mutation helper outside src/github/ not inside a guardedWrite callback, and ghFetch calls sending a mutating method, as "file: helper".
 function unguardedMutations(files: SourceFile[], helpers: string[]): string[] {
   const found: string[] = [];
   for (const file of files.filter((f) => !f.name.startsWith("github/"))) {
@@ -358,11 +339,8 @@ function unguardedMutations(files: SourceFile[], helpers: string[]): string[] {
   return found.sort();
 }
 
-// The call sites that reach GitHub outside guardedWrite, each named with why. guardedWrite
-// is checkScope over a caller's grant and flags (src/tools/repo-guards.ts), and none of
-// these has a caller to check: building an all-allowing agent for them would be a check
-// that cannot refuse. Each writes its own audit row. Adding a site is a test edit a
-// reviewer sees; a second call in a listed file fails too, because the count is exact.
+// Call sites that reach GitHub outside guardedWrite, each with why: none has a caller to check, so an all-allowing agent would be a check that cannot refuse.
+// Each writes its own audit row. Adding a site is a test edit a reviewer sees; a second call in a listed file fails too, since the count is exact.
 const UNGUARDED_EXCEPTIONS: Array<{ site: string; why: string }> = [
   {
     site: "approval-executor.ts: managePr",
@@ -395,10 +373,8 @@ const UNGUARDED_EXCEPTIONS: Array<{ site: string; why: string }> = [
 ];
 
 test("DERIVED: every repo mutation goes through the one wrapper that computes the flags", () => {
-  // The repo write tools reach GitHub through guardedWrite, where repoWriteFlags
-  // runs. Code calling a github/ mutation directly would skip the flag check while
-  // still being write-gated at the registrar. All of src/ is scanned, not only the
-  // repo tools: a cron or control reaching GitHub is a mutation too.
+  // Repo write tools reach GitHub through guardedWrite, where repoWriteFlags runs; a direct github/ mutation would skip the flag check while still write-gated.
+  // All of src/ is scanned, since a cron or control reaching GitHub is a mutation too.
   const files = sourceFiles();
   const helpers = githubMutationHelpers(files);
   // Vacuity and drift: the derivation finds every helper the repo tools are known to
@@ -453,8 +429,6 @@ test("every flag is required by some path, so none of them is decoration", () =>
       produced.add(flag);
     }
   }
-  // That the override is required on write, restore, delete and move is proven in
-  // test/improve-protected-paths.test.ts.
   for (const flag of IMPROVE_OVERRIDE_FLAGS) produced.add(flag);
   // The loops over SCOPE_FLAGS in the agents-* tests rely on this list being non-empty.
   assert.ok(

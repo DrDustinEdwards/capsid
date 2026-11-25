@@ -9,28 +9,16 @@ import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents.ts";
 import { toolListProblems } from "@dustinedwards/site-runtime/mcp-server";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// Tool annotations are derived, not declared.
-//
-// An annotation is a hint a client acts on, so a wrong one is worse than a missing
-// one: `readOnlyHint: true` on a tool that writes tells a client it need not ask.
-// src/tool-annotations.ts is a cache of facts that live in the handlers, and this file
-// checks it against them. A served tool dispatches to operations (src/tools/surface.ts),
-// so a tool's facts are the union of what its actions' operations do.
-//
-// Every scan below fails in both directions and carries a count guard, because
-// "0 tools disagreed" and "0 tools were read" are otherwise indistinguishable.
+// A wrong annotation is worse than a missing one: `readOnlyHint: true` on a tool that writes tells a client it need not
+// ask. Every scan fails in both directions and carries a count guard, so "0 disagreed" cannot mean "0 read".
 
-// A tool is write-gated iff some action of it needs more than the read grant
-// (src/scope.ts TOOL_GRANTS and TOOL_ACTION_GRANTS; "admin_read" is the admin identity
-// with the read grant). test/invariants.test.ts separately proves those tables against
-// the operations (every mutating action is write-gated, and nothing marked read runs
-// mutating SQL).
+// A tool is write-gated iff some action needs more than the read grant (TOOL_GRANTS and TOOL_ACTION_GRANTS;
+// test/invariants.test.ts proves those tables against the operations).
 const SERVED = servedOperations();
 const READ_ONLY = ["read", "admin_read"];
 const isWriteGated = (tool: string) =>
   SERVED.some((s) => s.tool === tool && !READ_ONLY.includes(s.requirement));
 
-// The operation blocks each served tool runs, through all its actions.
 const BLOCKS = new Map(operationBlocks().map((b) => [b.name, b]));
 function toolOps(tool: string, opts: { except?: Record<string, string> } = {}): ToolBlock[] {
   return SERVED.filter(
@@ -41,9 +29,7 @@ function toolOps(tool: string, opts: { except?: Record<string, string> } = {}): 
 }
 const TOOLS = [...new Set(SERVED.map((s) => s.tool))];
 
-// A write-gated handler is destructive iff it can overwrite or remove state that
-// already exists. Matched by what the handler does, never by its name, so the next
-// tool that learns to delete something is caught here.
+// Destructive iff the handler can overwrite or remove existing state, matched by what it does, not its name, so the next deleting tool is caught.
 const DESTRUCTIVE = [
   /INSERT INTO documents/i, // an overwrite goes through the same insert as a create
   /\bdocumentUpsert\(/,
@@ -80,14 +66,10 @@ const matches = (body: string, res: RegExp[]) => res.some((re) => re.test(body))
 // the reason. None today.
 const NOT_DESTRUCTIVE: Record<string, string> = {};
 
-// A tool is destructive iff some action of it runs a destructive operation.
 const destructiveTool = (tool: string) =>
   isWriteGated(tool) &&
   toolOps(tool, { except: NOT_DESTRUCTIVE }).some((b) => matches(b.body, DESTRUCTIVE));
 
-// The annotations a client receives, read from tools/list rather than from the
-// registration source.
-// Both servers: Capsid and Capsid Admin.
 type ServedTool = { name: string; annotations?: Record<string, unknown>; [field: string]: unknown };
 async function servedTools(
   caller: Agent = adminAgentForEmail("admin@example.com"),
@@ -115,9 +97,7 @@ async function servedAnnotations(): Promise<Map<string, Record<string, unknown> 
   );
 }
 
-// The family's live check (site-runtime-ai-audit, area 11) judges tools/list with these
-// rules: T4 wants every input object closed, and T7 wants every tool a read grant lists
-// to be read-only. Run 55 failed both, so the served lists are held to them here.
+// The live check wants every input object closed and every tool a read grant lists to be read-only.
 test("PLANT: the served tool lists pass the family's tools/list check, and a read grant lists only read-only tools", async () => {
   const errors = toolListProblems(await servedTools()).filter((p) => p.severity === "error");
   assert.deepEqual(
@@ -177,10 +157,7 @@ test("PLANT: the served readOnlyHint is exactly the negation of the write gate",
   assert.deepEqual(wrong, [], wrong.join("; "));
 });
 
-// The destructive classification comes from the handler source, because the repo,
-// queue, admin and agent tools overwrite through modules this file cannot observe
-// without their own fakes. The hints compared are the served ones. The five document
-// mutators test/write-invariants.test.ts drives are also checked by name below.
+// Destructive comes from the handler source, because repo, queue, admin and agent tools overwrite through modules this file cannot observe; the five document mutators are also checked by name below.
 test("PLANT: every mutating tool is served with destructiveHint true", async () => {
   const served = await servedAnnotations();
   const mutating = TOOLS.filter(destructiveTool);
@@ -204,7 +181,6 @@ test("PLANT: every mutating tool is served with destructiveHint true", async () 
 });
 
 test("PLANT: no read-only tool is served as destructive, and no additive tool overstates", async () => {
-  // The negative direction: a tool that mutates nothing must not claim to be destructive.
   const served = await servedAnnotations();
   const overstated = TOOLS.filter((name) => !destructiveTool(name)).filter(
     (name) => served.get(name)?.destructiveHint === true,
@@ -228,7 +204,6 @@ test("an unknown tool fails CLOSED rather than claiming to be safe", () => {
     "a tool with no entry must not be advertised as read-only",
   );
   assert.equal(unknown.destructiveHint, true);
-  // The protocol's own defaults, stated: repeatable effects, an open world.
   assert.equal(
     unknown.idempotentHint,
     false,
@@ -248,12 +223,7 @@ test("an unknown tool fails CLOSED rather than claiming to be safe", () => {
   assert.equal(constructorLookup.openWorldHint, true);
 });
 
-// idempotentHint and openWorldHint.
-//
-// The protocol reads an omitted idempotentHint as false and an omitted openWorldHint
-// as true, and the constructors in src/tool-annotations.ts default to the same so an
-// entry written the old way still compiles. A default is not a decision, so every
-// entry must state both.
+// The protocol reads an omitted idempotentHint as false and openWorldHint as true; a default is not a decision, so every entry states both.
 
 test("PLANT: every hint table entry states idempotent and openWorld explicitly", () => {
   const text = sourceFile("tool-annotations.ts");
@@ -299,12 +269,8 @@ test("PLANT: every read-only tool is served as idempotent", async () => {
   );
 });
 
-// openWorldHint: true iff the handler reaches GitHub or Cloudflare.
-//
-// DIRECT, not transitive: a block is open world when it calls a name its own file
-// imports from src/github* or src/ops-cloudflare*.ts. A transitive scan disagreed with
-// the table twice, so a call made through another module is named below with its
-// reason instead of inferred.
+// openWorldHint: true iff the handler reaches GitHub or Cloudflare, scanned DIRECT: a block is open world when it calls a name its
+// own file imports from src/github* or src/ops-cloudflare*. A transitive scan disagreed with the table twice.
 
 const OUTSIDE_MODULE = /^(?:\.\.?\/)+(?:github(?:\/[\w-]+)?|ops-cloudflare(?:-config)?)$/;
 
@@ -316,9 +282,7 @@ const NOT_NETWORK: Record<string, string> = {
   resolveRepo: "reads the namespaces table in D1",
 };
 
-// Operations that reach GitHub, Cloudflare or a site through another module. `via` is the
-// call the block makes, and `evidence` is where that module makes the request, so a
-// stale entry fails.
+// Operations that reach GitHub, Cloudflare or a site through another module: `via` is the call and `evidence` where that module makes the request, so a stale entry fails.
 const OPEN_WORLD_THROUGH: Record<
   string,
   { reason: string; via: RegExp; evidence: Array<{ file: string; pattern: RegExp }> }
@@ -393,7 +357,6 @@ const OPEN_WORLD_THROUGH: Record<
   },
 };
 
-// The names a file imports, as values, from src/github* or src/ops-cloudflare*.ts.
 function outsideImports(text: string): Set<string> {
   const names = new Set<string>();
   for (const m of text.matchAll(/import\s+(type\s+)?\{([^}]*)\}\s*from\s*"([^"]+)"/g)) {
@@ -440,7 +403,6 @@ test("PLANT: openWorldHint is served true exactly for the tools that reach GitHu
     [],
     `these tools reach neither and are not served as closed world: ${overstated.join(", ")}`,
   );
-  // Both sides populated, or the equality above compared nothing.
   assert.ok(
     expected.size < served.size,
     "every tool is open world, so the closed side of the rule is untested",
@@ -499,9 +461,7 @@ test("PLANT: every name exempted as not network is defined in an outside module 
   }
 });
 
-// idempotentHint for writes: a table, one reason per tool. A read-only tool is
-// idempotent by the test above; every tool behind the write gate is here, and the
-// served hint must match.
+// idempotentHint for writes: one reason per tool; every tool behind the write gate is here and the served hint must match.
 const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }> = {
   capsid_write_doc: {
     idempotent: false,
@@ -540,9 +500,7 @@ const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }>
   },
 };
 
-// What creates something new on every call, matched in the block by what it does. An
-// audit_log row records a call and is not state the tool acts on, so it is left out:
-// delete writes one and a repeat is refused before it does.
+// What creates something new on every call. An audit_log row records a call, not state the tool acts on, so it is left out.
 const NEW_EACH_CALL = [
   /\bciDispatch\(/,
   /\bopenPr\(/,
@@ -554,8 +512,6 @@ const NEW_EACH_CALL = [
   /\bregisterNamespace\(/,
 ];
 
-// An INSERT into anything but audit_log with no ON CONFLICT, read up to the end of
-// its SQL string literal.
 const insertsFresh = (body: string) =>
   [...body.matchAll(/INSERT INTO\s+(\w+)[^`"]*/g)].some(
     (m) => m[1] !== "audit_log" && !/ON CONFLICT/i.test(m[0]),

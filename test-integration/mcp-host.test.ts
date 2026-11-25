@@ -2,9 +2,8 @@ import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { MCP_HOST } from "../src/mcp-host";
 
-// The MCP endpoint on mcp.dustinedwards.info (src/mcp-host.ts; job_2f9671f89e89), through
-// the WHOLE Worker: the host rules run first in src/index.ts, before the OAuth provider,
-// which answers its own routes.
+// The MCP endpoint on mcp.dustinedwards.info (src/mcp-host.ts) through the whole Worker: the host rules run first
+// in src/index.ts, before the OAuth provider.
 
 const MCP = `https://${MCP_HOST}`;
 const isFallback = async (r: Response) =>

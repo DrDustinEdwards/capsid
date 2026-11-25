@@ -2,12 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { RETRY_CAP_REASON, atCorrectionCap, cappedSummary } from "../src/jobs-schema.ts";
 
-// Two corrections, then a human.
-//
-// Block, resume, block again can loop without bound, so the ceiling is counted
-// rather than judged. The rules are pure functions so they can be driven to their
-// refusals without a database; resumeJob, which consults them, is driven against a
-// real D1 in test-integration/jobs.test.ts.
+// Block, resume, block again can loop without bound, so the ceiling is counted, not judged. The rules are pure;
+// resumeJob runs against real D1 in test-integration/jobs.test.ts.
 
 test("a job under the cap is not capped, and a job at it is", () => {
   assert.equal(atCorrectionCap(0), false);
@@ -34,7 +30,6 @@ test("the capped summary names the cap and KEEPS what the driver said", () => {
     /the push needs a human/,
     "a cap that discards the driver's summary throws away what the human has to decide about",
   );
-  // An empty summary still says why the job stopped.
   assert.match(cappedSummary(null), new RegExp(RETRY_CAP_REASON));
   assert.match(cappedSummary(""), new RegExp(RETRY_CAP_REASON));
 });

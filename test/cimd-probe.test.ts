@@ -6,10 +6,8 @@ import { test } from "node:test";
 import { PROBE_CLIENT_PATH, PROBE_REDIRECT, probeClientId, probeDocumentProblem, registrationProblem } from "../scripts/cimd-probe-lib.mjs";
 import { VERIFY_LIVE_CLIENT_PATH, clientDocument } from "../src/oauth-client-docs.ts";
 
-// verify-live gate 2 (scripts/cimd-probe-lib.mjs): CIMD is on, tightened DCR refuses a
-// registration naming the probe's unlisted redirect (registrationRefusal), and the probe client's
-// metadata document is one the Worker accepts. The live half is the gate; these pin its
-// decisions and the document the Worker serves.
+// verify-live gate 2: CIMD is on, tightened DCR refuses a registration naming the probe's unlisted redirect, and the probe client's metadata is accepted.
+// The live half is the gate; these pin its decisions and the document the Worker serves.
 
 const ORIGIN = "https://capsid.example";
 const DOC = clientDocument(new URL(probeClientId(ORIGIN)))!;

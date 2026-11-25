@@ -1,8 +1,6 @@
 import type { FakeD1Rows } from "./fakes.ts";
 import { sqliteNow, type Row, type WriteResult } from "./fake-sql.ts";
 
-// The audit rows the fake builds inside a batch, as SQLite would evaluate their SELECT.
-
 // delete's row, whose params are the edges it removes, built by json_group_array. An
 // aggregate over no edges still answers one row, so the row lands with an empty list.
 const DELETE_AUDIT_EDGES =
@@ -18,7 +16,6 @@ function push(rows: FakeD1Rows, row: Record<string, unknown>) {
   (rows.audit_log as Row[]).push({ id, ...row, at: sqliteNow() });
 }
 
-/** The write when `flat` is one of those two audit statements, else null. */
 export function landAuditRow(
   flat: string,
   params: unknown[],

@@ -82,7 +82,6 @@ beforeEach(async () => {
   ]);
 });
 
-// The Worker's env, with every D1 prepare and APP_KV get counted.
 function counted(): { env: Env; reads: { d1: string[]; kv: string[] } } {
   const reads = { d1: [] as string[], kv: [] as string[] };
   const db = new Proxy(env.DB, {
@@ -112,7 +111,6 @@ describe("the feed against real D1", () => {
     await opsFeed(e, NOW);
     expect(reads.d1.length, `D1 statements:\n${reads.d1.join("\n")}`).toBe(OPS_FEED_READS.d1);
     expect(reads.kv.length, `KV gets: ${reads.kv.join(", ")}`).toBe(OPS_FEED_READS.kv);
-    // No per-namespace KV read: the count does not grow with the roster.
     expect(reads.kv.filter((key) => APP_ROSTER.some((ns) => key.endsWith(`:${ns}`)))).toEqual([]);
     // The count does not grow with the data: twice the jobs, the same reads.
     for (let i = 0; i < 6; i++) await seedJob(`job_1000000000${i}0`, { status: "queued" });
@@ -140,7 +138,6 @@ describe("the feed against real D1", () => {
     const blocked = feed.live.jobs.find((j) => j.id === "job_00000000000b")!;
     expect(blocked.waits_on).toBe("waiting on the push");
     expect(blocked.command).toBe("git push -u origin feat/x");
-    // Needs you reads the same inbox GET /ops/inbox answers with: the blocked job is in it.
     expect(feed.live.inbox.apps.flatMap((a) => a.items).map((i) => i.title)).toContain(
       blocked.title,
     );

@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isCanonPath } from "../src/canon.ts";
 
-// Which documents are canon (src/canon.ts): the path rules are exact strings, and their
-// near misses are not canon. Who may change one is tested against real D1 in
-// test-integration/canon.test.ts.
+// The path rules are exact strings and their near misses are not canon; who may change one is tested in test-integration/canon.test.ts.
 
 test("canon paths match, and their near misses do not", () => {
   const canon: Array<[string, string]> = [

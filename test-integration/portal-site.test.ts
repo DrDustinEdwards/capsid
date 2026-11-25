@@ -4,9 +4,7 @@ import type { Env } from "../src/env";
 import { readBuildLog, readWorkersBuilds } from "../src/portal-builds";
 import { readSiteSearch, readSiteTraffic } from "../src/portal-site";
 
-// A site page's reads (src/portal-site.ts) against a real D1, the outside services stubbed:
-// each source answers its data or no data with the reason, never a zero, and one source
-// failing leaves the others.
+// Each source answers its data or no data with the reason, never a zero, and one failing leaves the others.
 
 const NOW = new Date("2026-11-06T12:00:00.000Z");
 const BUILD = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
@@ -21,7 +19,6 @@ function siteEnv(extra: Partial<Env>): Env {
   } as Env;
 }
 
-// Answers by URL; anything not listed fails the test's read loudly.
 function stub(routes: Array<[RegExp, (url: URL, init?: RequestInit) => Response]>) {
   const calls: string[] = [];
   const fetchImpl = async (input: string, init?: RequestInit) => {

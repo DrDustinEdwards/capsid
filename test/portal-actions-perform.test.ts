@@ -53,11 +53,8 @@ import {
   auditRows,
 } from "./portal-actions-fixtures.ts";
 
-// Perform
-
-// The action whose mutator writes KV and one audit row, and the revoke; the job
-// transitions (close_shipped, supersede, park and unpark among them), the PR close, the approval, the site edits, the package edits,
-// the site key, the project edits and the canon decisions are performed against real D1 in test-integration/portal-actions.test.ts.
+// Only the action whose mutator writes KV and one audit row, and the revoke, run here;
+// the rest run against real D1 in test-integration/portal-actions.test.ts.
 for (const [action, params] of EVERY_ACTION.filter(
   ([a]) =>
     !a.endsWith("_job") &&
@@ -128,8 +125,7 @@ test("a co-owner's session is refused when CO_OWNER_EMAILS is unset", async () =
   wroteNothing(none, "a co-owner with no CO_OWNER_EMAILS");
 });
 
-// A confirmation is used once the nonce makes a second perform a
-// refusal of its own.
+// A confirmation is used once: the nonce makes a second perform a refusal of its own.
 test("PLANT: a confirmation is spent by its first perform, and a replay is refused with 409 and writes nothing", async () => {
   const w = world();
   const { token } = await issue(w);
@@ -176,7 +172,6 @@ test("PLANT: a token for one action cannot perform another", async () => {
     deps,
   );
   assert.equal(named.status, 400);
-  // Written into the token itself: the signature no longer verifies.
   const edited = tamper(token, (c) => (c.action = "reset_breaker"));
   const signed = await handlePortalPerform(await perform({ token: edited }), w.env, NOW, deps);
   assert.equal(signed.status, 403);
@@ -257,8 +252,6 @@ test("an action that happened but whose click row failed returns 200 with the wa
   assert.equal(errors.length, 1);
 });
 
-// Fetch metadata, the body cap, the JSON
-
 const overnightPreview = (site: string | null) =>
   preview(
     { action: "overnight", params: { value: "api", reason: "first supervised night" } },
@@ -306,8 +299,6 @@ test("a body that is not a JSON object is refused with 400", async () => {
     assert.equal(res.status, 400, raw);
   }
 });
-
-// The gate, on all four routes
 
 const ROUTES = [
   [PORTAL_PREVIEW_PATH, "POST", (r: Request, e: never) => handlePortalPreview(r, e, NOW)],
@@ -364,8 +355,6 @@ test("every route refuses a bearer with 403 and sends an anonymous caller to sig
   }
 });
 
-// Sign out
-
 // Node's Headers has getSetCookie; the Workers types this suite checks against do not.
 function setCookies(res: Response): string[] {
   return (res.headers as unknown as { getSetCookie(): string[] }).getSetCookie();
@@ -382,7 +371,6 @@ test("sign out expires the session and CSRF cookies at Path=/portal, and ends a 
   const res = await handlePortalSignOut(request, w.env, NOW);
   assert.equal(res.status, 204);
   const cookies = setCookies(res);
-  // Each under its __Secure- name.
   const names = cookies.map((c) => c.split("=")[0]).sort();
   assert.deepEqual(
     names,
@@ -399,10 +387,8 @@ test("sign out expires the session and CSRF cookies at Path=/portal, and ends a 
     assert.match(c, /; Secure; HttpOnly; SameSite=Lax/);
   }
   wroteNothing(w, "sign out");
-  // The same session cookie, sent again from anywhere, is a sign-in redirect now.
   const again = await handlePortalSignOut(copy, w.env, NOW);
   assert.equal(again.status, 302, "a copy of the signed-out session was still admitted");
-  // A session from another sign-in of the same person goes on.
   const other = await handlePortalSignOut(await signOut(), w.env, NOW);
   assert.equal(other.status, 204, "signing out one session ended another");
 });
@@ -424,8 +410,6 @@ for (const [label, opts] of [
   });
 }
 
-// The overnight run's switch (src/overnight.ts)
-
 test("PLANT: performing the subscription choice stores the mode and the decision record with the date, who set it and why; leaving it deletes the record", async () => {
   const w = world();
   const { token } = await previewOk(w, "overnight", {
@@ -440,7 +424,6 @@ test("PLANT: performing the subscription choice stores the mode and the decision
   assert.equal(decision.decided_on, "2026-10-04");
   assert.equal(decision.set_by, ACTOR);
   assert.equal(decision.reason, "first supervised night");
-  // The audit rows carry the same record, so the choice is visible in Activity.
   const mutator = w.d1.recorded.find((r) => r.params[1] === "overnight-set");
   assert.ok(mutator, "no overnight-set audit row");
   assert.match(String(mutator.params[4]), /Dustin Edwards/);

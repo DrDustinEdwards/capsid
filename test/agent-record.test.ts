@@ -35,7 +35,6 @@ function outcome(
   };
 }
 
-// A row the Worker checked.
 function verified(overrides: Partial<RecordRows["outcomes"][number]> = {}) {
   return outcome({
     verified: JSON.stringify({
@@ -90,7 +89,6 @@ test("ONLY A VERIFIED FIELD FEEDS A RATE", () => {
       // Unverified and generous: forty opened, forty merged. If this counted, the
       // merge rate would be a perfect 100%.
       outcome({ prs_opened: 40, prs_merged: 40 }),
-      // Verified and modest.
       verified({ prs_opened: 4, prs_merged: 1 }),
     ],
   });
@@ -108,8 +106,6 @@ test("the CI rate's denominator is what was checked, not what was done", () => {
       verified({ ci_green: 1 }),
       verified({ ci_green: 1 }),
       verified({ ci_green: 0 }),
-      // Three jobs with nothing to check: no pull request, or CI that had not
-      // finished. None of them belongs in the denominator.
       outcome({ ci_green: null }),
       outcome({ ci_green: null }),
       verified({ ci_green: null }),
@@ -131,7 +127,6 @@ test("the duration is a MEDIAN, so one job left open over a weekend does not mov
   });
   // The mean here is over a thousand minutes. The median says what a job usually took.
   assert.equal(weekend.median_duration_minutes, 28);
-  // An odd count takes the middle rather than averaging.
   const odd = recordFor(ACTOR, {
     ...EMPTY,
     outcomes: [
@@ -141,7 +136,6 @@ test("the duration is a MEDIAN, so one job left open over a weekend does not mov
     ],
   });
   assert.equal(odd.median_duration_minutes, 5);
-  // A job with no duration is not a job of length zero.
   const mixed = recordFor(ACTOR, {
     ...EMPTY,
     outcomes: [outcome({ duration_minutes: null }), outcome({ duration_minutes: 10 })],
@@ -155,7 +149,6 @@ test("gates hit and resumes are totals over the agent's own rows", () => {
     outcomes: [
       outcome({ blocked_count: 2, resumed_count: 2 }),
       outcome({ blocked_count: 1, resumed_count: 1 }),
-      // Another credential's job, which must not land on this record.
       outcome({ agent: "agent:sample-driver", blocked_count: 9, resumed_count: 9 }),
     ],
   });

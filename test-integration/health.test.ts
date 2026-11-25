@@ -1,11 +1,8 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-// /health AGAINST A REAL D1. The endpoint probes the store as well as reporting
-// provenance: a SELECT 1 plus an FTS MATCH pinned to capsid/conventions.md, and it
-// answers 503 `fail` (site-runtime's healthResponse) if either fails. Bindings resolve by name at deploy time,
-// so a Worker pointed at nothing starts fine while every read tool errors; this
-// endpoint makes that visible.
+// /health against a real D1: it probes the store (SELECT 1 plus an FTS MATCH pinned to capsid/conventions.md) and answers 503 if either fails;
+// bindings resolve by name at deploy time, so a Worker pointed at nothing starts fine while every read tool errors.
 
 describe("/health", () => {
   it("fails on an empty store, because the FTS probe finds nothing to match", async () => {
@@ -34,7 +31,6 @@ describe("/health", () => {
 
     const response = await SELF.fetch("https://capsid.test/health");
     const body = (await response.json()) as { status: string; sha?: string };
-    // Up, with warnings: no backup and no task run is recorded in a fresh store.
     expect(response.status).toBe(200);
     expect(body.status).toBe("warn");
     expect(body.sha).toBe("integration");

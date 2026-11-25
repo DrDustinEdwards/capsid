@@ -6,8 +6,6 @@ import { PORTAL_PREVIEW_PATH } from "../src/portal-actions";
 import { jobRow } from "./jobs-fixture";
 import { call, blockedJob, auditRows, resetPortal, performToken } from "./portal-actions-fixtures";
 
-// The Portal's job actions through the Worker (portal-actions.test.ts).
-
 beforeEach(resetPortal);
 
 describe("the job actions against real D1", () => {
@@ -76,8 +74,7 @@ describe("the job actions against real D1", () => {
   });
 
   it("resume REFUSES a job whose body was edited after it was signed, at perform, and the job stays blocked", async () => {
-    // A blocked job can be edited while it waits for a human, so resume re-verifies the
-    // signature, and the Portal must show that refusal rather than report success.
+    // Editing a blocked job makes resume re-verify the signature; the Portal must show that refusal, not report success.
     const id = await blockedJob("edited while blocked");
     const preview = (await (
       await call(PORTAL_PREVIEW_PATH, {

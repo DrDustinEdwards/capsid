@@ -3,12 +3,8 @@ import { test } from "node:test";
 import { CI_JOBS_MAX, CI_LOG_BUDGET, ciStatus } from "../src/github.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// capsid_inspect_repo action ci's drill-in for any run (jobs, job, step) and the redaction of every log it
-// returns (site-runtime ./redact). Driven through the real ciStatus against a stubbed GitHub,
-// as test/repo-fallthrough.test.ts drives the failed-run tail.
-//
-// Secret-shaped fixtures are assembled at run time so this public repo holds no string
-// a scanner reads as a credential. They are fake.
+// Drill-in for any run (jobs, job, step) and redaction of every log it returns, through the real ciStatus against a stubbed GitHub.
+// Secret-shaped fixtures are assembled at run time so this public repo holds no string a scanner reads as a credential.
 
 const ONE_REPO = [{ repo: "o/r", label: "primary" }];
 

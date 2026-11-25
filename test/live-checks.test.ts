@@ -22,8 +22,7 @@ import type { WebAnalyticsSite } from "../src/ops-types/views.ts";
 import { gatherFindings } from "../src/watcher-gather.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// The watcher's live checks (src/live-checks.ts). The beacon snippet and CSP directives are
-// from developers.cloudflare.com/web-analytics/faq.
+// The beacon snippet and CSP directives come from developers.cloudflare.com/web-analytics/faq.
 
 const NOW = new Date("2026-10-04T12:00:00.000Z");
 const BEACON = `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "sample"}'></script>`;
@@ -51,8 +50,6 @@ const probe = (over: Partial<SiteProbe> = {}): SiteProbe => ({
   checked_at: NOW.toISOString(),
   ...over,
 });
-
-// the document
 
 test("parseLiveConfig reads only '- site' lines, in all three rules, and ignores prose", () => {
   const parsed = parseLiveConfig(
@@ -98,8 +95,6 @@ test("PLANT: a '- site' line that does not parse refuses the whole document, nam
   }
 });
 
-// the beacon
-
 test("beaconCount counts script tags that load the beacon, in any quoting, and not other scripts, a mention in text or a lookalike host", () => {
   assert.equal(beaconCount(page("")), 0);
   assert.equal(beaconCount(page(BEACON)), 1);
@@ -132,8 +127,6 @@ test("beaconCount counts script tags that load the beacon, in any quoting, and n
     0,
   );
 });
-
-// findings from one page
 
 const read = (html: string, csp?: string): Parameters<typeof pageFindings>[2] => ({
   status: 200,
@@ -191,8 +184,6 @@ test("a page that must carry no beacon is clean without one and a finding with o
     "live-beacon-present-sample-account",
   ]);
 });
-
-// the security headers
 
 const headersRule: Extract<LiveRule, { path: string }> = {
   namespace: "sample",
@@ -271,8 +262,6 @@ test("the headers rule counts a page read, and a page with missing headers is a 
   assert.deepEqual(prints(bare.findings), ["live-headers-sample-root"]);
 });
 
-// the Web Analytics setting
-
 const ANALYTICS_SITE = {
   namespace: "sample",
   name: "Sample",
@@ -287,13 +276,11 @@ const wa = (over: Partial<WebAnalyticsSite> = {}): WebAnalyticsSite => ({
 
 test("analyticsFinding: automatic setup on is clean; a missing host, auto_install off and a switched-off ruleset each file their own finding", () => {
   assert.equal(analyticsFinding(ANALYTICS_SITE, [wa()]), null);
-  // a ruleset switch Cloudflare does not report is not a finding
   assert.equal(analyticsFinding(ANALYTICS_SITE, [wa({ enabled: null })]), null);
   const cases: Array<[WebAnalyticsSite[], string]> = [
     [[wa({ host: "other.example.com", auto_install: false })], "missing"],
     [[], "missing"],
     [[wa({ auto_install: false })], "off"],
-    // an unreported setting is not read as on
     [[wa({ auto_install: null })], "off"],
     [[wa({ enabled: false })], "off"],
   ];
@@ -355,8 +342,6 @@ test("PLANT: an analytics read that fails is an unread finding for the site and 
   assert.deepEqual(out.summary, summary(0, 0, 0, 0, 1, 0));
 });
 
-// the sha
-
 const HEAD = { sha: "b".repeat(40), committed_at: "2026-10-04T10:00:00.000Z" };
 
 test("shaFinding: equal, a short prefix either way, and a head inside the grace are clean", () => {
@@ -395,8 +380,6 @@ test("PLANT: a deployed sha that is not the head, past the grace, is a finding n
     "a 3 character sha is not a prefix match",
   );
 });
-
-// reading a page
 
 const html = (body: string, init: ResponseInit = {}, url?: string): Response => {
   const res = new Response(body, {
@@ -458,8 +441,6 @@ test("PLANT: a page that cannot be judged says why: an error, a 404, a login red
     assert.equal(got.gated, gated, `${name} gated`);
   }
 });
-
-// a whole pass
 
 const ANALYTICS_ON: WebAnalyticsSite[] = [
   { host: "sample.example.com", auto_install: true, enabled: true },
@@ -614,8 +595,6 @@ test("PLANT: two rules for one unknown site, or one page named twice, file one f
   assert.deepEqual(prints(twice.findings), ["live-csp-beacon-sample-root"]);
   assert.equal(twice.summary.pages_read, 2, "both rules were read; only their finding is one");
 });
-
-// through the watcher
 
 // A D1 that answers the site configuration and the live-checks document and throws on every other read.
 function liveDb(doc: string | null) {

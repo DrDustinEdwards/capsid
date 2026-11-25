@@ -2,13 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { breaking, type Handler, healthy, HTML, NON_HTML, run, SHA } from "./verify-live-stub.ts";
 
-// A gate that got no answer has not refused the deploy. scripts/verify-live.mjs
-// retries a thrown fetch, records a gate whose requests never got an answer as
-// could-not-run, and exits 3 rather than 1 when no gate refused. ci.yml rolls back
-// on exit 1 only, so a connection reset must not roll back a good deploy.
-//
-// These run the real script against a local server that plays a healthy Worker
-// (./verify-live-stub.ts), and can drop the connection instead of answering.
+// A gate that got no answer has not refused the deploy: verify-live exits 3, not 1, because ci.yml rolls back on exit 1
+// only and a connection reset must not roll back a good deploy.
 
 test("a connection reset on the first try of every request is retried and the run passes", async () => {
   // One reset per request. Without the retry the first reset would exit 1, and exit 1
@@ -26,13 +21,11 @@ test("a server that never answers is could-not-run (exit 3), not a refusal (exit
   assert.equal(code, 3, out);
   assert.match(out, /NORUN {2}1 health \+ provenance/);
   assert.match(out, /NORUN {2}2 CIMD, DCR allowlisted/);
-  // The gates that depend on a client id inherit could-not-run rather than failing.
   assert.match(out, /NORUN {2}3 consent form renders/);
   assert.doesNotMatch(out, /FAIL {2}/);
 });
 
 test("a server that answers with errors is still a refusal: exit 1", async () => {
-  // An answer decides, and a 503 is an answer.
   const broken: Handler = (_req, res) => {
     res.writeHead(503, { "content-type": "text/plain" });
     res.end("down");
@@ -61,9 +54,6 @@ test("a refusal outranks a gate that could not run: exit 1", async () => {
   assert.match(out, /FAIL {2}1 health \+ provenance/);
   assert.match(out, /NORUN {2}5 approve redirects to Access/);
 });
-
-// The folded gates: gate 1 carries the store check, and gate 6 carries the no-store
-// check and the report sink. Each case breaks one of those checks.
 
 test("gate 1 refuses a Worker whose FTS index is broken (was gate 1b)", async () => {
   const { code, out } = await run(
@@ -117,8 +107,6 @@ test("gate 6 refuses a report sink that does not answer 204 (was gate 7)", async
   );
 });
 
-// Gate 2 with tightened DCR: the script wiring, beside the decisions in
-// test/cimd-probe.test.ts.
 test("gate 2 refuses a Worker that registers an unlisted redirect", async () => {
   const { code, out } = await run(
     breaking((req, res) => {

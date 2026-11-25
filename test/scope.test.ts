@@ -18,11 +18,8 @@ import {
 import { actionArgFor, toolListed } from "../src/scope-guard.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// One enforcement point, and the refusal names what is missing.
-//
-// checkScope called directly, then two sweeps that call every served tool over a
-// real MCP connection. test/blast-radius.test.ts proves each flag is refused at every
-// path that needs it.
+// checkScope called directly, then two sweeps calling every served tool over a real MCP connection;
+// test/blast-radius.test.ts proves each flag at every path that needs it.
 
 function scopedAgent(mutate: (scopes: ReturnType<typeof defaultScopes>) => void = () => {}): Agent {
   const scopes = defaultScopes(["capsid"]);
@@ -203,7 +200,6 @@ test("the legacy caller passes every check, which is the one thing this migratio
 
 test("requiredGrant fails closed for a tool nobody has classified", () => {
   assert.equal(requiredGrant("a_tool_nobody_classified"), "write");
-  // And the lookup does not answer for Object.prototype keys.
   assert.equal(requiredGrant("constructor"), "write");
   assert.equal(requiredGrant("toString"), "write");
 });
@@ -246,12 +242,8 @@ test("a money path is matched by name, and an innocent path is not", () => {
   }
 });
 
-// The sweep: every served tool, called through a real MCP connection.
-//
-// The tool list comes from the server's own listTools, so a tool added later is in
-// the sweep once registered. Arguments are built from each tool's served input
-// schema, because the SDK validates arguments before the wrapped handler runs and
-// would otherwise refuse the call itself.
+// The tool list comes from listTools, so a later tool is swept once registered. Arguments are built from each tool's
+// input schema, which the SDK validates before the wrapped handler runs.
 
 interface JsonProp {
   type?: string;
@@ -268,8 +260,6 @@ interface SweepResult {
   // neither: the handler never ran.
   prepared: number;
   fetched: number;
-  // KV reads: an operation that keeps its state in KV (the watcher's snapshot) reaches
-  // the store there, not in D1.
   kvReads: number;
 }
 
@@ -283,8 +273,6 @@ function valueFor(name: string, prop: JsonProp): unknown {
   return "x";
 }
 
-// The required arguments, each given a value its schema accepts. `action` overrides
-// the tool's action argument (see actionArgFor) when the sweep walks the actions.
 function argsFor(tool: ServedTool, action?: string): Record<string, unknown> {
   const props = tool.inputSchema.properties ?? {};
   const args: Record<string, unknown> = {};
@@ -300,16 +288,13 @@ function argsFor(tool: ServedTool, action?: string): Record<string, unknown> {
   return args;
 }
 
-// Arguments an action needs that no schema marks required, because its handler checks
-// them itself. Without one the handler answers before it reaches the store, and the
-// read half below would assert nothing about that action.
+// Arguments an action needs that no schema marks required, because its handler checks them; without one the handler answers before the store and the read half asserts nothing.
 const ACTION_ARGS: Record<string, Record<string, unknown>> = {
   "capsid_admin_read_claims.job": { id: "x" },
   "capsid_admin_read_claims.export": { table: "job_claims" },
   "capsid_admin_read_ops.build_logs": { build_uuid: "00000000-0000-4000-8000-000000000000" },
 };
 
-// The action values a tool's schema offers, or [undefined] for a tool with none.
 function actionsOf(tool: ServedTool): Array<string | undefined> {
   const key = actionArgFor(tool.name);
   const values = key ? tool.inputSchema.properties?.[key]?.enum : undefined;
@@ -377,11 +362,8 @@ async function sweep(
       const key = actionArgFor(tool);
       const label = key && typeof args[key] === "string" ? `${tool}.${args[key]}` : tool;
       const props = served.find((t) => t.name === tool)?.inputSchema.properties ?? {};
-      // A composite tool's schema marks optional what only some of its actions need, so
-      // an action's own required argument can be missing from argsFor. The operation
-      // names it in its refusal, which comes after the registrar admitted the call; fill
-      // it and call again, so the result recorded is the handler's, not a parse error.
-      // The registrar's refusal is never retried: it names no missing argument.
+      // A composite tool marks optional what only some actions need; the operation names the missing argument after the
+      // registrar admitted the call, so fill it and call again. The registrar's refusal is never retried.
       for (let attempt = 0; ; attempt += 1) {
         let missing: string[] = [];
         await withFetch({}, async (fetches) => {
@@ -424,7 +406,6 @@ async function sweep(
   return { served, results };
 }
 
-// Each server serves exactly its own list, and the two lists are TOOL_GRANTS between them.
 function assertServedAll(surface: Surface, served: ServedTool[]) {
   assert.deepEqual(
     served.map((t) => t.name).sort(),
@@ -440,7 +421,6 @@ test("the two servers' surfaces are every tool in TOOL_GRANTS, so a sweep of bot
   assert.equal(both.length, AUTHORITATIVE.capsid.tools);
 });
 
-// A caller that holds every grant, every namespace and every repo, and no tools.
 function noToolsAgent(): Agent {
   const scopes = defaultScopes(["capsid"]);
   scopes.namespaces = "*";
@@ -458,14 +438,12 @@ function noToolsAgent(): Agent {
   };
 }
 
-// A tool registered before the guard, or around it, answers here.
 test("SWEEP: every served tool on both servers refuses a caller whose tools axis is empty, by name, before its handler runs", async () => {
   let called = 0;
   for (const surface of Object.keys(SURFACES) as Surface[]) {
     const { served, results } = await sweep(noToolsAgent(), surface, (tools) =>
       tools.map((tool) => ({ tool: tool.name, args: argsFor(tool) })),
     );
-    // Not vacuous: the sweep called every tool this server serves.
     assertServedAll(surface, served);
     assert.equal(results.size, served.length, `${surface}: the sweep did not call every tool`);
     called += results.size;
@@ -509,17 +487,13 @@ test("SWEEP: every served tool on both servers refuses a caller whose tools axis
   );
 });
 
-// The read actions of the two tools whose handler decides the grant per action (see
-// TOOL_GRANTS "action", outside TOOL_ACTION_GRANTS). Every other action is expected to
-// refuse a read-only caller, so an action added to either tool is expected to refuse
-// until it is listed here.
+// The read actions of the two tools whose handler decides the grant per action (TOOL_GRANTS "action"). Every other
+// action must refuse a read-only caller until it is listed here.
 const READ_ACTIONS: Record<string, string[]> = {
   capsid_work_jobs: ["list"],
   capsid_lint_namespace: ["gather"],
 };
 
-// A read is a "read" or "admin_read" requirement for this action (TOOL_ACTION_GRANTS
-// decides capsid_read_status's per action), or a READ_ACTIONS entry.
 function isReadCall(tool: string, action: string | undefined): boolean {
   const requirement = requiredForAction(tool, action);
   if (requirement === "read" || requirement === "admin_read") return true;
@@ -528,28 +502,21 @@ function isReadCall(tool: string, action: string | undefined): boolean {
   );
 }
 
-// The read-only caller each server is for. On Capsid, a read key. On Capsid Admin, the
-// admin identity holding only the read grant: a non-admin is refused there as not the
-// admin before any grant question arises, which would prove nothing about the grant.
+// On Capsid a read key; on Capsid Admin the admin identity with only the read grant, since a non-admin is refused as not the admin before any grant question.
 function readOnlyCaller(surface: Surface): Agent {
   const reader = grantAgent("read", "opkey:readonly0000");
   return surface === "admin" ? { ...reader, admin: true } : reader;
 }
 
-// A handler that decides a grant for itself is observable only where it disagrees
-// with checkScope, and it can only disagree by refusing, because the registrar runs
-// first. The write half proves every write refuses with checkScope's own sentence and
-// touches nothing; the read half proves no read is refused, which a private gate on a
-// read tool would do.
+// A handler that decides a grant itself is observable only where it disagrees with checkScope, by refusing. The write
+// half proves every write refuses with checkScope's sentence; the read half proves no read is refused.
 test("SWEEP: a read-only caller is refused every write by checkScope on both servers, and no read", async () => {
   const writeTools = new Set<string>();
   const readTools = new Set<string>();
   for (const surface of Object.keys(SURFACES) as Surface[]) {
     const caller = readOnlyCaller(surface);
     const unserved = SURFACES[surface].tools.filter((tool) => !toolListed(caller, tool));
-    // Every action as a writer is served it: a tool whose action decides its grant is
-    // served to a read grant with its read actions alone (src/tools/surface-composite.ts READ_VIEWS),
-    // and its write actions must still be refused when asked for by name.
+    // Every action is served to a writer; a read grant is served a composite tool's read actions alone (READ_VIEWS), yet its write actions must still be refused by name.
     const { served: writerTools } = await sweep(
       { ...grantAgent("write", "opkey:writer000000"), admin: surface === "admin" },
       surface,
@@ -563,7 +530,6 @@ test("SWEEP: a read-only caller is refused every write by checkScope on both ser
       ),
       ...unserved.map((tool) => ({ tool, args: {} as Record<string, unknown> })),
     ]);
-    // A read grant is served every tool but those that need write in whole (area 11, T7).
     assert.deepEqual(
       served.map((t) => t.name).sort(),
       SURFACES[surface].tools.filter((tool) => !unserved.includes(tool)).sort(),
@@ -595,8 +561,6 @@ test("SWEEP: a read-only caller is refused every write by checkScope on both ser
             /unauthorized|denied|requires the write grant/i,
             `${label} is a read and refused a read-only caller: ${result.text}`,
           );
-          // The handler ran. Its answer may be an error (empty store, no GitHub
-          // routes), but it reached the store to give it.
           assert.ok(
             result.prepared + result.fetched + result.kvReads > 0,
             `${label} never reached its handler, so this asserts nothing about it: ${result.text}`,
@@ -620,15 +584,12 @@ test("SWEEP: a read-only caller is refused every write by checkScope on both ser
       }
     }
   }
-  // Not vacuous in either direction: every tool that is not wholly a read has at least
-  // one write call, and every tool that is wholly a read one read call.
   const wholeRead = (r: string) => r === "read" || r === "admin_read";
   for (const [tool, r] of Object.entries(TOOL_GRANTS)) {
     if (!wholeRead(r))
       assert.ok(writeTools.has(tool), `${tool} needs more than read and had no write call`);
     if (wholeRead(r)) assert.ok(readTools.has(tool), `${tool} is a read tool and had no read call`);
   }
-  // The per-action table is swept too: each of its read actions was called as a read.
   for (const [tool, spec] of Object.entries(TOOL_ACTION_GRANTS)) {
     for (const [action, r] of Object.entries(spec.actions)) {
       if (r === "read")

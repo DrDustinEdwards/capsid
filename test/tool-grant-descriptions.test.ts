@@ -6,11 +6,8 @@ import { adminAgentForEmail } from "../src/agents.ts";
 import { TOOL_GRANTS, TOOL_ACTION_GRANTS, repoWriteFlags } from "../src/scope.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// The grant sentence in each tool description is derived from TOOL_GRANTS, the table
-// the registrar enforces, and checked against the descriptions the server serves, so
-// a change to either side fails this file.
+// The grant sentence in each description is derived from TOOL_GRANTS, so a change to either side fails.
 
-// Both servers: Capsid and Capsid Admin.
 async function servedDescriptions(): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   for (const build of [buildServer, buildAdminServer]) {
@@ -28,9 +25,7 @@ async function servedDescriptions(): Promise<Map<string, string>> {
   return out;
 }
 
-// The sentence a tool's description must contain, or null when the requirement is
-// not stated as one sentence (a read tool, or an action tool whose handler decides
-// per action and whose description marks each action instead).
+// The sentence a description must contain, or null when it is not one sentence (a read tool, or an action tool whose description marks each action).
 function grantSentence(tool: string): string | null {
   const requirement = TOOL_GRANTS[tool];
   if (requirement === "write") {
@@ -112,9 +107,7 @@ test("DERIVED: every tool's description states the requirement TOOL_GRANTS gives
 });
 
 test("PLANT: every served tool's description fits the 4,096 characters Claude Code shows", async () => {
-  // Claude Code cuts a tool description at 4,096 characters, so anything past it is
-  // never read. Detail belongs in the
-  // parameter descriptions and docs/.
+  // Claude Code cuts a tool description at 4,096 characters; detail belongs in parameter descriptions and docs/.
   const served = await servedDescriptions();
   assert.ok(served.size > 0, "the server served no tools");
   const over = [...served]

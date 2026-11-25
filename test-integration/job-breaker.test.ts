@@ -11,9 +11,8 @@ import {
 } from "../src/job-breaker";
 import { driverAgent, jobsEnv, seatAgent } from "./jobs-fixture";
 
-// The queue's circuit breaker (job_9e602b31888f, OWASP ASI08), against a real D1: the
-// breaker is a count over audit_log, so what it counts is only true of the real rows.
-// audit_log.at is the database's own clock, so these run on the real time.
+// The queue's circuit breaker against a real D1: it is a count over audit_log, whose `at` is the database's own clock,
+// so these run on real time.
 
 const POSTER = grantAgent("write", "github:DrDustinEdwards");
 
@@ -28,7 +27,6 @@ async function post(namespace = "capsid"): Promise<string> {
   return posted.job!.id;
 }
 
-// A job its holder claimed and then failed: one `job-fail` audit row.
 async function holderFails(driver: Agent, namespace = "capsid"): Promise<void> {
   const id = await post(namespace);
   const claimed = await claimJob(jobsEnv(), driver, new Date(), { id });
@@ -63,7 +61,6 @@ describe("the queue's circuit breaker", () => {
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/circuit breaker for capsid is open: 3 jobs failed/);
     expect(await status(waiting)).toEqual({ status: "queued", claimed_by: null });
-    // A claim by id is refused the same way.
     expect(
       (await claimJob(jobsEnv(), driverAgent("agent:capsid-driver-2"), new Date(), { id: waiting }))
         .ok,

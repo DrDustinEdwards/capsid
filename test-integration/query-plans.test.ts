@@ -1,15 +1,8 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-// EXPLAIN QUERY PLAN over every read in src/, against the real schema.
-//
-// The statements are walked out of the source (scripts/sql-statements.ts) rather
-// than listed here, so a newly added query is covered without anyone adding it.
-//
-// What counts as a finding: SQLite writes "SCAN" both for walking a table with no
-// usable index and for walking an index in order. Only the first is a defect, so the
-// rule is a bare `SCAN <table>` with no ` USING INDEX` and no ` VIRTUAL TABLE`, on
-// one of the tables that grows without bound.
+// EXPLAIN QUERY PLAN over every read in src/ (walked out by scripts/sql-statements.ts, so new queries are covered).
+// A defect is a bare `SCAN <table>` with no USING INDEX or VIRTUAL TABLE on a table that grows without bound.
 
 const HOT_TABLES = [
   "documents",
@@ -20,8 +13,7 @@ const HOT_TABLES = [
   "deploy_outcomes",
 ];
 
-// Reads that walk a whole table on purpose, each named with its reason, so a new
-// exception has to be added here explicitly.
+// Reads that walk a whole table on purpose, each with its reason, so a new exception is added explicitly.
 const WHOLE_TABLE_BY_DESIGN = [
   {
     file: "backup.ts",
@@ -45,9 +37,7 @@ function arity(sql: string): number {
   return (sql.match(/\?/g) ?? []).length;
 }
 
-// A bare table scan: "SCAN <name>" with nothing after it. "SCAN x USING INDEX y"
-// is an index scan and "SCAN documents_fts VIRTUAL TABLE INDEX 0:M2" is how FTS
-// reports a MATCH; neither is a defect.
+// "SCAN x USING INDEX y" is an index scan and FTS reports a MATCH as "SCAN documents_fts VIRTUAL TABLE INDEX 0:M2"; neither is a defect.
 function bareScan(detail: string): string | null {
   const match = /^SCAN ([A-Za-z_][A-Za-z0-9_]*)\s*$/.exec(detail.trim());
   return match ? match[1] : null;
@@ -68,10 +58,8 @@ const reads = () => env.TEST_SQL_STATEMENTS.filter((s) => /^SELECT\b/i.test(s.sq
 
 describe("query plans", () => {
   it("the walk found the statements at all, so nothing below can pass by reading nothing", () => {
-    // Every src/ file that calls `.prepare(` (listed by a separate fs walk in
-    // vitest.config.ts) must have yielded at least one statement, extracted or
-    // skipped. That catches the walk missing a file or directory without a fixed
-    // floor that breaks when statements move between files.
+    // Every src/ file calling `.prepare(` must yield at least one statement, so a walk missing a file fails
+    // without a fixed floor that breaks when statements move between files.
     const files = env.TEST_SQL_PREPARE_FILES;
     expect(
       files.length,
@@ -84,13 +72,11 @@ describe("query plans", () => {
       `files that call .prepare( but yielded no statement: ${unseen.join(", ")}`,
     ).toEqual([]);
     expect(reads().length, "no SELECTs among them").toBeGreaterThan(0);
-    // A statement the walk could not reconstruct is reported rather than dropped, so
-    // the plan check cannot quietly cover only part of the reads.
+    // A statement the walk could not reconstruct is reported, so the check cannot quietly cover only part of the reads.
     expect(
       env.TEST_SQL_SKIPPED.length,
       `${env.TEST_SQL_SKIPPED.length} statements could not be reconstructed: ${env.TEST_SQL_SKIPPED.map((s) => `${s.file}: ${s.sql.slice(0, 70)}`).join(" | ")}`,
-      // Three: advanceRun's built SET list, and two .prepare() calls that take an
-      // expression (backup.ts's dump, improve/open.ts's attempt read).
+      // Three: advanceRun's built SET list, and two .prepare() calls that take an expression.
     ).toBeLessThanOrEqual(3);
   });
 
@@ -143,10 +129,8 @@ describe("query plans", () => {
     expect(prunePlan).toContain("document_versions_snapshot");
   });
 
-  // The walker substitutes an optional `${clause}` with `WHERE 1 = 1`, but a filter
-  // can change the plan, not only narrow it: with `WHERE namespace = ?` the activity
-  // read can pick an index whose id ordering is out of reach and sort every row to
-  // take the newest 50. So the filtered variants are checked here by name.
+  // The walker substitutes an optional `${clause}` with `WHERE 1 = 1`, but a filter can change the plan: with `WHERE namespace = ?`
+  // the activity read can pick an index whose id ordering is out of reach and sort every row. So the filtered variants are checked by name.
   const ACTIVITY_VARIANTS: Array<[string, string, number, string]> = [
     [
       "by namespace",
@@ -166,7 +150,6 @@ describe("query plans", () => {
       3,
       "audit_log_ns_recent",
     ],
-    // The Activity drawer reads one row by its id, through the primary key.
     [
       "by id",
       "SELECT at, actor, action, namespace, path FROM audit_log WHERE id = ?1 ORDER BY id DESC LIMIT ?2",

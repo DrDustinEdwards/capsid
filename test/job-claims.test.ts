@@ -15,11 +15,6 @@ import { blockJob, completeJob, failJob } from "../src/jobs.ts";
 import { grantAgent } from "../src/agents.ts";
 import { fakeEnv } from "./fakes.ts";
 
-// Claims apart from verified outcomes (migrations/0023, src/job-claims.ts): what node
-// can check without a database. The append-only triggers, the one-batch property and
-// the claim_id subquery are properties of SQLite, so test-integration/job-claims.test.ts
-// checks them on a real D1.
-
 const NOW = new Date("2026-09-29T12:00:00.000Z");
 const PR = "https://github.com/example/sample/pull/3";
 const PR2 = "https://github.com/example/sample/pull/4";
@@ -47,8 +42,6 @@ const NULLABLE = [
   "model_id",
   "capsid_sha",
 ] as const;
-
-// parsing
 
 test("a claim arrives as an object or as a JSON string, and an absent or blank one is no claim", () => {
   const claim = {
@@ -119,8 +112,6 @@ test("a claim out of bounds is refused, not trimmed", () => {
   }
 });
 
-// the claim row
-
 test("PLANT: an absent field is NULL, never 0, and a stated zero or empty list is kept as said", () => {
   // No claim and no evidence: every structured column is NULL. A 0 here would read as
   // "counted and found none", which nobody said.
@@ -131,7 +122,6 @@ test("PLANT: an absent field is NULL, never 0, and a stated zero or empty list i
       null,
       `${column} is ${JSON.stringify(empty[column])} with nothing said`,
     );
-  // A partial claim leaves its siblings NULL too.
   const partial = row({ claim: { versions: { client_name: "x" } } });
   assert.equal(partial.model_id, null);
 
@@ -172,8 +162,6 @@ test("raw keeps the arguments as sent: JSON strings parsed once, and an unsent k
   assert.equal(raw.result_summary, "landed");
   assert.deepEqual(Object.keys(raw).sort(), ["claim", "evidence", "result_summary"]);
 });
-
-// evaluations
 
 test("agreement: unclaimed, unchecked, agree, disagree, and 0 is a claim", () => {
   assert.equal(agreementOf(null, 3), "unclaimed");
@@ -282,8 +270,6 @@ test("a pull request the Worker could not read leaves the check unchecked, with 
   assert.match(rows.pr_merged.explanation ?? "", /could not be read/);
 });
 
-// refusals happen before anything is written
-
 test("PLANT: complete, fail and block refuse a bad claim and write nothing", async () => {
   // fakeEnv has no DB, so a handler that reached the database would throw on the
   // missing binding rather than pass quietly.
@@ -307,8 +293,6 @@ test("PLANT: complete, fail and block refuse a bad claim and write nothing", asy
   assert.equal(blocked.ok, false, "block accepted a bad deploy_state");
   assert.match(blocked.refusal ?? "", /deploy_state/);
 });
-
-// claim.usage: what the session says it used (PR 1 of capsid/research/design-automation-for-speed.md)
 
 const USAGE = {
   cost_usd: 1.25,

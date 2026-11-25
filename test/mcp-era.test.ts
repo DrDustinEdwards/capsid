@@ -5,10 +5,6 @@ import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { httpClient, LEGACY, mcpFetch, MODERN } from "./mcp-http.ts";
 
-// Capsid's tools in both eras through src/mcp-handler.ts: 2026-07-28 by server/discover
-// and the per-request envelope, and 2025-11-25 by initialize through site-runtime's
-// routeMcpEra, which is tested there.
-
 const env = () =>
   fakeEnv({
     DB: fakeD1({

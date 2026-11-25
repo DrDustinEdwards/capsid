@@ -7,12 +7,8 @@ import { buildAdminServer } from "../src/server";
 import type { ClaimsAggregate, ClaimsJob } from "../src/ops-types/claims";
 import type { ClaimsExportPage } from "../src/job-claims-export";
 
-// The capsid_admin_read_claims tool (Capsid Admin) against a real D1 with
-// migrations/0023 applied: what the admin reads back from rows planted here, what a
-// driver and a read-only caller are refused, and the export's paging. The three
-// tables are append-only (their triggers refuse DELETE on a row), so nothing here
-// cleans up: each test plants rows under its own namespace and job ids, and filters
-// by them.
+// capsid_admin_read_claims against a real D1 with migrations/0023: the three tables are append-only (triggers refuse
+// DELETE), so each test plants rows under its own namespace and job ids and filters by them.
 
 const ADMIN = adminAgentForEmail("admin@example.com");
 const READ_ONLY = grantAgent("read", "opkey:readonly0000");
@@ -64,8 +60,6 @@ async function adminRead<T>(args: Record<string, unknown>): Promise<T> {
   return JSON.parse(result.content[0].text) as T;
 }
 
-// One job that blocked once, was approved after a second, and completed: two claims,
-// three checks on the completion, and three touches.
 async function plantJob(ns: string, job: string): Promise<void> {
   const claimId = `(SELECT MAX(id) FROM job_claims WHERE job_id = ?1)`;
   await env.DB.batch([
@@ -250,7 +244,6 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
   it("aggregate: since and until bound each table on its own time, and the agent filter is exact", async () => {
     const { ns, job } = fresh("claims-time");
     await plantJob(ns, job);
-    // After the block and its touches, before nothing: only the completion and its checks.
     const late = await adminRead<ClaimsAggregate>({ namespace: ns, since: "2026-09-01T10:30:00Z" });
     expect(late.filter.since).toBe("2026-09-01T10:30:00.000Z");
     expect(late.groups).toHaveLength(1);
@@ -303,10 +296,7 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
 
 describe("the capsid_admin_read_claims tool, refused", () => {
   // scanner-rule: one enforcement point, test/scope.test.ts. capsid_admin_read_claims is
-  // admin_read in TOOL_GRANTS (the admin identity with the read grant); the refusal
-  // must be checkScope's, before the handler reads anything. The route serves Capsid
-  // Admin to the administrator alone, and the registrar refuses a non-admin again, which
-  // is what these calls on buildAdminServer prove.
+  // admin_read in TOOL_GRANTS; the refusal must be checkScope's, before the handler reads anything, and the registrar refuses a non-admin again.
   it("PLANT: a non-admin caller is refused claims", async () => {
     const { ns, job } = fresh("claims-refuse");
     await plantJob(ns, job);
@@ -343,7 +333,6 @@ describe("the capsid_admin_read_claims tool, refused", () => {
 
 describe("the export's paging", () => {
   it("PLANT: export pages never skip or repeat a row", async () => {
-    // Enough rows, over several jobs, that a small page size takes many pages.
     for (let i = 0; i < 4; i++) {
       const { ns, job } = fresh("claims-page");
       await plantJob(ns, job);

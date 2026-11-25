@@ -29,9 +29,7 @@ import { WATCHER_ACTOR } from "../src/watcher.ts";
 import { pullRequestRisk } from "../src/model-routing-pr.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// Automatic model routing (src/model-routing.ts, docs/work-queue.md). The titles below are
-// real ones from the capsid queue, so the kind rules are held to the work they will read.
-
+// The titles below are real ones from the capsid queue, so the kind rules are held to the work they will read.
 const DRIVER = "agent:capsid-driver";
 const job = (title: string, over: Record<string, unknown> = {}) => ({
   title,
@@ -39,8 +37,6 @@ const job = (title: string, over: Record<string, unknown> = {}) => ({
   posted_by: "access:seat@example.com",
   ...over,
 });
-
-// KIND
 
 test("deriveKind reads real queue titles, the watcher by its actor, and a given kind first", () => {
   const expected: Array<[string, string]> = [
@@ -91,8 +87,6 @@ test("the watcher's actor here is the watcher's actor there", () => {
   assert.equal(WATCHER_ACTOR_NAME, WATCHER_ACTOR);
 });
 
-// ROUTING
-
 test("PLANT: a routine job that is risky is upgraded to opus, whatever its kind", () => {
   const routine = routeJob(job("Update the changelog", { kind: "docs" }));
   assert.equal(routine.model, "sonnet");
@@ -114,7 +108,6 @@ test("PLANT: a routine job that is risky is upgraded to opus, whatever its kind"
   );
   assert.match(upgraded.reason, /requires can_merge/);
   assert.equal(upgraded.risk, "high");
-  // A flag that asks for no blast radius does not upgrade.
   assert.equal(
     routeJob(job("Update the changelog", { kind: "docs", required_flags: ["can_comment_pr"] }))
       .model,
@@ -165,7 +158,6 @@ test("PLANT: a named model never lowers a high-risk job below the risk rule's mo
     );
     assert.equal(viaPr.model, "opus", `a job naming ${asked} whose pull request is risky`);
   }
-  // Naming the risk rule's model, or naming any model on a routine job, still holds.
   assert.equal(
     routeJob(job("Tidy", { kind: "docs", required_flags: ["can_merge"], body: "model: opus" }))
       .reason,
@@ -249,8 +241,6 @@ test("every kind and the rule list are tied: the last rule is the catch-all, and
       `no rule names ${kind}`,
     );
 });
-
-// TRIAL ARMS
 
 // Ids shaped like mintJobId's, and the first of them in and out of the arms.
 const ids = Array.from(
@@ -354,8 +344,6 @@ test("trialStatus: collecting below the minimum, then the verdict proposeRuleCha
   assert.equal(bad.find((t) => t.kind === "maintenance")!.verdict, "does not support");
 });
 
-// RISK
-
 test("riskOf: money paths, refused paths, backups, deletions and renames each raise it, and no files is unread", () => {
   assert.equal(riskOf([{ filename: "docs/readme.md" }]).level, "routine");
   assert.equal(riskOf([{ filename: "app/payments/charge.ts" }]).level, "high");
@@ -384,8 +372,6 @@ test("riskOf: money paths, refused paths, backups, deletions and renames each ra
   );
 });
 
-// WORTH A REVIEWER
-
 const worth = (files: Parameters<typeof worthReviewer>[0]) => worthReviewer(files).level;
 
 test("worthReviewer: what riskOf flags for routing but a reviewer would not read is skipped", () => {
@@ -408,7 +394,6 @@ test("worthReviewer: what riskOf flags for routing but a reviewer would not read
     );
     assert.equal(worth(files), "skip", names);
   }
-  // Ordinary code that enforces nothing is skipped by both.
   assert.equal(
     worth([{ filename: "dashboard/src/styles.css" }, { filename: "src/limits.ts" }]),
     "skip",
@@ -474,8 +459,6 @@ test("riskFromJob: only blast-radius flags, a gate, or a payments namespace make
   );
   assert.equal(riskFromJob({ namespace: "foxhound" }).level, "high");
 });
-
-// LEARNING
 
 const fact = (
   kind: string,
@@ -556,7 +539,6 @@ test("proposals: a cheaper model that did as well is proposed; a stronger one wh
     ),
     [],
   );
-  // A cheaper model that did worse is not proposed, and a current rate above the floor does not move.
   assert.deepEqual(
     proposeRuleChanges(
       cellsOf([...many(12, 11, "docs", "sonnet"), ...many(12, 4, "docs", "haiku")]),
@@ -641,8 +623,6 @@ test("PLANT: a session's self-reported model never moves an outcome into another
   assert.equal(out.outcomes_read, 36);
   assert.match(out.note, /12 outcomes were left out/);
 });
-
-// THE QUEUE: post assigns, claim delivers
 
 test("post assigns the kind and model at the Worker, and a given kind is validated", async () => {
   const d1 = fakeD1({});
@@ -748,5 +728,3 @@ test("post and claim place a job in the same arm, by its id", async (t) => {
   assert.deepEqual([claimed.routing?.model, claimed.routing?.trial], ["haiku", "haiku"]);
   assert.match(String(claimed.routing?.deliver), /--model haiku/);
 });
-
-// THE WIRING THE TESTS CANNOT SEE FROM INSIDE ONE FILE

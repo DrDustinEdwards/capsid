@@ -7,9 +7,8 @@ import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// Outcome rows are immutable except merge state. A driver never merges: it blocks and
-// the seat merges afterwards, so every row is written "opened, not merged". These
-// cover the one path that corrects it.
+// Outcome rows are immutable except merge state: a driver never merges, so every row is written "opened, not merged";
+// these cover the one path that corrects it.
 
 function recorder() {
   const recorded: Array<{ sql: string; params: unknown[] }> = [];
@@ -24,8 +23,6 @@ function recorder() {
   return { recorded, db };
 }
 
-// the join rows written at complete
-
 test("one row per pull request the evidence named", () => {
   const { recorded, db } = recorder();
   const statements = outcomePrStatements(db, "job_1", [
@@ -35,9 +32,8 @@ test("one row per pull request the evidence named", () => {
   assert.equal(statements.length, 2);
   assert.equal(recorded.length, 2);
   assert.match(recorded[0].sql, /INSERT INTO job_outcome_prs/);
-  // With no merge state read for them, merged and merge_verified_at bind NULL: nobody
-  // counted, never 0, and no identity is pinned (the sweep pins it on its first read).
-  // A read state is covered in test-integration/outcome-prs.test.ts.
+  // With no merge state read, merged and merge_verified_at bind NULL: nobody counted, never 0, and no identity is pinned
+  // (the sweep pins it on its first read).
   assert.deepEqual(recorded[0].params, [
     "job_1",
     "https://github.com/o/r/pull/1",
@@ -76,8 +72,6 @@ test("a repeated pull request is written once, because a batch conflict would ab
   assert.deepEqual(outcomePrStatements(db, "job_1", []), [], "no pull requests, no rows");
 });
 
-// seeding a row that stored no pull request
-
 test("pull request URLs are found in both result_ref and the summary prose", () => {
   const urls = prUrlsFromJob({
     result_ref: "https://github.com/DrDustinEdwards/capsid-mcp/pull/25",
@@ -112,13 +106,6 @@ test("a near-miss URL is not mistaken for a pull request", () => {
   });
   assert.deepEqual(urls, [], "an issue and a non-numeric pull path are neither of them evidence");
 });
-
-// The re-verification rules are driven against a real D1 in
-// test-integration/outcome-prs.test.ts: a seeded URL is looked at in the same sweep and
-// counted only by GitHub's answer; the count is recomputed, never incremented, and no
-// other column moves; an unreadable pull request and an unnamed one write nothing; a
-// pull request closed unmerged is stored as 0; the sweep binds its limit, takes
-// never-checked rows first, and skips what is known merged.
 
 async function connectAdmin(db: unknown) {
   const server = buildServer(
@@ -197,8 +184,6 @@ test("a merge that fails to update an outcome does not fail the merge", async ()
   );
 });
 
-// evidence as an object or a JSON string
-
 test("the same evidence as a JSON string parses to the same thing", () => {
   // A session whose cached tool schema predates the object form can still attach
   // evidence.
@@ -235,10 +220,6 @@ test("a non-string entry in prs is dropped and the rest survive", () => {
   assert.deepEqual(parsed.evidence?.prs, ["https://github.com/o/r/pull/1"]);
 });
 
-// That the tool accepts evidence as an object and as a JSON string, and that each
-// reaches the outcome row, is driven against a real D1 in
-// test-integration/job-outcomes.test.ts ("the jobs tool takes evidence as an object
-// and as a JSON string").
 test("the tool refuses an unparseable evidence string and writes nothing", async () => {
   const d1 = fakeD1({});
   const client = await connectAdmin(d1.db);

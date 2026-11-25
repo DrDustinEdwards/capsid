@@ -2,17 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sourceFiles } from "./source-files.ts";
 
-// document_links stores (namespace, path) strings, not documents.id, and the
-// table carries no foreign key, so the database will not keep edges in step with
-// a renamed or removed document. Application code is the only thing that can, so
-// delete, move and lint finalize all route through pathMutation().
-//
-// These tests are a source guard rather than a behavioral one: they fail when a
-// new mutation site appears, which a behavioral test over the known callers would
-// not catch.
-
-// The guard scans every file under src/, because a path mutation can be written in
-// any module.
+// document_links stores path strings with no foreign key, so only application code keeps edges in step with a renamed or
+// removed document: delete, move and lint finalize route through pathMutation(). A source guard over all of src/, because
+// it fails when a new mutation site appears, which a test over the known callers would not catch.
 const SOURCES = sourceFiles();
 
 const HELPER_START = "// PATH_MUTATION_HELPER_START";
@@ -32,16 +24,8 @@ function helperRange(): { file: string; text: string; start: number; end: number
   return { file: owner.name, text: owner.text, start, end };
 }
 
-// Every SQL fragment that renames a document or removes a documents row.
-// Deliberately broad: it matches the shapes a future author is likely to write, not
-// just the ones that exist today.
-//
-// The UPDATE pattern does not require path to be the first assignment in the SET
-// clause, so `UPDATE documents SET updated_at = datetime('now'), path = ?3` is caught.
-//
-// It matches the SET clause only, stopping at WHERE, because `path` appears in the
-// WHERE clause of almost every statement, and
-// `UPDATE documents SET status = ?1 WHERE namespace = ?2 AND path = ?3` mutates no path.
+// Deliberately broad (shapes a future author is likely to write). The UPDATE pattern reads the SET clause only, stopping at
+// WHERE, because `path` is in nearly every WHERE and `UPDATE documents SET status = ?1 WHERE ... AND path = ?3` mutates no path.
 const SET_CLAUSE = /UPDATE\s+documents\b([\s\S]{0,400}?)(?:\bWHERE\b|`|;)/gi;
 
 function pathMutationHits(text: string): number[] {

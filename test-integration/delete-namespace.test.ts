@@ -13,12 +13,8 @@ import { mintConfirm } from "@dustinedwards/site-runtime/confirm-token";
 import { confirmKeys } from "../src/auth";
 import { buildAdminServer, buildServer } from "../src/server";
 
-// capsid_admin_manage_namespaces delete_preview and delete_perform (Capsid Admin)
-// against a real D1 and KV: every refusal the preview gives, every way
-// a token is refused at perform, the one batch deleting exactly what the preview
-// listed with a snapshot per document, and the in-batch guard aborting on a change
-// that lands after the perform re-read its plan. The file shares one store, so every
-// test works in its own fresh namespace.
+// capsid_admin_manage_namespaces delete_preview and delete_perform against real D1 and KV: refusals, token checks, the one batch and its in-batch guard.
+// The file shares one store, so every test works in its own fresh namespace.
 
 const SECRET = "integration-namespace-delete-key";
 const ADMIN = adminAgentForEmail("admin@example.com");
@@ -270,8 +266,7 @@ describe("capsid_admin_manage_namespaces is admin only", () => {
   });
 
   it("a read-only caller is never served the tool", async () => {
-    // It needs the write grant in whole, so it is not registered for a read grant (src/scope.ts
-    // toolListed; area 11, T7) and the protocol refuses the call.
+    // It needs the write grant in whole, so toolListed does not register it for a read grant and the protocol refuses the call.
     const ns = fresh();
     await register(ns);
     await expect(
@@ -504,7 +499,6 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     expect(done.edges_removed).toBe(3);
     expect(done.ops_site_removed).toBe(true);
 
-    // Deleted: the live documents, their edges, the site row, the mapping.
     expect(
       await n(
         "SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'",
@@ -520,7 +514,6 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
       ),
     ).toBe(0);
 
-    // Snapshotted: each live document's body, by path.
     const { results: versions } = await env.DB.prepare(
       "SELECT path, body FROM document_versions WHERE namespace = ?1 AND document_id IS NOT NULL ORDER BY path",
     )
@@ -532,8 +525,6 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
       ["notes/a.md", "a body"],
     ]);
 
-    // Kept: the archive and its own edge, the other namespace, the finished job, the
-    // revoked agent.
     expect(
       await n(
         "SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path LIKE 'archive/%'",
@@ -556,7 +547,6 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     expect(await n("SELECT COUNT(*) AS n FROM jobs WHERE namespace = ?1", ns)).toBe(1);
     expect(await n("SELECT COUNT(*) AS n FROM agents WHERE name = ?1", `${ns}-gone`)).toBe(1);
 
-    // Recorded: one audit row holding the edges, the paths and both rows whole.
     const audit = await env.DB.prepare(
       "SELECT actor, params FROM audit_log WHERE action = 'namespace-delete' AND namespace = ?1",
     )
@@ -591,7 +581,6 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     expect(params.ops_site?.revision).toBe(1);
     expect(params.namespace_row?.namespace).toBe(ns);
 
-    // The archive stays readable under the deleted name.
     const server = buildServer(workerEnv() as never, ADMIN);
     const client = new Client({
       name: "delete-namespace-read",
@@ -696,7 +685,6 @@ describe("capsid_admin_manage_namespaces delete batch cap", () => {
       /Delete documents with capsid_delete_doc, or move them with capsid_write_doc action move, first, or ask the seat to rule a set-based helper/,
     );
 
-    // A token signed over this very plan is refused at perform too, by the same rule.
     const plan = await readDeletePlan(env.DB, ns);
     const token = await forge(workerEnv(), {
       namespace: ns,

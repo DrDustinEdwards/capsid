@@ -3,16 +3,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-// The mannered-prose guard (capsid/conventions.md, Writing style).
-//
-// The rule governs all prose this repo carries; this guard covers README.md and
-// docs/. It is deliberately narrower than the rule: a phrase list cannot catch a
-// flourish it has never seen, and comments and commit messages are not scanned.
-//
-// Adding a phrase to this list is cheap. Removing one needs a reason written down.
-// 2026-10-25: tapestry, delve, journey, landscape, navigate and testament came off. Current
-// Claude models, tested with no style rules, no longer write them (Capsid
-// foxing/ai-writing-tells.md); the two phrases above the construction are ones sessions wrote here.
+// Deliberately narrower than the rule: a phrase list cannot catch a flourish it has never seen, and comments
+// and commit messages are not scanned. Removing a phrase needs a reason written down.
 
 const ROOT = join(import.meta.dirname, "..");
 const DOCS = join(ROOT, "docs");
@@ -20,7 +12,6 @@ const DOCS = join(ROOT, "docs");
 const BANNED: Array<[RegExp, string]> = [
   [/\bload[- ]bearing\b/i, '"load-bearing" (say "important", or name what breaks without it)'],
   [/\bearns its keep\b/i, '"earns its keep" (say "still matters")'],
-  // The "it's not X, it's Y" construction, in both contractions and both tenses.
   [
     /\b(?:it's|it is|this isn't|this is not)\s+not\b[^.!?\n]{1,60}?,\s*(?:it's|it is)\b/i,
     "the \"it's not X, it's Y\" construction (state what it is, and stop)",

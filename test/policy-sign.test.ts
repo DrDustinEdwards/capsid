@@ -12,8 +12,8 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildAdminServer } from "../src/server.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// The one thing that mints policy authority: the counterpart to verifySignedBody. The
-// tests are mostly refusals, because a signer's value is in what it declines to sign.
+// The counterpart to verifySignedBody and the one thing that mints policy authority: mostly refusals, because a signer's
+// value is in what it declines to sign.
 
 const SECRET = "test-improve-secret";
 
@@ -34,8 +34,6 @@ function envWith(
   const fake = fakeD1({ documents });
   return { fake, env: fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: secret, APP_KV: fakeKv().kv }) };
 }
-
-// what it refuses to sign
 
 test("sign_policy refuses what it must not sign: another namespace, a path outside policy/, a missing or empty document, no secret", async () => {
   const ME = "github:DrDustinEdwards";
@@ -99,8 +97,6 @@ test("sign_policy refuses what it must not sign: another namespace, a path outsi
   }
 });
 
-// what it produces
-
 test("a signed policy verifies, and the same store then loads it", async () => {
   const { fake, env } = envWith([
     { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
@@ -121,8 +117,6 @@ test("a signed policy verifies, and the same store then loads it", async () => {
   const verdict = await verifySignedBody(SECRET, written, "merge policy");
   assert.equal(verdict.ok, true, verdict.ok ? "" : verdict.reason);
 
-  // The verifier that decides whether a pull request may merge accepts this document,
-  // fed back in as the stored row.
   const { env: reloaded } = envWith([
     { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: written },
   ]);
@@ -152,7 +146,6 @@ test("signing an already-signed policy replaces the frontmatter rather than nest
   assert.equal(first.ok, true);
   const onceSigned = signedBodyFrom(fake.recorded);
 
-  // The already-signed body fed back in, which is what a second call would read.
   const { fake: again, env: envAgain } = envWith([
     { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: onceSigned },
   ]);
@@ -188,8 +181,6 @@ test("signing an already-signed policy replaces the frontmatter rather than nest
   );
 });
 
-// the write invariants
-
 test("signing snapshots the prior body and writes an audit row, in one batch", async () => {
   const { fake, env } = envWith([
     { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
@@ -222,12 +213,9 @@ test("signing snapshots the prior body and writes an audit row, in one batch", a
   );
 });
 
-// admin only
-
 test("sign_policy is admin only, never signs the auto-merge policy, and signs only the body read", async () => {
-  // Served as capsid_admin_manage_switches action "sign_policy", an admin tool in
-  // TOOL_GRANTS, and enforced by the registrar. The driver's capsid_read_status serves
-  // status and the versions model, two reads, so no driver tool can name sign_policy.
+  // Served as capsid_admin_manage_switches action "sign_policy", an admin tool enforced by the registrar; no driver tool
+  // (capsid_read_status serves two reads) can name sign_policy.
   assert.equal(
     requiredForAction("capsid_admin_manage_switches", "sign_policy"),
     "admin",
@@ -281,10 +269,8 @@ test("sign_policy is admin only, never signs the auto-merge policy, and signs on
   await client.close();
 });
 
-// Anti-rollback. Every signed version stays in document_versions and still verifies,
-// so sign_policy records which body is current and the loader refuses any other. The
-// fake does not apply upserts to its rows, so each test copies the signed text into
-// the row by hand, as D1 would.
+// Every signed version stays in document_versions and verifies; sign_policy records which body is current and the loader
+// refuses any other. The fake does not apply upserts, so each test copies the signed text into the row by hand.
 
 function pinnedStore(kvOpts: Parameters<typeof fakeKv>[0] = {}) {
   const fake = fakeD1({
@@ -295,7 +281,6 @@ function pinnedStore(kvOpts: Parameters<typeof fakeKv>[0] = {}) {
   const kv = fakeKv(kvOpts);
   const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: kv.kv });
   const row = fake.rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)!;
-  // Sign whatever the row holds, and store the signed text the way the upsert would.
   const sign = async (): Promise<string> => {
     const result = await signPolicyDocument(
       env,

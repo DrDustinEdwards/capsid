@@ -3,9 +3,7 @@ import { test } from "node:test";
 import { bingDay, bingWebmaster, pickBingSite, sumStats } from "../src/bing-webmaster.ts";
 import { fakeEnv } from "./fakes.ts";
 
-// Bing Webmaster Tools for a namespace's site (src/bing-webmaster.ts), served as
-// capsid_inspect_repo action bing. The namespace picks the Bing site, only Get methods
-// are called, and the API key never reaches a result.
+// The namespace picks the Bing site, only Get methods are called, and the API key never reaches a result.
 
 const NOW = new Date("2026-10-18T12:00:00.000Z");
 const ORIGIN = "https://sample.example.com";

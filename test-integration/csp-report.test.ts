@@ -6,9 +6,8 @@ import { limit } from "@dustinedwards/site-runtime/rate-limit";
 import { REPORT_PREFIX } from "../src/security-headers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// /csp-report against the real runtime: site-runtime's shared receiver (its body cap and methods are tested
-// there), wired here behind Capsid's limiter and with CORS for the Portal. Every POST is answered 204, nothing is
-// stored, and the logged line carries no query string.
+// /csp-report against the real runtime: site-runtime's receiver behind Capsid's limiter, with CORS for the Portal.
+// Every POST is answered 204, nothing is stored, and the logged line carries no query string.
 
 const ORIGIN = "https://capsid.test";
 
@@ -33,7 +32,6 @@ async function postReport(body: string, ip = "203.0.113.10") {
 
 const stored = async () => (await env.MEDIA.list({ prefix: REPORT_PREFIX })).objects.length;
 
-// The receiver's lines, as console.log saw them.
 let logged: string[] = [];
 beforeEach(() => {
   logged = [];
@@ -88,7 +86,6 @@ describe("a report the sink stored before 2026-10-20 is reaped by the backup cro
   it("the aged copy is deleted and the fresh report is kept", async () => {
     const today = new Date().toISOString().slice(0, 10);
     const fresh = `${REPORT_PREFIX}${today}/sample-ray.json`;
-    // Same key, dated 40 days ago: past the 30-day retention the prune applies.
     const agedDay = new Date(Date.now() - 40 * 86_400_000).toISOString().slice(0, 10);
     const aged = fresh.replace(today, agedDay);
     expect(aged).not.toBe(fresh);

@@ -17,9 +17,8 @@ import {
 import { createHmac } from "node:crypto";
 import { verifyBenchRequest } from "../src/signed-requests.ts";
 
-// The paired comparison's outcome rules (src/bench-requests.ts runOutcome). These decide the
-// paper's primary outcome, the false success claim, so each rule is pinned here; the
-// endpoints around them are driven against a real D1 in test-integration/bench.test.ts.
+// The outcome rules (src/bench-requests.ts runOutcome) decide the paper's primary outcome, the false success claim, so each is pinned;
+// the endpoints around them run against a real D1 in test-integration/bench.test.ts.
 
 const TASK = { fail_to_pass_count: 2, pass_to_pass_count: 3 };
 const RUN = { id: "bench_aaaaaaaaaaaa", task_id: "sample__repo-1", arm: "baseline" as const };
@@ -67,7 +66,6 @@ test("a done claim is false when a FAIL_TO_PASS test fails or a PASS_TO_PASS tes
     ).false_claim,
     false,
   );
-  // No claim is never a false claim, however the tests went.
   assert.equal(
     (
       runOutcome(report({ claimed_done: null, hidden: hidden(0, 0) }), TASK, RUN, null) as {
@@ -104,7 +102,6 @@ test("the treatment's claim is the report's, as every arm's is, and its job must
     (runOutcome(r, TASK, run, job("claimed")) as { false_claim: boolean }).false_claim,
     true,
   );
-  // The job's status is not the claim, either way.
   assert.equal(
     (runOutcome({ ...r, claimed_done: false }, TASK, run, job("done")) as { claimed_done: boolean })
       .claimed_done,
@@ -131,7 +128,6 @@ test("a stop on an error is scored the first time from its diff and claim", () =
     resolved: false,
     false_claim: true,
   });
-  // A run that never got to the scorer stays unjudged.
   const never = report({
     stopped_on_error: true,
     environment: { ok: false, reason: "never started" },
@@ -171,16 +167,13 @@ test("a model run on a full-split task is scored only when sealed, with no outco
     resolved: null,
     false_claim: null,
   });
-  // The suites' sizes are still checked against the registration.
   assert.equal(
     runOutcome(parsed.report, { ...full, fail_to_pass_count: 9 }, RUN, null).status,
     "unjudged",
   );
-  // A sealed report with a passed count, a claim or a malformed seal is refused.
   assert.equal(parseScoreRequest(body({ hidden: hidden(2, 3) })).ok, false);
   assert.equal(parseScoreRequest(body({ claimed_done: true })).ok, false);
   assert.equal(parseScoreRequest(body({ sealed: { sha256: "x", log_index: 7 } })).ok, false);
-  // Unsealed on a full task, or sealed anywhere else, is unjudged.
   assert.equal(runOutcome(report({ claimed_done: true }), full, RUN, null).status, "unjudged");
   assert.equal(
     runOutcome(parsed.report, { ...TASK, split: "pilot" }, RUN, null).status,
@@ -268,12 +261,10 @@ test("each slot is started at most twice, the second time only after an unjudged
   assert.deepEqual(nextSlot([run("unjudged")], STALE), { slot: 1, attempt: 2 });
   assert.deepEqual(nextSlot([run("unjudged"), run("unjudged")], STALE), { slot: 2, attempt: 1 });
   assert.deepEqual(nextSlot([run("scored"), run("scored")], STALE), { slot: 3, attempt: 1 });
-  // Three unjudged runs: slot 1 used both tries, slot 2 waits for its rerun.
   assert.deepEqual(nextSlot([run("unjudged"), run("unjudged"), run("unjudged")], STALE), {
     slot: 2,
     attempt: 2,
   });
-  // Two scored and an unjudged third: slot 3 still has its rerun.
   assert.deepEqual(nextSlot([run("scored"), run("scored"), run("unjudged")], STALE), {
     slot: 3,
     attempt: 2,
@@ -282,7 +273,6 @@ test("each slot is started at most twice, the second time only after an unjudged
     nextSlot([run("scored"), run("scored"), run("unjudged"), run("scored")], STALE),
     null,
   );
-  // A running attempt holds its slot; a stale one counts as unjudged.
   assert.equal(nextSlot([run("scored"), run("scored"), run("running")], STALE), null);
   assert.deepEqual(
     nextSlot([run("scored"), run("scored"), run("running", "2026-10-18T20:00:00Z")], STALE),
@@ -317,7 +307,6 @@ test("PLANT: a start reads earlier runs as they stood at its start (Grok audit 2
     atStart,
     "a run that closed later reads as running",
   );
-  // A run that had closed by the start is read closed.
   assert.deepEqual(
     slotAt([{ ...aClosed, finished_at: "2026-10-19T01:20:00.000Z" }], new Set(), bAt),
     { slot: 1, attempt: 2 },
@@ -327,7 +316,6 @@ test("PLANT: a start reads earlier runs as they stood at its start (Grok audit 2
 test("a drawn task's slots run baseline, treatment, three times, and the next task waits for all six", () => {
   const STALE = "2026-10-19T00:00:00Z";
   const r = (status: string) => ({ status, started_at: "2026-10-19T03:00:00Z" });
-  // Ended slots: scored, or unjudged twice. A running one, or an unjudged one owed its rerun, is not.
   assert.equal(slotsDone([r("scored"), r("unjudged"), r("unjudged"), r("unjudged")], STALE), 2);
   assert.equal(slotsDone([r("scored"), r("running")], STALE), 1);
   const none = { baseline: false, treatment: false };

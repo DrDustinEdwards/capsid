@@ -26,10 +26,6 @@ import { type Finding } from "../src/watcher-detect.ts";
 import { fakeEnv, fakeFindingMemory, fakeKv, withFetch } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
-// The watcher's read of Cloudflare for the Watch Floor (src/ops-cloudflare.ts), and the
-// two findings built on the snapshot: a site down on two probes in a row, and a
-// Worker's error rate over the approved threshold.
-
 const NOW = new Date("2026-09-28T12:10:00.000Z");
 const ACCOUNT = "0123456789abcdef0123456789abcdef";
 const TOKEN = "sample-token";
@@ -144,8 +140,6 @@ async function quietly<T>(fn: () => Promise<T>): Promise<{ value: T; logged: str
   }
 }
 
-// No token
-
 test("with no token or no account, every Cloudflare site says exactly what is unset and nothing is fetched", async () => {
   const cases: Array<[Record<string, string>, RegExp, RegExp | null]> = [
     [{}, /CF_OPS_TOKEN is not set/, /neither CF_ACCOUNT_ID nor R2_ACCOUNT_ID is set/],
@@ -166,11 +160,6 @@ test("with no token or no account, every Cloudflare site says exactly what is un
     assert.equal(read.bySite["sample-vercel"].state, "not-cloudflare");
   }
 });
-
-// Script resolution
-
-// The seed's scripts (a script named only where the host proves it) are checked
-// against the migrated table in test-integration/ops-sites.test.ts.
 
 test("a custom-domain site resolves to the Worker its custom domain names; one with none is unresolved, never guessed", async () => {
   const cf = cloudflare({
@@ -222,8 +211,6 @@ test("a domains list that cannot be read makes each custom-domain site an error,
   assert.ok(logged.some((l) => l.includes("WATCHER_READ_FAILED cloudflare custom domains")));
 });
 
-// Deployments
-
 test("deployments are newest first, at most ten, with the version serving the largest share", async () => {
   const many = Array.from({ length: 12 }, (_, i) =>
     deploy(`d${i}`, `2026-09-${String(10 + i).padStart(2, "0")}T00:00:00Z`, [["v" + i, 100]]),
@@ -263,8 +250,6 @@ test("deployments are newest first, at most ten, with the version serving the la
     assert.ok(c.signal, `${c.url} has no timeout`);
   }
 });
-
-// Errors
 
 test("ONE analytics query covers every script: 24 hourly buckets, oldest first, an hour with no row a real zero", async () => {
   const cf = cloudflare({
@@ -361,8 +346,6 @@ test("a row for an unasked script still fails the read", async () => {
   const { value: read } = await quietly(() => readCloudflare(CREDS, [WORKERS_DEV], cf.impl, NOW));
   assert.equal(read.ran, false);
 });
-
-// The findings
 
 const probe = (namespace: string, state: SiteProbe["state"]): SiteProbe => ({
   namespace,
@@ -514,8 +497,6 @@ test("site-down is owned by the probes and site-errors by the cloudflare check, 
   );
 });
 
-// The snapshot
-
 test("the snapshot carries each site's Cloudflare state, and an old snapshot without it still reads", async () => {
   const cf: Record<string, SiteCloudflare> = {
     a: hourly(10, 0),
@@ -560,8 +541,6 @@ test("the snapshot carries each site's Cloudflare state, and an old snapshot wit
   assert.deepEqual(next.sites[0].cloudflare, cf.a);
 });
 
-// Through gatherFindings
-
 // A D1 that throws on everything: every D1 check fails into attempt(), which is the
 // path a real outage takes, so only the probes, the snapshot and Cloudflare run.
 const deadDb = {
@@ -570,9 +549,7 @@ const deadDb = {
   },
 };
 
-// The site configuration a pass reads (src/ops-sites.ts), shaped like the migration's
-// seed: a self-probed workers.dev site, a second workers.dev site, two custom domains
-// resolved from Cloudflare's list, and a Vercel site. Every other read fails, as deadDb.
+// The site configuration a pass reads (src/ops-sites.ts), shaped like the migration's seed; every other read fails, as deadDb.
 const row = (
   namespace: string,
   origin: string | null,
@@ -705,7 +682,6 @@ test("a site down on two probes in a row, and a Worker over the error rate, reac
 test("only the watcher, the admin capsid_admin_read_ops calls, the capsid_inspect_repo traffic call, a site page's reads and the site key control import the Cloudflare read, so the feed cannot call Cloudflare", () => {
   const importersOf = (module: string) =>
     sourceFiles()
-      // A static import, a bare side-effect import, or a dynamic import().
       .filter((f) =>
         new RegExp(
           `(\\bfrom\\s*|\\bimport\\s*\\(?\\s*)["'](\\.\\.?\\/)+${module}(\\.ts)?["']`,
@@ -726,8 +702,6 @@ test("only the watcher, the admin capsid_admin_read_ops calls, the capsid_inspec
   ]);
   assert.deepEqual(importersOf("ops-cloudflare-config"), ["tools/cloudflare.ts"]);
 });
-
-// The live checks' Web Analytics read (GET /accounts/{id}/rum/site_info/list).
 
 const rumPage = (result: unknown[], page: number, totalPages: number): Response =>
   Response.json({

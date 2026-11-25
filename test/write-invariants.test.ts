@@ -5,17 +5,13 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer, concurrentEditWarning, type ToolGrant } from "../src/server.ts";
 import { fakeD1, fakeEnv, type FakeD1Rows, type Recorded } from "./fakes.ts";
 
-// The behavioral half of the write-path invariants. test/invariants.test.ts reads the
-// source; this file drives the real tool handlers over a real MCP connection and records
-// the SQL they issue. The store is the shared row-backed fake from ./fakes.ts: WHERE
-// clauses resolve against the bound values. It proves which statements a handler emits,
-// not that the SQL is correct.
+// Drives the real handlers over a real MCP connection and records the SQL they issue (test/invariants.test.ts reads the
+// source); it proves which statements are emitted, not that the SQL is correct.
 
 interface FakeOptions {
   namespaceExists?: boolean;
   body?: string;
   updatedAt?: string;
-  // The document does not exist, so the handler takes its create path.
   exists?: boolean;
   // A concurrent writer. Runs once, after the handler's pre-read of the document row and
   // before its commit-time read and its batch: the window the write predicate closes.
@@ -155,7 +151,6 @@ async function connect(
   return { client, recorded, rows, prompts, close: () => client.close() };
 }
 
-// One call on a fresh connection: the result, its first text, and the statements issued.
 async function run(
   tool: string,
   args: Record<string, unknown>,
@@ -182,14 +177,10 @@ const RESTORE = { action: "restore", ...DOC, version_id: VERSION_ID, confirm: tr
 const DELETE = { ...DOC, confirm: true };
 const MOVE = { action: "move", ...DOC, new_path: "moved.md", confirm: true };
 
-// The snapshot itself: the statement that copies the live title and body into a version
-// row. A bare /INSERT INTO document_versions/ would also match the requireExists and
-// requireBodyUnchanged guards, so a batch that lost its snapshot would still match.
+// The snapshot statement. A bare /INSERT INTO document_versions/ would also match the requireExists and requireBodyUnchanged guards, so a lost snapshot would still match.
 const SNAPSHOT_COPY = /INSERT INTO document_versions \(document_id, namespace, path, title, body\)/;
 
-// The tools and actions that overwrite, remove or rename a document, and what each must
-// issue. Adding a mutating tool without adding it here is the gap the source guard in
-// invariants.test.ts covers from the other side.
+// The tools and actions that overwrite, remove or rename a document, and what each must issue; invariants.test.ts covers the missing-entry gap from the source side.
 const MUTATORS: Array<{
   label: string;
   tool: string;
@@ -448,9 +439,7 @@ test("of two racing creates exactly one wins; the loser is refused, not turned i
 });
 
 test("restore writes the VERSION body and title, and snapshots the LIVE one", async () => {
-  // A restore that wrote the live body back over itself would issue the same statements;
-  // only the bound value tells them apart. The snapshot's INSERT ... SELECT runs against
-  // real SQLite in test-integration/live-snapshot.test.ts.
+  // A restore writing the live body back over itself issues the same statements; only the bound value tells them apart.
   const { result, text, recorded } = await run("capsid_write_doc", RESTORE);
   assert.ok(!result.isError, text);
   const upsert = recorded.find((r) => /INSERT INTO documents [(]/i.test(r.sql));
@@ -547,9 +536,7 @@ test("restore and delete refuse a version or document that does not exist, and w
   }
 });
 
-// The elicited arm: consent given through elicitation is bound to the body it was about.
-// No call passes confirm or if_match, so the elicited signal is the only thing that can arm
-// the body guard.
+// The elicited arm: no call passes confirm or if_match, so the elicited signal alone can arm the body guard.
 
 const ELICITED: Array<[string, string, Record<string, unknown>]> = [
   ["write", "capsid_write_doc", { ...WRITE, confirm: undefined }],

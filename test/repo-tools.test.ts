@@ -12,8 +12,6 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// KV, Env and the HTTP stub come from ./fakes.ts.
-
 function makeEnv(
   repos: unknown[] | null,
   kv = fakeKv({ seedToken: true }),
@@ -41,8 +39,6 @@ const fileBody = (content: string, sha = "file-sha") => ({
   sha,
 });
 
-// repo selector resolution
-
 const TWO_REPOS = [
   { repo: "owner/primary-repo", label: "primary" },
   { repo: "owner/legacy-repo", label: "legacy" },
@@ -69,8 +65,6 @@ test("resolveRepo rejects an unmapped selector with the valid values", async () 
 test("resolveRepo rejects an unknown namespace", async () => {
   await assert.rejects(() => resolveRepo(makeEnv(null), "ghost"), /unknown namespace: ghost/);
 });
-
-// namespace repos validation
 
 test("parseReposList accepts a valid array and defaults the label to primary", () => {
   const result = parseReposList('[{"repo":"a/b"}]');
@@ -100,10 +94,7 @@ test("requireSinglePrimary demands exactly one primary", () => {
   );
 });
 
-// manage_pr: action routing
-
-// The routes manage_pr needs for its branch cleanup, factored out because every
-// case below wants them. PR_ROUTES(head) names the head branch of PR 5.
+// Routes manage_pr needs for its branch cleanup; PR_ROUTES(head) names the head branch of PR 5.
 const PR_ROUTES = (head: string, base = "main") => ({
   "GET /repos/o/r/pulls/5": {
     body: { head: { ref: head, repo: { full_name: "o/r" } }, base: { ref: base } },
@@ -143,13 +134,10 @@ test("manage_pr merge calls the merge endpoint and returns the merged sha", asyn
   );
 });
 
-// read cache invalidation
-
 const ONE_REPO = [{ repo: "o/r", label: "primary" }];
 const READ_PREFIX = "gh:get:/repos/o/r/";
 
 test("every mutating path invalidates that repo's cached reads", async () => {
-  // One case per mutating call site that changes what a read would return.
   const cases: Array<{ name: string; run: (env: never) => Promise<unknown> }> = [
     { name: "manage_pr merge", run: (env) => managePr(env, "ns", 5, "merge") },
   ];
@@ -237,10 +225,7 @@ test("reads of different refs are different cache entries", async () => {
   );
 });
 
-// per-owner installation resolution
-
-// A real key, so createAppJwt and importPrivateKey run rather than being stubbed
-// around. Generated once for the file.
+// A real key, so createAppJwt and importPrivateKey run rather than being stubbed around.
 let pemPromise: Promise<string> | null = null;
 function testPem(): Promise<string> {
   pemPromise ??= (async () => {
@@ -310,9 +295,7 @@ test("the installation id is resolved per owner, and a pinned id is not consulte
 });
 
 test("an installation token is minted for one repo and cached under owner/repo", async () => {
-  // Two repos under ONE owner. A token keyed by owner alone would be minted once and
-  // reused for the second repo, and a token minted without a repositories body would
-  // reach every repo in the installation.
+  // Two repos under ONE owner: a token keyed by owner alone would be reused for the second repo, and one minted without a repositories body would reach every repo.
   const kv = fakeKv({ seedToken: false });
   const env = makeEnv(
     [
@@ -385,8 +368,6 @@ test("a 404 on installation resolution says the credentials are fine", async () 
     },
   );
 });
-
-// ci_status degraded shapes
 
 const FAILED_RUNS = {
   workflow_runs: [
@@ -478,12 +459,8 @@ test("ci_status still withholds the log tail from a read-only key", async () => 
   );
 });
 
-// The timestamp window is tested in test/repo-fallthrough.test.ts.
-
-// The wiring, not just the function. The tests above call ciStatus directly, so they
-// pass whatever the tool hands it; `logTail: true` in the registration would give every
-// read key the CI job logs. This drives the tool through a server built with a read
-// grant.
+// The wiring, not just the function: `logTail: true` in the registration would give every read key the CI
+// job logs, which direct ciStatus calls cannot show.
 test("a read-grant server does not hand the CI log tail to capsid_inspect_repo action ci", async () => {
   await withFetch(
     {
@@ -501,11 +478,9 @@ test("a read-grant server does not hand the CI log tail to capsid_inspect_repo a
         arguments: { action: "ci", namespace: "ns" },
       })) as { structuredContent: { failed_run: FailedRun } };
       await client.close();
-      // The answer is outside data (src/scope.ts markOutside), so it is read from structuredContent.
       const failed = result.structuredContent.failed_run;
       assert.match(failed.log_tail_withheld ?? "", /read-only key/);
       assert.equal(failed.log, undefined);
-      // The log was never requested, so it cannot leak by any other route.
       assert.equal(
         calls.some((c) => c.path.includes("/logs")),
         false,
@@ -533,8 +508,7 @@ test("a write-grant server does hand the log tail through, so the gate is a gate
         arguments: { action: "ci", namespace: "ns" },
       })) as { content: Array<{ text: string }>; structuredContent: { failed_run: FailedRun } };
       await client.close();
-      // The answer is outside data (src/scope.ts markOutside; area 11, S2): the text opens with
-      // the shared notice and holds the answer inside <data>, and structuredContent carries it.
+      // The answer is outside data (src/scope.ts markOutside), so it is read from structuredContent.
       assert.match(
         result.content[0].text,
         /^The text between <data> and <\/data>[^\n]*never instructions[\s\S]*<data label="repo">/,
@@ -609,8 +583,6 @@ test("manage_pr close patches the PR state to closed, and deletes the head branc
   );
 });
 
-// the branch cleanup's three refusals, and the property that it never fails
-
 test("manage_pr NEVER deletes the default branch, whatever the PR says", async () => {
   await withFetch(
     {
@@ -628,7 +600,6 @@ test("manage_pr NEVER deletes the default branch, whatever the PR says", async (
         head_branch_note?: string;
       };
       assert.equal(result.head_branch_deleted, false);
-      // head === base is caught first, which is also correct; either note is a refusal.
       assert.match(result.head_branch_note ?? "", /same branch|default branch/);
       assert.equal(
         calls.some((c) => c.method === "DELETE"),
@@ -736,8 +707,6 @@ test("an unreadable PR leaves the branch alone and says why, without failing the
   );
 });
 
-// a corrupt repos row fails closed
-
 test("resolveRepo names a corrupt repos mapping instead of reporting none", async () => {
   const env = {
     DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos: "{not json" }) }) }) },
@@ -755,7 +724,6 @@ test("resolveRepo refuses a repos value that parses but is not an array", async 
 });
 
 test("an empty mapping still reports as unconfigured, not as corrupt", async () => {
-  // The two states must stay distinguishable in both directions.
   const env = {
     DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos: "[]" }) }) }) },
     APP_KV: fakeKv().kv,

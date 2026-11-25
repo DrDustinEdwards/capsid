@@ -7,10 +7,7 @@ import {
   taskRunStatements,
 } from "../src/task-runs";
 
-// The run ledger against a real D1 with every migration applied
-// (migrations/0029_task_runs.sql): the insert, the bounded prune, the schema's own
-// check, and the per-task read the Portal makes. test/task-runs.test.ts covers the
-// recorder and the flags without a database.
+// Real D1 with every migration applied: the insert, the bounded prune, the schema's own check and the per-task read the Portal makes.
 
 const NOW = new Date("2026-10-01T12:00:00Z");
 const DAY = 86_400_000;

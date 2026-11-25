@@ -5,13 +5,8 @@ import { portalSessionCookie } from "../src/portal-auth";
 import { HASHED_ASSET_CACHE } from "../src/portal-app";
 import { PORTAL_HOST } from "../src/portal-host";
 
-// Capsid Portal through the whole Worker: its pages (the tests' stand-in for the server-rendered
-// build, test/fixtures/portal-pages.ts, which reads the feed as a real page does first) and its
-// files, with miniflare's real ASSETS binding (vitest.config.ts, `assets`) holding the fake build
-// in test-integration/fixtures/dashboard. SELF is the Worker's own default export, not the
-// assets router in front of it, so what the router does is the deploy config's
-// business (docs/portal.md, run_worker_first). A signed-in request is sent to the
-// Worker's fetch with a cookie key, because the pool binds none (as oauth-flow.test.ts does).
+// SELF is the Worker's own default export, not the assets router in front of it, whose behavior is deploy config (docs/portal.md).
+// Signed-in requests carry a cookie key sent straight to fetch, since the pool binds none (as oauth-flow.test.ts does).
 
 const ORIGIN = "https://capsid.test";
 const SECRET = "integration-portal-cookie-key";
@@ -79,7 +74,6 @@ describe("the Portal's pages and files", () => {
     expect(nonce).toBeTruthy();
     expect(page.headers.get("Content-Security-Policy") ?? "").toContain(`'nonce-${nonce}'`);
     expect(page.headers.get("Content-Security-Policy") ?? "").not.toMatch(/unsafe-inline/);
-    // The feed's first read minted the CSRF cookie, which the page passes on.
     expect(page.headers.get("Set-Cookie") ?? "").toContain("capsid_portal_csrf=");
   });
 

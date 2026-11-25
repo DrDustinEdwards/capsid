@@ -10,10 +10,6 @@ import {
 import type { OpsSiteConfig } from "../src/ops-types/sites.ts";
 import { siteMapFindings } from "../src/watcher-detect.ts";
 
-// The Portal's site configuration (src/ops-sites.ts): what an edit may say, how rows
-// become probed sites, and the site map against the registered namespaces. The table,
-// its seed and the writes run against real D1 in test-integration/ops-sites.test.ts.
-
 function row(namespace: string, over: Partial<OpsSiteConfig> = {}): OpsSiteConfig {
   return {
     namespace,
@@ -30,8 +26,6 @@ function row(namespace: string, over: Partial<OpsSiteConfig> = {}): OpsSiteConfi
     ...over,
   };
 }
-
-// Origins
 
 const GOOD_ORIGINS: Array<[string, string]> = [
   ["https://example.com", "https://example.com"],
@@ -88,8 +82,6 @@ test("PLANT: every origin that is not https:// and a public hostname alone is re
   }
 });
 
-// Health paths
-
 const GOOD_PATHS = [
   "/",
   "/health",
@@ -123,8 +115,6 @@ test("PLANT: a health path is a plain absolute path; a query, a fragment, an esc
   for (const p of GOOD_PATHS) assert.equal(healthPathRefusal(p), null, `${p} was refused`);
   for (const p of BAD_PATHS) assert.ok(healthPathRefusal(p), `${JSON.stringify(p)} was accepted`);
 });
-
-// The whole edit
 
 test("a site edit is normalized: a name defaults to the namespace, blank optional fields are null", () => {
   const got = validateSite({
@@ -187,8 +177,6 @@ test("PLANT: the platform, the script and the namespace are checked", () => {
   assert.equal(validateSite({ ...base, platform: "cloudflare", script: "sample-web" }).ok, true);
 });
 
-// Rows to sites
-
 test("only rows with an origin become probed sites; the script and the self-probe carry over", () => {
   const sites = sitesFrom([
     row("capsid", { script: "capsid", self_probe: true, health_path: "/health" }),
@@ -215,8 +203,6 @@ test("only rows with an origin become probed sites; the script and the self-prob
   ]);
   assert.deepEqual(sitesFrom([]), []);
 });
-
-// The site map
 
 test("the site map is compared with the registered namespaces both ways, a no-site row counting as decided", () => {
   const config = [

@@ -1,12 +1,5 @@
-// Client ID Metadata Documents, as the provider fetches them. A client's id is the https
-// URL of its metadata document, and the provider fetches that URL when the client
-// appears at /authorize and /token. (/register takes only the allowlisted Grok, Gemini
-// and ChatGPT callbacks, so test clients come from here.)
-//
-// The documents are served by a wrapper around globalThis.fetch installed when this
-// module loads, not by a vi spy, because the flows restore their spies halfway
-// (after the Access callback) and the token exchange looks the client up again. A spy
-// that stubs Access falls through to cimdResponse for the same reason.
+// Client ID Metadata Documents, served by a wrapper on globalThis.fetch installed at module load, not a vi spy:
+// the flows restore their spies after the Access callback and the token exchange looks the client up again.
 
 const documents = new Map<string, Record<string, unknown>>();
 let counter = 0;
@@ -26,8 +19,6 @@ export function cimdClient(redirects: string[], name = "integration-client"): st
   return url;
 }
 
-// The document for a URL this module published, or a 404 for any other client URL, or
-// null for any URL that is not a client document.
 export function cimdResponse(url: string): Response | null {
   if (!url.startsWith("https://client.example.com/oauth/")) return null;
   const doc = documents.get(url);

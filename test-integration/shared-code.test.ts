@@ -7,10 +7,8 @@ import { PORTAL_SHARED_CODE_PATH } from "../src/portal-packages";
 import { SHARED_CODE_CACHE_KEY } from "../src/shared-code-read";
 import type { SharedCodeView } from "../src/ops-types/feed";
 
-// The Shared code view's route through the Worker, against the D1 the migrations build:
-// the six seeded packages are read from configuration, every repo in the system model is
-// tried, and an app or a tag list that cannot be read is said, never counted as up to date.
-// No GitHub is reachable here, so every read fails, which is the case this test is for.
+// The six seeded packages are read from configuration and every repo in the system model is tried; an app or tag list that
+// cannot be read is said, never counted as up to date. No GitHub is reachable here, so every read fails.
 
 const ORIGIN = "https://capsid.test";
 const SECRET = "integration-portal-cookie-key";
@@ -42,7 +40,6 @@ describe("GET /portal/api/shared-code", () => {
     expect(view.packages.map((p) => p.name).sort()).toEqual(
       ["Capsomer", "d1-dump", "devkit", "Prelum", "site-api", "site-runtime"].sort(),
     );
-    // The apps are every repo the system model lists, each read once.
     const repos = new Set(bundledModel().systems.flatMap((s) => s.repos));
     expect(view.apps_read + view.apps_failed.length, "every repo in the model was tried").toBe(
       repos.size,

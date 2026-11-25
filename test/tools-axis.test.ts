@@ -8,7 +8,6 @@ import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { actionArgFor } from "../src/scope-guard.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// The schemas both servers actually serve (Capsid and Capsid Admin), as the admin sees them.
 async function listedTools() {
   const tools = [];
   for (const build of [buildServer, buildAdminServer]) {
@@ -31,10 +30,8 @@ async function listedTools() {
   return tools;
 }
 
-// The tools axis, driven through the path a real caller uses. A qualifier such as
-// `capsid_close_pr.delete_branch` only applies if the call path passes the action to the scope
-// check. test/roles.test.ts calls allowsToolAction with the action already set, so
-// every plant here goes through a real MCP client against a real server.
+// A qualifier such as `capsid_close_pr.delete_branch` applies only if the call path passes the action to the scope check;
+// test/roles.test.ts sets the action itself, so every plant here goes through a real MCP client.
 
 const REPOS = [{ repo: "o/r", label: "primary" }];
 
@@ -69,9 +66,7 @@ async function callAs(
   return result;
 }
 
-// GitHub routes for closing pull request 7 on `full`, so an innocent-direction call can
-// be asserted to SUCCEED. With no routes the call fails on GitHub's side, and a check
-// that only looks for the absence of one refusal passes on that failure.
+// GitHub routes for closing pull request 7, so an innocent-direction call can be asserted to SUCCEED; with none the call fails on GitHub's side and passes a check for a missing refusal.
 function closeRoutes(full: string) {
   return {
     [`PATCH /repos/${full}/pulls/7`]: {
@@ -86,8 +81,6 @@ function succeeded(result: ToolResult): Record<string, unknown> {
   return JSON.parse(text) as Record<string, unknown>;
 }
 
-// An agent narrowed to one action of one tool: the write grant, no flag, and a tools
-// axis of capsid_close_pr's delete_branch alone.
 function brancher(): Agent {
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
@@ -102,8 +95,6 @@ function brancher(): Agent {
     row: null,
   };
 }
-
-// the narrowed agent cannot close or merge
 
 for (const action of ["close", "merge"]) {
   test(`PLANT: an agent scoped to capsid_close_pr.delete_branch is REFUSED the same tool's action ${action}`, async () => {
@@ -147,8 +138,6 @@ test("THE INNOCENT DIRECTION: the agent IS allowed action delete_branch", async 
   });
 });
 
-// lint's action is its mode
-
 test("PLANT: an agent scoped to capsid_lint_namespace.gather is REFUSED mode finalize", async () => {
   // capsid_lint_namespace spells its action `mode`: gather is a read and finalize archives documents.
   const caller = brancher();
@@ -186,8 +175,6 @@ test("THE INNOCENT DIRECTION: the same caller IS allowed mode gather", async () 
   assert.equal(out.core?.body, "the core", "gather did not return the namespace's core document");
 });
 
-// the rule itself
-
 test("AN UNKNOWN ACTION ON A NARROWED TOOL IS REFUSED, rather than read as the whole tool", () => {
   // Fail closed: a call path that forgets to pass the action is refused.
   assert.equal(
@@ -214,10 +201,8 @@ test("AN UNKNOWN ACTION ON A NARROWED TOOL IS REFUSED, rather than read as the w
     ),
     false,
   );
-  // Unqualified is untouched in both directions.
   assert.equal(allowsToolAction(["capsid_inspect_repo"], "capsid_inspect_repo", undefined), true);
   assert.equal(allowsToolAction(["capsid_inspect_repo"], "capsid_inspect_repo", "ci"), true);
-  // The narrowing reaches only the tool it names.
   assert.equal(
     allowsToolAction(
       ["capsid_close_pr", "capsid_close_pr.delete_branch", "capsid_lint_namespace"],
@@ -228,17 +213,10 @@ test("AN UNKNOWN ACTION ON A NARROWED TOOL IS REFUSED, rather than read as the w
   );
 });
 
-// a new action tool cannot be added without wiring its action
-
 test("DERIVED: every tool that declares an action-shaped argument is in ACTION_ARG", async () => {
-  // A tool with an `action` or `mode` enum missing from the enforcement point's table
-  // could not be narrowed. The exclusions are reviewed, and there are none: `mode` on
-  // capsid_write_doc decides how a body is edited rather than what authority the call
-  // needs, and the tool is narrowed by its `action` instead, which the second assertion
-  // holds it to.
+  // A tool with an `action` or `mode` enum missing from the enforcement point's table could not be narrowed. `mode` on
+  // capsid_write_doc is how a body is edited, not authority, and the tool is narrowed by `action` instead.
   const REVIEWED_EXCLUSIONS = new Set<string>();
-  // Read from the schemas the server serves, which is what a caller sees, rather than
-  // from the registration source.
   const found = (await listedTools())
     .filter((tool) => {
       const props = (tool.inputSchema.properties ?? {}) as Record<string, { enum?: unknown[] }>;
@@ -290,7 +268,6 @@ test("every tool named in ACTION_ARG serves an argument by that name", async () 
     "capsid_inspect_repo",
   ];
   const tools = await listedTools();
-  // Every served tool ACTION_ARG names is in the list, so an entry added later is checked too.
   const named = tools.map((t) => t.name).filter((name) => actionArgFor(name) !== undefined);
   assert.deepEqual(
     named.filter((name) => !wired.includes(name)),
@@ -309,12 +286,8 @@ test("every tool named in ACTION_ARG serves an argument by that name", async () 
   }
 });
 
-// the repos axis binds the default call
-
 test("PLANT: a driver scoped to one repo is refused a write and a read of the namespace primary when they differ", async () => {
-  // The axis must be checked against the resolved repo, not the `repo` argument, which
-  // is a selector and usually absent. Otherwise a remap of the mapping redirects a
-  // narrowed driver.
+  // Checked against the resolved repo, not the `repo` argument (a selector, usually absent); otherwise a remap of the mapping redirects a narrowed driver.
   const caller = brancher();
   caller.scopes.tools = "*";
   caller.scopes.repos = ["DrDustinEdwards/capsid"];
