@@ -5,9 +5,7 @@ description: Use before committing or opening a pull request that changes what t
 
 # Verify a Portal change
 
-Tests prove what someone thought to test. This skill proves the change itself: run
-the real Portal, use the changed flow as Dustin would, and look at the result. Do
-it before every commit that touches `dashboard/`, `src/portal-*.ts` or
+Do it before every commit that touches `dashboard/`, `src/portal-*.ts` or
 `src/dashboard-csp.ts`, and before the pull request.
 
 ## 1. Boot the build the browser tests use
@@ -21,11 +19,9 @@ npm run build
 node --import ../test/resolve-ts.mjs dev/serve.ts 4174   # run in the background
 ```
 
-`dev/serve.ts` serves `build/worker/portal.js`, the module the Worker bundles, with
-the Worker's own CSP and a fresh nonce on every page, and `dev/mock-api.ts` in
-place of `/portal/api/*` (fake data: sites under example.com, namespaces
-`sample*`). A script or style the live Portal would refuse fails here too. Wait
-until `curl -s -o /dev/null -w '%{http_code}' http://localhost:4174/` prints 200.
+`dev/serve.ts` serves the Worker's build with its CSP and `dev/mock-api.ts` in
+place of `/portal/api/*` (fake data). Wait until
+`curl -s -o /dev/null -w '%{http_code}' http://localhost:4174/` prints 200.
 
 For the empty and failure states, start it with `WF_MOCK=signed-out`,
 `no-snapshot`, `no-token` or `no-sites` (dashboard/README.md). `npm run dev`
@@ -62,11 +58,8 @@ try {
 }
 ```
 
-Drive the whole flow, not just the page load: open the dialog, submit the form,
-see the row change, go back, reload and see it hold. If the change is
-responsive or themed, repeat the end state at 390 px wide and in dark mode
-(`page.setViewportSize`, `page.emulateMedia({ colorScheme: "dark" })`). If it must
-work with scripts off, run it once more with `browser.newContext({ javaScriptEnabled: false })`.
+Drive the whole flow (act, see the result, reload and see it hold); repeat the end
+state at 390 px and dark when the change is responsive or themed.
 
 ## 3. Run the specs that cover the area
 
