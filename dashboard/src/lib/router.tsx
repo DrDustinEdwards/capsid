@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, type AnchorHTMLAttributes, type ReactNode } from "react";
 import { Link as RouterLink, useLocation as useRouterLocation, useNavigate } from "react-router";
-import { DEMO_BASE } from "./demo";
+import { DEMO_BASE } from "./demo-base";
 
 // Views name pages from the Portal's root; these helpers prefix the base the page was opened under, so a demo link stays in the demo.
 

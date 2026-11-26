@@ -5,7 +5,7 @@
 // /demos/api/*.json by scripts/demo-api.mjs. Nothing in it is read from Capsid, and nothing is written:
 // every request that is not a GET is answered here with a refusal and never leaves the browser.
 
-export const DEMO_BASE = "/demos";
+import { DEMO_BASE } from "./demo-base.ts";
 
 /** The clock the captured answers were made at; each read moves every time by now minus this. */
 export const DEMO_CAPTURED = "2026-10-01T12:00:00.000Z";
