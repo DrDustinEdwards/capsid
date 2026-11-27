@@ -27,8 +27,8 @@ function anomalySince(now: Date): string {
 
 /**
  * The read the rules run on: every minted agent's audit rows of the last BASELINE_DAYS plus one
- * days, grouped by action and hour, the watcher (`except`) left out. On the audit_log_at index
- * (migrations/0005), bounded by the window.
+ * days, grouped by action and hour, the watcher (`except`) left out. On the audit_log_at_actor_action index
+ * (migrations/0070, covering), bounded by the window.
  */
 export async function readActionHours(
   db: D1Database,
