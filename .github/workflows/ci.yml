@@ -208,7 +208,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     permissions:
       contents: read
-    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@1f8d35b63b7e78eabbef60752f798513646fe9b9 # v0.64.0
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@22893f4b81049f7eeb019864e7e73257b1b7892f # v0.67.0
     with:
       worker-name: capsid-mcp
       health-url: https://mcp.dustinedwards.info/health
@@ -223,7 +223,6 @@ jobs:
       sha-var: BUILD_SHA
       d1-database: capsid
       gradual-percent: 10
-      gradual-minutes: 10
       # No preview per pull request (D6): Cloudflare makes no preview URL for a Worker that has a Durable Object.
       preview: false
       # The Portal is server-rendered here, not a sitemap site.

@@ -163,7 +163,7 @@ jobs:
     concurrency:
       group: explorer-deploy
       cancel-in-progress: false
-    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@1f8d35b63b7e78eabbef60752f798513646fe9b9 # v0.64.0
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@22893f4b81049f7eeb019864e7e73257b1b7892f # v0.67.0
     with:
       worker-name: capsid
       health-url: https://capsid.dustinedwards.info/health
@@ -179,7 +179,6 @@ jobs:
       # Gradual rollout (D4): the new version takes 10% of traffic for 10 minutes before the live gate judges it and it
       # takes all traffic; a refused one is rolled back to the version it shared traffic with.
       gradual-percent: 10
-      gradual-minutes: 10
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.EXPLORER_CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
