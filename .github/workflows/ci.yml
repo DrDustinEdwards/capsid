@@ -223,7 +223,6 @@ jobs:
       sha-var: BUILD_SHA
       d1-database: capsid
       gradual-percent: 10
-      gradual-minutes: 10
       # No preview per pull request (D6): Cloudflare makes no preview URL for a Worker that has a Durable Object.
       preview: false
       # The Portal is server-rendered here, not a sitemap site.

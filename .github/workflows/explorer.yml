@@ -179,7 +179,6 @@ jobs:
       # Gradual rollout (D4): the new version takes 10% of traffic for 10 minutes before the live gate judges it and it
       # takes all traffic; a refused one is rolled back to the version it shared traffic with.
       gradual-percent: 10
-      gradual-minutes: 10
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.EXPLORER_CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
