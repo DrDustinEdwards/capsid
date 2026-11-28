@@ -34,7 +34,6 @@ import type {
   PortalLibrary,
   PortalTrends,
   LibraryEntry,
-  PortalPackageHistory,
   PortalSiteSearch,
   PortalSiteTraffic,
   PortalWorkersBuilds,
@@ -132,16 +131,13 @@ function seedSites(): OpsSiteConfig[] {
   }));
 }
 
-// The fixture's packages. WF_MOCK=no-packages starts with none, so the Packages view
-// is not offered.
+// The fixture's packages. WF_MOCK=no-packages starts with none.
 function seedPackages(): OpsPackageConfig[] {
   if (process.env.WF_MOCK === "no-packages") return [];
   const raw = JSON.parse(readFileSync(FIXTURE, "utf8")) as OpsFeed;
   return raw.live.packages.map((p) => ({ ...p }));
 }
 
-// A made-up daily history for a configured package: the former name from 2025-06-01
-// to 2026-06-30, then the current name, a few downloads a day with a weekly rhythm.
 // The Completeness view's answer (src/completeness.ts), in sample names: one area verified
 // complete on every site but one that is still in its clean days, one failing a check, one
 // with checks passing and no verifier, and the rest without a live check yet.
@@ -606,32 +602,6 @@ function mockTrends(weeks: number): PortalTrends {
   };
 }
 
-function mockHistory(p: OpsPackageConfig): PortalPackageHistory {
-  const now = mockNow();
-  const days: PortalPackageHistory["days"] = [];
-  const DAY = 86_400_000;
-  for (let t = Date.parse("2025-06-01T00:00:00Z"); t < now - DAY; t += DAY) {
-    const day = new Date(t).toISOString().slice(0, 10);
-    const name = p.formerly && day < "2026-07-01" ? p.formerly : p.name;
-    const n = Math.round(3 + 2 * Math.sin(t / (7 * DAY)) + ((t / DAY) % 11 === 0 ? 20 : 0));
-    if (n > 0) days.push({ day, downloads: n, name });
-  }
-  return {
-    name: p.name,
-    formerly: p.formerly,
-    generated: new Date(now).toISOString(),
-    fetched_at: new Date(now).toISOString(),
-    days,
-    first_day: days[0]?.day ?? null,
-    last_day: days[days.length - 1]?.day ?? null,
-    notes: [],
-    weeks: [
-      { week: "2026-W39", stars: 4, open_issues: 1, open_prs: 2, latest_release: "v0.3.0" },
-      { week: "2026-W38", stars: 3, open_issues: 1, open_prs: 1, latest_release: "v0.2.0" },
-    ],
-  };
-}
-
 // Registered namespaces: the roster, every row the fixture seeds, and EXTRA_REGISTERED.
 // Removing a row does not unregister its namespace.
 function registered(): Set<string> {
@@ -1027,7 +997,7 @@ function plan(
       return {
         summary: `Remove ${name}.`,
         done: `Removed ${name}.`,
-        changes: [`ops_packages: remove ${name}. Its weekly rows stay.`],
+        changes: [`ops_packages: remove ${name}.`],
         apply: (st) => void (st.packages = st.packages.filter((p) => p.name !== name)),
       };
     }
@@ -1846,7 +1816,6 @@ export function mockHandler(): (
       "/portal/api/actions/perform",
       "/portal/api/namespaces",
       "/portal/api/activity",
-      "/portal/api/packages/history",
       "/portal/api/site-search",
       "/portal/api/site-traffic",
       "/portal/api/workers-builds",
@@ -2047,13 +2016,6 @@ export function mockHandler(): (
     if (path === "/portal/api/shared-code") {
       if (req.method !== "GET") return send(res, 405, { error: "method" });
       return send(res, 200, sharedCode());
-    }
-    if (path === "/portal/api/packages/history") {
-      if (req.method !== "GET") return send(res, 405, { error: "method" });
-      const name = url.searchParams.get("name")?.trim() ?? "";
-      const p = st.packages.find((x) => x.name === name);
-      if (!p) return send(res, 404, { error: `${name} is not a configured package.` });
-      return send(res, 200, mockHistory(p));
     }
     if (req.method !== "POST" || req.headers["x-capsid-ops"] !== "refresh")
       return send(res, 400, { error: "refresh needs POST and X-Capsid-Ops: refresh" });

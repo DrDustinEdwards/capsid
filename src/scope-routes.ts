@@ -73,8 +73,6 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "the Portal's convergence view of each site that opted into its operator API: sync_status, the health route and secret names read live, gated by portalGate",
   "/portal/api/maintenance":
     "the Portal's Maintenance list, the daily pass's stored list that capsid_read_status action status serves, gated by portalGate",
-  "/portal/api/packages/history":
-    "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
   "/portal/api/completeness":
     "the Portal's Completeness view: devkit's daily scoreboard (board.json on its scoreboard branch), read through the GitHub App and cached for ten minutes, gated by portalGate",
   "/portal/api/not-found":

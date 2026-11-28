@@ -3,8 +3,7 @@ import { runPass } from "./watcher-pass";
 import { type HealthReport } from "./health";
 import { d1FindingMemory } from "./watcher-findings";
 import { type SiteMapDrift } from "./ops-sites";
-import { weekStatement } from "./ops-packages";
-import type { ExpirySnapshot, PackageSnapshot, SiteCloudflare } from "./ops-types/sites";
+import type { ExpirySnapshot, SiteCloudflare } from "./ops-types/sites";
 import { archiveRevokedAgents } from "./agents-archive";
 import {
   buildSnapshot,
@@ -93,9 +92,6 @@ export interface Observed {
   // Each site's Cloudflare state, keyed by namespace. Optional so a pass assembled
   // without it (a test's Gathered) still builds a snapshot.
   cloudflare?: Record<string, SiteCloudflare>;
-  // Each configured package as this pass read it; [] with none configured, absent when
-  // the configuration could not be read (the snapshot then keeps the last pass's).
-  packages?: PackageSnapshot[];
   // The TLS and domain expiry dates this pass read; a part that failed is null.
   expiry?: ExpirySnapshot;
 }
@@ -159,29 +155,9 @@ export async function watcherTick(
       site_map: o.siteMap,
       probes: o.probes,
       cloudflare: o.cloudflare,
-      packages: o.packages,
       expiry: o.expiry,
     }),
   );
-  // The week's GitHub numbers, once per package per ISO week (ops_package_weeks). A
-  // failed write loses one week's row, not the pass: it is logged, and the next pass
-  // that week writes it.
-  const weekly = (o.packages ?? [])
-    .map((p) => weekStatement(env.DB, p, now))
-    .filter((st): st is D1PreparedStatement => st !== null);
-  if (weekly.length > 0) {
-    try {
-      await env.DB.batch(weekly);
-    } catch (err) {
-      logEvent(
-        "WATCHER_PACKAGE_WEEKS_FAILED",
-        {
-          message: `WATCHER_PACKAGE_WEEKS_FAILED: ${errorMessage(err)}`,
-        },
-        { level: "error" },
-      );
-    }
-  }
 
   // Revoked agents out of the live table, history kept (src/agents-archive.ts). A failed
   // move is logged and retried next pass; it never stops the pass.

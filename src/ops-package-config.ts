@@ -1,7 +1,8 @@
 import type { OpsPackageConfig } from "./ops-types/sites";
 import { auditCommitted } from "./store-guards";
 
-// The packages configuration: the ops_packages rows and their validated edits.
+// The npm package list the versions table reads (src/shared-code-read.ts): the ops_packages
+// rows and their validated edits.
 
 const PACKAGE_ROWS_LIMIT = 50;
 

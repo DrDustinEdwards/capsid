@@ -8,7 +8,6 @@ import type {
   ExpirySnapshot,
   OffaccountObservation,
   OpsSnapshot,
-  PackageSnapshot,
   SiteCloudflare,
   SiteMapDrift,
   SiteProbe,
@@ -285,9 +284,6 @@ export interface SnapshotInput {
   // This pass's Cloudflare state per site, keyed by namespace (src/ops-cloudflare.ts).
   // A probed site with no entry is written without the field, never with last pass's.
   cloudflare?: Record<string, SiteCloudflare>;
-  // This pass's packages; undefined when they could not be read, and then the last
-  // pass's are kept rather than shown as gone.
-  packages?: PackageSnapshot[];
   // This pass's expiry dates; a part that could not be read is null, and then the last
   // pass's part is kept.
   expiry?: ExpirySnapshot;
@@ -333,11 +329,6 @@ export function buildSnapshot(prev: OpsSnapshot | null, input: SnapshotInput): O
     ci: input.ci,
     site_map: input.site_map,
     sites,
-    ...(input.packages
-      ? { packages: input.packages }
-      : prev?.packages
-        ? { packages: prev.packages }
-        : {}),
     ...(input.expiry || prev?.expiry
       ? {
           expiry: {

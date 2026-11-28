@@ -2,7 +2,6 @@ import { QueryClient, dehydrate, type DehydratedState } from "@tanstack/react-qu
 import { createContext, type RouterContextProvider } from "react-router";
 import { answerOf, ask, type Answer } from "capsomer/react/data";
 import { FEED_KEY, LIVE } from "../lib/api";
-import { pageBase } from "../lib/router";
 import type { FigureSet, OpsFeed } from "../types";
 import { figuresKey } from "../lib/trends";
 import type { ViewId } from "../app/ctx";
@@ -53,8 +52,6 @@ const qs = (o: Record<string, string>) => {
 function specsFor(
   view: ViewId,
   url: URL,
-  feed: OpsFeed | null,
-  demo: boolean,
   drawer: { type: string; id: string } | null,
   site: string | null,
 ): Spec[] {
@@ -125,12 +122,6 @@ function specsFor(
         { key: ["shared-code"], path: "/shared-code" },
         { key: ["completeness"], path: "/completeness" },
       );
-      if (demo)
-        for (const pkg of feed?.live.packages ?? [])
-          out.push({
-            key: ["packages", "history", pkg.name],
-            path: `/packages/history${qs({ name: pkg.name })}`,
-          });
       break;
     case "memory": {
       const q = p.get("q")?.trim() || "";
@@ -201,10 +192,6 @@ export async function prefetchView(
   const server = serverFor(context, request);
   const url = new URL(request.url);
   const client = new QueryClient();
-  const demo = pageBase(url.pathname) !== "";
-  const feed = await feedOf(context, request);
-  await Promise.all(
-    specsFor(view, url, feed, demo, drawer, site).map((s) => readInto(client, server, s)),
-  );
+  await Promise.all(specsFor(view, url, drawer, site).map((s) => readInto(client, server, s)));
   return dehydrate(client);
 }

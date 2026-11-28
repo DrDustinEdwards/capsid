@@ -121,8 +121,6 @@ export interface OpsSnapshot {
   ci: CiObservation[];
   site_map: SiteMapDrift | null;
   sites: SiteSnapshot[];
-  // Optional so a snapshot written before the panel existed still parses.
-  packages?: PackageSnapshot[];
   expiry?: ExpirySnapshot;
 }
 
@@ -148,40 +146,6 @@ export interface OpsPackageConfig {
   updated_at: string;
 }
 
-// "none" is an answer (no repository, no dependents on record), not a failure.
-type PackagePart<T> =
-  | ({ state: "ok" } & T)
-  | { state: "none"; reason: string }
-  | { state: "error"; reason: string };
-
-export interface PackageSnapshot {
-  name: string;
-  registry: "npm";
-  at: string;
-  npm: PackagePart<{
-    latest: string | null;
-    dist_tags: Record<string, string>;
-    versions: number;
-    modified: string | null;
-  }>;
-  // Per version for the last 7 days only: npm keeps no per-version history.
-  downloads: PackagePart<{
-    last_week: number;
-    last_month: number;
-    through: string | null;
-    by_version_last_week: Record<string, number>;
-  }>;
-  dependents: PackagePart<{ version: string; direct: number; indirect: number; total: number }>;
-  github: PackagePart<{
-    repo: string;
-    stars: number;
-    open_issues: number;
-    open_prs: number;
-    open_prs_capped: boolean;
-    latest_release: { tag: string; published_at: string | null } | null;
-  }>;
-}
-
 export interface PortalNotFound {
   days: number;
   generated: string;
@@ -192,24 +156,6 @@ export interface PortalNotFound {
   }> | null;
   probes: number | null;
   error: string | null;
-}
-
-export interface PortalPackageHistory {
-  name: string;
-  formerly: string | null;
-  generated: string;
-  fetched_at: string;
-  days: Array<{ day: string; downloads: number; name: string }>;
-  first_day: string | null;
-  last_day: string | null;
-  notes: string[];
-  weeks: Array<{
-    week: string;
-    stars: number;
-    open_issues: number;
-    open_prs: number;
-    latest_release: string | null;
-  }>;
 }
 
 export interface ServerErrors {

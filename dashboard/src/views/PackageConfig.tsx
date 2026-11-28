@@ -75,7 +75,7 @@ export function PackageForm({
       onClose={onClose}
       danger={
         !adding && (
-          <DangerZone note="The Packages page stops showing it.">
+          <DangerZone note="The versions table stops showing it.">
             <button
               type="button"
               className="cap-btn"

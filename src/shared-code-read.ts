@@ -2,7 +2,7 @@ import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import { parseReposList } from "./github/client";
-import { readNpm, readNpmVersions, type FetchLike } from "./ops-packages";
+import { callSignal } from "./call-signal";
 import { readPackageConfig } from "./ops-package-config";
 import { noBloatJobs, npmLockVersions, pnpmLockVersions, workflowPins } from "./lockfiles";
 import { bundledModel } from "./public-data";
@@ -16,6 +16,7 @@ import {
   rootManifest,
   sharedCodeView,
   type AppRead,
+  type NpmRead,
   type ReleaseRead,
   type RootManifest,
   type SharedConfig,
@@ -39,23 +40,60 @@ const RENOVATE_FILES = [
   ".renovaterc.json",
 ];
 
+type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+const NPM_TIMEOUT_MS = 8000;
+const NPM_USER_AGENT = "capsid (shared code; https://github.com/DrDustinEdwards/capsid)";
+
+// npm's abbreviated document for `name`, or null when npm has no such package; throws with npm's
+// answer otherwise. A scoped name's slash is escaped, as the registry requires.
+async function npmDocument(
+  fetchImpl: FetchLike,
+  name: string,
+): Promise<{ "dist-tags"?: Record<string, unknown>; versions?: Record<string, unknown> } | null> {
+  let res: Response;
+  try {
+    res = await fetchImpl(`https://registry.npmjs.org/${name.replace("/", "%2F")}`, {
+      headers: { "User-Agent": NPM_USER_AGENT, Accept: "application/vnd.npm.install-v1+json" },
+      signal: callSignal(NPM_TIMEOUT_MS),
+    });
+  } catch (err) {
+    throw new Error(`registry.npmjs.org could not be read: ${errorMessage(err).slice(0, 160)}`);
+  }
+  if (!res.ok) {
+    await res.body?.cancel();
+    if (res.status === 404) return null;
+    throw new Error(`registry.npmjs.org answered ${res.status}`);
+  }
+  return res.json();
+}
+
+// The latest dist-tag of a released package, for whether the repo's version has reached npm.
+async function readNpm(fetchImpl: FetchLike, name: string): Promise<NpmRead> {
+  try {
+    const doc = await npmDocument(fetchImpl, name);
+    if (!doc) return { state: "none", reason: `npm has no package ${name}` };
+    const latest = doc["dist-tags"]?.latest;
+    return { state: "ok", latest: typeof latest === "string" ? latest : null };
+  } catch (err) {
+    return { state: "error", reason: errorMessage(err) };
+  }
+}
+
+// Every version npm has published of `name`, for the versions model's "behind" count.
+async function readNpmVersions(fetchImpl: FetchLike, name: string): Promise<string[]> {
+  const doc = await npmDocument(fetchImpl, name);
+  if (!doc) throw new Error(`npm has no package ${name}`);
+  return Object.keys(doc.versions ?? {});
+}
+
 // A repo's root package.json, on its default branch, through the App. Uncached.
-async function readRootManifest(
-  env: Env,
-  full: string,
-): Promise<RootManifest> {
+async function readRootManifest(env: Env, full: string): Promise<RootManifest> {
   const [owner, repo] = full.split("/");
-  const resp = await ghFetch(
-    env,
-    owner,
-    repo,
-    `/repos/${owner}/${repo}/contents/package.json`,
-  );
+  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/contents/package.json`);
   if (!resp.ok) {
     await resp.body?.cancel();
-    throw new Error(
-      `GitHub answered ${resp.status} for ${full}'s package.json`,
-    );
+    throw new Error(`GitHub answered ${resp.status} for ${full}'s package.json`);
   }
   const data = (await resp.json()) as { content?: unknown; encoding?: unknown };
   if (data.encoding !== "base64" || typeof data.content !== "string")
@@ -288,8 +326,8 @@ async function buildSharedCode(
       packages: [],
     };
   }
-  // The published packages the Packages view watches, matched by name. Optional: a
-  // missing table is no npm packages, not a failed view.
+  // The npm packages configured in ops_packages, matched by name. Optional: a missing table is
+  // no npm packages, not a failed view.
   const published = await readPackageConfig(env.DB).catch(() => []);
   for (const p of published) {
     if (p.repo)

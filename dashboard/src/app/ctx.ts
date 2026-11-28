@@ -44,7 +44,6 @@ export const MEMORY_TABS = [
 export type MemoryTab = (typeof MEMORY_TABS)[number]["id"];
 
 export const PACKAGE_TABS = [
-  { id: "published", label: "Published" },
   { id: "shared", label: "Shared" },
   { id: "complete", label: "Completeness" },
 ] as const;

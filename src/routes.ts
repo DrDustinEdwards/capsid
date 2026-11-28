@@ -93,12 +93,10 @@ import { handlePortalFigures, PORTAL_FIGURES_PATH } from "./portal-figures";
 import {
   handlePortalCompleteness,
   handlePortalNotFound,
-  handlePortalPackageHistory,
   handlePortalResources,
   handlePortalSharedCode,
   PORTAL_COMPLETENESS_PATH,
   PORTAL_NOT_FOUND_PATH,
-  PORTAL_PACKAGE_HISTORY_PATH,
   PORTAL_RESOURCES_PATH,
   PORTAL_SHARED_CODE_PATH,
 } from "./portal-packages";
@@ -403,8 +401,6 @@ function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
     return handlePortalConvergence(request, env);
   if (url.pathname === PORTAL_BACKUPS_PATH && request.method === "GET")
     return handlePortalBackups(request, env);
-  if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET")
-    return handlePortalPackageHistory(request, env);
   if (url.pathname === PORTAL_SHARED_CODE_PATH && request.method === "GET")
     return handlePortalSharedCode(request, env);
   if (url.pathname === PORTAL_NOT_FOUND_PATH && request.method === "GET")

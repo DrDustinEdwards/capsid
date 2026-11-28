@@ -1,28 +1,12 @@
-import { packageHistory, type FetchLike } from "./ops-packages";
-import { readPackageRow } from "./ops-package-config";
 import { behindGate } from "./portal-auth";
 import { readSharedCode } from "./shared-code-read";
 import { readCompleteness } from "./completeness";
 import { readResources } from "./system-facts-store";
-import { textResponse, jsonResponse } from "@dustinedwards/site-runtime/http";
+import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import { notFoundReport } from "@dustinedwards/site-runtime/not-found";
 import type { PortalNotFound } from "./ops-types/sites";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-
-export const PORTAL_PACKAGE_HISTORY_PATH = "/portal/api/packages/history";
-
-export const handlePortalPackageHistory = behindGate(
-  async (request, env, now, _user, fetchImpl: FetchLike = (url, init) => fetch(url, init)) => {
-    const name = new URL(request.url).searchParams.get("name")?.trim() ?? "";
-    if (!name || name.length > 214)
-      return textResponse("name must be a configured package's npm name.", 400);
-    const cfg = await readPackageRow(env.DB, name);
-    if (!cfg) return textResponse(`${name} is not a configured package.`, 404);
-    const body = await packageHistory(env, cfg, fetchImpl, now);
-    return jsonResponse(body);
-  },
-);
 
 // The Sites view's 404 panel: GET /portal/api/not-found. Capsid's own counts,
 // page_404_daily, read with site-runtime's notFoundReport; each other site keeps its table in
@@ -62,9 +46,8 @@ export const handlePortalNotFound = behindGate(async (_request, env, now) => {
   return jsonResponse(body);
 });
 
-// The Shared code view's read: GET /portal/api/shared-code (src/shared-code.ts). Like the
-// history above it answers to portalGate and nothing else, writes only its own hour-long
-// cache, and reads GitHub only for the configured packages and the configured sites' repos.
+// The Shared code view's read: GET /portal/api/shared-code (src/shared-code.ts). It
+// answers to portalGate and nothing else, writes only its own hour-long cache, and reads GitHub only for the configured packages and the configured sites' repos.
 export const PORTAL_SHARED_CODE_PATH = "/portal/api/shared-code";
 
 export const handlePortalSharedCode = behindGate(async (_request, env, now) => {

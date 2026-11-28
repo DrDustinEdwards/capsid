@@ -42,11 +42,11 @@ function describeAction(action: PortalAction, params: ActionParams): string {
     case "site_remove":
       return `Remove ${ns} from the Portal's site configuration. The watcher stops probing it on its next pass.`;
     case "package_add":
-      return `Add the npm package ${params.name ?? ""} to the packages Capsid Portal watches. The watcher reads it from its next pass.`;
+      return `Add the npm package ${params.name ?? ""} to the versions table's npm package list. The next nightly build reads its versions.`;
     case "package_edit":
-      return `Change how Capsid Portal watches the package ${params.name ?? ""}. The watcher reads the new row on its next pass.`;
+      return `Change the npm package ${params.name ?? ""} in the versions table's list. The next nightly build reads the new row.`;
     case "package_remove":
-      return `Remove the package ${params.name ?? ""} from the Portal. The watcher stops reading it; its weekly rows are kept.`;
+      return `Remove the npm package ${params.name ?? ""} from the versions table's list. The next nightly build leaves it out.`;
     case "site_repair":
       return `Run ${params.tool ?? ""} on ${ns} through its operator API. It re-derives one of the site's stores from its source and reports whether it converged. Capsid calls only the site's allowlisted repairs; it never merges and never mints.`;
     case "site_backup":
