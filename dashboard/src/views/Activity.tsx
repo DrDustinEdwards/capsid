@@ -15,15 +15,30 @@ import { Row, RowList } from "capsomer/react/row-list";
 import "capsomer/group.css";
 import "capsomer/row-list.css";
 import { ReadAgain } from "capsomer/react/read-state";
-import { PageHead, ProjectSelect } from "./shared";
-import { trendChart } from "./charts";
+import { ProjectSelect } from "./shared";
+import { useFigures } from "../lib/trends";
+import { boardChart, trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 
 const MinutesTile = trendChart("MinutesTile");
+const ServerFigure = boardChart("ServerFigure");
+
+function WhoActed() {
+  const figs = useFigures("agents");
+  const d = figs.data;
+  if (!d) return null;
+  if (!d.figures.who_acted)
+    return <p className="cap-text">{d.empty.who_acted ?? "No one acted."}</p>;
+  return (
+    <ChartSlot>
+      <ServerFigure html={d.figures.who_acted} narrow={d.figures.who_acted_weeks} />
+    </ChartSlot>
+  );
+}
 
 export function Activity() {
   const { feed, now: appNow } = useApp();
-  const filters = useUrlFilters(["namespace", "actor"] as const);
+  const filters = useUrlFilters(["namespace", "actor"] as const, { fixed: { tab: "activity" } });
   const { namespace, actor } = filters.applied;
   const { namespace: nsInput, actor: actorInput } = filters.input;
 
@@ -42,9 +57,9 @@ export function Activity() {
   ].sort();
 
   return (
-    <div className="cap-admin-page">
-      <PageHead title="Activity" />
+    <div className="cap-stack">
       <WeeklyDigest />
+      <WhoActed />
       <form
         className="cap-cluster"
         data-gap="3"
@@ -116,7 +131,7 @@ export function Activity() {
         {!data && load.loading ? (
           <Spinner layout="page" label="Reading the activity..." />
         ) : data && data.rows.length ? (
-          <div className="cap-table-wrap">
+          <div className="cap-table-wrap" data-reflow="">
             <table className="cap-table">
               <thead>
                 <tr>
@@ -136,21 +151,25 @@ export function Activity() {
                     data-open={`audit:${r.id}`}
                     tabIndex={0}
                   >
-                    <td className="cap-num" title={utc(parse(r.at))}>
+                    <td data-label="When" className="cap-num" title={utc(parse(r.at))}>
                       {ago(parse(r.at), now)}
                     </td>
-                    <td className="cap-mono">
-                      {r.actor ?? <Missing />}
+                    <td data-label="Who" className="cap-mono">
+                      {r.actor ?? <Missing reason="the row names no actor">unrecorded</Missing>}
                       {r.client && <div className="src">via {r.client}</div>}
                     </td>
-                    <td>
+                    <td data-label="What">
                       {actionWords(r.action) ?? (
                         <span className="cap-mono">{r.action ?? <Missing />}</span>
                       )}
                       {actionWords(r.action) && <div className="src cap-mono">{r.action}</div>}
                     </td>
-                    <td className="cap-mono">{r.namespace ?? <Missing />}</td>
-                    <td className="cap-mono wrap">{r.path ?? <Missing />}</td>
+                    <td data-label="Project" className="cap-mono">
+                      {r.namespace ?? <Missing />}
+                    </td>
+                    <td data-label="Path" className="cap-mono wrap">
+                      {r.path ?? <Missing />}
+                    </td>
                   </tr>
                 ))}
               </tbody>

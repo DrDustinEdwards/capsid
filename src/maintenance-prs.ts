@@ -5,9 +5,8 @@ import type { MaintenanceItem } from "./maintenance";
 import { HOUR_MS, days } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The daily maintenance pass's pull request rules: a green pull request still open is waiting for the
-// seat (shown with its age); A read that fails is listed as "not checked", so a missing read never
-// passes as clean.
+// The daily maintenance pass's pull request rule: a pull request red too long. A read that fails is
+// listed as "not checked", so a missing read never passes as clean.
 
 const RED_HOURS = 48;
 // Open pull requests read per repo. More are reported as not checked, not silently cut.
@@ -39,18 +38,6 @@ export interface PrReaders {
     repo: string,
     check: PrCheck,
   ): Promise<{ step: string | null; problem: string | null }>;
-}
-
-export function greenAwaitingSeat(namespace: string, prs: OpenPr[], now: Date): MaintenanceItem[] {
-  return prs
-    .filter((pr) => !pr.draft && ciVerdict(pr.checks).conclusion === "success")
-    .sort((a, b) => a.created_at.localeCompare(b.created_at))
-    .map((pr) => ({
-      rule: "pr-awaiting-seat" as const,
-      namespace,
-      pr: pr.url,
-      line: `${pr.url} is green and has been open ${days(now.getTime() - Date.parse(pr.created_at))}: merge it or say why it waits.`,
-    }));
 }
 
 /**
@@ -95,7 +82,6 @@ export async function gatherPrItems(
     }
     read[namespace] = got.prs.length;
     if (got.problem) items.push(notChecked(namespace, got.problem));
-    items.push(...greenAwaitingSeat(namespace, got.prs, now).slice(0, MAX_ITEMS_PER_RULE));
     for (const { pr, since, check } of redTooLong(got.prs, now).slice(0, MAX_ITEMS_PER_RULE)) {
       let where: string;
       try {

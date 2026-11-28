@@ -1,8 +1,7 @@
 import { heatStrip, timeline, type TimelineEvent } from "enarratio";
 import { areaChart } from "enarratio/lite/area";
-import { barChart } from "enarratio/lite/bar";
 import { lineChart } from "enarratio/lite/line";
-import { ChartFrame, ChartPanel } from "capsomer/react/chart-frame";
+import { ChartFrame } from "capsomer/react/chart-frame";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { padRing } from "capsomer/behavior/uptime-strip";
@@ -89,56 +88,6 @@ function Unread({ what, error }: { what: string; error: string | null }) {
     <p className="cap-text" data-tone="dim">
       {what} could not be read: {error}
     </p>
-  );
-}
-
-const MERGE_KINDS = ["seat", "closed"] as const;
-const MERGE_NAME: Record<(typeof MERGE_KINDS)[number], string> = {
-  seat: "Merged by you",
-  closed: "Closed unmerged",
-};
-
-// Enarratio's bar chart has no event marker, so each rollback is listed under it.
-export function MergesChart() {
-  const { data, error, loading } = useTrends();
-  if (loading && !data) return null;
-  if (!data) return <Unread what="Merges per week" error={error} />;
-  const weeks = data.merges.weeks;
-  const rollbacks = data.merges.rollbacks;
-  const rows = weeks.flatMap((w) =>
-    MERGE_KINDS.map((k) => ({
-      week: w.week.slice(5),
-      kind: MERGE_NAME[k],
-      pulls: w[k],
-    })),
-  );
-  const total = (k: (typeof MERGE_KINDS)[number]) => weeks.reduce((a, w) => a + w[k], 0);
-  const merged = total("seat");
-  const opts = {
-    data: rows,
-    x: "week",
-    y: "pulls",
-    series: "kind",
-    seriesDomain: MERGE_KINDS.map((k) => MERGE_NAME[k]),
-    layout: "stacked",
-    // ISO week without its year, so eight fit a phone.
-    xLabel: `ISO week, ${weeks[0]!.week.slice(0, 4)} on`,
-    yLabel: "Pull requests",
-    height: 240,
-    title: "Merges per week",
-    subtitle: `${merged} merged and ${total("closed")} closed unmerged in ${weeks.length} weeks.`,
-    alt: `Pull requests merged or closed per week for ${weeks.length} weeks: ${merged} merged, ${total("closed")} closed unmerged. ${rollbacks.length} ${rollbacks.length === 1 ? "rollback" : "rollbacks"}.`,
-    caption: rollbacks.length
-      ? `Rollbacks: ${rollbacks.map((r) => `${r.at.slice(0, 10)} ${r.repo}${r.pr === null ? "" : ` #${r.pr}`}${r.outcome === "rollback_failed" ? " (rollback failed)" : ""}`).join("; ")}.`
-      : "No deploy was rolled back in this window.",
-    source: { name: "Audit log, weekly" },
-  } as const;
-  return (
-    <ChartPanel
-      id="merge-trend"
-      stale={error}
-      draw={(width, fit) => barChart({ ...opts, width, ...fit })}
-    />
   );
 }
 
@@ -322,7 +271,6 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
 
 // As if it started when the plan was read: the plan holds estimates, not a start time, and the axis is a UTC clock.
 // Heavy lanes share one session so run in turn; the window runs a tenth past the end so the last tick is not on the edge.
-const missing = (v: number): string => (v >= 1 ? "missing" : "kept");
 
 export function BackupSlots() {
   const { data, error, loading } = useTrends();
@@ -340,24 +288,25 @@ export function BackupSlots() {
         ) : (
           (
             [
-              ["Daily", "14 days", b.slots.daily],
-              ["Weekly", "8 weeks", b.slots.weekly],
-              ["Monthly", "6 months", b.slots.monthly],
+              ["Daily", `${b.slots.daily.length} days`, b.slots.daily],
+              ["Weekly", `${b.slots.weekly.length} weeks`, b.slots.weekly],
+              ["Monthly", `${b.slots.monthly.length} months`, b.slots.monthly],
             ] as const
           ).map(([name, span, slots]) => {
             const kept = slots.filter((s) => s.filled).length;
             const opts = {
-              values: slots.map((s) => (s.filled ? 0 : 1)),
+              values: slots.map((s) => (s.filled ? 1 : null)),
               min: 0,
               max: 1,
               title: name,
               subtitle: `${kept} of ${slots.length} kept`,
               label: `${name} backups, the last ${span}`,
-              source: { name: "backup bucket, complete runs" },
               height: 20,
               cellLabels: slots.map((s) => s.key),
-              formatValue: missing,
-            };
+              formatValue: () => "kept",
+              csv: false,
+              summary: false,
+            } as const;
             return (
               <ChartFrame
                 key={name}
@@ -366,6 +315,12 @@ export function BackupSlots() {
               />
             );
           })
+        )}
+        {b?.slots && (
+          <p className="cap-text slot-key" data-tone="dim">
+            <span className="slot-swatch" data-kept="" aria-hidden="true" /> kept{" "}
+            <span className="slot-swatch" aria-hidden="true" /> missing
+          </p>
         )}
       </div>
     </Panel>
@@ -422,9 +377,10 @@ export function CiHistory() {
                 notes: r.truncated ? "Over 100 runs; early days may be missing some." : undefined,
                 height: 20,
                 cellLabels: r.days.map((d) => d.day),
-                source: { name: "GitHub Actions, default branch runs" },
                 formatValue: (v: number) => (v >= 1 ? "red" : "green"),
-              };
+                csv: false,
+                summary: false,
+              } as const;
               return (
                 <div key={r.namespace} data-ci={r.namespace}>
                   <ChartFrame inline draw={(width, fit) => heatStrip({ ...opts, width, ...fit })} />

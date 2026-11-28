@@ -72,11 +72,14 @@ export function installDemoFetch(): void {
 }
 
 /** The captured file a demo read answers from: "/x?..." is /demos/api/x.json (the query is not
- *  kept), and a package's history (/packages/history?name=<package>) its own file. */
+ *  kept), a package's history (/packages/history?name=<package>) its own file, and a chart set
+ *  (/figures?set=<set>) its own. */
 export function demoFile(path: string): string {
   const url = new URL(path, "https://demo.invalid");
   const pkg = url.pathname === "/packages/history" ? url.searchParams.get("name") : null;
-  return `${DEMO_BASE}/api${url.pathname}${pkg ? `/${demoFileName(pkg)}` : ""}.json`;
+  const set = url.pathname === "/figures" ? url.searchParams.get("set") : null;
+  const own = pkg ?? set;
+  return `${DEMO_BASE}/api${url.pathname}${own ? `/${demoFileName(own)}` : ""}.json`;
 }
 
 /** A captured answer with every time moved to now. */

@@ -6,7 +6,7 @@ import { useLocation, useSearchString } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { hasSites } from "../lib/derive";
 import { incidents } from "../lib/incidents";
-import { ago } from "../lib/format";
+import { DAY } from "../lib/format";
 import { Glyph, Status } from "capsomer/react/status";
 import { ChartSlot } from "../ui/ChartSlot";
 
@@ -127,10 +127,12 @@ export function IncidentFeed({ ns }: { ns?: string }) {
   if (ns && ns !== "all") items = items.filter((x) => x.ns === ns);
   if (!items.length)
     return <Empty kind="all-clear" title="No watcher findings in the live window." />;
+  const oldest = Math.max(DAY, ...items.map((it) => now - it.at));
   return (
     <div className="feed">
       {items.map((it) => {
         const kind = it.open ? it.sev : "ok";
+        const open = Math.max(0, now - it.at);
         return (
           <div
             className={kind === "crit" ? "frow sev-crit" : "frow"}
@@ -145,13 +147,20 @@ export function IncidentFeed({ ns }: { ns?: string }) {
             <div className="t">
               <b>{it.title}</b>
               <div className="sub">
-                <span className="ns">{it.ns}</span> · {it.open ? "open" : "closed"}, {it.status}
+                <span className="ns">{it.ns}</span> ·{" "}
+                {it.status === "open" ? (it.open ? "open" : "closed") : it.status}
               </div>
             </div>
             <div className="m">
-              first seen
-              <br />
-              {ago(it.at, now)}
+              {(open / DAY).toFixed(1)} days open
+              <svg
+                className="age-bar"
+                viewBox="0 0 100 6"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                <rect width={Math.max(2, (open / oldest) * 100)} height="6" data-tone={kind} />
+              </svg>
             </div>
           </div>
         );

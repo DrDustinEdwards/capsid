@@ -1337,16 +1337,6 @@
         "archived_at": null
       },
       {
-        "name": "seat",
-        "kind": "seat",
-        "namespaces": "*",
-        "flags": ["can_merge"],
-        "last_seen": "2026-09-28T11:22:00.000Z",
-        "revoked_at": null,
-        "pending": false,
-        "archived_at": null
-      },
-      {
         "name": "watcher",
         "kind": "cron",
         "namespaces": "*",

@@ -1,6 +1,6 @@
 import type { InboxApp, InboxItem, OpsFeed } from "../types";
 
-export type Entry = { app: InboxApp; item: InboxItem };
+type Entry = { app: InboxApp; item: InboxItem };
 
 // Read once for the header's count and Needs you's list, so the two cannot differ.
 export function useWaiting(feed: OpsFeed | null) {

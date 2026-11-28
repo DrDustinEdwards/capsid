@@ -21,3 +21,8 @@ export function externalFence(source: string, ref: string, text: string, maxText
   );
   return `${OPEN} source=${source} ref=${cleanRef}\n${body}\n${FENCE}`;
 }
+
+export function unfence(text: string): string {
+  const m = text.match(/^~~~external source=[a-z][a-z0-9-]{0,31} ref=[^\n]*\n([\s\S]*)\n~~~$/);
+  return m ? m[1]!.replace(/^([ \t]{0,3})\\(~{3,})/gm, "$1$2") : text;
+}

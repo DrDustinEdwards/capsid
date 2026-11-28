@@ -32,7 +32,6 @@ export function ProjectForm({
       : editing.row.repos.map((r) => draftRow(r.repo, r.label)),
   );
   const [cascade, setCascade] = useState(false);
-  const [policies, setPolicies] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
 
   const submit = () => {
@@ -66,7 +65,6 @@ export function ProjectForm({
   const remove = () => {
     const params: Record<string, string> = { namespace: ns };
     if (cascade) params.cascade = "true";
-    if (policies) params.allow_improve_paths = "true";
     confirm({
       action: "namespace_remove",
       params,
@@ -93,14 +91,6 @@ export function ProjectForm({
                 onChange={(e) => setCascade(e.target.checked)}
               />{" "}
               Also delete its live documents (each is saved as a version first)
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={policies}
-                onChange={(e) => setPolicies(e.target.checked)}
-              />{" "}
-              Also delete its signed policy documents
             </label>
             <button
               type="button"

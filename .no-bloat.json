@@ -12,7 +12,7 @@
     }
   ],
   "baseline": {
-    "measured_at": "458af03",
+    "measured_at": "a1a84a9",
     "knip (Worker)": {},
     "knip (dashboard)": {},
     "jscpd": {
@@ -30,7 +30,6 @@
       "dashboard/dev/mock-api.ts": 2087,
       "dashboard/src/app/App.tsx": 585,
       "dashboard/src/views/SiteTraffic.tsx": 605,
-      "dashboard/src/views/TrendCharts.tsx": 515,
       "explorer/src/explorer.css": 1435,
       "explorer/src/pages.mjs": 810,
       "scripts/verify-live.mjs": 671,
@@ -38,8 +37,8 @@
       "test/fakes.ts": 1232
     },
     "tests": {
-      "files": 202,
-      "cases": 1279
+      "files": 204,
+      "cases": 1290
     },
     "comments": {
       "lines": 5120,

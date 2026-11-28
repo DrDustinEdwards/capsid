@@ -76,7 +76,7 @@ function HealthVerdict() {
       )}
       named={NAMED}
       more={(rest) => (
-        <button type="button" className="cap-link-btn" onClick={() => open("view:needs#attention")}>
+        <button type="button" className="cap-link-btn" onClick={() => open("view:board#attention")}>
           {rest} more
         </button>
       )}

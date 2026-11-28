@@ -43,6 +43,10 @@ export interface LibraryEntry {
   updated_at: string;
 }
 
+export interface LibraryHandoff extends LibraryEntry {
+  open: boolean;
+}
+
 interface LibraryHit extends LibraryEntry {
   // FTS5 snippet: matched words between U+0002 and U+0003 (LIBRARY_MARK_OPEN/CLOSE), gaps as " ... ".
   snippet: string;
@@ -60,6 +64,8 @@ export type PortalLibrary =
       generated: string;
       shelves: Record<LibraryShelf, LibraryEntry[]>;
       truncated: boolean;
+      handoffs: LibraryHandoff[];
+      handoffs_truncated: boolean;
     }
   | { kind: "search"; generated: string; query: string; rows: LibraryHit[]; truncated: boolean }
   | {
@@ -76,13 +82,6 @@ export interface TrendMinutesWeek {
   start: string; // its Monday, YYYY-MM-DD
   minutes: number;
   sessions: number;
-}
-
-export interface TrendMergeWeek {
-  week: string;
-  start: string;
-  seat: number; // merged by the seat through capsid_close_pr
-  closed: number; // closed without merging, from chat or the Portal
 }
 
 export interface TrendBackupSlot {
@@ -123,15 +122,6 @@ export interface PortalTrends {
   generated: string;
   weeks: number;
   minutes: { weeks: TrendMinutesWeek[]; truncated: boolean; note: string };
-  merges: {
-    weeks: TrendMergeWeek[];
-    rollbacks: Array<{
-      at: string;
-      repo: string;
-      pr: number | null;
-      outcome: "rolled_back" | "rollback_failed";
-    }>;
-  };
   deploys: { repos: TrendDeployRepo[] };
   backups: {
     slots: {
@@ -152,7 +142,6 @@ export interface PortalTrends {
 // GET /portal/api/maintenance -> PortalMaintenance: the last daily pass's findings and actions. A "-not-checked"
 // rule is a failed read, shown so a missing read is never taken for clean.
 export type MaintenanceRule =
-  | "pr-awaiting-seat"
   | "pr-red"
   | "prs-not-checked"
   | "branch-merged"

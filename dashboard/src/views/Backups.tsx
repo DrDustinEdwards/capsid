@@ -1,17 +1,25 @@
 import { Alert, Banner } from "capsomer/react/banner";
-import { trendChart } from "./charts";
+import { boardChart, trendChart } from "./charts";
 import { Fragment, Suspense } from "react";
 import { useApp } from "../app/ctx";
-import { ago } from "../lib/format";
+import { HOUR, ago } from "../lib/format";
 import { formatBytes } from "capsomer/behavior/format";
 import { parse } from "capsomer/behavior/time";
-import { OFFACCOUNT_LATE, OFFACCOUNT_STALE, offaccountState } from "../lib/derive";
+import {
+  BACKUP_STALE_HOURS,
+  BACKUP_TARGET_HOURS,
+  OFFACCOUNT_LATE,
+  OFFACCOUNT_STALE,
+  offaccountState,
+} from "../lib/derive";
+import { Meter } from "capsomer/react/meter";
 import { storeUse } from "../lib/store";
 import { Status } from "capsomer/react/status";
 import { Time } from "capsomer/react/time";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
 import { NoSnapshot } from "./shared";
+import { ChartSlot } from "../ui/ChartSlot";
 import { Spinner } from "capsomer/react/skeleton";
 import { fetchBackups } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
@@ -20,6 +28,76 @@ import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
 
 const BackupSlots = trendChart("BackupSlots");
+const BackupRuns = boardChart("BackupRuns");
+
+function AgeMeters({
+  title,
+  rows,
+  target,
+  stale,
+}: {
+  title: string;
+  rows: Array<{ site: string; hours: number | null }>;
+  target: number;
+  stale: number;
+}) {
+  const missing = rows.filter((r) => r.hours === null).map((r) => r.site);
+  return (
+    <Panel flush title={title}>
+      <div className="body cap-stack" data-gap="3">
+        <ul className="age-meters">
+          {rows.map((r) =>
+            r.hours === null ? null : (
+              <Meter
+                key={r.site}
+                as="li"
+                size="sm"
+                label={r.site}
+                value={Math.min(r.hours, stale)}
+                max={stale}
+                threshold={target}
+                warnAt={target / stale}
+                critAt={1}
+                words={{ warn: `Past the ${target} h target`, crit: `Stale, over ${stale} h` }}
+                valueText={`${r.hours.toFixed(1)} hours; target ${target}, stale after ${stale}.`}
+                display={`${r.hours.toFixed(r.hours < 10 ? 1 : 0)} h`}
+              />
+            ),
+          )}
+        </ul>
+        <p className="cap-text" data-tone="dim">
+          Tick: the {target} h target. The bar ends at {stale} h, stale.
+          {missing.length > 0 && ` None reported for ${missing.join(", ")}.`}
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
+function BackupAges() {
+  const { now } = useApp();
+  const b = useAnswer(["backups"], fetchBackups).data;
+  if (!b) return null;
+  const since = (at: string | null | undefined) =>
+    at ? Math.max(0, (now - parse(at)) / HOUR) : null;
+  const sites = [{ site: "capsid", ...b.capsid, namespace: "capsid" }, ...b.sites];
+  return (
+    <div className="cap-panes" data-even data-gap="5">
+      <AgeMeters
+        title="Backup age"
+        rows={sites.map((s) => ({ site: s.namespace, hours: s.status?.age_hours ?? null }))}
+        target={BACKUP_TARGET_HOURS}
+        stale={BACKUP_STALE_HOURS}
+      />
+      <AgeMeters
+        title="Amazon copy age"
+        rows={sites.map((s) => ({ site: s.namespace, hours: since(s.amazon?.newest) }))}
+        target={OFFACCOUNT_LATE / HOUR}
+        stale={OFFACCOUNT_STALE / HOUR}
+      />
+    </div>
+  );
+}
 
 export function Backups() {
   const { feed, now } = useApp();
@@ -36,6 +114,12 @@ export function Backups() {
   const os = o ? offaccountState(o, now) : null;
   return (
     <div className="cap-stack">
+      <BackupAges />
+      {feed.scheduled.tasks && (
+        <ChartSlot>
+          <BackupRuns tasks={feed.scheduled.tasks} />
+        </ChartSlot>
+      )}
       <div className="cap-panes" data-even data-gap="5">
         <Panel flush title="Primary: Capsid D1">
           <div className="body cap-stack" data-gap="4">

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mappedRepos, whatsNext, type WhatsNextPr } from "../src/whats-next.ts";
+import { mappedRepos, whatsNext } from "../src/whats-next.ts";
+import type { PortalPr } from "../src/ops-types/board.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
 
 const NOW = new Date("2026-10-10T12:00:00.000Z");
@@ -89,7 +90,7 @@ function github(full: string, prs: PrFixture[]): Record<string, Route> {
   return routes;
 }
 
-const byNumber = (prs: WhatsNextPr[], n: number) => {
+const byNumber = (prs: PortalPr[], n: number) => {
   const found = prs.find((p) => p.number === n);
   assert.ok(found, `pull request #${n} is missing from the answer`);
   return found;
@@ -127,7 +128,7 @@ test("PLANT: a namespace whose mapping does not parse is reported as not checked
   assert.match(notChecked[0], /^sample's repo mapping does not parse/);
 });
 
-test("waiting_on_seat is set only for a non-draft, green, mergeable pull request", async () => {
+test("each pull request carries its CI verdict, draft flag and conflict", async () => {
   const prs: PrFixture[] = [
     { number: 1, checks: GREEN, detail: CLEAN },
     { number: 2, draft: true, checks: GREEN, detail: CLEAN },
@@ -143,11 +144,6 @@ test("waiting_on_seat is set only for a non-draft, green, mergeable pull request
     );
     const all = r.pull_requests.all;
     assert.equal(all.length, prs.length);
-    assert.deepEqual(
-      r.pull_requests.waiting_on_seat.map((p) => p.number),
-      [1],
-      "waiting_on_seat holds the wrong pull requests",
-    );
     assert.equal(byNumber(all, 1).ci, "success");
     assert.equal(byNumber(all, 1).conflict, false);
     assert.equal(byNumber(all, 2).draft, true);
@@ -170,7 +166,7 @@ test("waiting_on_seat is set only for a non-draft, green, mergeable pull request
   });
 });
 
-test("PLANT: a null mergeable is never reported as no conflict, and keeps the pull request off waiting_on_seat", async () => {
+test("PLANT: a null mergeable is never reported as no conflict", async () => {
   const prs: PrFixture[] = [
     { number: 11, checks: GREEN, detail: { mergeable: null, mergeable_state: "unknown" } },
     { number: 12, checks: GREEN, detail: { mergeable: false, mergeable_state: "blocked" } },
@@ -187,13 +183,7 @@ test("PLANT: a null mergeable is never reported as no conflict, and keeps the pu
         null,
         `#${n}: an unknown mergeability was reported as ${String(pr.conflict)}`,
       );
-      assert.equal(
-        pr.waiting_on_seat,
-        false,
-        `#${n} was put on waiting_on_seat with its mergeability unknown`,
-      );
     }
-    assert.deepEqual(r.pull_requests.waiting_on_seat, []);
     assert.deepEqual(r.pull_requests.conflicts, []);
   });
 });
@@ -230,7 +220,6 @@ test("PLANT: a failed mergeability read and a failed check-runs read are named, 
     const pr22 = byNumber(r.pull_requests.all, 22);
     assert.equal(pr22.ci, null, "a check-runs read that failed was reported with a verdict");
     assert.match(pr22.ci_note, /check runs not read: page 1 returned 502/);
-    assert.deepEqual(r.pull_requests.waiting_on_seat, []);
   });
 });
 

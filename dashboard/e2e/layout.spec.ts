@@ -55,7 +55,9 @@ for (const d of DRAWERS) {
     await page.setViewportSize({ width: 1024, height: 900 });
     await visit(page, d.from);
     await page
-      .locator(`main :is([data-open^="${d.type}:"], .cap-row-title a[href*="/${d.type}/"])`)
+      .locator(
+        `main :is([data-open^="${d.type}:"], .cap-row-title a[href*="/${d.type}/"], .cap-chart a[href*="/${d.type}/"])`,
+      )
       .first()
       .click();
     const drawer = page.locator("dialog.drawer[open]");
@@ -92,7 +94,7 @@ test.describe("on a phone", () => {
 });
 
 test("a chart's toolbar shows its inline icons under the Portal's CSP", async ({ page }) => {
-  await page.goto("demos/activity");
+  await page.goto("demos/agents?tab=activity");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   const toolbar = page.getByRole("toolbar", { name: "Chart controls" }).first();
   await expect(toolbar).toBeVisible();

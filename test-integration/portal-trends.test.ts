@@ -27,7 +27,7 @@ async function audit(
 }
 
 describe("the trends series", () => {
-  it("PLANT: minutes and merges are counted from the rows that happened", async () => {
+  it("PLANT: minutes and deploys are counted from the rows that happened", async () => {
     await audit("access:admin@example.com", "write", "2030-01-15 09:00:00");
     await audit("access:admin@example.com", "agent-revoked", "2030-01-15 09:04:00");
     await audit("agent:sample-driver", "write", "2030-01-15 15:00:00");
@@ -74,12 +74,6 @@ describe("the trends series", () => {
     // one-minute sessions an hour apart. The driver's write is none of them.
     expect(thisWeek).toMatchObject({ start: "2030-01-14", sessions: 5, minutes: 9 });
 
-    expect(t.merges.weeks[1]).toEqual({
-      week: t.merges.weeks[1]!.week,
-      start: "2030-01-14",
-      seat: 1,
-      closed: 2,
-    });
     expect(t.deploys.repos).toEqual([
       {
         repo: "example-org/sample",
@@ -93,15 +87,6 @@ describe("the trends series", () => {
         restore_median_seconds: 90,
       },
     ]);
-    expect(t.merges.rollbacks).toEqual([
-      {
-        at: "2030-01-15T10:00:00.000Z",
-        repo: "example-org/sample",
-        pr: 12,
-        outcome: "rolled_back",
-      },
-    ]);
-
     expect(t.backups.error).toBeNull();
     expect(t.backups.slots!.daily.filter((s) => s.filled).map((s) => s.key)).toEqual([
       "2030-01-16",

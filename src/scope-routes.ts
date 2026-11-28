@@ -86,7 +86,13 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/library":
     "the Portal's read-only Library: the knowledge store's shelves, a search and one document with its edges, through the readers behind capsid_find_docs and capsid_read_doc, gated by portalGate",
   "/portal/api/trends":
-    "the Portal's trends for its charts: minutes, merges and rollbacks from D1, backup slots from R2, default-branch CI from GitHub (cached an hour), read-only, gated by portalGate",
+    "the Portal's trends for its charts: minutes and deploy measures from D1, backup slots from R2, default-branch CI from GitHub (cached an hour), read-only, gated by portalGate",
+  "/portal/api/board":
+    "the Portal's Board: open handoffs with their checklists, what waits on Dustin and the threads of the last 21 days, from D1 through the readers behind capsid_admin_whats_next, read-only, gated by portalGate",
+  "/portal/api/prs":
+    "the Portal's open pull requests in every mapped repo with CI, conflicts and same-file overlaps, through the reader behind capsid_admin_whats_next, kept in KV 15 minutes, read-only, gated by portalGate",
+  "/portal/api/figures":
+    "the Portal's server-drawn charts (memory writes, who acted, open problems, backup ages) from D1 and the sites' backup_status, kept in KV 10 minutes, read-only, gated by portalGate",
   "/portal/api/push":
     "the Portal's phone alerts: GET lists the devices with alerts on behind portalGate; POST turns one on or off or sends a test behind the preview's checks (portalGate, same-origin, the body cap, CSRF)",
   "/portal/api/sign-out":

@@ -3,7 +3,8 @@ import { createContext, type RouterContextProvider } from "react-router";
 import { answerOf, ask, type Answer } from "capsomer/react/data";
 import { FEED_KEY, LIVE } from "../lib/api";
 import { pageBase } from "../lib/router";
-import type { OpsFeed } from "../types";
+import type { FigureSet, OpsFeed } from "../types";
+import { figuresKey } from "../lib/trends";
 import type { ViewId } from "../app/ctx";
 import { PUSH_KEY, parseDocParam } from "../lib/keys";
 
@@ -60,15 +61,18 @@ function specsFor(
   const p = url.searchParams;
   const trends: Spec = { key: [LIVE, "trends"], path: "/trends" };
   const namespaces: Spec = { key: [LIVE, "namespaces"], path: "/namespaces" };
+  const figures = (set: FigureSet): Spec => ({ key: figuresKey(set), path: `/figures?set=${set}` });
   const out: Spec[] = [];
   switch (view) {
-    case "needs":
-      out.push(namespaces);
+    case "board":
+      out.push(namespaces, { key: [LIVE, "board"], path: "/board" });
       break;
-    case "health":
+    case "health": {
       out.push(trends, { key: ["maintenance"], path: "/maintenance" });
-      if (p.get("tab") === "resources") out.push({ key: ["resources"], path: "/resources" });
+      const tab = p.get("tab");
+      if (tab === "resources") out.push({ key: ["resources"], path: "/resources" });
       break;
+    }
     case "sites": {
       if (!site) {
         if (p.get("tab") === "deploys") out.push(trends);
@@ -98,23 +102,24 @@ function specsFor(
       out.push(namespaces);
       break;
     case "prs":
-      out.push(trends);
       break;
-    case "activity": {
-      const namespace = p.get("namespace") ?? "";
-      const actor = p.get("actor") ?? "";
-      out.push(
-        {
-          key: ["activity", namespace, actor],
-          path: `/activity${qs({ namespace, actor })}`,
-        },
-        trends,
-      );
+    case "agents": {
+      const tab = p.get("tab");
+      if (!tab || tab === "roster") out.push(figures("roster"));
+      if (tab === "activity") {
+        const namespace = p.get("namespace") ?? "";
+        const actor = p.get("actor") ?? "";
+        out.push(
+          figures("agents"),
+          {
+            key: ["activity", namespace, actor],
+            path: `/activity${qs({ namespace, actor })}`,
+          },
+          trends,
+        );
+      }
       break;
     }
-    case "agents":
-      out.push(trends);
-      break;
     case "packages":
       out.push(
         { key: ["shared-code"], path: "/shared-code" },
@@ -127,7 +132,7 @@ function specsFor(
             path: `/packages/history${qs({ name: pkg.name })}`,
           });
       break;
-    case "library": {
+    case "memory": {
       const q = p.get("q")?.trim() || "";
       const doc = parseDocParam(p.get("doc"));
       const args: Record<string, string> = doc ? { ns: doc.ns, path: doc.path } : q ? { q } : {};
@@ -135,6 +140,8 @@ function specsFor(
         key: ["library", doc?.ns ?? null, doc?.path ?? null, q],
         path: `/library${qs(args)}`,
       });
+      const tab = p.get("tab");
+      if (!doc && !q && (!tab || tab === "handoffs")) out.push(figures("memory"));
       break;
     }
     case "settings":

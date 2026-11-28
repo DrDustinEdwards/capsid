@@ -20,7 +20,6 @@ import { KIND_STATUS } from "../lib/derive";
 const RULE: Record<MaintenanceRule, { kind: Kind; label: string; order: number }> = {
   "pr-red": { kind: "crit", label: "Red PR", order: 0 },
   "undeployed-merge": { kind: "warn", label: "Not deployed", order: 2 },
-  "pr-awaiting-seat": { kind: "warn", label: "PR waiting", order: 3 },
   "branch-merged": { kind: "warn", label: "Merged branch", order: 7 },
   "branch-stale": { kind: "warn", label: "Old branch", order: 8 },
   "model-drift": { kind: "warn", label: "Model drift", order: 8 },
@@ -45,7 +44,11 @@ export function Maintenance() {
   const load = useAnswer<PortalMaintenance>(["maintenance"], fetchMaintenance);
 
   const data = load.data;
-  const items = data ? [...data.items].sort((a, b) => RULE[a.rule].order - RULE[b.rule].order) : [];
+  const items = data
+    ? data.items
+        .filter((i) => Object.hasOwn(RULE, i.rule))
+        .sort((a, b) => RULE[a.rule].order - RULE[b.rule].order)
+    : [];
   const crit = items.filter((i) => RULE[i.rule].kind === "crit").length;
   const shown = more ? items : items.slice(0, Math.max(ROWS, crit));
   const hidden = items.length - shown.length;

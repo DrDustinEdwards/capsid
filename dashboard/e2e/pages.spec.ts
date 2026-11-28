@@ -1,0 +1,76 @@
+import { expect, test, type Page } from "@playwright/test";
+import { visit } from "./views.ts";
+
+const chart = (page: Page, title: string) =>
+  page.locator(".cap-chart").filter({ has: page.locator("figcaption", { hasText: title }) });
+
+test("Memory: the handoffs tab draws the year's writes and the weekly handoffs, and filters the list", async ({
+  page,
+}) => {
+  await visit(page, "memory");
+  await expect(page.getByRole("link", { name: "Handoffs", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(
+    chart(page, "How often is memory written?").first().locator("svg[role='img']"),
+  ).toBeVisible();
+  await expect(
+    chart(page, "How often are handoffs written?").locator("svg[role='img']"),
+  ).toHaveCount(1);
+  const rows = page.locator("#memory-handoffs tbody tr");
+  await expect(rows).toHaveCount(6);
+  await page.getByLabel("Filter handoffs").fill("drill");
+  await expect(rows).toHaveCount(1);
+  await page.getByRole("link", { name: "Decisions" }).click();
+  await expect(page.locator("#memory-decisions")).toBeVisible();
+  await page.getByRole("link", { name: "Search", exact: true }).click();
+  await page.getByRole("searchbox", { name: "Search memory" }).fill("quokka");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(page.locator("#memory-results li")).toHaveCount(3);
+});
+
+test("Pull requests: every open one in a table, oldest first, each linking to GitHub", async ({
+  page,
+}) => {
+  await visit(page, "prs");
+  const table = page.getByRole("table", { name: "Data for: Open pull requests" });
+  await expect(table.locator("tbody tr")).toHaveCount(5);
+  await expect(table.locator("tbody th").first()).toContainText("Draft: backup drill notes");
+  await expect(table.getByRole("link", { name: /Rebuild the search index/ })).toHaveAttribute(
+    "href",
+    "https://github.com/example-org/sample-b/pull/12",
+  );
+  await expect(page.locator("#open-prs").getByText(/as of/)).toBeVisible();
+});
+
+test("Agents: a roster row opens the agent's drawer, and Activity shows who acted", async ({
+  page,
+}) => {
+  await visit(page, "agents");
+  const roster = page.getByRole("table", { name: "Data for: Live agents" });
+  await expect(roster.locator("tbody tr")).toHaveCount(6);
+  await roster.getByRole("link", { name: "watcher", exact: true }).click();
+  await expect(page.locator("dialog.drawer[open]")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "Activity" }).click();
+  await expect(
+    chart(page, "Who acted, last 30 days").first().locator("svg[role='img']"),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
+});
+
+test("Health: findings with how long each has been open, and the backups' ages against their targets", async ({
+  page,
+}) => {
+  await visit(page, "health");
+  await expect(page.locator("#problems .frow").first()).toContainText("days open");
+  await page.getByRole("link", { name: "Backups" }).click();
+  const age = page.locator(".cap-panel", {
+    has: page.getByRole("heading", { name: "Backup age" }),
+  });
+  await expect(age.getByRole("meter")).toHaveCount(2);
+  await expect(age.getByText("Past the 26 h target")).toBeVisible();
+  await expect(chart(page, "Backup runs, last 14 days").locator("svg[role='img']")).toHaveCount(1);
+  await expect(page.getByText("Weekly", { exact: true })).toBeVisible();
+});

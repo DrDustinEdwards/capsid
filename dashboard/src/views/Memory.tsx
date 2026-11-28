@@ -1,5 +1,5 @@
 import { parseDocParam } from "../lib/keys";
-import { type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { FilterBar, withParams } from "capsomer/react/filter-bar";
 import { Empty } from "capsomer/react/empty";
 import { Spinner } from "capsomer/react/skeleton";
@@ -7,14 +7,19 @@ import { Panel } from "capsomer/react/panel";
 import { Snippet } from "capsomer/react/search-results";
 import "capsomer/search-results.css";
 import "capsomer/filter-bar.css";
-import "./Library.css";
+import "./Memory.css";
 import { Link, useLocation, useSearchString } from "../lib/router";
-import { routePath, useApp } from "../app/ctx";
+import { MEMORY_TABS, routePath, tabOf, useApp, type MemoryTab } from "../app/ctx";
 import { fetchLibrary } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
-import type { LibraryEntry, LibraryShelf, PortalLibrary } from "../types";
+import type { LibraryEntry, LibraryHandoff, LibraryShelf, PortalLibrary } from "../types";
+import { useFigures } from "../lib/trends";
+import { PageTabs, useTabParam } from "../ui/pagetabs";
+import { ChartSlot } from "../ui/ChartSlot";
+import { boardChart } from "./charts";
+import { memoryDocHref } from "./memory-links";
 import { Status } from "capsomer/react/status";
 import { PageHead } from "./shared";
 
@@ -24,15 +29,17 @@ const SHELVES: Array<{ id: LibraryShelf; title: string; none: string }> = [
   { id: "research", title: "Research", none: "No research yet." },
 ];
 
-function docParam(ns: string, path: string): string {
-  return `${ns}/${path}`;
-}
+const plainSnippet = (text: string) =>
+  text
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/(^|\n)\s*(?:#{1,6}|>|[-*+]|\d+\.)\s+/g, "$1")
+    .replace(/(^|\s)#{1,6}\s+/g, "$1")
+    .replace(/(\*\*|__|\*|`)/g, "");
 
-function docHref(ns: string, path: string): string {
-  return `${routePath("library")}?${new URLSearchParams({ doc: docParam(ns, path) }).toString()}`;
-}
+const WritesFigure = boardChart("ServerFigure");
+const HandoffWeeksChart = boardChart("HandoffWeeksChart");
 
-export function Library() {
+export function Memory() {
   const { now } = useApp();
   const search = useSearchString();
   const [, navigate] = useLocation();
@@ -41,6 +48,8 @@ export function Library() {
   const doc = parseDocParam(params.get("doc"));
   const docNs = doc?.ns ?? null;
   const docPath = doc?.path ?? null;
+  const tabParam = useTabParam();
+  const tab: MemoryTab = q ? "search" : (tabOf(MEMORY_TABS, tabParam) ?? MEMORY_TABS[0].id);
   const load = useAnswer<PortalLibrary>(["library", docNs, docPath, q], () =>
     fetchLibrary(
       docNs !== null && docPath !== null ? { ns: docNs, path: docPath } : q ? { q } : null,
@@ -49,53 +58,162 @@ export function Library() {
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const next = String(new FormData(e.currentTarget).get("q") ?? "");
-    navigate(withParams(routePath("library"), { q: next }));
+    navigate(withParams(routePath("memory"), { tab: "search", q: next }));
   };
   const data = load.data;
+  const shelf = SHELVES.find((s) => s.id === tab);
   return (
     <div className="cap-admin-page">
-      <PageHead title="Library" />
-      {/* The address changed (back, a link): the field follows it, so the bar starts over. */}
-      <FilterBar
-        key={q}
-        label="Search the knowledge store"
-        onSubmit={submit}
-        applyLabel="Search"
-        clearLabel="All shelves"
-        clearHref={q || doc ? routePath("library") : null}
-        renderLink={(props) => <Link {...props} />}
-      >
-        <input
-          className="search"
-          type="search"
-          name="q"
-          aria-label="Search the knowledge store"
-          defaultValue={q}
-        />
-      </FilterBar>
+      <PageHead title="Memory" />
+      {!doc && <PageTabs label="Memory" path="/memory" tabs={MEMORY_TABS} current={tab} />}
+      {tab === "search" && !doc && (
+        // The address changed (back, a link): the field follows it, so the bar starts over.
+        <FilterBar
+          key={q}
+          label="Search memory"
+          onSubmit={submit}
+          applyLabel="Search"
+          clearLabel="Clear"
+          clearHref={q ? `${routePath("memory")}?tab=search` : null}
+          renderLink={(props) => <Link {...props} />}
+        >
+          <input
+            className="search"
+            type="search"
+            name="q"
+            aria-label="Search memory"
+            defaultValue={q}
+          />
+        </FilterBar>
+      )}
       {load.loading ? (
-        <Spinner layout="page" label="Reading the library" />
+        <Spinner layout="page" label="Reading memory" />
       ) : load.error ? (
         <p role="alert">
-          <Status tone="crit">Could not read the library: {load.error}</Status>
+          <Status tone="crit">Could not read memory: {load.error}</Status>
         </p>
       ) : !data ? null : data.kind === "document" ? (
         <DocumentView data={data} now={now} />
       ) : data.kind === "search" ? (
         <Results data={data} now={now} />
-      ) : (
+      ) : tab === "search" ? null : shelf ? (
         <>
-          {SHELVES.map((s) => (
-            <Shelf key={s.id} title={s.title} none={s.none} rows={data.shelves[s.id]} now={now} />
-          ))}
+          <Shelf title={shelf.title} none={shelf.none} rows={data.shelves[shelf.id]} now={now} />
           {data.truncated && (
             <p className="cap-text shared-read" data-tone="dim">
               The shelves show the first 500 documents; search for the rest.
             </p>
           )}
         </>
+      ) : (
+        <>
+          <Handoffs rows={data.handoffs} truncated={data.handoffs_truncated} now={now} />
+          <MemoryCharts />
+        </>
       )}
     </div>
+  );
+}
+
+function MemoryCharts() {
+  const figs = useFigures("memory");
+  const d = figs.data;
+  if (!d)
+    return figs.error ? (
+      <p className="cap-text" data-tone="dim">
+        The charts could not be read: {figs.error}
+      </p>
+    ) : null;
+  return (
+    <div className="cap-stack" data-gap="5">
+      <ChartSlot>
+        {d.handoff_weeks && <HandoffWeeksChart weeks={d.handoff_weeks} />}
+        {d.figures.writes ? (
+          <WritesFigure html={d.figures.writes} narrow={d.figures.writes_recent} />
+        ) : (
+          <p className="cap-text">{d.empty.writes ?? "No writes."}</p>
+        )}
+      </ChartSlot>
+    </div>
+  );
+}
+
+function Handoffs({
+  rows,
+  truncated,
+  now,
+}: {
+  rows: LibraryHandoff[];
+  truncated: boolean;
+  now: number;
+}) {
+  const [filter, setFilter] = useState("");
+  const f = filter.trim().toLowerCase();
+  const shown = f
+    ? rows.filter((r) => `${r.title ?? ""} ${r.namespace}/${r.path}`.toLowerCase().includes(f))
+    : rows;
+  const open = rows.filter((r) => r.open).length;
+  return (
+    <Panel
+      flush
+      title="Handoffs"
+      id="memory-handoffs"
+      count={rows.length}
+      footer={
+        <span className="cap-text" data-tone="dim">
+          {open} open{truncated ? `; the newest ${rows.length} are listed` : ""}
+        </span>
+      }
+    >
+      <div className="body">
+        <label className="cap-sr-only" htmlFor="handoff-filter">
+          Filter handoffs
+        </label>
+        <input
+          id="handoff-filter"
+          className="search"
+          type="search"
+          placeholder="Filter handoffs"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      </div>
+      {shown.length ? (
+        <table className="cap-table lib-table">
+          <caption className="cap-sr-only">Handoffs, open first</caption>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th className="c-where">Where</th>
+              <th>State</th>
+              <th className="c-when">Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((r) => (
+              <tr key={`${r.namespace}/${r.path}`}>
+                <td>
+                  <Link href={memoryDocHref(r.namespace, r.path)}>{r.title || r.path}</Link>
+                </td>
+                <td className="c-where">
+                  <span className="cap-mono">
+                    {r.namespace}/{r.path}
+                  </span>
+                </td>
+                <td>
+                  {r.open ? <Status tone="info">open</Status> : <Status tone="muted">older</Status>}
+                </td>
+                <td className="c-when">{ago(parse(r.updated_at), now)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="cap-text shared-none" data-tone="dim">
+          {f ? "No handoff matches." : "No handoff yet."}
+        </p>
+      )}
+    </Panel>
   );
 }
 
@@ -103,7 +221,7 @@ function EntryRow({ row, now }: { row: LibraryEntry; now: number }) {
   return (
     <tr>
       <td>
-        <Link href={docHref(row.namespace, row.path)}>{row.title || row.path}</Link>
+        <Link href={memoryDocHref(row.namespace, row.path)}>{row.title || row.path}</Link>
       </td>
       <td className="c-where">
         <span className="cap-mono">
@@ -126,7 +244,7 @@ function Shelf({
   rows: LibraryEntry[];
   now: number;
 }) {
-  const id = `library-${title.toLowerCase()}`;
+  const id = `memory-${title.toLowerCase()}`;
   return (
     <Panel
       flush
@@ -171,7 +289,7 @@ function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" 
     <Panel
       flush
       title="Results"
-      id="library-results"
+      id="memory-results"
       section="Results"
       footer={
         <span className="cap-text" data-tone="dim">
@@ -184,7 +302,7 @@ function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" 
       <ol className="lib-results">
         {data.rows.map((r) => (
           <li key={`${r.namespace}/${r.path}`}>
-            <Link href={docHref(r.namespace, r.path)}>
+            <Link href={memoryDocHref(r.namespace, r.path)}>
               <b>{r.title || r.path}</b>
             </Link>{" "}
             <span className="cap-text cap-mono" data-tone="dim">
@@ -194,7 +312,7 @@ function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" 
               · {r.type} · {ago(parse(r.updated_at), now)}
             </span>
             <div className="cap-search-snippet">
-              <Snippet text={r.snippet} />
+              <Snippet text={plainSnippet(r.snippet)} />
             </div>
           </li>
         ))}
@@ -229,7 +347,7 @@ function DocumentView({
     <Panel
       flush
       title={d.title || d.path}
-      id="library-document"
+      id="memory-document"
       section="Document"
       src={
         <>
@@ -249,7 +367,7 @@ function DocumentView({
               <span className="cap-text" data-tone="dim">
                 {e.type} {e.dir}
               </span>{" "}
-              <Link href={docHref(e.ns, e.path)}>
+              <Link href={memoryDocHref(e.ns, e.path)}>
                 <span className="cap-mono">
                   {e.ns}/{e.path}
                 </span>

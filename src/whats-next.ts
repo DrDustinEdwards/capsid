@@ -4,6 +4,7 @@ import { ciVerdict, readAllPages, readCheckRuns } from "./github/pr-files";
 import { readSnapshot } from "./ops-snapshot";
 import { externalFence } from "./provenance";
 import { board } from "./board";
+import type { PortalPr } from "./ops-types/board";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 // WHAT NEEDS ME (capsid/research/design-mcp-servers.md, section 3: "the ruling's 'what needs me'":
@@ -23,21 +24,6 @@ interface RawPr {
   created_at: string;
   user?: { login?: string } | null;
   head: { sha: string; ref: string };
-}
-
-export interface WhatsNextPr {
-  repo: string;
-  namespace: string;
-  number: number;
-  url: string;
-  title: string;
-  author: string | null;
-  draft: boolean;
-  created_at: string;
-  ci: string | null;
-  ci_note: string;
-  conflict: boolean | null;
-  waiting_on_seat: boolean;
 }
 
 /** The repos each registered namespace maps, deduplicated across namespaces. */
@@ -72,7 +58,7 @@ async function openPrs(
   namespace: string,
   full: string,
   notChecked: string[],
-): Promise<WhatsNextPr[]> {
+): Promise<PortalPr[]> {
   const [owner, repo] = full.split("/");
   const listed = await readAllPages<RawPr>(
     env,
@@ -83,7 +69,7 @@ async function openPrs(
     LIST_MAX_PAGES,
   );
   if (listed.problem) notChecked.push(`${full} open pull requests: ${listed.problem}`);
-  const out: WhatsNextPr[] = [];
+  const out: PortalPr[] = [];
   for (const pr of listed.items.slice(0, PRS_PER_REPO)) {
     const checks = await readCheckRuns(env, owner, repo, pr.head.sha, CHECKS_MAX_PAGES);
     const verdict = checks.problem
@@ -114,16 +100,16 @@ async function openPrs(
       ci: verdict.conclusion,
       ci_note: verdict.note,
       conflict,
-      waiting_on_seat: pr.draft !== true && verdict.conclusion === "success" && conflict === false,
     });
   }
   return out;
 }
 
-export async function whatsNext(env: Env, now: Date = new Date()) {
-  const notChecked: string[] = [];
-
-  const prs: WhatsNextPr[] = [];
+export async function readOpenPrs(
+  env: Env,
+  notChecked: string[],
+): Promise<{ prs: PortalPr[]; repos_read: number }> {
+  const prs: PortalPr[] = [];
   let repos: Array<{ namespace: string; repo: string }> = [];
   try {
     repos = await mappedRepos(env.DB, notChecked);
@@ -145,6 +131,12 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
       notChecked.push(`${repo}: ${errorMessage(err)}`);
     }
   }
+  return { prs, repos_read: Math.min(repos.length, REPOS_MAX) };
+}
+
+export async function whatsNext(env: Env, now: Date = new Date()) {
+  const notChecked: string[] = [];
+  const { prs, repos_read } = await readOpenPrs(env, notChecked);
 
   let checks: Array<{ id: string; state: string; findings: string[] }> = [];
   let passAt: string | null = null;
@@ -163,11 +155,10 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
     as_of: now.toISOString(),
     ...coordinator,
     pull_requests: {
-      waiting_on_seat: prs.filter((p) => p.waiting_on_seat),
       red: prs.filter((p) => p.ci === "failure"),
       conflicts: prs.filter((p) => p.conflict === true),
       all: prs,
-      repos_read: Math.min(repos.length, REPOS_MAX),
+      repos_read,
     },
     checks: { pass_at: passAt, failing: checks },
     not_checked: notChecked,

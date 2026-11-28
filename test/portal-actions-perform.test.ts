@@ -20,6 +20,13 @@ import {
 } from "../src/portal-actions.ts";
 import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
 import { handlePortalTrends, PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
+import {
+  handlePortalBoard,
+  handlePortalPrs,
+  PORTAL_BOARD_PATH,
+  PORTAL_PRS_PATH,
+} from "../src/portal-board.ts";
+import { handlePortalFigures, PORTAL_FIGURES_PATH } from "../src/portal-figures.ts";
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
 import {} from "node:path";
@@ -290,6 +297,9 @@ const ROUTES = [
   [PORTAL_ACTIVITY_PATH, "GET", (r: Request, e: never) => handlePortalActivity(r, e, NOW)],
   [PORTAL_LIBRARY_PATH, "GET", (r: Request, e: never) => handlePortalLibrary(r, e, NOW)],
   [PORTAL_TRENDS_PATH, "GET", (r: Request, e: never) => handlePortalTrends(r, e, NOW)],
+  [PORTAL_BOARD_PATH, "GET", (r: Request, e: never) => handlePortalBoard(r, e, NOW)],
+  [PORTAL_PRS_PATH, "GET", (r: Request, e: never) => handlePortalPrs(r, e, NOW)],
+  [PORTAL_FIGURES_PATH, "GET", (r: Request, e: never) => handlePortalFigures(r, e, NOW)],
   [PORTAL_MAINTENANCE_PATH, "GET", (r: Request, e: never) => handlePortalMaintenance(r, e, NOW)],
   [PORTAL_CONVERGENCE_PATH, "GET", (r: Request, e: never) => handlePortalConvergence(r, e, NOW)],
   [PORTAL_SIGN_OUT_PATH, "POST", (r: Request, e: never) => handlePortalSignOut(r, e, NOW)],

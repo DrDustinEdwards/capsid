@@ -29,6 +29,8 @@ import {
 import { PORTAL_PUSH_PATH } from "../src/push-portal.ts";
 import { PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
 import { PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
+import { PORTAL_BOARD_PATH, PORTAL_PRS_PATH } from "../src/portal-board.ts";
+import { PORTAL_FIGURES_PATH } from "../src/portal-figures.ts";
 import { REPORT_PATH } from "../src/security-headers.ts";
 import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
 import { BACKUP_CREDENTIAL_PATH } from "../src/signed-requests.ts";
@@ -79,6 +81,9 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_COMPLETENESS_PATH,
   PORTAL_LIBRARY_PATH,
   PORTAL_TRENDS_PATH,
+  PORTAL_BOARD_PATH,
+  PORTAL_PRS_PATH,
+  PORTAL_FIGURES_PATH,
   PORTAL_PUSH_PATH,
   PORTAL_SIGN_OUT_PATH,
   PORTAL_API_PREFIX,

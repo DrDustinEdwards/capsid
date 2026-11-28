@@ -59,13 +59,13 @@ const ShortcutSheet = lazy(() =>
   import("./ShortcutSheet").then((m) => ({ default: m.ShortcutSheet })),
 );
 
-const TABS: ViewId[] = ["needs", "health", "prs"];
+const TABS: ViewId[] = ["board", "health", "prs"];
 
 const GROUPS: Array<{ label?: string; views: ViewId[] }> = [
-  { label: "Now", views: ["needs", "health"] },
-  { label: "Sites", views: ["sites"] },
-  { label: "Work", views: ["prs", "projects"] },
-  { label: "Records", views: ["activity", "agents", "packages", "library"] },
+  { label: "Now", views: ["board", "health"] },
+  { label: "Work", views: ["memory", "prs", "projects"] },
+  { label: "Network", views: ["sites", "packages"] },
+  { label: "Access", views: ["agents"] },
   { views: ["settings"] },
 ];
 
@@ -480,7 +480,7 @@ function PortalApp() {
           ? {
               count: waiting.total,
               countNote: "waiting on you",
-              href: routePath("needs"),
+              href: routePath("board"),
             }
           : undefined
       }

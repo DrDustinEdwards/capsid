@@ -30,6 +30,10 @@ import type {
   PortalBackups,
   PortalLibrary,
   PortalTrends,
+  PortalBoard,
+  PortalPrs,
+  PortalFigures,
+  FigureSet,
   SharedCodeView,
   CompletenessView,
   ResourcesDoc,
@@ -48,6 +52,9 @@ const COMPLETENESS_URL = `${BASE}/api/completeness`;
 const RESOURCES_URL = `${BASE}/api/resources`;
 const LIBRARY_URL = `${BASE}/api/library`;
 const TRENDS_URL = `${BASE}/api/trends`;
+const BOARD_URL = `${BASE}/api/board`;
+const PRS_URL = `${BASE}/api/prs`;
+const FIGURES_URL = `${BASE}/api/figures`;
 const SITE_SEARCH_URL = `${BASE}/api/site-search`;
 const SITE_TRAFFIC_URL = `${BASE}/api/site-traffic`;
 const WORKERS_BUILDS_URL = `${BASE}/api/workers-builds`;
@@ -289,6 +296,18 @@ export function fetchBuildLog(build: string): Promise<Answer<PortalBuildLog>> {
 
 export function fetchTrends(): Promise<Answer<PortalTrends>> {
   return getAnswer<PortalTrends>(TRENDS_URL);
+}
+
+export function fetchBoard(): Promise<Answer<PortalBoard>> {
+  return getAnswer<PortalBoard>(BOARD_URL);
+}
+
+export function fetchPrs(): Promise<Answer<PortalPrs>> {
+  return getAnswer<PortalPrs>(PRS_URL);
+}
+
+export function fetchFigures(set: FigureSet): Promise<Answer<PortalFigures>> {
+  return getAnswer<PortalFigures>(`${FIGURES_URL}?${new URLSearchParams({ set }).toString()}`);
 }
 
 export function fetchMaintenance(): Promise<Answer<PortalMaintenance>> {

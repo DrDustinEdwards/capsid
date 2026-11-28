@@ -1,14 +1,15 @@
 import { documentEdges, readDocument, searchDocuments } from "./doc-reads";
 import { MAX_NAMESPACE, MAX_QUERY, MAX_ROWS, pathProblem, SEARCH_ROWS } from "./limits";
-import type { LibraryEntry, LibraryShelf, PortalLibrary } from "./ops-types/views";
+import type { LibraryEntry, LibraryHandoff, LibraryShelf, PortalLibrary } from "./ops-types/views";
 import { behindGate, queryParam } from "./portal-auth";
 import { jsonResponse as json } from "@dustinedwards/site-runtime/http";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The Portal's Library: GET /portal/api/library, read-only, over the knowledge store (search,
-// decisions, rulings, research). Writing stays in chat and with drivers.
+// The Portal's Memory: GET /portal/api/library, read-only, over the knowledge store (search,
+// handoffs, decisions, rulings, research). Writing stays in chat and with drivers.
 
 export const PORTAL_LIBRARY_PATH = "/portal/api/library";
+const HANDOFF_ROWS = 300;
 
 // The marks around a matched word in a search's snippet: control characters no document
 // holds, so brackets in the text (a Markdown link) are never taken for a match.
@@ -77,15 +78,25 @@ export const handlePortalLibrary = behindGate(async (request, env, now) => {
   // walk reads it. ORDER BY namespace, path walks the (namespace, path) unique
   // index, so the read stops at the LIMIT and never bare-scans documents
   // (test-integration/query-plans.test.ts). archive/ is history, not a shelf.
-  const { results } = await env.DB.prepare(
-    `SELECT namespace, path, title, type, status, updated_at
+  const [{ results }, handoffs] = await Promise.all([
+    env.DB.prepare(
+      `SELECT namespace, path, title, type, status, updated_at
      FROM documents
      WHERE (type = 'decision' OR path GLOB 'rulings/*' OR path GLOB 'research/*') AND path NOT GLOB 'archive/*'
      ORDER BY namespace, path
      LIMIT ?1`,
-  )
-    .bind(MAX_ROWS + 1)
-    .all<LibraryEntry>();
+    )
+      .bind(MAX_ROWS + 1)
+      .all<LibraryEntry>(),
+    env.DB.prepare(
+      `SELECT namespace, path, title, type, status, updated_at,
+       (status != 'closed' AND updated_at >= datetime('now', '-14 days')) AS open
+     FROM documents WHERE path GLOB 'handoff/*' ORDER BY updated_at DESC LIMIT ?1`,
+    )
+      .bind(HANDOFF_ROWS + 1)
+      .all<Omit<LibraryHandoff, "open"> & { open: number }>(),
+  ]);
+  const rows = handoffs.results.slice(0, HANDOFF_ROWS).map((r) => ({ ...r, open: r.open === 1 }));
   const shelves: Record<LibraryShelf, LibraryEntry[]> = {
     decisions: [],
     rulings: [],
@@ -97,6 +108,8 @@ export const handlePortalLibrary = behindGate(async (request, env, now) => {
     generated,
     shelves,
     truncated: results.length > MAX_ROWS,
+    handoffs: [...rows.filter((r) => r.open), ...rows.filter((r) => !r.open)],
+    handoffs_truncated: handoffs.results.length > HANDOFF_ROWS,
   };
   return json(body);
 });

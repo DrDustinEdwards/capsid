@@ -124,7 +124,7 @@ export interface Attention {
   group?: { key: GroupKey; facet: string };
 }
 
-export function attentionItems(feed: OpsFeed, now: number): Attention[] {
+export function attentionItems(feed: OpsFeed, now: number, skipInbox = false): Attention[] {
   const out: Attention[] = [];
   const snap = feed.snapshot;
   const live = feed.live;
@@ -151,7 +151,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       });
     }
     for (const s of sitesOn ? snap.sites : []) {
-      if (s.state === "down" || s.state === "degraded") {
+      if ((s.state === "down" && !skipInbox) || s.state === "degraded") {
         out.push({
           sev: s.state === "down" ? "crit" : "warn",
           kind: "Site",
@@ -246,7 +246,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
           at: parse(snap.pass_at),
           open: "view:health#ci",
         });
-      else if (st.red)
+      else if (st.red && !(skipInbox && c.latest.conclusion === "failure"))
         out.push({
           sev: "warn",
           kind: "CI",
@@ -378,8 +378,9 @@ export function attentionList(
   feed: OpsFeed,
   now: number,
   href: (ref: OpenRef) => string,
+  skipInbox = false,
 ): { items: AttentionItem[]; groups: Record<string, AttentionGroupInfo> } {
-  const rows = attentionItems(feed, now);
+  const rows = attentionItems(feed, now, skipInbox);
   const items = rows.map((a, i): AttentionItem => ({
     id: `${a.kind}|${a.title}|${i}`,
     tone: a.sev,
@@ -405,6 +406,9 @@ export function attentionList(
   }
   return { items, groups };
 }
+
+export const BACKUP_TARGET_HOURS = 26;
+export const BACKUP_STALE_HOURS = 50;
 
 // Windows match src/watcher-detect.ts (warning at 30 hours, alert at 36 for a copy; 13 hours report; 35 days restore drill). worst is the oldest of the sites' newest copies.
 export const OFFACCOUNT_LATE = 30 * HOUR;

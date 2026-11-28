@@ -1,4 +1,10 @@
-import { forwardRef, useCallback, type AnchorHTMLAttributes, type ReactNode } from "react";
+import {
+  forwardRef,
+  useCallback,
+  type AnchorHTMLAttributes,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { Link as RouterLink, useLocation as useRouterLocation, useNavigate } from "react-router";
 import { DEMO_BASE } from "./demo-base";
 
@@ -54,4 +60,22 @@ export function rowLink({
       {children}
     </Link>
   );
+}
+
+export function useHtmlLinks() {
+  const base = pageBase(useRouterLocation().pathname);
+  const nav = useNavigate();
+  const href = useCallback((to: string) => withBase(base, to), [base]);
+  const onClick = useCallback(
+    (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
+        return;
+      const a = (e.target as Element).closest<HTMLAnchorElement>("a[data-route]");
+      if (!a) return;
+      e.preventDefault();
+      void nav(a.getAttribute("href")!);
+    },
+    [nav],
+  );
+  return { href, onClick };
 }

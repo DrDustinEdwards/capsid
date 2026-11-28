@@ -6,6 +6,7 @@ import { HOUR, ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import "capsomer/stat-tile.css";
 import type { OpsFeed } from "../types";
+import { incidents } from "../lib/incidents";
 
 type Tile = StatTileProps extends infer P
   ? P extends StatTileProps
@@ -18,7 +19,7 @@ function counts(feed: OpsFeed) {
   return {
     down: sites.filter((s) => s.state === "down").length,
     degraded: sites.filter((s) => s.state === "degraded").length,
-    findings: feed.live.findings.filter((f) => f.class === "alert").length,
+    findings: incidents(feed).filter((x) => x.open).length,
     ciRed: (feed.snapshot?.ci ?? []).filter((c) => ciState(c).red).length,
   };
 }

@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { shiftTimes } from "../src/lib/demo.ts";
+import { mockBoardRoute, mockHandoffDocs } from "./mock-board.ts";
 import type {
   OpsFeed,
   OpsPackageConfig,
@@ -501,7 +502,17 @@ function mockLibrary(url: URL): { status: number; body: PortalLibrary | { error:
     research: [],
   };
   for (const d of LIBRARY_DOCS) shelves[shelf(d)].push(strip(d));
-  return { status: 200, body: { kind: "shelves", generated, shelves, truncated: false } };
+  return {
+    status: 200,
+    body: {
+      kind: "shelves",
+      generated,
+      shelves,
+      truncated: false,
+      handoffs: mockHandoffDocs(mockNow()),
+      handoffs_truncated: false,
+    },
+  };
 }
 
 // The trends route's answer (src/trends.ts), sample numbers on the mock's clock: eight weeks
@@ -550,22 +561,6 @@ function mockTrends(weeks: number): PortalTrends {
       truncated: false,
       note: "An estimate: the administrator's own writes, sessions split at a 5-minute gap, plus 1 minute each. Reading the Portal without acting is not counted.",
     },
-    merges: {
-      weeks: weekRows.map((w, i) => ({
-        week: w.week,
-        start: w.start,
-        seat: Math.max(0, 6 - i),
-        closed: 1,
-      })),
-      rollbacks: [
-        {
-          at: new Date(now - 3 * DAYMS).toISOString(),
-          repo: "example-org/sample",
-          pr: 12,
-          outcome: "rolled_back" as const,
-        },
-      ],
-    },
     deploys: {
       repos: [
         {
@@ -597,8 +592,8 @@ function mockTrends(weeks: number): PortalTrends {
       error: null,
       slots: {
         daily: days.map((d, i) => ({ key: d, filled: i !== 11 })),
-        weekly: weekRows.slice(-8).map((w) => ({ key: w.start, filled: true })),
-        monthly: months.map((m, i) => ({ key: m, filled: i !== 0 })),
+        weekly: weekRows.slice(-4).map((w) => ({ key: w.start, filled: true })),
+        monthly: months.slice(-3).map((m, i) => ({ key: m, filled: i !== 0 })),
       },
     },
     ci: {
@@ -1427,9 +1422,9 @@ function backups(st: MockState): PortalBackups {
       .map((s) => ({
         namespace: s.namespace,
         origin: s.origin!,
-        status: { ...fresh(7 * 3_600_000), files: { media: fresh(7 * 3_600_000) } },
+        status: { ...fresh(31 * 3_600_000), files: { media: fresh(7 * 3_600_000) } },
         error: null,
-        amazon: { newest: iso(9 * 3_600_000), bytes: 1_800_000 },
+        amazon: { newest: iso(33 * 3_600_000), bytes: 1_800_000 },
       })),
     amazon_report_at: iso(2 * 3_600_000),
     not_configured: [],
@@ -1565,16 +1560,9 @@ function maintenance(): PortalMaintenance {
       items: [],
       read: { prs: 0, branches: 0, repos: 0, roster: 7, deploys: 0 },
     };
-  const pr = "https://github.com/example-org/sample/pull/41";
   return {
     generated: new Date(now - 3 * 3_600_000).toISOString(),
     items: [
-      {
-        rule: "pr-awaiting-seat",
-        namespace: "sample",
-        pr,
-        line: `${pr} is green and has been open 2.1 days: merge it or say why it waits.`,
-      },
       {
         rule: "undeployed-merge",
         namespace: "sample-b",
@@ -1583,7 +1571,7 @@ function maintenance(): PortalMaintenance {
       {
         rule: "branch-merged",
         namespace: "sample",
-        line: "3 merged branch(es) in example-org/sample would be pruned; the auto-prune is off, so none was deleted.",
+        line: "3 merged branch(es) in example-org/sample would be pruned; the auto-prune, on by default, is turned off, so none was deleted.",
       },
       {
         rule: "branch-stale",
@@ -1872,6 +1860,9 @@ export function mockHandler(): (
       "/portal/api/resources",
       "/portal/api/library",
       "/portal/api/trends",
+      "/portal/api/board",
+      "/portal/api/prs",
+      "/portal/api/figures",
       "/portal/api/push",
       "/portal/api/sign-out",
     ];
@@ -2011,6 +2002,15 @@ export function mockHandler(): (
         200,
         mockTrends(Number.isInteger(weeks) && weeks >= 1 && weeks <= 26 ? weeks : 8),
       );
+    }
+    if (
+      path === "/portal/api/board" ||
+      path === "/portal/api/prs" ||
+      path === "/portal/api/figures"
+    ) {
+      if (req.method !== "GET") return send(res, 405, { error: "method" });
+      const out = mockBoardRoute(path, url, mockNow(), quiet(req));
+      return send(res, out.status, out.body);
     }
     if (path === "/portal/api/library") {
       if (req.method !== "GET") return send(res, 405, { error: "method" });
