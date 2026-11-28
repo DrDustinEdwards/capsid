@@ -17,6 +17,10 @@ import "capsomer/fonts-martian-mono.css";
 import "capsomer/fonts-jost.css";
 import monoFontUrl from "capsomer/fonts/martian-mono-latin-wght-normal.woff2?url";
 import uiFontUrl from "capsomer/fonts/inter-latin-wght-normal.woff2?url";
+// Hashed build files under /assets/, the only files the Portal host serves without a sign-in, so the public demo loads them too.
+import faviconUrl from "./icons/favicon.ico?url";
+import iconUrl from "./icons/icon.svg?url";
+import touchIconUrl from "./icons/apple-touch-icon.png?url";
 // Components are in the cap.* layers so the app's unlayered styles win; a component only some pages draw brings its stylesheet with its view.
 import "capsomer/tokens.css";
 import "capsomer/base.css";
@@ -79,9 +83,9 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="robots" content="noindex" />
         <meta name="theme-color" content="#01585c" />
         <script nonce={nonce} dangerouslySetInnerHTML={markup(NO_FLASH)} />
-        <link rel="icon" href="/favicon.ico" sizes="48x48" />
-        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="icon" href={faviconUrl} sizes="48x48" />
+        <link rel="icon" href={iconUrl} type="image/svg+xml" />
+        <link rel="apple-touch-icon" href={touchIconUrl} />
         {/* A manifest is fetched without cookies unless the link says use-credentials, and this one is behind the sign-in; the demo installs nothing. */}
         {demo ? null : (
           <link rel="manifest" href="/site.webmanifest" crossOrigin="use-credentials" />
