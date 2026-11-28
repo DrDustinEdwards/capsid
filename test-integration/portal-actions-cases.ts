@@ -1,7 +1,6 @@
 import { env } from "cloudflare:test";
 import { expect } from "vitest";
 import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY } from "../src/overnight";
-import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick";
 import { jobRow } from "./jobs-fixture";
 import {
   ACTOR,
@@ -13,7 +12,6 @@ import {
   auditRows,
   Case,
   GITHUB_PR,
-  seedAwaitingPr,
 } from "./portal-actions-fixtures";
 import { SITE_CASES } from "./portal-actions-site-cases";
 
@@ -143,34 +141,6 @@ export const JOB_CASES: Record<string, Case> = {
         head_branch_deleted: true,
       });
       await env.APP_KV.delete("gh:token:v3:example/capsid");
-    },
-  },
-  approve_pr: {
-    params: async () => {
-      githubCalls.length = 0;
-      await seedAwaitingPr();
-      return { namespace: "capsid", prs: "41", shas: "c".repeat(7), reason: "read the diff" };
-    },
-    after: async () => {
-      const row = await env.DB.prepare(
-        "SELECT repo, pr, head_sha, class, status, approved_by, surface, reason FROM pr_approvals",
-      ).first<Record<string, unknown>>();
-      expect(row).toEqual({
-        repo: "example/capsid",
-        pr: 41,
-        head_sha: "c".repeat(40),
-        class: "approve",
-        status: "approved",
-        approved_by: ACTOR,
-        surface: "portal",
-        reason: "read the diff",
-      });
-      expect(
-        githubCalls.filter((c) => c.includes("/merge")),
-        "approve_pr merged",
-      ).toEqual([]);
-      await env.APP_KV.delete("gh:token:v3:example/capsid");
-      await env.APP_KV.delete(AWAITING_SEAT_KEY);
     },
   },
   fail_job: {

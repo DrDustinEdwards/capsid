@@ -17,8 +17,8 @@ import {
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// Signing a policy document: the one path that mints the signature the auto-merge and gate policies
-// are verified against. Its constraints: 1.
+// Signing a policy document: the one path that mints the signature the gate policy is verified
+// against. Its constraints: 1.
 
 export interface PolicySignResult {
   ok: true;
@@ -38,10 +38,10 @@ export interface PolicySignRefusal {
   error: string;
 }
 
-export const POLICY_SIGN_NAMESPACE = "capsid";
+const POLICY_SIGN_NAMESPACE = "capsid";
 
 /** The document a signing rewrites, as it stands before the write. */
-export function readPriorDoc(
+function readPriorDoc(
   env: Env,
   namespace: string,
   path: string,
@@ -136,7 +136,7 @@ export async function signPolicyDocument(
 // Sign `body` and write it over the stored policy at `path`: the anti-rollback pin first, then one
 // batch that refuses if the stored body changed since `prior` was read, snapshots the prior row,
 // writes the signed body and the audit row (test/write-invariants.test.ts).
-export async function commitSigned(
+async function commitSigned(
   env: Env,
   caller: string,
   namespace: string,

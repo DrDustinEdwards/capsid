@@ -106,14 +106,6 @@ export interface ConfirmRequest {
   title: string;
   onDone?: (p: PortalPerformed) => void;
   undo?: UndoRequest;
-  batch?: ReadonlyArray<BatchItem>;
-  confirmHelp?: string;
-}
-
-export interface BatchItem {
-  action: PortalAction;
-  params: Record<string, string>;
-  label: string;
 }
 
 export interface UndoRequest {
@@ -130,16 +122,9 @@ export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>([
   "supersede_job",
   "park_job",
   "pr_close",
-  "unit_resume",
-  "automerge_resume",
 ]);
 
 export const TAKES_NOTE: ReadonlySet<PortalAction> = new Set<PortalAction>(["resume_job"]);
-
-export const TYPED_CONFIRM: ReadonlySet<PortalAction> = new Set<PortalAction>([
-  "sign_policy_from_repo",
-  "sign_policy_change",
-]);
 
 const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) => string)> = {
   overnight: (p) =>
@@ -156,7 +141,6 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   park_job: "Park job",
   unpark_job: "Unpark job",
   pr_close: "Close pull request",
-  approve_pr: (p) => (p.undo === "true" ? "Undo approval" : "Approve"),
   revoke_agent: "Revoke agent",
   activate_agent: "Activate agent",
   site_add: "Add site",
@@ -169,10 +153,6 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   site_repair: (p) => `Run ${p.tool ?? "repair"}`,
   site_backup: (p) => (p.namespace ? `Back up ${p.namespace} now` : "Back up every site now"),
   run_job: (p) => `Run ${p.name ?? "job"} now`,
-  sign_policy_change: (p) => (p.change === "demote" ? "Sign without the unit" : "Sign and promote"),
-  sign_policy_from_repo: "Load from repo and sign",
-  unit_resume: "Lift suspension",
-  automerge_resume: "Resume auto-merge",
   namespace_add: "Add project",
   namespace_edit: "Save changes",
   namespace_remove: "Delete project",

@@ -82,24 +82,22 @@ export async function verifySignedBody(
   return { ok: true, body };
 }
 
-// One reader for both signed policies (capsid/policy/auto-merge.md and gates.md). Both are read,
-// verified and parsed the same way, so a fix to that path is made once. Each loader keeps only what
-// differs: which document, and what its parsed lists must agree with.
+// The reader of a signed policy (capsid/policy/gates.md): read, verified and pinned here, so its
+// loader keeps only which document it is and what its parsed lists must agree with.
 const POLICY_NAMESPACE = "capsid";
 
 // Where the signed policies live. sign_policy signs nothing outside it.
 export const POLICY_PREFIX = "policy/";
 
 // The ordinary write tools refuse a policy document. The Worker reads them as authority:
-// capsid/policy/auto-merge.md says what it may merge with no human, and capsid/policy/gates.md
-// which blocked commands the seat may approve without one.
+// capsid/policy/gates.md says which blocked commands the seat may approve without a human.
 export function policyWriteRefusal(namespace: string, path: string, allow: boolean): string | null {
   if (allow || !path.startsWith(POLICY_PREFIX)) return null;
   return `${namespace}/${path} is an autonomy policy document. It decides what this Worker may do without a human, so a write here is a ruling. Pass allow_improve_paths: true to write it anyway; the flag needs the can_touch_protected scope and is audit-logged.`;
 }
 
 // Read capsid/<path> and return the signed body, or a refusal. `ifAbsent` finishes the sentence
-// that reports a missing document ("so nothing is auto-merged"). /
+// that reports a missing document. /
 export async function readSignedPolicy(
   env: Pick<Env, "DB" | "IMPROVE_SCORE_SECRET" | "APP_KV">,
   path: string,

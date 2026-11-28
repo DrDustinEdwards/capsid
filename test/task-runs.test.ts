@@ -100,12 +100,12 @@ test("PLANT: a tick step's throw is recorded and does not stop the steps after i
   try {
     const value = await runTask(
       env,
-      "auto-merge",
+      "merge-resume",
       async () => {
         throw new Error("GitHub 502");
       },
       () => null,
-      { tag: "AUTO_MERGE_THREW:", rethrow: false },
+      { tag: "MERGE_RESUME_THREW:", rethrow: false },
     );
     assert.equal(value, null);
     await runTask(
@@ -120,11 +120,11 @@ test("PLANT: a tick step's throw is recorded and does not stop the steps after i
   }
   assert.ok(after, "the step after the throw did not run");
   assert.deepEqual(inserts(), [
-    { task: "auto-merge", outcome: "threw", reason: "GitHub 502" },
+    { task: "merge-resume", outcome: "threw", reason: "GitHub 502" },
     { task: "watcher", outcome: "ok", reason: "pass" },
   ]);
   assert.ok(
-    errors.lines.some((l) => JSON.parse(l).message.startsWith("AUTO_MERGE_THREW: GitHub 502")),
+    errors.lines.some((l) => JSON.parse(l).message.startsWith("MERGE_RESUME_THREW: GitHub 502")),
   );
 });
 
@@ -186,10 +186,10 @@ const flags = (runs: Partial<Record<TaskId, OpsTaskRun[]>>, cadence = 30) =>
 test("PLANT: a task whose newest run threw or was refused is failing, whatever came before", () => {
   const f = flags({
     backup: [run(60, "threw"), run(1500)],
-    "auto-merge": [run(5, "refused")],
+    "merge-resume": [run(5, "refused")],
   });
   assert.equal(f.backup, "failing");
-  assert.equal(f["auto-merge"], "failing");
+  assert.equal(f["merge-resume"], "failing");
 });
 
 test("PLANT: a failure of a task without a period ages out after a day; a periodic one stands until its next run", () => {

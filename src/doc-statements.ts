@@ -2,11 +2,6 @@ import { normalizeDashes } from "./normalize";
 import { auditStatement, snapshotLive } from "./store-guards";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// The audit actor of the Worker's own unattended actions (the auto-merge tick, an approved merge
-// executed). The string is the improve loop's, which wrote these rows first; it is kept so
-// audit_log reads as one series and src/job-touches.ts still recognizes it.
-const SYSTEM_ACTOR = "improve-loop";
-
 // A system document write (a job's mirror document) under the same two invariants as every other
 // write path (snapshot invariant, test/write-invariants.test.ts): the prior row is snapshotted
 // into document_versions and audit_log gets a row, in the same batch as the write, so all three
@@ -65,17 +60,4 @@ export async function priorDoc(
     .prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
     .bind(namespace, path)
     .first<{ id: number; title: string | null; body: string | null }>();
-}
-
-// An audit row for a system action that is not a document write (an auto-merge, a decline, an
-// approval executed), under SYSTEM_ACTOR, so one query answers what the Worker did on its own. An
-// action a person made names that person: `actor` is the caller (controls design, finding 5).
-export function systemAudit(
-  db: D1Database,
-  action: string,
-  namespace: string | null,
-  params: unknown,
-  actor: string = SYSTEM_ACTOR,
-): D1PreparedStatement {
-  return auditStatement(db, actor, action, namespace, null, params);
 }

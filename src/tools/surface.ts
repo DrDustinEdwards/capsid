@@ -92,7 +92,7 @@ const CLOSE_PR: CompositeSpec = {
     merge: {
       op: "manage_pr",
       inject: { action: "merge" },
-      fields: ["namespace", "number", "merge_method", "sha", "repo", "approved_in"],
+      fields: ["namespace", "number", "merge_method", "sha", "repo"],
       summary: "Merge a pull request.",
     },
     close: {

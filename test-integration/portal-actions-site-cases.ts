@@ -1,43 +1,15 @@
 import { env } from "cloudflare:test";
 import { expect } from "vitest";
-import type { Env } from "../src/env";
 import { breakerResetKey } from "../src/job-breaker";
-import { AUTO_MERGE_POLICY_PATH, loadMergePolicy } from "../src/auto-merge-policy";
-import { splitSignedTask } from "../src/signed-docs";
-import { policyDocument } from "../test/policy-doc";
-import { LIFTED_KEY, SUSPENDED_KEY } from "../src/merge-units";
-import { LIFTED_KEY as SAFETY_LIFTED_KEY, PAUSED_KEY } from "../src/merge-safety";
 import {
   OPERATOR_TOKEN,
   operatorCalls,
-  repo,
   secretPuts,
   auditRows,
   packageRow,
   siteRow,
-  signedPolicy,
   Case,
 } from "./portal-actions-fixtures";
-
-async function signedPolicyBody(): Promise<string> {
-  const row = await env.DB.prepare(
-    "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
-  )
-    .bind(AUTO_MERGE_POLICY_PATH)
-    .first<{ body: string }>();
-  const { signature, body } = splitSignedTask(row!.body);
-  expect(signature).toBeTruthy();
-  return body;
-}
-
-async function previousPolicyBody(): Promise<string | undefined> {
-  const version = await env.DB.prepare(
-    "SELECT body FROM document_versions WHERE namespace = 'capsid' AND path = ?1 ORDER BY id DESC LIMIT 1",
-  )
-    .bind(AUTO_MERGE_POLICY_PATH)
-    .first<{ body: string }>();
-  return version?.body;
-}
 
 function expectOperatorCall(tool: string, args: Record<string, unknown>) {
   expect(operatorCalls.map((c) => [c.url, c.auth, JSON.parse(c.body)])).toEqual([
@@ -125,75 +97,6 @@ export const SITE_CASES: Record<string, Case> = {
       return { name: "sample-pkg", revision: "1" };
     },
     after: async () => expect(await packageRow("sample-pkg")).toBeNull(),
-  },
-  sign_policy_change: {
-    params: async () => {
-      await signedPolicy();
-      return { change: "promote", unit: "capsid/tests", confirm: "8" };
-    },
-    after: async () => {
-      const body = await signedPolicyBody();
-      expect(body).toMatch(/^- version: 8$/m);
-      expect(body).toContain("- unit `capsid / tests`");
-      const loaded = await loadMergePolicy(env as unknown as Env);
-      expect("policy" in loaded && loaded.policy.units).toEqual(["capsid / tests"]);
-      expect(await previousPolicyBody(), "version 7 was not snapshotted").toMatch(/- version: 7/);
-    },
-  },
-  sign_policy_from_repo: {
-    params: async () => {
-      await signedPolicy();
-      await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
-      repo.policy = policyDocument("8");
-      return { confirm: "8" };
-    },
-    after: async () => {
-      const body = await signedPolicyBody();
-      expect(body).toBe(policyDocument("8"));
-      const loaded = await loadMergePolicy(env as unknown as Env);
-      expect("policy" in loaded && loaded.policy.version).toBe("8");
-      expect(await previousPolicyBody(), "version 7 was not snapshotted").toMatch(/- version: 7/);
-      const audit = await env.DB.prepare(
-        "SELECT params FROM audit_log WHERE action = 'policy-loaded-from-repo' ORDER BY id DESC LIMIT 1",
-      ).first<{ params: string }>();
-      expect(JSON.parse(audit?.params ?? "{}")).toMatchObject({
-        from: "7",
-        to: "8",
-        source: "docs/policy/auto-merge.md",
-      });
-    },
-  },
-  unit_resume: {
-    params: async () => {
-      await env.APP_KV.put(
-        SUSPENDED_KEY,
-        JSON.stringify([
-          { unit: "capsid/docs", since: "2026-09-27T00:00:00.000Z", reason: "rolled back" },
-        ]),
-      );
-      await env.APP_KV.delete(LIFTED_KEY);
-      return { unit: "capsid/docs", reason: "the cause is fixed" };
-    },
-    after: async () => {
-      expect(JSON.parse((await env.APP_KV.get(SUSPENDED_KEY))!)).toEqual([]);
-      expect(Object.keys(JSON.parse((await env.APP_KV.get(LIFTED_KEY))!))).toEqual(["capsid/docs"]);
-    },
-  },
-  automerge_resume: {
-    params: async () => {
-      await env.APP_KV.put(
-        PAUSED_KEY,
-        JSON.stringify({ capsid: { since: "2026-09-27T00:00:00.000Z", reason: "2 rolled back" } }),
-      );
-      await env.APP_KV.delete(SAFETY_LIFTED_KEY);
-      return { namespace: "capsid", reason: "both are answered" };
-    },
-    after: async () => {
-      expect(JSON.parse((await env.APP_KV.get(PAUSED_KEY))!)).toEqual({});
-      expect(Object.keys(JSON.parse((await env.APP_KV.get(SAFETY_LIFTED_KEY))!))).toEqual([
-        "capsid",
-      ]);
-    },
   },
   namespace_add: {
     params: async () => ({ namespace: "sample-added", repo: "example/sample-added" }),

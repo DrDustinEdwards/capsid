@@ -7,8 +7,8 @@ import { ghFetch } from "./client";
 // rename.
 
 // A list not read whole is reported rather than judged.
-export const PER_PAGE = 100;
-export const FILES_LIMIT = 3000;
+const PER_PAGE = 100;
+const FILES_LIMIT = 3000;
 const FILES_MAX_PAGES = FILES_LIMIT / PER_PAGE;
 
 export function readAllPages<T>(
@@ -49,13 +49,42 @@ export async function readCheckRuns<T extends CheckRunRow = CheckRunRow>(
   );
 }
 
+// Every completed check run must have concluded success, skipped or neutral, and at least one must
+// have reported. A PR with no checks is not green: its workflow never started, which cannot be
+// told apart from a workflow that was removed.
+export function ciVerdict(runs: readonly CheckRunRow[]): {
+  conclusion: string | null;
+  note: string;
+} {
+  if (runs.length === 0)
+    return { conclusion: null, note: "no check run has reported on this commit" };
+  const pending = runs.filter((r) => r.status !== "completed");
+  if (pending.length > 0) {
+    return {
+      conclusion: "pending",
+      note: `${pending.length} check(s) still running: ${pending.map((r) => r.name).join(", ")}`,
+    };
+  }
+  const bad = runs.filter((r) => !["success", "skipped", "neutral"].includes(r.conclusion ?? ""));
+  if (bad.length > 0) {
+    return {
+      conclusion: "failure",
+      note: `${bad.map((r) => `${r.name}=${r.conclusion ?? "null"}`).join(", ")}`,
+    };
+  }
+  return { conclusion: "success", note: `${runs.length} check(s) green` };
+}
+
+const JOB_ID_IN_BODY = /\bjob_[0-9a-f]{12}\b/;
+
+/** The Capsid job a pull request's description names, or null. */
+export function jobIdFromBody(body: string): string | null {
+  return JOB_ID_IN_BODY.exec(body ?? "")?.[0] ?? null;
+}
+
 export interface PrFiles {
   paths: string[];
   problem: string | null;
-  // Null when a file came back without counts; auto-merge's size cap refuses null rather than
-  // reading zero.
-  changedLines: number | null;
-  testEdits: string[];
   rows: PrFileRow[];
 }
 
@@ -71,27 +100,6 @@ export interface PrFileRow {
 const TEST_DIRS = ["test/", "test-integration/", "dashboard/e2e/"];
 export const inTestDir = (path: string | undefined) =>
   path !== undefined && (TEST_DIRS.some((d) => path.startsWith(d)) || TEST_FILE.test(path));
-
-/**
- * Fails closed: a test-dir file with no status or no integer deletions counts as an edit, since it
- * cannot be shown untouched.
- */
-export function existingTestEdits(files: readonly PrFileRow[]): string[] {
-  const edited: string[] = [];
-  for (const f of files) {
-    const path = inTestDir(f.previous_filename)
-      ? f.previous_filename!
-      : inTestDir(f.filename)
-        ? f.filename
-        : null;
-    if (path === null) continue;
-    if (f.status === "added") continue;
-    const pureAdditions =
-      f.status === "modified" && Number.isInteger(f.deletions) && f.deletions === 0;
-    if (!pureAdditions) edited.push(path);
-  }
-  return edited;
-}
 
 export async function readPrFiles(
   env: Env,
@@ -116,17 +124,5 @@ export async function readPrFiles(
   const paths = files.items.flatMap((f) =>
     f.previous_filename ? [f.previous_filename, f.filename] : [f.filename],
   );
-  const counted = files.items.every(
-    (f) => Number.isInteger(f.additions) && Number.isInteger(f.deletions),
-  );
-  const changedLines = counted
-    ? files.items.reduce((n, f) => n + (f.additions ?? 0) + (f.deletions ?? 0), 0)
-    : null;
-  return {
-    paths,
-    problem,
-    changedLines,
-    testEdits: existingTestEdits(files.items),
-    rows: files.items,
-  };
+  return { paths, problem, rows: files.items };
 }

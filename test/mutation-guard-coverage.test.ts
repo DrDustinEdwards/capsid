@@ -35,7 +35,7 @@ function servedCall(
   return { tool, args: action === undefined ? args : { action, ...args } };
 }
 
-const POLICY_DOC = "policy/auto-merge.md";
+const POLICY_DOC = "policy/gates.md";
 
 // type 'source' so lint finalize would consume it: a document written to a policy
 // path with the opt-in can carry any type, which is the case finalize's guard is for.
@@ -73,7 +73,7 @@ const PLANTS: Record<string, Record<string, unknown>> = {
     confirm: true,
   },
   delete: { namespace: "capsid", path: POLICY_DOC, confirm: true },
-  move: { namespace: "capsid", path: POLICY_DOC, new_path: "parked/auto-merge.md", confirm: true },
+  move: { namespace: "capsid", path: POLICY_DOC, new_path: "parked/gates.md", confirm: true },
   restore: { namespace: "capsid", path: POLICY_DOC, version_id: 11, confirm: true },
   lint: { namespace: "capsid", mode: "finalize", consumed: [POLICY_DOC], confirm: true },
 };
@@ -172,7 +172,7 @@ test("THE INNOCENT DIRECTION: with the opt-in and the flag, every tool that take
 
 test("PLANT: a move INTO or OUT OF the policy prefix is refused at either end", () => {
   assert.ok(policyWriteRefusal("capsid", "policy/planted.md", false));
-  assert.ok(policyWriteRefusal("capsid", "policy/auto-merge.md", false));
+  assert.ok(policyWriteRefusal("capsid", "policy/gates.md", false));
 });
 
 test("an ordinary move is untouched at both ends", () => {

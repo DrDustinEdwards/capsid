@@ -90,9 +90,8 @@ to master.
   switch; the refusal stays in `src/gate-policy.ts`).
 - Dropping a table, index or column; deleting rows; truncating a table.
 - Deleting files recursively.
-- Merging a pull request. A merge is not approvable through this policy; the auto-merge
-  policy (`docs/policy/auto-merge.md`) governs which driver pull requests the Worker
-  merges; a PR not auto-merged is merged on green by its session or the seat.
+- Merging a pull request. A merge is not approvable through this policy; a pull request
+  merges on green, by its session or by GitHub auto-merge.
 
 ## What this policy cannot do
 

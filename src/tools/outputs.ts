@@ -389,7 +389,6 @@ const OUTPUTS: Record<string, Shape> = {
     canon_paths: rows,
     policies: obj,
     overnight: obj,
-    merge_safety: nullable(obj),
     agents: rows.optional(),
     namespaces: rows,
   },

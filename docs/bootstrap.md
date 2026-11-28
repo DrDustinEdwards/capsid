@@ -195,10 +195,9 @@ that says no while the inventory says yes teaches a reader to distrust the table
 The seat granted them on 2026-09-11. Every other driver holds none. `capsid_read_status` action `status` and Capsid Portal list what each agent actually holds, so the
 inventory settles it and this table describes the rule.
 
-A driver opens pull requests with its own GitHub access and never merges them. A driver's pull request is
-merged either by the seat or by the Worker under the signed auto-merge policy
-(`docs/policy/auto-merge.md`); the gates policy cannot approve a merge. Giving a
-driver `can_merge` would bypass both.
+A driver opens pull requests with its own GitHub access. A pull request merges on green, by
+the session that opened it or by GitHub auto-merge; Capsid runs no merge loop of its own, and
+the gates policy cannot approve a merge.
 
 Widen one later with `capsid_admin_manage_agents(action: "update_scopes", ...)`, which names the axes it
 changes and leaves the rest. Revoke with `capsid_admin_manage_agents(action: "revoke", name: ...)`: the
@@ -270,15 +269,15 @@ Optional parts stay hidden or inert until configured:
 
 - With no row in `ops_sites` that has an origin, nothing is probed and Health shows no Sites section.
 - Without `CF_OPS_TOKEN`, deploy and error columns say the Cloudflare read is not configured.
-- Auto-merge is off by default (section 10).
+- Pre-approved gates are off by default (section 10).
 
 ## 10. Switches
 
 One switch, off by default.
 
-- **Auto-merge and pre-approved gates** run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards, which is admin only: the auto-merge policy with the `sign_policy_change` or `sign_policy_from_repo` control, the gate policy with `capsid_admin_manage_switches` action `sign_policy`. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
+- **Pre-approved gates** run only when the policy document's `enabled` field is `true` and the document has been signed again afterwards with `capsid_admin_manage_switches` action `sign_policy`, which is admin only. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
 
-Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13 and auto-merge on 2026-09-16.
+Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13.
 
 ## 11. Checks before a push
 

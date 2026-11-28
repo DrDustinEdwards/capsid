@@ -59,7 +59,7 @@ Audit rows and `jobs.claimed_by` record a minted agent as `agent:<name>`.
 
 **Three of these have never connected, and what each is waiting for is written down so an unused credential reads as a plan rather than a loose end.** `capsid_read_status` action `status` shows `last_seen: null` for all three today.
 
-- `seat` is not what auto-merge uses. `capsid/policy/auto-merge.md` is signed and enabled, and the Worker merges a qualifying pull request itself on its cron tick (`src/auto-merge-tick.ts`), on the namespaces the policy names. The signed policy (reviewable source: `docs/policy/auto-merge.md`) decides which namespaces may auto-merge; a pull request that touches a refused path, or fails any other check, waits for the seat. The seat's key is for a seat session working through `/ops/mcp`, and its `last_seen` in `capsid_read_status` action `status` shows whether one has.
+- `seat` is not a merge path. A pull request merges on green, by the session that opened it or by GitHub auto-merge; the Worker merges nothing on its tick. The seat's key is for a seat session working through `/ops/mcp`, and its `last_seen` in `capsid_read_status` action `status` shows whether one has.
 - `auditor` is used by an outside model doing a cold audit, which is a thing a person starts rather than something the system reaches for.
 - `watcher` is different from the other two, and its `null` means something else. The tick has no bearer token to present, so it builds a SYNTHETIC watcher identity in `src/watcher.ts` shaped to match the minted role exactly, and `touchLastSeen` returns early for an agent with no row. The minted `watcher` key is therefore unused by construction, and its `last_seen` stays `null` however many findings the tick posts. What records that work is `audit_log`, where the actor is `agent:watcher` either way. The key is there for a person driving the watcher's checks by hand from outside the Worker.
 
@@ -161,7 +161,7 @@ MCP and sign-in:
 
 Agents (`/ops/`):
 
-- `GET /ops/inbox` what needs Dustin, per app: blocked jobs and questions, pull requests auto-merge declined, failing CI, a site that is down, a claim with no activity for 24 hours, a parked job past its due date. Read by an app's server with a bearer key; a key scoped to one namespace sees that app only, a key on every namespace sees every app, and the response carries no CORS headers (docs/portal.md)
+- `GET /ops/inbox` what needs Dustin, per app: blocked jobs and questions, failing CI, a site that is down, a claim with no activity for 24 hours, a parked job past its due date. Read by an app's server with a bearer key; a key scoped to one namespace sees that app only, a key on every namespace sees every app, and the response carries no CORS headers (docs/portal.md)
 - `POST /ops/inbox/report` what an app reports about itself to the inbox (Carrel's drafts waiting), with its own key and the write grant on its namespace; replaced whole, expires after 6 hours, one per minute per key (docs/portal.md)
 
 Backups and the paired comparison (signed, no bearer):

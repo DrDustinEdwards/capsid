@@ -6,7 +6,7 @@ Job job_1057e44ecffe, 2026-10-09. Design only: nothing built. Answers DECIDE 6 o
 - **Supersede button:** yes.
 - **Branches:** they delete automatically after merge, and the backup button has Undo. The tick already deletes them through `deleteHeadBranchAfterPr`, `src/github/refs.ts:97-140`.
 
-It coordinates with job_cefba61b515c (`docs/design/design-merge-pipeline.md`), which owns the approval record, PR classes and push channel; this document owns the screens.
+It coordinated with job_cefba61b515c, the merge pipeline design, which owned the approval record, PR classes and push channel; that pipeline was retired on 2026-11-28 (Dustin), and this document owns the screens.
 
 Read at master e2762d8 (fetched 2026-10-09). The review read a worktree. This reads master, so counts differ where code moved: 37 tools now, 36 then.
 

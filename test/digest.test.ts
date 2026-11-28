@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick.ts";
 import { DIGEST_LAST_KEY, digestProblem, digestState, digestTick } from "../src/digest.ts";
 import type { OvernightDigest } from "../src/ops-types/views.ts";
 import { selectRows, type Row } from "./fake-sql.ts";
@@ -74,37 +73,6 @@ const FULL: OvernightDigest = {
   pull_requests_merged: 2,
 };
 
-const awaiting = [
-  {
-    namespace: "foxhound",
-    repo: "owner/foxhound",
-    number: 7,
-    failed: "money",
-    why: "",
-    at: "",
-    class: "typed",
-  },
-  {
-    namespace: "capsid",
-    repo: "owner/capsid",
-    number: 8,
-    failed: "path",
-    why: "",
-    at: "",
-    class: "approve",
-    visual: { title: "New header", preview: "https://pr-8.sample.workers.dev/", shots: [] },
-  },
-  {
-    namespace: "capsid",
-    repo: "owner/capsid",
-    number: 9,
-    failed: "ci",
-    why: "",
-    at: "",
-    class: "wait",
-  },
-];
-
 function world(
   opts: {
     routing?: string;
@@ -118,10 +86,7 @@ function world(
 ) {
   const sent: Array<{ from: string; to: string; subject: string; text: string }> = [];
   const kv = fakeKv({
-    seed: {
-      [AWAITING_SEAT_KEY]: JSON.stringify(awaiting),
-      ...(opts.last ? { [DIGEST_LAST_KEY]: JSON.stringify(opts.last) } : {}),
-    },
+    seed: opts.last ? { [DIGEST_LAST_KEY]: JSON.stringify(opts.last) } : {},
   });
   const deploys = opts.deploys ?? [];
   const db = {
@@ -230,13 +195,7 @@ test("the mail lists what waits by class, questions, blocked jobs, rollbacks and
   const m = w.sent[0]!;
   assert.equal(m.to, "admin@example.com");
   assert.equal(m.from, "capsid@example.com");
-  assert.equal(m.subject, "Capsid digest 2026-10-11: 4 waiting on you");
-  assert.match(m.text, /owner\/foxhound#7, class typed \(money: approve by typing its number\)/);
-  assert.match(
-    m.text,
-    /owner\/capsid#8, class approve \(visual: look at https:\/\/pr-8\.sample\.workers\.dev\/ and approve in the Portal\)/,
-  );
-  assert.doesNotMatch(m.text, /#9/, "a wait-class pull request was listed as waiting on Dustin");
+  assert.equal(m.subject, "Capsid digest 2026-10-11: 2 waiting on you");
   assert.match(m.text, /Questions \(1\)\n- carrel job_q: Which domain\?/);
   assert.match(m.text, /Blocked \(1\)\n- sample job_b: Create the bucket/);
   assert.match(m.text, /Rollbacks \(1\)\n- owner\/capsid at aaaaaaa: rolled back/);

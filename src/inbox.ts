@@ -1,12 +1,8 @@
 import type { Env } from "./env";
-import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { readSiteConfig } from "./ops-sites";
 import { readSnapshot } from "./ops-snapshot";
 import { prUrlsFromJob } from "./outcome-prs";
 import { readReports } from "./inbox-report";
-import { unitInboxItems } from "./merge-units";
-import type { MergeClass } from "./merge-class";
-import { checkWords } from "./check-words";
 import { prsSettled, readStaleCache, type StalePrCache } from "./stale-jobs";
 import { readStepCache, stepsSeen, type StaleStepCache } from "./manual-steps";
 import { severityOf as worstOf } from "capsomer/behavior/attention-list";
@@ -26,9 +22,7 @@ const MAX_ITEMS_PER_APP = 50;
 const WAITING_ON_PERSON: ReadonlySet<InboxKind> = new Set([
   "blocked-job",
   "question",
-  "pr",
   "report",
-  "proposal",
   "stale-claim",
   "parked-due",
 ]);
@@ -89,27 +83,6 @@ export function heldJobItem(
 
 export function severityOf(items: readonly Pick<InboxItem, "kind">[]): InboxSeverity {
   return worstOf(items, WAITING_ON_PERSON);
-}
-
-const CLASS_WORDS: Record<MergeClass, string> = {
-  auto: "merges on its own",
-  approve: "one tap to approve",
-  typed: "a typed confirmation",
-  seat: "a step outside a merge",
-  wait: "nothing yet, CI is running",
-};
-
-/**
- * An auto-merge hold as an inbox title, in plain words: what held it, then what it takes. A visual
- * pull request one tap would merge says it waits for his look, whichever check stopped it first: a
- * session's visual PR usually names no job, and "names no job" hid that there was something to
- * look at.
- */
-export function prHoldTitle(
-  a: Pick<AwaitingSeat, "number" | "failed" | "class" | "visual">,
-): string {
-  const why = checkWords(a.visual && a.class === "approve" ? "visual_awaits_look" : a.failed);
-  return `PR #${a.number} waits for you: ${why}${a.class ? ` (${CLASS_WORDS[a.class]})` : ""}`;
 }
 
 // Two facts the Worker already holds settle it: every pull request it names is merged or closed,
@@ -214,23 +187,6 @@ export async function gatherInbox(
     .bind(JOB_DOC_PREFIX, now.toISOString(), MAX_HELD)
     .all<Parameters<typeof heldJobItem>[0] & { namespace: string }>();
 
-  try {
-    const raw = await env.APP_KV.get(AWAITING_SEAT_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    if (Array.isArray(parsed)) {
-      for (const a of parsed as AwaitingSeat[]) {
-        add(a.namespace, {
-          title: prHoldTitle(a),
-          kind: "pr",
-          link: `https://github.com/${a.repo}/pull/${a.number}`,
-          since: a.at,
-        });
-      }
-    }
-  } catch {
-    // none
-  }
-
   const snapshot = await readSnapshot(env).catch(() => null);
   for (const ci of snapshot?.ci ?? []) {
     if (ci.latest?.conclusion === "failure") {
@@ -252,10 +208,6 @@ export async function gatherInbox(
       });
     }
   }
-
-  // The merge units' proposals and suspensions (src/merge-units.ts): a widening or a narrowing only
-  // Dustin signs.
-  for (const { namespace, item } of await unitInboxItems(env.APP_KV)) add(namespace, item);
 
   for (const [namespace, items] of await readReports(env.APP_KV, now)) {
     for (const item of items) add(namespace, item);

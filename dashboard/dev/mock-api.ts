@@ -7,7 +7,7 @@
 //
 // It also mocks the Portal's controls (preview and perform), GET
 // /portal/api/namespaces, GET /portal/api/activity, GET /portal/api/claims, GET
-// /portal/api/stale, GET /portal/api/merge-units, a site page's GET /portal/api/site-search,
+// /portal/api/stale, a site page's GET /portal/api/site-search,
 // /portal/api/site-traffic, /portal/api/workers-builds and /portal/api/build-log, GET /portal/api/maintenance, GET and POST /portal/api/push and POST
 // /portal/api/sign-out, with the Worker's refusals:
 // text/plain 400 for a bad request, 403 for a missing or wrong X-Capsid-CSRF, 410 for
@@ -38,7 +38,6 @@ import type {
   LibraryEntry,
   PortalPackageHistory,
   PortalStale,
-  PortalMergeUnits,
   PortalSiteSearch,
   PortalSiteTraffic,
   PortalWorkersBuilds,
@@ -77,8 +76,6 @@ const ACTIONS: PortalAction[] = [
   "supersede_job",
   "park_job",
   "unpark_job",
-  "pr_close",
-  "approve_pr",
   "revoke_agent",
   "activate_agent",
   "site_add",
@@ -90,10 +87,6 @@ const ACTIONS: PortalAction[] = [
   "package_remove",
   "site_repair",
   "site_backup",
-  "sign_policy_change",
-  "sign_policy_from_repo",
-  "unit_resume",
-  "automerge_resume",
   "namespace_add",
   "namespace_edit",
   "namespace_remove",
@@ -162,13 +155,6 @@ interface MockState {
   activity: PortalActivityRow[];
   // Repairs run since the mock started, newest first (GET /portal/api/convergence).
   repairs: Array<{ namespace: string; tool: string; at: string }>;
-  // Pull requests closed from the Portal since the mock started, as "<repo>#<number>".
-  closedPrs: Set<string>;
-  // The merge units' controls: the units the policy promotes and its version once a change
-  // is signed, units whose suspension was lifted, and namespaces whose auto-merge resumed.
-  policy: { version: string; units: string[] } | null;
-  unitsLifted: Set<string>;
-  automergeResumed: Set<string>;
   // The project controls: repo mappings registered or changed since the mock started (the
   // fixture's projects map to example-org/<namespace>), and projects deleted.
   projects: Map<string, string>;
@@ -624,8 +610,6 @@ function mockTrends(weeks: number): PortalTrends {
       weeks: weekRows.map((w, i) => ({
         week: w.week,
         start: w.start,
-        auto: 4 + i,
-        approved: 3,
         seat: Math.max(0, 6 - i),
         closed: 1,
       })),
@@ -844,18 +828,6 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
   }
   out.live.sites = st.sites.map((s) => ({ ...s }));
   out.live.packages = st.packages.map((p) => ({ ...p }));
-  out.live.awaiting_seat = out.live.awaiting_seat.filter(
-    (a) => !st.closedPrs.has(`${a.repo}#${a.number}`),
-  );
-  if (st.policy && out.live.merge_policy.loads)
-    out.live.merge_policy = { ...out.live.merge_policy, ...st.policy };
-  if (out.live.merge_safety)
-    out.live.merge_safety = {
-      ...out.live.merge_safety,
-      namespaces: out.live.merge_safety.namespaces.map((n) =>
-        st.automergeResumed.has(n.namespace) ? { ...n, paused: null } : n,
-      ),
-    };
   out.refresh_allowed_at = nextRefresh > mockNow() ? new Date(nextRefresh).toISOString() : null;
   return out;
 }
@@ -1081,49 +1053,6 @@ function plan(
         changes: [`jobs.${j.id}.status: parked -> queued, at priority ${j.priority}`],
         apply: (st) =>
           void st.jobs.set(j.id, { status: "queued", parked_reason: undefined, updated_at: now }),
-      };
-    }
-    case "pr_close": {
-      const repo = need(params, "repo", "The repo");
-      const number = need(params, "number", "The pull request's number");
-      need(params, "reason", "A reason");
-      if (!f.live.awaiting_seat.some((a) => a.repo === repo && String(a.number) === number))
-        throw new Refusal(400, `${repo}#${number} is not an open pull request the mock knows.`);
-      return {
-        summary: `Close ${repo}#${number} without merging it.`,
-        done: `Closed ${repo}#${number}.`,
-        changes: [
-          `${repo}#${number}: open -> closed, not merged`,
-          "Its head branch is deleted as manage_pr close deletes it.",
-        ],
-        apply: (st) => void st.closedPrs.add(`${repo}#${number}`),
-      };
-    }
-    case "approve_pr": {
-      // As src/pr-approvals.ts plans it: the pull request must be in the awaiting-seat set,
-      // classed approve or auto, and approved at the head the tick judged.
-      const repo = need(params, "repo", "The repo");
-      const pr = need(params, "prs", "The pull request's number");
-      const sha = need(params, "shas", "The head sha you reviewed");
-      const a = f.live.awaiting_seat.find((x) => x.repo === repo && String(x.number) === pr);
-      if (!a) throw new Refusal(400, `${repo}#${pr} is not an open pull request the mock knows.`);
-      if (a.class !== "approve" && a.class !== "auto")
-        throw new Refusal(
-          400,
-          `#${pr} is class ${a.class ?? "unclassed"}, which the Portal cannot approve.`,
-        );
-      if (a.head_sha !== sha)
-        throw new Refusal(
-          400,
-          `#${pr} moved: its head is ${a.head_sha?.slice(0, 7) ?? "unknown"} now, not ${sha.slice(0, 7)}.`,
-        );
-      return {
-        summary: `Approve ${repo}#${pr} at ${sha.slice(0, 7)}.`,
-        done: `Approved ${repo}#${pr}. It merges once CI is green on ${sha.slice(0, 7)}.`,
-        changes: [
-          `${repo}#${pr}: approved at ${sha.slice(0, 7)} (class ${a.class}). Nothing merges now; the next tick merges it on green CI.`,
-        ],
-        apply: () => undefined,
       };
     }
     case "release_job": {
@@ -1418,102 +1347,6 @@ function plan(
         apply: () => undefined,
       };
     }
-    // A signed change to the promoted units: the typed version must be the next one.
-    case "sign_policy_change": {
-      const change = need(params, "change", "The change");
-      const unit = need(params, "unit", "The unit");
-      if (!f.live.merge_policy.loads)
-        throw new Refusal(
-          400,
-          "the auto-merge policy in force does not load, so it is not changed.",
-        );
-      const from = f.live.merge_policy.version;
-      const to = String(Number(from) + 1);
-      const listed = f.live.merge_policy.units.includes(unit);
-      if (change === "promote" && listed)
-        throw new Refusal(400, `${unit} is already promoted to auto in version ${from}.`);
-      if (change === "demote" && !listed)
-        throw new Refusal(
-          400,
-          `${unit} is not promoted to auto in version ${from}, so there is nothing to remove.`,
-        );
-      const typed = (params.confirm ?? "").trim();
-      if (typed && typed !== to)
-        throw new Refusal(
-          400,
-          `${typed} is not the policy's next version. Type ${to} to sign it. Nothing was signed.`,
-        );
-      const units =
-        change === "promote"
-          ? [...f.live.merge_policy.units, unit]
-          : f.live.merge_policy.units.filter((u) => u !== unit);
-      return {
-        summary:
-          change === "promote"
-            ? `Promote ${unit} to auto and sign version ${to}.`
-            : `Remove ${unit} from auto and sign version ${to}.`,
-        done: `Signed auto-merge policy version ${to}${change === "promote" ? ` with ${unit} promoted` : ` without ${unit}`}.`,
-        changes: [
-          `capsid/policy/auto-merge.md: version ${from} -> ${to}, signed.`,
-          change === "promote"
-            ? `${unit} is added under ## Auto units.`
-            : `${unit} is removed from ## Auto units: its pull requests wait for an approval again.`,
-        ],
-        apply: (st) => void (st.policy = { version: to, units }),
-      };
-    }
-    // The mock's repo says version 8 against the stored 7; a typed version is checked as the
-    // Worker checks it, and a perform writes nothing.
-    case "sign_policy_from_repo": {
-      const typed = (params.confirm ?? "").trim();
-      if (typed && typed !== "8")
-        throw new Refusal(
-          400,
-          `${typed} is not the version in docs/policy/auto-merge.md, which says 8. Type 8 to sign it. Nothing was signed.`,
-        );
-      return {
-        summary:
-          "Write the auto-merge policy from docs/policy/auto-merge.md on the default branch and sign it.",
-        done: "Signed auto-merge policy version 8 from docs/policy/auto-merge.md (1 lines removed, 1 added).",
-        changes: [
-          "capsid/policy/auto-merge.md: version 7 -> 8, written exactly as docs/policy/auto-merge.md reads on the default branch now, and signed.",
-          "Lines changed: 1 removed, 1 added.",
-          "- - version: 7",
-          "+ - version: 8",
-        ],
-        apply: () => {},
-      };
-    }
-    case "unit_resume": {
-      const unit = need(params, "unit", "The unit");
-      need(params, "reason", "The reason");
-      const s = mergeUnits(f, st).suspended.find((u) => u.unit === unit);
-      if (!s) throw new Refusal(400, `${unit} is not suspended, so there is nothing to lift.`);
-      return {
-        summary: `Lift the suspension of the merge unit ${unit}.`,
-        done: `Lifted the suspension of ${unit}.`,
-        changes: [
-          `${unit}: suspended since ${s.since} ("${s.reason}") -> lifted. The tick may merge its pull requests unattended again; a rollback after now suspends it again.`,
-        ],
-        apply: (st) => void st.unitsLifted.add(unit),
-      };
-    }
-    case "automerge_resume": {
-      const ns = need(params, "namespace", "The namespace");
-      need(params, "reason", "The reason");
-      const row = f.live.merge_safety?.namespaces.find((n) => n.namespace === ns);
-      if (!row?.paused)
-        throw new Refusal(400, `auto-merge for ${ns} is not paused, so there is nothing to lift.`);
-      const { since, reason } = row.paused;
-      return {
-        summary: `Lift the pause on auto-merge for ${ns}.`,
-        done: `Resumed auto-merge for ${ns}.`,
-        changes: [
-          `${ns}: auto-merge paused since ${since} ("${reason}") -> lifted. The tick may merge its pull requests unattended again; new bad merges pause it again.`,
-        ],
-        apply: (st) => void st.automergeResumed.add(ns),
-      };
-    }
     // The project controls, with the Worker's refusals (src/namespace-admin.ts, src/namespace-delete.ts).
     case "namespace_add": {
       const ns = need(params, "namespace", "The namespace");
@@ -1590,7 +1423,7 @@ function plan(
       if (f.live.namespaces.some((n) => n.name === ns)) {
         throw new Refusal(
           400,
-          `${ns} is on the roster (ROSTER in src/roster.ts), which the watcher, auto-merge and maintenance iterate by name. Remove it from the roster in code first; this tool will not.`,
+          `${ns} is on the roster (ROSTER in src/roster.ts), which the watcher and maintenance iterate by name. Remove it from the roster in code first; this tool will not.`,
         );
       }
       return {
@@ -1829,40 +1662,6 @@ function buildLog(build: string): PortalBuildLog {
         note: null,
       },
     },
-  };
-}
-
-// GET /portal/api/merge-units: one suspended unit (also proposed for removal) and one ready to
-// promote, as the units tick would report them; a lift or a signed change drops its row.
-function mergeUnits(f: OpsFeed, st: MockState): PortalMergeUnits {
-  const units = f.live.merge_policy.loads ? f.live.merge_policy.units : [];
-  const generated = new Date(Date.parse(f.live.generated) - 30 * 60_000).toISOString();
-  const suspended = [
-    {
-      unit: "sample-c/docs",
-      since: new Date(Date.parse(f.live.generated) - 30 * 3_600_000).toISOString(),
-      reason: "example-org/sample-c#12 merged unattended and was rolled back (run 4410)",
-    },
-  ];
-  const proposals: PortalMergeUnits["proposals"] = [
-    {
-      kind: "demote",
-      unit: "sample-c/docs",
-      title:
-        "Remove sample-c docs from auto: example-org/sample-c#12 merged unattended and was rolled back",
-    },
-    {
-      kind: "promote",
-      unit: "sample-b/tests",
-      title: "Promote sample-b tests to auto: 23 approved over 31 days, 0 rollbacks",
-    },
-  ];
-  return {
-    generated,
-    suspended: suspended.filter((u) => !st.unitsLifted.has(u.unit)),
-    proposals: proposals.filter((p) =>
-      p.kind === "promote" ? !units.includes(p.unit) : units.includes(p.unit),
-    ),
   };
 }
 
@@ -2741,7 +2540,6 @@ function quietFeed(f: OpsFeed): OpsFeed {
     severity: "none",
     apps: f.live.inbox.apps.map((a) => ({ ...a, count: 0, severity: "none", items: [] })),
   };
-  for (const n of f.live.merge_safety?.namespaces ?? []) n.paused = null;
   return f;
 }
 
@@ -2764,10 +2562,6 @@ export function mockHandler(): (
     packages: seedPackages(),
     activity: seedActivity(),
     repairs: [],
-    closedPrs: new Set(),
-    policy: null,
-    unitsLifted: new Set(),
-    automergeResumed: new Set(),
     projects: new Map(),
     projectsRemoved: new Set(),
     tokens: new Map(),
@@ -2887,7 +2681,6 @@ export function mockHandler(): (
       "/portal/api/claims",
       "/portal/api/packages/history",
       "/portal/api/stale",
-      "/portal/api/merge-units",
       "/portal/api/site-search",
       "/portal/api/site-traffic",
       "/portal/api/workers-builds",
@@ -2925,11 +2718,6 @@ export function mockHandler(): (
     if (path === "/portal/api/stale") {
       if (req.method !== "GET") return send(res, 405, { error: "method" });
       return send(res, 200, stale(feed(nextRefresh, st)));
-    }
-    if (path === "/portal/api/merge-units") {
-      if (req.method !== "GET") return send(res, 405, { error: "method" });
-      const units = mergeUnits(feed(nextRefresh, st), st);
-      return send(res, 200, quiet(req) ? { ...units, suspended: [], proposals: [] } : units);
     }
     // A site page's reads, with the Worker's 400s for a bad namespace, days, limit or build.
     if (

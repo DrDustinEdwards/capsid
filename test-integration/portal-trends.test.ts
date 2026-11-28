@@ -1,7 +1,6 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import worker from "../src/index";
-import { AUTO_MERGED_APPROVAL_REASON } from "../src/approval-executor";
 import type { Env } from "../src/env";
 import type { PortalTrends } from "../src/ops-types/views";
 import { portalSessionCookie } from "../src/portal-auth";
@@ -62,12 +61,9 @@ describe("the trends series", () => {
     await job("job_00000000000c", "queued", "2030-01-15T08:00:00.000Z", "2030-01-15T08:00:00.000Z");
     await job("job_00000000000d", "failed", "2029-12-01T00:00:00.000Z", "2029-12-20T00:00:00.000Z");
 
+    // Rows the retired auto-merge loop wrote are history the series no longer counts.
     await audit("system:auto-merge", "auto-merged", "2030-01-14 10:00:00");
     await audit("system:executor", "approved-merged", "2030-01-14 11:00:00");
-    // The policy's merge also closed an approval it held: the same merge, counted once.
-    await audit("system:auto-merge", "approved-merged", "2030-01-14 10:00:01", {
-      reason: AUTO_MERGED_APPROVAL_REASON,
-    });
     await audit("access:admin@example.com", "manage_pr", "2030-01-14 12:00:00", {
       action: "merge",
       merged: true,
@@ -114,7 +110,12 @@ describe("the trends series", () => {
     expect(day("2030-01-14")).toMatchObject({ posted: 0, ended: 1, open: 1 });
     expect(day("2030-01-15")).toMatchObject({ posted: 1, ended: 0, open: 2 });
 
-    expect(t.merges.weeks[1]).toMatchObject({ auto: 1, approved: 1, seat: 1, closed: 2 });
+    expect(t.merges.weeks[1]).toEqual({
+      week: t.merges.weeks[1]!.week,
+      start: "2030-01-14",
+      seat: 1,
+      closed: 2,
+    });
     expect(t.deploys.repos).toEqual([
       {
         repo: "example-org/sample",

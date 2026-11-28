@@ -343,14 +343,6 @@ function unguardedMutations(files: SourceFile[], helpers: string[]): string[] {
 // Each writes its own audit row. Adding a site is a test edit a reviewer sees; a second call in a listed file fails too, since the count is exact.
 const UNGUARDED_EXCEPTIONS: Array<{ site: string; why: string }> = [
   {
-    site: "approval-executor.ts: managePr",
-    why: "the tick merging on a human's recorded approval (pr_approvals), pinned to the approved sha; no caller, audited by close()",
-  },
-  {
-    site: "auto-merge-tick-judge.ts: managePr",
-    why: "the signed auto-merge policy's own merge on the cron tick, pinned to the judged sha; no caller, audited by systemAudit",
-  },
-  {
     site: "controls-perform.ts: managePr",
     why: "the portal's pr_close control: the owner's signed control token (Access login, no MCP grant); writes its pr-closed audit row",
   },

@@ -68,20 +68,6 @@ export interface OpsPr {
   recorded_at: string;
 }
 
-export interface OpsAwaitingSeat {
-  namespace: string;
-  repo: string;
-  number: number;
-  failed: string;
-  why: string;
-  at: string;
-  class?: "auto" | "approve" | "typed" | "seat" | "wait" | null;
-  path_class?: string | null;
-  class_reasons?: string[];
-  head_sha?: string;
-  visual?: { title: string; preview: string | null; shots: string[] };
-}
-
 interface OpsOvernight {
   mode: "off" | "api" | "subscription";
   decision: {
@@ -169,46 +155,20 @@ export type { InboxSeverity } from "capsomer/behavior/attention-list";
 export type InboxKind =
   | "blocked-job"
   | "question"
-  | "pr"
   | "ci"
   | "site-down"
   | "report"
-  | "proposal"
   | "stale-claim"
   | "parked-due";
 export type InboxItem = CapsomerInboxItem<InboxKind>;
 export type InboxApp = CapsomerInboxApp<InboxKind>;
 export type Inbox = CapsomerInbox<InboxKind>;
 
-export interface OpsMergeSafetyRow {
-  namespace: string;
-  auto_merged: number;
-  approved: number;
-  deploys_verified: number;
-  rolled_back: number;
-  rollback_failed: number;
-  reverts: number;
-  bad_auto_7d: number;
-  paused: { since: string; reason: string } | null;
-}
-
-export interface OpsMergeSafety {
-  generated: string;
-  namespaces: OpsMergeSafetyRow[];
-}
-
-type OpsMergePolicy =
-  | { loads: true; version: string; enabled: boolean; units: string[] }
-  | { loads: false; reason: string };
-
 export interface OpsLive {
   generated: string;
   jobs: OpsJob[];
   agents: OpsAgent[];
   prs: OpsPr[];
-  awaiting_seat: OpsAwaitingSeat[];
-  merge_safety: OpsMergeSafety | null;
-  merge_policy: OpsMergePolicy;
   overnight: OpsOvernight;
   namespaces: Array<{ name: string }>;
   sites: OpsSiteConfig[];

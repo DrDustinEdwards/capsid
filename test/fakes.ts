@@ -270,8 +270,7 @@ export interface FakeD1Options {
   // Queue rows, for the readers that look a job up rather than transition it.
   // The queue's own transitions are driven against real SQLite in test-integration.
   jobs?: Array<Record<string, unknown>>;
-  // The PR URLs an outcome named (migrations/0015), for auto-merge's check that a PR
-  // was recorded against the job its body names. Absent by default.
+  // The PR URLs an outcome named (migrations/0015). Absent by default.
   jobOutcomePrs?: Array<{ job_id: string; pr_url: string }>;
   jobOutcomes?: Array<Record<string, unknown>>;
 }
@@ -684,8 +683,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       if (/SET last_seen/i.test(flat)) row.last_seen = "2026-09-11 02:00:00";
       return { id: row.id };
     }
-    // Jobs and outcome reads (for example auto-merge asking which agent claimed the
-    // job a pull request closes). Every filter in the statement applies, and a COUNT
+    // Jobs and outcome reads. Every filter in the statement applies, and a COUNT
     // counts.
     const selected = tableSelect(flat, params);
     if (selected) return selected[0] ?? null;
@@ -750,7 +748,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       const answered = loopTableExec(flat, params, rows);
       return answered.handled ? answered.results : [];
     }
-    // auto-merge's read of the PR URLs recorded against one job.
+    // The read of the PR URLs recorded against one job.
     if (/^SELECT pr_url FROM job_outcome_prs WHERE job_id = \?1$/i.test(flat.trim())) {
       return rows.job_outcome_prs
         .filter((r) => r.job_id === params[0])
@@ -1419,9 +1417,6 @@ export const FEED: OpsFeedData = {
     jobs: [],
     agents: [],
     prs: [],
-    awaiting_seat: [],
-    merge_safety: null,
-    merge_policy: { loads: false, reason: "sample" },
     overnight: { mode: "off", decision: null },
     sites: [],
     packages: [],

@@ -40,7 +40,6 @@ import { repoGuards } from "./repo-guards";
 import { HeadMovedError } from "../github/refs";
 import { reverifyPr } from "../outcome-prs";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
-import { chatApprovalRefusal, MAX_APPROVAL_LINK, recordChatApproval } from "../chat-approval";
 
 function prUrlFor(result: { repo?: string }, number: number): string {
   return `https://github.com/${result.repo ?? ""}/pull/${number}`;
@@ -193,22 +192,9 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
             "For action 'merge': the full head sha you reviewed; the merge is refused if the head moved. Refused for the other actions.",
           ),
         repo: repoSelector.optional().describe(REPO_ARG),
-        approved_in: bounded(MAX_APPROVAL_LINK)
-          .optional()
-          .describe(
-            "For action 'merge', admin only: the https://claude.ai/ link to the message where Dustin approved this merge. Needs sha. After the merge, Capsid records the approval (src/chat-approval.ts). Refused for the other actions.",
-          ),
       },
     },
-    ({ namespace, number, action, merge_method, sha, repo, approved_in }) => {
-      if (approved_in !== undefined) {
-        if (action !== "merge")
-          return fail(
-            `manage_pr action '${action}' takes no approved_in; only a merge records an approval.`,
-          );
-        const refusal = chatApprovalRefusal(approved_in, sha, ctx.agent.admin === true);
-        if (refusal) return fail(refusal);
-      }
+    ({ namespace, number, action, merge_method, sha, repo }) => {
       return guardedWrite(
         "manage_pr",
         namespace,
@@ -224,25 +210,6 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
             repo,
             sha,
           ).catch(headMovedRefusal(number));
-          // Never fails the merge, which already happened: a bookkeeping update that did not land
-          // would misreport it, and the daily sweep picks the row up either way.
-          if (action === "merge" && approved_in !== undefined && sha !== undefined) {
-            const merged = result as { repo: string; sha?: string };
-            const approval = await recordChatApproval(
-              env,
-              ctx.actor,
-              {
-                namespace,
-                repo: merged.repo,
-                number,
-                headSha: sha,
-                mergeSha: merged.sha ?? null,
-                link: approved_in,
-              },
-              new Date(),
-            );
-            Object.assign(result, { approval });
-          }
           if (action === "merge") {
             try {
               const url =

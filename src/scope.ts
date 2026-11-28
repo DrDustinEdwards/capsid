@@ -17,7 +17,7 @@ import {
 import { MINUTE_MS, HOUR_MS } from "./time";
 
 // The one enforcement point: every tool call and repo mutation is checked here. A per-tool gate can
-// be omitted by a new tool and cannot see writes a module away (the queue, the auto-merge tick).
+// be omitted by a new tool and cannot see writes a module away (the queue, the tick).
 
 // What each tool requires. The registrar enforces it and tool-annotations.ts derives readOnlyHint
 // from it. "action" means the requirement depends on the action argument.
@@ -327,7 +327,7 @@ const ADMIN_REASON: Record<string, string> = {
   capsid_admin_run_controls:
     "It runs the administrator's controls (revoke an agent, resume or fail a job, edit the sites and packages the Portal watches), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
   capsid_admin_manage_switches:
-    "It holds the administrator's switches: sign_policy decides whether this Worker may merge without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_read_status.",
+    "It holds the administrator's switches: sign_policy decides which gates a driver may clear without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_read_status.",
 };
 
 function adminReason(tool: string): string {

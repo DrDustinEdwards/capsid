@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick.ts";
-import { PAUSED_KEY } from "../src/merge-safety.ts";
 import { RETRY_CAP_REASON } from "../src/jobs-schema.ts";
 import { PORTAL_CSRF_COOKIE } from "../src/ops-feed.ts";
 import { PORTAL_CSRF_HEADER } from "../src/portal-actions.ts";
@@ -15,7 +13,7 @@ import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
 import { applyWrite, selectRows, type Row, type TableSpec } from "./fake-sql.ts";
 import { fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
-// Exactly seven triggers, each sent once, never with an Approve button, never with a title.
+// Each trigger sent once, never with an Approve button, never with a title.
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
 const H = 3_600_000;
@@ -92,32 +90,13 @@ const device = (over: Row = {}): Row => ({
   created_at: iso(-48 * H),
   ...over,
 });
-const typed = (number: number) => ({
-  namespace: "foxhound",
-  repo: "owner/foxhound",
-  number,
-  failed: "paths_not_money",
-  why: "money",
-  at: NOW.toISOString(),
-  class: "typed",
-  path_class: "money",
-  class_reasons: ["billing"],
-});
-const approve = (number: number) => ({
-  ...typed(number),
-  class: "approve",
-  path_class: "src-routine",
-});
-
 function world(
   opts: {
-    awaiting?: object[];
     jobs?: Row[];
     deploys?: Row[];
     devices?: Row[];
     state?: object;
     key?: boolean;
-    paused?: object;
   } = {},
 ) {
   const { d1, tables, writes } = db({
@@ -125,10 +104,7 @@ function world(
     deploys: opts.deploys,
     devices: opts.devices ?? [device()],
   });
-  const seed: Record<string, string> = {
-    [AWAITING_SEAT_KEY]: JSON.stringify(opts.awaiting ?? []),
-  };
-  if (opts.paused) seed[PAUSED_KEY] = JSON.stringify(opts.paused);
+  const seed: Record<string, string> = {};
   if (opts.state) seed["push:state"] = JSON.stringify(opts.state);
   const kv = fakeKv({ seed });
   const env = {
@@ -194,67 +170,6 @@ async function decrypt(body: Uint8Array): Promise<string> {
   return new TextDecoder().decode(padded.slice(0, padded.lastIndexOf(2)));
 }
 
-test("a typed pull request alerts only after 2 hours waiting, counted from the first tick that saw it", async () => {
-  const w = world({ awaiting: [typed(7)] });
-  const s = service();
-  assert.equal((await pushTick(w.env, NOW, s.fetcher)).sent.length, 0, "alerted at once");
-  // The first sighting is kept, because the awaiting-seat set is rewritten every tick.
-  const seen = JSON.parse(w.kv.store.get("push:state")!) as {
-    typed_seen: Record<string, string>;
-  };
-  assert.equal(seen.typed_seen["owner/foxhound#7"], NOW.toISOString());
-  assert.equal(
-    (await pushTick(w.env, new Date(NOW.getTime() + 2 * H), s.fetcher)).sent.length,
-    0,
-    "alerted at exactly 2 hours",
-  );
-  const later = await pushTick(w.env, new Date(NOW.getTime() + 2 * H + 60_000), s.fetcher);
-  assert.deepEqual(later.sent, ["typed:owner/foxhound#7"]);
-  assert.equal(s.got.length, 1);
-  assert.equal(s.got[0]!.title, "Typed approval waiting");
-  assert.match(s.got[0]!.body, /^owner\/foxhound#7, class typed/);
-});
-
-test("an approve-class pull request never alerts, however long it waits", async () => {
-  const w = world({
-    awaiting: [approve(8)],
-    state: { typed_seen: { "owner/foxhound#8": iso(-30 * H) }, sent: {} },
-  });
-  const s = service();
-  const report = await pushTick(w.env, NOW, s.fetcher);
-  assert.equal(report.sent.length, 0);
-  assert.equal(s.got.length, 0);
-});
-
-test("a visual pull request alerts at once, once per head, and names no title", async () => {
-  const visual = (sha: string) => ({
-    ...approve(9),
-    failed: "visual_awaits_look",
-    head_sha: sha,
-    visual: {
-      title: "Secret redesign",
-      preview: "https://preview.example.com/",
-      shots: [],
-    },
-  });
-  const w = world({ awaiting: [visual("aaa")] });
-  const s = service();
-  assert.deepEqual((await pushTick(w.env, NOW, s.fetcher)).sent, ["visual:owner/foxhound#9:aaa"]);
-  assert.equal(s.got[0]!.title, "Visual change to look at");
-  assert.doesNotMatch(s.got[0]!.body, /Secret redesign/, "an alert carries no title");
-  assert.equal(
-    (await pushTick(w.env, new Date(NOW.getTime() + 60_000), s.fetcher)).sent.length,
-    0,
-    "sent twice for one head",
-  );
-  await w.kv.kv.put("improve:awaiting-seat", JSON.stringify([visual("bbb")]));
-  assert.deepEqual(
-    (await pushTick(w.env, new Date(NOW.getTime() + 120_000), s.fetcher)).sent,
-    ["visual:owner/foxhound#9:bbb"],
-    "a new push did not ask again",
-  );
-});
-
 test("a rollback and a failed rollback alert; a verified deploy and an old rollback do not", async () => {
   const deploys = [
     {
@@ -295,32 +210,6 @@ test("a rollback and a failed rollback alert; a verified deploy and an old rollb
   const report = await pushTick(w.env, NOW, s.fetcher);
   assert.deepEqual(report.sent.sort(), ["rollback:owner/capsid:1", "rollback:owner/carrel:2"]);
   assert.deepEqual(s.got.map((g) => g.title).sort(), ["Deploy rolled back", "Rollback failed"]);
-});
-
-test("PLANT: a namespace the safety shutoff paused alerts once, naming the namespace and the reason", async () => {
-  const since = iso(-H);
-  const w = world({
-    paused: {
-      capsid: {
-        since,
-        reason: "2 of the pull requests auto-merge merged were rolled back or reverted in 7 days",
-      },
-    },
-  });
-  const s = service();
-  const report = await pushTick(w.env, NOW, s.fetcher);
-  assert.deepEqual(report.sent, [`paused:capsid:${since}`]);
-  assert.equal(s.got[0]!.title, "Auto-merge paused");
-  assert.equal(s.got[0]!.url, "https://portal.dustinedwards.info/prs#auto-merge");
-  assert.match(
-    s.got[0]!.body,
-    /^capsid: 2 of the pull requests auto-merge merged were rolled back or reverted in 7 days\./,
-  );
-  assert.equal(
-    (await pushTick(w.env, new Date(NOW.getTime() + 5 * 60_000), service().fetcher)).sent.length,
-    0,
-    "the same pause alerted twice",
-  );
 });
 
 test("a job at the correction cap alerts; a question alerts only past 4 hours on priority 70 or more", async () => {

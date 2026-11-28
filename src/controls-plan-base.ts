@@ -1,5 +1,5 @@
 // bind: params the plan itself adds to the token, beside the caller's, so the perform carries out
-// what this preview read (sign_policy_from_repo binds its source sha this way).
+// what this preview read (namespace_edit binds its mapping digest this way).
 export type Plan =
   | { ok: true; changes: string[]; audit: string[]; bind?: Record<string, string> }
   | { ok: false; refusal: string };

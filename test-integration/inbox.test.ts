@@ -110,22 +110,6 @@ beforeEach(async () => {
     .bind(await sha256Hex(SEAT_KEY), serializeScopes(everywhere))
     .run();
   await env.APP_KV.put("ops:snapshot", JSON.stringify(snapshot));
-  await env.APP_KV.put(
-    "improve:awaiting-seat",
-    JSON.stringify([
-      {
-        namespace: "capsid",
-        repo: "example-org/sample",
-        number: 7,
-        failed: "paths_not_refused",
-        why: "touches a protected path",
-        at: "2026-10-08T09:00:00.000Z",
-        class: "approve",
-        path_class: "src-worth",
-        class_reasons: ["the policy stops at paths_not_refused"],
-      },
-    ]),
-  );
 });
 
 describe("GET /ops/inbox", () => {
@@ -146,24 +130,15 @@ describe("GET /ops/inbox", () => {
     const body = (await response.json()) as Inbox;
     expect(body.apps.map((a) => a.namespace)).toEqual(["capsid"]);
     const app = body.apps[0];
-    expect(app.items.map((i) => i.kind).sort()).toEqual(["blocked-job", "ci", "pr"]);
-    expect(app.count).toBe(3);
+    expect(app.items.map((i) => i.kind).sort()).toEqual(["blocked-job", "ci"]);
+    expect(app.count).toBe(2);
     expect(app.severity).toBe("needs-you");
     expect(app.items.find((i) => i.kind === "blocked-job")?.link).toBe(PR);
-    expect(app.items.find((i) => i.kind === "pr")?.link).toBe(
-      "https://github.com/example-org/sample/pull/7",
-    );
-    expect(
-      app.items.find((i) => i.kind === "pr")?.title,
-      "plain words for the check, and what answering it takes",
-    ).toBe(
-      "PR #7 waits for you: it changes a file auto-merge never merges on its own (one tap to approve)",
-    );
     expect(
       JSON.stringify(body),
       "another namespace's job title leaked to a scoped caller",
     ).not.toContain("Not for this driver");
-    expect(body.count).toBe(3);
+    expect(body.count).toBe(2);
   });
 
   it("leaves out a blocked job whose migration the seat has applied, and keeps one whose migration is not", async () => {
@@ -211,8 +186,7 @@ describe("GET /ops/inbox", () => {
     });
   });
 
-  it("an unreadable awaiting-seat list and snapshot do not fail the inbox, they read as nothing", async () => {
-    await env.APP_KV.put("improve:awaiting-seat", "not json");
+  it("an unreadable snapshot does not fail the inbox, it reads as nothing", async () => {
     await env.APP_KV.put("ops:snapshot", "{{{");
     await blocked("capsid", "Still counted", "needs the seat");
     const response = await inboxAs(DRIVER_KEY);
@@ -227,7 +201,7 @@ describe("improve_status carries the same answer per namespace", () => {
     await blocked("capsid", "Add the health route", `Merge ${PR}`);
     const status = await capsidStatus(jobsEnv(), "capsid");
     const capsid = status.namespaces.find((n) => n.namespace === "capsid");
-    expect(capsid?.needs_dustin.count).toBe(3);
+    expect(capsid?.needs_dustin.count).toBe(2);
     expect(capsid?.needs_dustin.severity).toBe("needs-you");
   });
 });

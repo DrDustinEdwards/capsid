@@ -24,7 +24,6 @@ import type {
   PortalPerformed,
   PortalPreview,
   PortalStale,
-  PortalMergeUnits,
   PortalSiteSearch,
   PortalSiteTraffic,
   PortalWorkersBuilds,
@@ -57,7 +56,6 @@ const RESOURCES_URL = `${BASE}/api/resources`;
 const LIBRARY_URL = `${BASE}/api/library`;
 const TRENDS_URL = `${BASE}/api/trends`;
 const STALE_URL = `${BASE}/api/stale`;
-const MERGE_UNITS_URL = `${BASE}/api/merge-units`;
 const SITE_SEARCH_URL = `${BASE}/api/site-search`;
 const SITE_TRAFFIC_URL = `${BASE}/api/site-traffic`;
 const WORKERS_BUILDS_URL = `${BASE}/api/workers-builds`;
@@ -293,10 +291,6 @@ export function fetchLibrary(
 
 export function fetchStale(): Promise<Answer<PortalStale>> {
   return getAnswer<PortalStale>(STALE_URL);
-}
-
-export function fetchMergeUnits(): Promise<Answer<PortalMergeUnits>> {
-  return getAnswer<PortalMergeUnits>(MERGE_UNITS_URL);
 }
 
 export function fetchSiteSearch(namespace: string): Promise<Answer<PortalSiteSearch>> {

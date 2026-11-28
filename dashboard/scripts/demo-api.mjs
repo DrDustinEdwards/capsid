@@ -11,7 +11,6 @@ const ROUTES = [
   "activity",
   "claims",
   "stale",
-  "merge-units",
   "site-search?namespace=sample",
   "site-traffic?namespace=sample",
   "workers-builds?namespace=sample",

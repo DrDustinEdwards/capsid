@@ -7,7 +7,6 @@ import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight";
 import { PORTAL_ACTIONS } from "../src/controls-base";
 import { PORTAL_PREVIEW_PATH } from "../src/portal-actions";
 import { OVERNIGHT_MODE_KEY } from "../src/overnight";
-import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick";
 import { jobRow } from "./jobs-fixture";
 import {
   CSRF,
@@ -17,7 +16,6 @@ import {
   auditRows,
   KEYS,
   resetPortal,
-  seedAwaitingPr,
   performToken,
   previewAndPerform,
 } from "./portal-actions-fixtures";
@@ -114,27 +112,6 @@ describe("parked jobs, the Tonight plan and the digest", () => {
     expect(digest.status, await digest.clone().text()).toBe(200);
     expect(((await digest.json()) as PortalDigest).since).toBe("2026-01-01T00:00:00.000Z");
     expect((await call(`${PORTAL_DIGEST_PATH}?since=soon`)).status).toBe(400);
-  });
-});
-
-describe("the approval record against real D1", () => {
-  it("approving again voids the open approval as replaced, and Undo voids the new one as undone, each with its row", async () => {
-    await seedAwaitingPr();
-    const act = (params: Record<string, string>) => previewAndPerform("approve_pr", params);
-    await act({ namespace: "capsid", prs: "41", shas: "c".repeat(40) });
-    const again = await act({ namespace: "capsid", prs: "41", shas: "c".repeat(40) });
-    expect(again.audit).toContain(`pr-approval-voided by ${ACTOR}`);
-    const undo = await act({ namespace: "capsid", prs: "41", undo: "true" });
-    expect(undo.audit).toContain(`portal-undo-approve_pr by ${ACTOR}`);
-    const { results } = await env.DB.prepare(
-      "SELECT status, close_reason FROM pr_approvals ORDER BY id",
-    ).all<{ status: string; close_reason: string | null }>();
-    expect(results).toEqual([
-      { status: "voided", close_reason: "replaced" },
-      { status: "voided", close_reason: "undone" },
-    ]);
-    await env.APP_KV.delete("gh:token:v3:example/capsid");
-    await env.APP_KV.delete(AWAITING_SEAT_KEY);
   });
 });
 

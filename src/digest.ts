@@ -1,6 +1,5 @@
 import { sendEmail } from "@dustinedwards/site-runtime/email";
 import type { Env } from "./env";
-import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { readOvernightDigest } from "./overnight-digest";
 import { PORTAL_HOST } from "./portal-host";
 import type { DigestState } from "./ops-types/views";
@@ -71,17 +70,6 @@ async function composeDigest(
   since: string,
   read: DigestReader = readOvernightDigest,
 ): Promise<{ subject: string; text: string; waiting: number }> {
-  const raw = await env.APP_KV.get(AWAITING_SEAT_KEY).catch(() => null);
-  // A corrupt list reads as none, so one bad value cannot stop every tick's mail.
-  let parsed: unknown = [];
-  try {
-    parsed = raw ? JSON.parse(raw) : [];
-  } catch {
-    // parsed stays []
-  }
-  const awaiting = (Array.isArray(parsed) ? (parsed as AwaitingSeat[]) : []).filter(
-    (a) => a.class !== "auto" && a.class !== "wait",
-  );
   const digest = await read(env, { since }, now);
   const questions = digest.blocked.filter((b) => b.summary.startsWith("QUESTION:"));
   const blocked = digest.blocked.filter((b) => !b.summary.startsWith("QUESTION:"));
@@ -92,20 +80,12 @@ async function composeDigest(
     .all<{ repo: string; head_sha: string; outcome: string }>();
   const rollbacks = rolled.results ?? [];
 
-  const waiting = awaiting.length + questions.length + blocked.length;
+  const waiting = questions.length + blocked.length;
   const day = utcDay(now);
   const text: string[] = [`Capsid, ${day}. Since ${since.replace("T", " ").slice(0, 16)} UTC.`, ""];
   const section = (title: string, lines: string[]) => {
     if (lines.length) text.push(title, ...lines, "");
   };
-  section(
-    `Pull requests waiting on you (${awaiting.length})`,
-    list(
-      awaiting,
-      (a) =>
-        `${a.repo}#${a.number}, class ${a.class ?? "unclassed"}${a.class === "typed" ? " (money: approve by typing its number)" : ""}${a.visual ? ` (visual: look${a.visual.preview ? ` at ${a.visual.preview}` : ""} and approve in the Portal)` : ""}: https://github.com/${a.repo}/pull/${a.number}`,
-    ),
-  );
   section(
     `Questions (${questions.length})`,
     list(questions, (q) => `${q.namespace} ${q.id}: ${q.title}`),

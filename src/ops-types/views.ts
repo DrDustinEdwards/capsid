@@ -110,8 +110,6 @@ export interface TrendQueueDay {
 export interface TrendMergeWeek {
   week: string;
   start: string;
-  auto: number; // merged by the signed policy on its own
-  approved: number; // merged by the executor on an approval
   seat: number; // merged by the seat through capsid_close_pr
   closed: number; // closed without merging, from chat or the Portal
 }
@@ -414,10 +412,3 @@ export type PortalPlan = OvernightPlan;
 
 // GET /portal/api/digest?since= -> PortalDigest over every namespace; since defaults to 24 hours, a non-ISO one is a 400.
 export type PortalDigest = OvernightDigest;
-
-// Merge units suspended after a rollback of an unattended merge, plus the units tick's promote and demote proposals.
-export interface PortalMergeUnits {
-  generated: string | null;
-  suspended: Array<{ unit: string; since: string; reason: string }>;
-  proposals: Array<{ kind: "promote" | "demote"; unit: string; title: string }>;
-}

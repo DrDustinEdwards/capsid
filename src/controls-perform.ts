@@ -3,8 +3,6 @@ import { activateAgent, revokeAgent } from "./agents-admin";
 import {
   type ActionParams,
   type Surface,
-  AUTOMERGE_RESUME_REASON,
-  UNIT_RESUME_REASON,
   SWITCHES,
   auditPrefix,
   clickAuditAction,
@@ -26,13 +24,8 @@ import type { Env } from "./env";
 import { managePr } from "./github";
 import { resetBreaker } from "./job-breaker";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
-import { resumeNamespace } from "./merge-safety";
-import { liftSuspension } from "./merge-units";
 import type { PortalAction } from "./ops-types/portal";
 import { overnightValueRefusal, setOvernight } from "./overnight";
-import { performPolicyChange } from "./policy-sign-change";
-import { performPolicyFromRepo } from "./policy-sign-repo";
-import { planApproval, performApproval } from "./pr-approvals";
 import { auditStatement } from "./store-guards";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
@@ -139,96 +132,6 @@ export async function performAction(
       case "run_job": {
         const r = await performJobAction(c, action);
         if (r) return r;
-        break;
-      }
-      case "approve_pr": {
-        // Planned again from the state now: the heads, the classes and the open approvals may have moved
-        // since the preview, and the approval is of what is true now.
-        const clean = Object.fromEntries(
-          Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string"),
-        );
-        const plan = await planApproval(env, actor, clean, surface, click);
-        if (!plan.ok) return { ok: false, refusal: plan.refusal };
-        state.summary = await performApproval(env, actor, plan, required(params, "reason"), now);
-        state.committed = true;
-        await auditClick(
-          plan.namespace,
-          {
-            repo: plan.repo,
-            prs: plan.targets.map((t) => ({ pr: t.number, head_sha: t.head_sha, class: t.class })),
-            approval_surface: plan.surface,
-            ...(undo ? { undo: true } : {}),
-          },
-          click,
-        );
-        break;
-      }
-      case "sign_policy_change": {
-        // Planned again from the policy now, and refused unless the new version is typed.
-        const done = await performPolicyChange(
-          env,
-          actor,
-          required(params, "change") ?? undefined,
-          required(params, "unit") ?? undefined,
-          required(params, "confirm") ?? undefined,
-        );
-        if (!done.ok) return { ok: false, refusal: done.error };
-        state.summary = done.summary;
-        state.committed = true;
-        await auditClick(
-          "capsid",
-          {
-            change: params.change,
-            unit: params.unit,
-            confirm: params.confirm,
-            reason: required(params, "reason"),
-          },
-          click,
-        );
-        break;
-      }
-      case "sign_policy_from_repo": {
-        // The file is read again and must read as the preview's did (the hash the token binds), and the
-        // typed version must be the file's.
-        const done = await performPolicyFromRepo(
-          env,
-          actor,
-          required(params, "confirm") ?? undefined,
-          required(params, "source_sha") ?? undefined,
-        );
-        if (!done.ok) return { ok: false, refusal: done.error };
-        state.summary = done.summary;
-        state.committed = true;
-        await auditClick(
-          "capsid",
-          {
-            confirm: params.confirm,
-            source_sha: params.source_sha,
-            reason: required(params, "reason"),
-          },
-          click,
-        );
-        break;
-      }
-      case "unit_resume":
-      case "automerge_resume": {
-        const unit = action === "unit_resume";
-        const field = unit ? "unit" : "namespace";
-        const reason = required(params, "reason");
-        if (!reason)
-          return { ok: false, refusal: unit ? UNIT_RESUME_REASON : AUTOMERGE_RESUME_REASON };
-        const target = required(params, field) ?? undefined;
-        const done = unit
-          ? await liftSuspension(env, actor, target, reason, now)
-          : await resumeNamespace(env, actor, target, reason, now);
-        if (!done.ok) return { ok: false, refusal: done.refusal };
-        state.summary = done.summary;
-        state.committed = true;
-        await auditClick(
-          (params[field] ?? "").split("/")[0]!.trim() || null,
-          { [field]: params[field], reason },
-          click,
-        );
         break;
       }
       case "namespace_add":
