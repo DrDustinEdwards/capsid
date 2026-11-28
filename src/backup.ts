@@ -58,7 +58,6 @@ export const TABLES = [
   "ops_sites",
   // Hand-edited configuration and weekly rows kept nowhere else (migrations/0028).
   "ops_packages",
-  "ops_package_weeks",
   "watcher_findings",
   "task_runs",
   // Seeded by its migration, so a restore empties it before importing (0036).
