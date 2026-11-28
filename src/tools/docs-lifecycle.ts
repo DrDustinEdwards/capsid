@@ -34,10 +34,10 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
         version_id: z.number().int().positive(),
         confirm: z.boolean().optional(),
         if_match: bounded(MAX_SHA).optional(),
-        allow_improve_paths: z.boolean().optional(),
+        allow_policy_paths: z.boolean().optional(),
       },
     },
-    async ({ namespace, path, version_id, confirm, if_match, allow_improve_paths }) => {
+    async ({ namespace, path, version_id, confirm, if_match, allow_policy_paths }) => {
       const nsError = await requireRegisteredNamespace(db, namespace);
       if (nsError) return fail(nsError);
       if (canonGuarded(ctx.agent, namespace, path))
@@ -54,7 +54,7 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
         ctx,
         "restore",
         namespace,
-        allow_improve_paths,
+        allow_policy_paths,
         [path],
       );
       if (restorePolicyRefusal) return fail(restorePolicyRefusal);
@@ -167,23 +167,19 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
         namespace: nsName,
         path: docPath,
         confirm: z.boolean().optional(),
-        allow_improve_paths: z.boolean().optional(),
+        allow_policy_paths: z.boolean().optional(),
       },
     },
-    async ({ namespace, path, confirm, allow_improve_paths }) => {
+    async ({ namespace, path, confirm, allow_policy_paths }) => {
       const nsError = await requireRegisteredNamespace(db, namespace);
       if (nsError) return fail(nsError);
       if (canonGuarded(ctx.agent, namespace, path))
         return fail(canonRefusal("delete", namespace, path));
       const prior = await readDocument(db, namespace, path);
       if (!prior) return fail(`not found: ${namespace}/${path}`);
-      const deletePolicyRefusal = policyPathsRefusal(
-        ctx,
-        "delete",
-        namespace,
-        allow_improve_paths,
-        [path],
-      );
+      const deletePolicyRefusal = policyPathsRefusal(ctx, "delete", namespace, allow_policy_paths, [
+        path,
+      ]);
       if (deletePolicyRefusal) return fail(deletePolicyRefusal);
       const deleteRefusal = await requireConfirmation(server, confirm, {
         prompt: `Delete ${namespace}/${path}? It will be snapshotted to document_versions first, so it can be recovered.`,
@@ -254,10 +250,10 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
         path: docPath,
         new_path: docPath,
         confirm: z.boolean().optional(),
-        allow_improve_paths: z.boolean().optional(),
+        allow_policy_paths: z.boolean().optional(),
       },
     },
-    async ({ namespace, path, new_path, confirm, allow_improve_paths }) => {
+    async ({ namespace, path, new_path, confirm, allow_policy_paths }) => {
       const nsError = await requireRegisteredNamespace(db, namespace);
       if (nsError) return fail(nsError);
       // Both ends: moving canon away empties it, and moving a document onto a canon path
@@ -273,7 +269,7 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ ok: number }>();
       if (!exists) return fail(`not found: ${namespace}/${path}`);
-      const movePolicyRefusal = policyPathsRefusal(ctx, "move", namespace, allow_improve_paths, [
+      const movePolicyRefusal = policyPathsRefusal(ctx, "move", namespace, allow_policy_paths, [
         path,
         new_path,
       ]);

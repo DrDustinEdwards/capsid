@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import type { FetchLike } from "./http";
 import type { HealthReport } from "./health";
 import { healthOf, parseHealth } from "@dustinedwards/site-runtime/health-read";
 import { readCapped } from "@dustinedwards/site-runtime/body";
@@ -117,8 +118,6 @@ export function ringReading(
     mark,
   };
 }
-
-type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 interface Reached {
   status: number | null;

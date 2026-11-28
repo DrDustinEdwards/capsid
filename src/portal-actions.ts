@@ -19,7 +19,7 @@ import { refuseCrossSite } from "@dustinedwards/site-runtime/origin";
 import { requireJson } from "@dustinedwards/site-runtime/body";
 import type { Env } from "./env";
 import { capsidStatus } from "./status";
-import { parseReposList } from "./github";
+import { parseReposList } from "./github/client";
 import { readBoundedText } from "./signed-requests";
 import { opsFeed, OPS_RETURN_TO, PORTAL_CSRF_COOKIE, type OpsFeedData } from "./ops-feed";
 import { isoTime } from "./ops-live";

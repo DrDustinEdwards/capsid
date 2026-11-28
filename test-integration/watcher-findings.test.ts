@@ -106,23 +106,13 @@ async function findingRow(fingerprint: string) {
 }
 
 describe("the finding's row across passes", () => {
-  it("a finding a person dismissed stays dismissed while seen, clears when it stops, stays quiet six hours, and opens again after", async () => {
+  it("a finding clears when it stops, stays quiet six hours, and opens again after", async () => {
     const [f] = SITE_MAP_DRIFT();
     expect((await pass(NOW, [f])).recorded).toEqual([f.fingerprint]);
     expect(await findingRow(f.fingerprint)).toMatchObject({
       state: "open",
       seen_count: 1,
       namespace: "capsid",
-    });
-
-    await env.DB.prepare("UPDATE watcher_findings SET state = 'dismissed' WHERE fingerprint = ?1")
-      .bind(f.fingerprint)
-      .run();
-    expect((await pass(at(1), [f])).recorded).toEqual([]);
-    expect(await findingRow(f.fingerprint)).toMatchObject({
-      state: "dismissed",
-      seen_count: 2,
-      reopen_after: null,
     });
 
     await pass(at(2), []);
@@ -133,14 +123,14 @@ describe("the finding's row across passes", () => {
     });
 
     expect((await pass(at(3), [f])).recorded).toEqual([]);
-    expect(await findingRow(f.fingerprint)).toMatchObject({ state: "cleared", seen_count: 3 });
+    expect(await findingRow(f.fingerprint)).toMatchObject({ state: "cleared", seen_count: 2 });
 
     expect((await pass(at(9), [f])).recorded).toEqual([f.fingerprint]);
     expect(await findingRow(f.fingerprint)).toMatchObject({
       state: "open",
       cleared_at: null,
       reopen_after: null,
-      seen_count: 4,
+      seen_count: 3,
     });
   });
 

@@ -15,8 +15,7 @@ export const MAX_EVIDENCE = 20;
 const MAX_EVIDENCE_LINES = 8;
 const MAX_EVIDENCE_LINE = 300;
 
-const FINDING_STATES = ["open", "dismissed", "cleared"] as const;
-type FindingState = (typeof FINDING_STATES)[number];
+type FindingState = "open" | "cleared";
 
 export interface FindingRow {
   fingerprint: string;
@@ -32,8 +31,7 @@ export interface FindingRow {
   updated_at: string;
 }
 
-// What a sighting carries into the row. The Finding type lives in src/watcher-detect.ts;
-// this is the part of it the memory reads.
+// The part of a Finding (src/watcher-detect.ts) the memory reads.
 export interface Sighted {
   fingerprint: string;
   namespace: string;
@@ -88,10 +86,6 @@ export type SightingVerdict =
 // and the writes.
 export function onSighting(row: FindingRow | null, now: Date): SightingVerdict {
   if (!row || row.state === "open") return { do: "record" };
-  if (row.state === "dismissed")
-    return { do: "quiet", why: "dismissed, and it has not cleared since" };
-
-  // cleared
   const reopen = row.reopen_after ? Date.parse(row.reopen_after) : Number.NaN;
   // A cleared row with no usable reopen_after is opened rather than muted: a watcher
   // that goes quiet on a corrupt stamp reads as health.
@@ -113,11 +107,10 @@ export function onSighting(row: FindingRow | null, now: Date): SightingVerdict {
 /** The reopen_after a clear at `now` writes. */
 const reopenAfter = (now: Date) => new Date(now.getTime() + REOPEN_QUIET_MS).toISOString();
 
-// The reads and writes a pass makes, injected so test/watcher.test.ts can drive the
-// pass without a database. `d1FindingMemory` is the one the tick uses.
+// The reads and writes a pass makes, injected so a test can drive the pass without a database.
 export interface FindingMemory {
-  // The rows for these fingerprints, and every 'open' or 'dismissed' row (the ones a pass may
-  // clear), keyed by fingerprint.
+  // The rows for these fingerprints, and every open row (the ones a pass may clear), keyed by
+  // fingerprint.
   load(fingerprints: string[]): Promise<Map<string, FindingRow>>;
   /** A first row, open. False when a row already exists. */
   insert(f: Sighted, now: Date): Promise<boolean>;
@@ -125,7 +118,7 @@ export interface FindingMemory {
   sight(row: FindingRow, f: Sighted, now: Date): Promise<boolean>;
   /** To 'open', from the state it was read in. */
   open(row: FindingRow, f: Sighted, now: Date): Promise<boolean>;
-  /** From 'open' or 'dismissed' to 'cleared', quiet until reopenAfter(now). */
+  /** From 'open' to 'cleared', quiet until reopenAfter(now). */
   clear(row: FindingRow, now: Date): Promise<boolean>;
 }
 
@@ -137,7 +130,7 @@ export function d1FindingMemory(env: Env): FindingMemory {
       const { results } = await db
         .prepare(
           `SELECT * FROM watcher_findings
-           WHERE fingerprint IN (SELECT value FROM json_each(?1)) OR state IN ('open', 'dismissed')`,
+           WHERE fingerprint IN (SELECT value FROM json_each(?1)) OR state = 'open'`,
         )
         .bind(JSON.stringify(fingerprints))
         .all<FindingRow>();

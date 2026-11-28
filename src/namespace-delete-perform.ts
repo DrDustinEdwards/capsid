@@ -53,7 +53,7 @@ export async function previewNamespaceDelete(
     verdict: refusals.length ? "refused" : "allowed",
     refusals,
     cascade: opts.cascade,
-    allow_improve_paths: opts.allowImprovePaths,
+    allow_policy_paths: opts.allowPolicyPaths,
     counts: plan.counts,
     live_agents: plan.live_agents,
     live_paths: plan.live_paths,
@@ -70,7 +70,7 @@ export async function previewNamespaceDelete(
       claims: {
         namespace,
         cascade: opts.cascade,
-        allow_improve_paths: opts.allowImprovePaths,
+        allow_policy_paths: opts.allowPolicyPaths,
         actor,
         plan: planFingerprint(plan),
       },
@@ -89,7 +89,7 @@ export async function previewNamespaceDelete(
       ...base,
       token: minted.token,
       expires_at: minted.expiresAt,
-      next: `Call capsid_admin_manage_namespaces with action 'delete_perform', the same namespace, cascade and allow_improve_paths, and this token within five minutes. Any change to what the preview counted refuses it.`,
+      next: `Call capsid_admin_manage_namespaces with action 'delete_perform', the same namespace, cascade and allow_policy_paths, and this token within five minutes. Any change to what the preview counted refuses it.`,
     },
   };
 }
@@ -157,7 +157,7 @@ export async function performNamespaceDelete(
         actor,
         namespace,
         cascade: opts.cascade,
-        allow_improve_paths: opts.allowImprovePaths,
+        allow_policy_paths: opts.allowPolicyPaths,
       },
       now: now.getTime(),
     });
@@ -232,7 +232,7 @@ export async function deleteAsPlanned(
   // What the audit row carries besides what it reads inside the batch.
   const recorded = JSON.stringify({
     cascade: opts.cascade,
-    allow_improve_paths: opts.allowImprovePaths,
+    allow_policy_paths: opts.allowPolicyPaths,
     counts: plan.counts,
     documents_deleted: paths,
   });

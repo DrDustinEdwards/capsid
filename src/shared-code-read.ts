@@ -1,4 +1,5 @@
 import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
+import type { FetchLike } from "./http";
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import { parseReposList } from "./github/client";
@@ -39,8 +40,6 @@ const RENOVATE_FILES = [
   ".renovaterc",
   ".renovaterc.json",
 ];
-
-type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 const NPM_TIMEOUT_MS = 8000;
 const NPM_USER_AGENT = "capsid (shared code; https://github.com/DrDustinEdwards/capsid)";

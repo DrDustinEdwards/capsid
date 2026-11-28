@@ -13,7 +13,7 @@ import {
 } from "@dustinedwards/site-runtime/health";
 import { auditLogCheck } from "@dustinedwards/site-runtime/audit-log";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
-import { DEFAULT_CADENCE_MINUTES } from "./watcher";
+import { WATCHER_CADENCE_MINUTES } from "./watcher";
 
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 export const BACKUP_LAST_OK_KEY = "backup:last-ok";
@@ -141,7 +141,7 @@ function taskCheck(env: Env, now: () => Date = () => new Date()): HealthCheck {
     name: "cron",
     level: "warn",
     run: async () => {
-      const states = taskStates(await readTaskRuns(env.DB), now(), DEFAULT_CADENCE_MINUTES);
+      const states = taskStates(await readTaskRuns(env.DB), now(), WATCHER_CADENCE_MINUTES);
       const periodic = new Set<string>(TASKS.filter((t) => t.period_ms !== null).map((t) => t.id));
       const flagged = states.filter(
         (t) =>

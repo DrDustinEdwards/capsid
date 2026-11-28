@@ -1,7 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { readDocument } from "../doc-reads";
 import { z } from "zod";
-import { repoBlobPaths, resolveRepo } from "../github";
+import { resolveRepo } from "../github/client";
+import { repoBlobPaths } from "../github/contents";
 import {
   auditStatement,
   documentUpsert,

@@ -60,12 +60,5 @@ export async function readFactsDrift(
 
 /** The stored secrets and data model, or null before the first build. */
 export async function readResources(env: Pick<Env, "APP_KV">): Promise<ResourcesDoc | null> {
-  const doc = await readFactsJson<ResourcesDoc>(env, RESOURCES_KEY);
-  if (!doc) return null;
-  // The stored doc can predate a field the type has since gained.
-  // Fill what the type promises, so a reader never meets a missing list.
-  return {
-    ...doc,
-    workers: (doc.workers ?? []).map((w) => ({ ...w, previews: w.previews ?? [] })),
-  };
+  return readFactsJson<ResourcesDoc>(env, RESOURCES_KEY);
 }

@@ -1,9 +1,10 @@
 import type { Env } from "./env";
+import type { FetchLike } from "./http";
 import { healthUrl, readSiteConfig } from "./ops-sites";
 import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
 import type { ConvergenceCheck, ConvergenceSite } from "./ops-types/views";
 import { REPAIR_AUDIT_ACTION } from "./site-repair";
-import { callOperator, tokenSet, toolRefusal, type FetchLike } from "./site-operator";
+import { callOperator, tokenSet, toolRefusal } from "./site-operator";
 import { readStoredSecrets } from "./secret-presence";
 import { clip, readHealth } from "./site-watch";
 // THE CONVERGENCE VIEW per site that opted in, what its own operator API says (sync_status: the

@@ -15,7 +15,6 @@ export interface Actions extends StopActions {
   refresh: () => void;
   theme: () => void;
   help: () => void;
-  copy: (text: string) => void;
 }
 
 function commands(

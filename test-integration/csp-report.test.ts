@@ -1,9 +1,7 @@
-import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
-import worker, { BACKUP_CRON } from "../src/index";
+import { env, SELF } from "cloudflare:test";
 import { CSP_REPORT_RULES } from "../src/routes";
 import { rateLimiter } from "../src/http";
 import { limit } from "@dustinedwards/site-runtime/rate-limit";
-import { REPORT_PREFIX } from "../src/security-headers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // /csp-report against the real runtime: site-runtime's receiver behind Capsid's limiter, with CORS for the Portal.
@@ -30,7 +28,7 @@ async function postReport(body: string, ip = "203.0.113.10") {
   });
 }
 
-const stored = async () => (await env.MEDIA.list({ prefix: REPORT_PREFIX })).objects.length;
+const stored = async () => (await env.MEDIA.list()).objects.length;
 
 let logged: string[] = [];
 beforeEach(() => {
@@ -77,45 +75,6 @@ describe("/csp-report is rate limited before it reads anything", () => {
     expect(valid.status).toBe(204);
     expect(violations()).toHaveLength(0);
     expect(await stored()).toBe(before);
-  });
-});
-
-describe("a report the sink stored before 2026-10-20 is reaped by the backup cron", () => {
-  // The sink no longer stores, but the prune still reaps what it left under the
-  // prefix. A fresh and an aged report are seeded as the old sink keyed them.
-  it("the aged copy is deleted and the fresh report is kept", async () => {
-    const today = new Date().toISOString().slice(0, 10);
-    const fresh = `${REPORT_PREFIX}${today}/sample-ray.json`;
-    const agedDay = new Date(Date.now() - 40 * 86_400_000).toISOString().slice(0, 10);
-    const aged = fresh.replace(today, agedDay);
-    expect(aged).not.toBe(fresh);
-    await env.MEDIA.put(fresh, "{}");
-    await env.MEDIA.put(aged, "{}");
-
-    // The backup refuses every prune when the store looks empty or the pinned FTS probe
-    // misses, so the probe document /health also reads is seeded first.
-    await env.DB.prepare(
-      `INSERT OR IGNORE INTO documents (namespace, path, title, body, type, status)
-       VALUES ('capsid', 'conventions.md', 'Portfolio-wide conventions', 'Standing rules that apply across all projects.', 'procedural', 'published')`,
-    ).run();
-
-    const ctx = createExecutionContext();
-    worker.scheduled?.(
-      {
-        cron: BACKUP_CRON,
-        scheduledTime: Date.now(),
-        noRetry() {},
-      } as unknown as ScheduledController,
-      env,
-      ctx,
-    );
-    await waitOnExecutionContext(ctx);
-
-    const after = (await env.MEDIA.list({ prefix: REPORT_PREFIX })).objects.map((o) => o.key);
-    expect(after, "the prune did not reap an aged report the sink's prefix holds").not.toContain(
-      aged,
-    );
-    expect(after, "the prune reaped a fresh report").toContain(fresh);
   });
 });
 

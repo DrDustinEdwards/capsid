@@ -1,11 +1,6 @@
 import type { Env } from "./env";
-import {
-  CF_API,
-  CfReadError,
-  cfGetAll,
-  cloudflareCredentials,
-  type FetchLike,
-} from "./ops-cloudflare";
+import type { FetchLike } from "./http";
+import { CF_API, CfReadError, cfGetAll, cloudflareCredentials } from "./ops-cloudflare";
 
 // The reads behind capsid_admin_read_ops's Cloudflare actions: Access applications and policies,
 // and Email Routing rules and destination addresses. Only src/tools/cloudflare.ts imports this

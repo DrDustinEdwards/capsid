@@ -19,7 +19,6 @@ import { KIND_STATUS } from "../lib/derive";
 
 const RULE: Record<MaintenanceRule, { kind: Kind; label: string; order: number }> = {
   "pr-red": { kind: "crit", label: "Red PR", order: 0 },
-  "undeployed-merge": { kind: "warn", label: "Not deployed", order: 2 },
   "branch-merged": { kind: "warn", label: "Merged branch", order: 7 },
   "branch-stale": { kind: "warn", label: "Old branch", order: 8 },
   "model-drift": { kind: "warn", label: "Model drift", order: 8 },
@@ -27,7 +26,6 @@ const RULE: Record<MaintenanceRule, { kind: Kind; label: string; order: number }
   "branch-pruned": { kind: "ok", label: "Pruned", order: 10 },
   "prs-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "branches-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
-  "deploys-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "model-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "rule-docs-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
 };
@@ -50,7 +48,7 @@ export function Maintenance() {
   const hidden = items.length - shown.length;
   const r = data?.read;
   const readLine = r
-    ? `${r.repos} of ${r.roster} repos, ${r.prs} open PRs, ${r.branches} branches, ${r.deploys} live deploys read`
+    ? `${r.repos} of ${r.roster} repos, ${r.prs} open PRs, ${r.branches} branches read`
     : "";
   return (
     <Panel

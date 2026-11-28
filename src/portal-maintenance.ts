@@ -26,13 +26,12 @@ export const handlePortalMaintenance = behindGate(async (_request, env) => {
           branches: sum(list.branches_read),
           repos: Object.keys(list.prs_read).length,
           roster: ROSTER.length,
-          deploys: Object.keys(list.deploys_read).length,
         },
       }
     : {
         generated: null,
         items: [],
-        read: { prs: 0, branches: 0, repos: 0, roster: ROSTER.length, deploys: 0 },
+        read: { prs: 0, branches: 0, repos: 0, roster: ROSTER.length },
       };
   return jsonResponse(body);
 });

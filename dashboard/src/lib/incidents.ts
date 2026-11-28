@@ -1,15 +1,12 @@
-import type { OpenRef } from "./derive";
 import type { OpsFeed } from "../types";
 import { parse } from "capsomer/behavior/time";
 
 export interface Incident {
   sev: "crit" | "warn";
-  open: boolean;
   title: string;
   fp: string;
   ns: string;
   at: number;
-  ref: OpenRef | null;
   status: string;
 }
 
@@ -23,12 +20,10 @@ export function incidents(feed: OpsFeed): Incident[] {
     seen.add(f.fingerprint);
     items.push({
       sev: HOT.test(f.fingerprint) ? "crit" : "warn",
-      open: true,
       title: f.headline,
       fp: f.fingerprint,
       ns: f.namespace,
       at: parse(f.first_seen),
-      ref: null,
       status: "open",
     });
   }
@@ -38,15 +33,13 @@ export function incidents(feed: OpsFeed): Incident[] {
       if (seen.has(fp)) continue;
       items.push({
         sev: HOT.test(fp) ? "crit" : "warn",
-        open: true,
         title: `Check '${c.id}' reports a finding`,
         fp,
         ns: "watcher",
         at: parse(feed.snapshot?.pass_at ?? feed.live.generated),
-        ref: null,
         status: "not recorded yet",
       });
     }
   }
-  return items.sort((a, b) => Number(b.open) - Number(a.open) || b.at - a.at);
+  return items.sort((a, b) => b.at - a.at);
 }

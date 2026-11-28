@@ -1,24 +1,11 @@
-import { listAllKeys } from "@dustinedwards/d1-dump";
 import type { Env } from "./env";
-import { REPORT_PREFIX } from "./security-headers";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { pruneNotFound } from "@dustinedwards/site-runtime/not-found";
 import { DAY_MS } from "./time";
 
 const VERSION_RETENTION_DAYS = 90;
 const AUDIT_RETENTION_DAYS = 365;
-// DORA's readers look back weeks, not a year.
 const DEPLOY_RETENTION_DAYS = 365;
-
-// Nothing else prunes this prefix, and a public unauthenticated path writes it.
-const REPORT_RETENTION_DAYS = 30;
-
-// Both prefixes carry an ISO date at a fixed offset, so age is a string comparison; an unparseable key is never pruned.
-function isOlderThan(key: string, prefix: string, cutoffDay: string): boolean {
-  const day = key.slice(prefix.length, prefix.length + 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
-  return day < cutoffDay;
-}
 
 function cutoffDay(now: Date, days: number): string {
   return new Date(now.getTime() - days * DAY_MS).toISOString().slice(0, 10);
@@ -32,17 +19,6 @@ export async function deleteInChunks(bucket: R2Bucket, keys: string[]): Promise<
     await bucket.delete(keys.slice(i, i + R2_DELETE_MAX));
   }
   return keys.length;
-}
-
-// Deletes CSP reports past retention. Dump runs outside the graduated retention are pruned by runCheckedBackup
-// with d1-dump's default policy (counts runs, deletes whole runs, never the newest complete one).
-export async function pruneReports(env: Env, now: string): Promise<number> {
-  const reportCutoff = cutoffDay(new Date(now), REPORT_RETENTION_DAYS);
-  const staleReports = (await listAllKeys(env.MEDIA, REPORT_PREFIX)).filter((key) =>
-    isOlderThan(key, REPORT_PREFIX, reportCutoff),
-  );
-  if (staleReports.length > 0) await deleteInChunks(env.MEDIA, staleReports);
-  return staleReports.length;
 }
 
 // Prunes after the export so leaving rows are in today's dump. meta.changes is inflated by FTS5 triggers,

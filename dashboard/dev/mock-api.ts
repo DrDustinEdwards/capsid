@@ -1528,16 +1528,11 @@ function maintenance(): PortalMaintenance {
     return {
       generated: null,
       items: [],
-      read: { prs: 0, branches: 0, repos: 0, roster: 7, deploys: 0 },
+      read: { prs: 0, branches: 0, repos: 0, roster: 7 },
     };
   return {
     generated: new Date(now - 3 * 3_600_000).toISOString(),
     items: [
-      {
-        rule: "undeployed-merge",
-        namespace: "sample-b",
-        line: "sample-b was last deployed 2026-10-04 09:00 UTC, 4.0 days before example-org/sample-b's last commit on main (1a2b3c4): deploy it, or say why it waits.",
-      },
       {
         rule: "branch-merged",
         namespace: "sample",
@@ -1548,13 +1543,8 @@ function maintenance(): PortalMaintenance {
         namespace: "sample-c",
         line: "example-org/sample-c branch feat/old-idea has had no commit for 41 days (no pull request): delete it, open its pull request, or keep-list it.",
       },
-      {
-        rule: "deploys-not-checked",
-        namespace: "sample-c",
-        line: "Deploys in sample-c were not checked (Cloudflare was not read for it (CF_OPS_TOKEN is not set)): what is missing is not a clean result.",
-      },
     ],
-    read: { prs: 6, branches: 48, repos: 7, roster: 7, deploys: 2 },
+    read: { prs: 6, branches: 48, repos: 7, roster: 7 },
   };
 }
 
@@ -1647,7 +1637,7 @@ function seedActivity(): PortalActivityRow[] {
       d({ fields: [{ name: "Mode", value: "overwrite" }], withheld: 1 }),
     ],
     [240, "agent:reviewer", "read", "sample-c", "sample-c/decisions.md", d({})],
-    [400, null, "lint.finalize", "sample", "sample/archive/old-note.md", d({ unreadable: true })],
+    [400, null, "lint", "sample", "sample/archive/old-note.md", d({ unreadable: true })],
     [
       720,
       "agent:sample-c-driver",

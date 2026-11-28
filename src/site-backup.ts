@@ -1,11 +1,12 @@
 import type { Env } from "./env";
+import type { FetchLike } from "./http";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { backupFreshness } from "./health";
 import { OFFACCOUNT_REPORT_KEY, isOffaccountSite, offaccountSiteOf } from "./offaccount";
 import { readSiteConfig } from "./ops-sites";
 import type { SiteOperator } from "./ops-types/sites";
 import type { PortalBackups, SiteBackupRow, SiteBackupStatus } from "./ops-types/views";
-import { callOperator, tokenSet, type FetchLike, type OperatorCall } from "./site-operator";
+import { callOperator, tokenSet, type OperatorCall } from "./site-operator";
 import { describeRuns } from "@dustinedwards/site-runtime/cron";
 import { operatorRefusal } from "./site-jobs";
 import { takeLimit } from "./site-repair";

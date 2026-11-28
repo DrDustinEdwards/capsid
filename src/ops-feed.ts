@@ -18,7 +18,7 @@ import type { OpsFeed, OpsUptime, OpsUptimeCounts } from "./ops-types/feed";
 import { DAILY_RETENTION_DAYS } from "./backup-prune";
 import { auditStatement } from "./store-guards";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
-import { DEFAULT_CADENCE_MINUTES, watcherTick, type Gathered, type WatcherReport } from "./watcher";
+import { WATCHER_CADENCE_MINUTES, watcherTick, type Gathered, type WatcherReport } from "./watcher";
 import { gatherFindings } from "./watcher-gather";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { warningHeaders } from "./http";
@@ -159,7 +159,7 @@ export async function opsFeed(env: Env, now: Date): Promise<OpsFeedData> {
       "error" in runs
         ? { tasks: null, error: runs.error }
         : {
-            tasks: taskStates(runs.read, now, snapshot?.cadence_min ?? DEFAULT_CADENCE_MINUTES),
+            tasks: taskStates(runs.read, now, snapshot?.cadence_min ?? WATCHER_CADENCE_MINUTES),
             error: null,
           },
     refresh_allowed_at: refreshAllowedAt(last, now),

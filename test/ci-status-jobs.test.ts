@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CI_JOBS_MAX, CI_LOG_BUDGET, ciStatus } from "../src/github.ts";
+import { CI_JOBS_MAX, CI_LOG_BUDGET, ciStatus } from "../src/github/actions.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // Drill-in for any run (jobs, job, step) and redaction of every log it returns, through the real ciStatus against a stubbed GitHub.

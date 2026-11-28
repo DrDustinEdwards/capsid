@@ -1,8 +1,9 @@
 import type { Env } from "./env";
+import type { FetchLike } from "./http";
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
 import { runSiteRepair, type RepairOutcome } from "./site-repair";
-import { tokenSet, type FetchLike } from "./site-operator";
+import { tokenSet } from "./site-operator";
 import { DAY_MS } from "./time";
 import { mapLimit } from "./map-limit";
 import { failingCheckNames } from "@dustinedwards/site-runtime/health-read";

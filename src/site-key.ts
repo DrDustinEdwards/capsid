@@ -1,5 +1,6 @@
 import type { Env } from "./env";
-import { CF_API, type FetchLike } from "./ops-cloudflare";
+import type { FetchLike } from "./http";
+import { CF_API } from "./ops-cloudflare";
 import { readSiteRow } from "./ops-sites";
 import { auditStatement } from "./store-guards";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";

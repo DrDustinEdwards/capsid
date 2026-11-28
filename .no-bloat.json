@@ -12,13 +12,13 @@
     }
   ],
   "baseline": {
-    "measured_at": "aefa799",
+    "measured_at": "4cfe924",
     "knip (Worker)": {},
     "knip (dashboard)": {},
     "jscpd": {
-      "clones": 69,
-      "lines": 533,
-      "percentage": 0.58,
+      "clones": 67,
+      "lines": 517,
+      "percentage": 0.57,
       "unread": 4
     },
     "shared copies": {
@@ -27,23 +27,23 @@
     },
     "legacy": {},
     "size": {
-      "dashboard/dev/mock-api.ts": 2049,
-      "dashboard/src/app/App.tsx": 585,
+      "dashboard/dev/mock-api.ts": 2039,
+      "dashboard/src/app/App.tsx": 561,
       "dashboard/src/views/SiteTraffic.tsx": 605,
       "explorer/src/explorer.css": 1435,
       "explorer/src/pages.mjs": 810,
       "scripts/verify-live.mjs": 671,
-      "src/ops-cloudflare.ts": 546,
+      "src/ops-cloudflare.ts": 545,
       "test/fakes.ts": 1231
     },
     "tests": {
-      "files": 191,
-      "cases": 1047
+      "files": 187,
+      "cases": 1024
     },
     "comments": {
-      "lines": 4546,
-      "code": 81688,
-      "percentage": 5.27
+      "lines": 4422,
+      "code": 80149,
+      "percentage": 5.23
     }
   }
 }

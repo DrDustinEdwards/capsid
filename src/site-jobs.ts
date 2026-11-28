@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import type { FetchLike } from "./http";
 import { exportAuditLog } from "@dustinedwards/site-runtime/audit-log";
 import { describeRuns, runsSucceeded } from "@dustinedwards/site-runtime/cron";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
@@ -6,7 +7,7 @@ import { withAuditKey } from "./audit-key";
 import { backupLeaseHeld, backupTaskResult, runBackup } from "./backup";
 import { readSiteRow } from "./ops-sites";
 import type { SiteOperator } from "./ops-types/sites";
-import { callOperator, tokenSet, type FetchLike } from "./site-operator";
+import { callOperator, tokenSet } from "./site-operator";
 import { takeLimit } from "./site-repair";
 import { auditStatement } from "./store-guards";
 import { supersedePass } from "./supersede";

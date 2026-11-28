@@ -27,15 +27,6 @@
   color: var(--warn);
   white-space: nowrap;
 }
-kbd {
-  font-family: var(--mono);
-  font-size: var(--fs-label);
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-s);
-  border: var(--line-w) solid var(--line-strong);
-  background: var(--surface);
-  color: var(--muted);
-}
 
 /* main is the containing block for absolutely positioned children (.cap-sr-only in a table header): otherwise they sit against the document, past the scrolling table, and a mobile browser widens its layout. */
 main {
@@ -76,28 +67,8 @@ main {
   color: var(--dim);
 }
 
-.chev {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin: 0 var(--space-1-5) var(--space-1) var(--space-2-5);
-  border-right: var(--line-w-mid) solid var(--muted);
-  border-bottom: var(--line-w-mid) solid var(--muted);
-  transform: rotate(-45deg);
-  transition: transform var(--dur-fast);
-}
-
 summary {
   cursor: pointer;
-}
-summary.cap-btn::-webkit-details-marker {
-  display: none;
-}
-details[open] > summary .chev {
-  transform: rotate(45deg);
-}
-details > summary + .cap-cluster {
-  margin-block-start: var(--space-3);
 }
 
 .shared-read {
@@ -244,10 +215,6 @@ table.workers-stores .cap-status {
   list-style: none;
 }
 
-tr.click {
-  cursor: pointer;
-}
-
 .search {
   height: 32px;
   border: var(--line-w) solid var(--line-strong);
@@ -269,9 +236,6 @@ tr.click {
   margin: 0 0 var(--space-3);
 }
 
-#root {
-  height: 100%;
-}
 .uptime-cell {
   width: 30%;
 }
@@ -284,9 +248,7 @@ tr.click {
 .body {
   padding: var(--space-4-5) var(--space-5);
 }
-.src.hot,
-.cap-mono.hot,
-.cap-num.hot {
+.src.hot {
   color: var(--crit);
 }
 .spark,
@@ -302,9 +264,6 @@ td.wrap {
 .prewrap {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-.nowrap {
-  white-space: nowrap;
 }
 select.search {
   padding-right: var(--space-2-5);

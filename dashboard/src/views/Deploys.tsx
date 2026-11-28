@@ -1,4 +1,5 @@
-import { useApp, type Filters } from "../app/ctx";
+import { useState } from "react";
+import { useApp } from "../app/ctx";
 import type { CfDeploy, SiteSnapshot } from "../types";
 import { cfNoData, cfOk, siteKey } from "../lib/derive";
 import { DAY, ago, shortId } from "../lib/format";
@@ -10,13 +11,14 @@ import { NoSnapshot, NsChips, TimelinePanel, useNsFilter } from "./shared";
 
 const DeploysTable = trendChart("DeploysTable");
 
-const RANGES: Array<Filters["range"]> = ["24h", "7d", "30d"];
+const RANGES = ["24h", "7d", "30d"] as const;
 
 export function Deploys() {
-  const { feed, now, filters, setFilters } = useApp();
+  const { feed, now } = useApp();
+  const [range, setRange] = useState<(typeof RANGES)[number]>("7d");
   const [ns, setNs] = useNsFilter();
   const snap = feed.snapshot;
-  const days = filters.range === "24h" ? 1 : filters.range === "30d" ? 30 : 7;
+  const days = range === "24h" ? 1 : range === "30d" ? 30 : 7;
   const rows: Array<{ s: SiteSnapshot; d: CfDeploy }> = [];
   for (const s of snap?.sites ?? []) for (const d of cfOk(s)?.deploys ?? []) rows.push({ s, d });
   const list = rows
@@ -33,8 +35,8 @@ export function Deploys() {
             key={r}
             type="button"
             className="cap-chip"
-            aria-pressed={filters.range === r}
-            onClick={() => setFilters({ range: r })}
+            aria-pressed={range === r}
+            onClick={() => setRange(r)}
           >
             {r}
           </button>
@@ -77,7 +79,6 @@ export function Deploys() {
                   {list.map(({ s, d }) => (
                     <tr
                       key={`${siteKey(s)}-${d.id}`}
-                      className="click"
                       data-row=""
                       data-open={`site:${siteKey(s)}`}
                       tabIndex={0}

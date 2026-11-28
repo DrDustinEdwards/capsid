@@ -1,6 +1,5 @@
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
-import { parseReposList, repoTokenOk, requireSinglePrimary } from "./github";
-import type { RepoEntry } from "./github/client";
+import { parseReposList, repoTokenOk, requireSinglePrimary, type RepoEntry } from "./github/client";
 import { MAX_NAMESPACE, MAX_REPO_SELECTOR, MAX_REPOS_JSON } from "./limits";
 import { auditStatement, isMissingRowAbort } from "./store-guards";
 

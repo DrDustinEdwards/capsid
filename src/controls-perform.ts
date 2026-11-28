@@ -12,7 +12,7 @@ import { deleteAsPlanned } from "./namespace-delete-perform";
 import { type ActionResult, type PerformContext, required } from "./controls-perform-base";
 import { performSiteAction } from "./controls-perform-sites";
 import type { Env } from "./env";
-import { managePr } from "./github";
+import { managePr } from "./github/refs";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import type { PortalAction } from "./ops-types/portal";
 import { auditStatement } from "./store-guards";
@@ -130,7 +130,7 @@ export async function performAction(
         await auditClick(namespace, {
           namespace,
           cascade: options.opts.cascade,
-          allow_improve_paths: options.opts.allowImprovePaths,
+          allow_policy_paths: options.opts.allowPolicyPaths,
           documents_deleted: data.documents_deleted,
           edges_removed: data.edges_removed,
           ops_site_removed: data.ops_site_removed,

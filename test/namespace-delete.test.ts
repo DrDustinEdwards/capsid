@@ -45,8 +45,8 @@ function plan(over: Partial<DeletePlan> = {}, counts: Partial<PlanCounts> = {}):
   };
 }
 
-const NONE = { cascade: false, allowImprovePaths: false };
-const ALL = { cascade: true, allowImprovePaths: true };
+const NONE = { cascade: false, allowPolicyPaths: false };
+const ALL = { cascade: true, allowPolicyPaths: true };
 
 test("the action argument is required with no default, so an omitted one never means perform", () => {
   assert.equal(actionArgFor("capsid_admin_manage_namespaces"), "action");
@@ -88,7 +88,7 @@ test("PLANT: live documents refuse without cascade, and cascade clears exactly t
   const p = plan({}, { documents_live: 4, documents_archived: 9 });
   assert.equal(deleteRefusals(p, NONE).length, 1);
   assert.match(deleteRefusals(p, NONE)[0], /4 live documents/);
-  assert.deepEqual(deleteRefusals(p, { cascade: true, allowImprovePaths: false }), []);
+  assert.deepEqual(deleteRefusals(p, { cascade: true, allowPolicyPaths: false }), []);
 });
 
 test("an empty namespace, revoked agents and archived documents alone refuse nothing", () => {
@@ -97,9 +97,9 @@ test("an empty namespace, revoked agents and archived documents alone refuse not
   assert.deepEqual(deleteRefusals(plan({}, { documents_archived: 9 }), NONE), []);
 });
 
-test("PLANT: a signed policy document needs allow_improve_paths", () => {
+test("PLANT: a signed policy document needs allow_policy_paths", () => {
   const p = plan({ policy_paths: ["policy/gates.md"] }, { documents_live: 1, policy_documents: 1 });
-  const refusals = deleteRefusals(p, { cascade: true, allowImprovePaths: false });
+  const refusals = deleteRefusals(p, { cascade: true, allowPolicyPaths: false });
   assert.equal(refusals.length, 1);
   assert.match(refusals[0], /policy\/gates\.md/);
   assert.deepEqual(deleteRefusals(p, ALL), []);

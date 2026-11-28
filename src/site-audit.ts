@@ -1,6 +1,6 @@
 import { auditPages, crawlSite } from "@drdustinedwards/site-helpers/audit";
+import type { FetchLike } from "./http";
 import type { Env } from "./env";
-import type { FetchLike } from "./live-checks";
 import { reportSite } from "./site-reports";
 
 // A crawler's SEO audit of a namespace's site, served as capsid_inspect_repo action audit (the SEO

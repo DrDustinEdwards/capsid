@@ -5,11 +5,6 @@
   flex-wrap: wrap;
 }
 
-.conv-h {
-  margin: 0;
-  font-size: var(--fs-detail);
-  font-weight: var(--weight-heading);
-}
 .search-rows + .search-rows {
   margin-top: var(--space-4);
 }

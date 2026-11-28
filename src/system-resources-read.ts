@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import type { FetchLike } from "./http";
 import {
   CF_API,
   CfReadError,
@@ -6,7 +7,6 @@ import {
   cfGetAll,
   cfPostRead,
   cloudflareCredentials,
-  type FetchLike,
 } from "./ops-cloudflare";
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 

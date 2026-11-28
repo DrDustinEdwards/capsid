@@ -131,24 +131,20 @@ export function IncidentFeed({ ns }: { ns?: string }) {
   return (
     <div className="feed">
       {items.map((it) => {
-        const kind = it.open ? it.sev : "ok";
+        const kind = it.sev;
         const open = Math.max(0, now - it.at);
         return (
           <div
             className={kind === "crit" ? "frow sev-crit" : "frow"}
-            key={`${it.fp}-${it.ref ?? ""}`}
+            key={it.fp}
             data-row=""
-            data-open={it.ref ?? undefined}
-            role={it.ref ? "button" : undefined}
-            tabIndex={it.ref ? 0 : undefined}
-            title={it.ref ? undefined : `fingerprint ${it.fp}`}
+            title={`fingerprint ${it.fp}`}
           >
             <Glyph name={kind} tone={kind} />
             <div className="t">
               <b>{it.title}</b>
               <div className="sub">
-                <span className="ns">{it.ns}</span> ·{" "}
-                {it.status === "open" ? (it.open ? "open" : "closed") : it.status}
+                <span className="ns">{it.ns}</span> · {it.status}
               </div>
             </div>
             <div className="m">

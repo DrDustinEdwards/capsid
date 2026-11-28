@@ -3,7 +3,6 @@ import type { OpsMaintenanceItem } from "./ops-types/views";
 import { ROSTER } from "./roster";
 import { gatherBranchItems, githubBranchReaders, type BranchReaders } from "./maintenance-branches";
 import { gatherPrItems, githubPrReaders, type PrReaders } from "./maintenance-prs";
-import { gatherDeployItems, githubDeployReaders, type DeployReaders } from "./maintenance-deploys";
 import { gatherModelDriftItems } from "./model-drift";
 import { readFactsDrift } from "./system-facts-store";
 import { bundledModel } from "./public-data";
@@ -27,7 +26,6 @@ interface MaintenanceList {
   items: MaintenanceItem[];
   prs_read: Record<string, number>;
   branches_read: Record<string, number>;
-  deploys_read: Record<string, number>;
   model_read: number;
   rule_docs_read: number;
 }
@@ -41,7 +39,6 @@ async function gatherMaintenance(
   now: Date,
   prReaders: PrReaders = githubPrReaders(env),
   branchReaders: BranchReaders = githubBranchReaders(env),
-  deployReaders: DeployReaders = githubDeployReaders(env),
   // The model's own drift, then the versions and secrets models' from the nightly build.
   driftReader: DriftReader = async (e) => {
     const [model, facts] = [
@@ -59,9 +56,6 @@ async function gatherMaintenance(
   const branches = await gatherBranchItems(env, ROSTER, branchReaders, now);
   items.push(...branches.items);
 
-  const deploys = await gatherDeployItems(deployReaders, now);
-  items.push(...deploys.items);
-
   const drift = await driftReader(env);
   items.push(...drift.items);
 
@@ -73,7 +67,6 @@ async function gatherMaintenance(
     items,
     prs_read: prs.read,
     branches_read: branches.read,
-    deploys_read: deploys.read,
     model_read: drift.read,
     rule_docs_read: ruleDocs.read,
   };
@@ -89,7 +82,6 @@ export async function maintenanceTick(
   now: Date,
   prReaders?: PrReaders,
   branchReaders?: BranchReaders,
-  deployReaders?: DeployReaders,
   driftReader?: DriftReader,
 ): Promise<MaintenanceReport> {
   const today = now.toISOString().slice(0, 10);
@@ -99,17 +91,12 @@ export async function maintenanceTick(
   if (last && last.slice(0, 10) === today) return { ran: false, note: `already ran ${last}` };
   if (await env.APP_KV.get(MAINTENANCE_RETRY_KEY))
     return { ran: false, note: "the last pass threw; it runs again within the hour" };
-  const list = await gatherMaintenance(
-    env,
-    now,
-    prReaders,
-    branchReaders,
-    deployReaders,
-    driftReader,
-  ).catch(async (err: unknown) => {
-    await env.APP_KV.put(MAINTENANCE_RETRY_KEY, "1", { expirationTtl: 3600 });
-    throw err;
-  });
+  const list = await gatherMaintenance(env, now, prReaders, branchReaders, driftReader).catch(
+    async (err: unknown) => {
+      await env.APP_KV.put(MAINTENANCE_RETRY_KEY, "1", { expirationTtl: 3600 });
+      throw err;
+    },
+  );
   await env.APP_KV.put(MAINTENANCE_KEY, JSON.stringify(list));
   await env.APP_KV.put(MAINTENANCE_LAST_KEY, now.toISOString());
   const prsRead = Object.values(list.prs_read).reduce((a, b) => a + b, 0);
@@ -117,10 +104,9 @@ export async function maintenanceTick(
   const branchesRead = Object.values(list.branches_read).reduce((a, b) => a + b, 0);
   const branchRepos = Object.keys(list.branches_read).length;
   const pruned = list.items.filter((i) => i.rule === "branch-pruned").length;
-  const deploySites = Object.keys(list.deploys_read).length;
   return {
     ran: true,
-    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${deploySites} site deploy(s) compared; ${list.model_read} fact(s) compared with the system model; ${list.rule_docs_read} rule document(s) checked`,
+    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${list.model_read} fact(s) compared with the system model; ${list.rule_docs_read} rule document(s) checked`,
     list,
   };
 }
@@ -131,22 +117,7 @@ export async function readMaintenance(env: Env): Promise<MaintenanceList | null>
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as MaintenanceList;
-    if (!Array.isArray(parsed.items) || typeof parsed.generated !== "string") return null;
-    // A list written before a rule existed read nothing for it.
-    const counts = (v: unknown): Record<string, number> =>
-      v && typeof v === "object" ? (v as Record<string, number>) : {};
-    return {
-      ...parsed,
-      // The disk and release-tag rules were removed; a list stored before then may still carry their items.
-      items: parsed.items.filter(
-        (i) => !i.rule.startsWith("disk-") && !i.rule.startsWith("release-"),
-      ),
-      prs_read: counts(parsed.prs_read),
-      branches_read: counts(parsed.branches_read),
-      deploys_read: counts(parsed.deploys_read),
-      model_read: typeof parsed.model_read === "number" ? parsed.model_read : 0,
-      rule_docs_read: typeof parsed.rule_docs_read === "number" ? parsed.rule_docs_read : 0,
-    };
+    return Array.isArray(parsed.items) && typeof parsed.generated === "string" ? parsed : null;
   } catch {
     return null;
   }

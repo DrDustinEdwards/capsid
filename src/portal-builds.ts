@@ -1,6 +1,7 @@
 import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
+import type { FetchLike } from "./http";
 import type { Env } from "./env";
-import { cloudflareCredentials, type FetchLike } from "./ops-cloudflare";
+import { cloudflareCredentials } from "./ops-cloudflare";
 import { readSiteRow } from "./ops-sites";
 import type { PortalBuildLog, PortalWorkersBuilds, WorkersBuild } from "./ops-types/site-page";
 import { behindGate } from "./portal-auth";

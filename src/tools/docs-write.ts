@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { IMPROVE_OVERRIDE_FLAGS } from "../scope";
+import { POLICY_OVERRIDE_FLAGS } from "../scope";
 import { toolSurfaceOf } from "./surface";
 
 import {
@@ -49,20 +49,20 @@ export async function requireRegisteredNamespace(
   );
 }
 
-// allow_improve_paths is itself scoped (IMPROVE_OVERRIDE_FLAGS in src/scope.ts).
+// allow_policy_paths is itself scoped (POLICY_OVERRIDE_FLAGS in src/scope.ts).
 export function policyPathsRefusal(
   ctx: ToolCtx,
   tool: "write" | "restore" | "delete" | "move",
   namespace: string,
-  allowImprovePaths: boolean | undefined,
+  allowPolicyPaths: boolean | undefined,
   paths: string[],
 ): string | null {
-  const allow = allowImprovePaths === true;
+  const allow = allowPolicyPaths === true;
   if (allow) {
     const overrideRefusal = ctx.scope({
       ...toolSurfaceOf(tool),
       namespace,
-      flags: IMPROVE_OVERRIDE_FLAGS,
+      flags: POLICY_OVERRIDE_FLAGS,
     });
     if (overrideRefusal) return overrideRefusal;
   }
@@ -119,7 +119,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         confirm: z.boolean().optional(),
         links: bounded(MAX_LINKS_JSON).optional(),
         if_match: bounded(MAX_SHA).optional(),
-        allow_improve_paths: z.boolean().optional(),
+        allow_policy_paths: z.boolean().optional(),
       },
     },
     async ({
@@ -136,7 +136,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       confirm,
       links,
       if_match,
-      allow_improve_paths,
+      allow_policy_paths,
     }) => {
       const writeMode = mode ?? "replace";
       const typeError = type === undefined ? null : validateDocType(type);
@@ -228,9 +228,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         );
       }
 
-      const policyRefusal = policyPathsRefusal(ctx, "write", namespace, allow_improve_paths, [
-        path,
-      ]);
+      const policyRefusal = policyPathsRefusal(ctx, "write", namespace, allow_policy_paths, [path]);
       if (policyRefusal) return fail(policyRefusal);
 
       // A rule document (src/rule-docs.ts) may not be made worse: over its cap and larger than
@@ -289,7 +287,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
             status,
             mode: writeMode,
             updated: Boolean(prior),
-            ...(allow_improve_paths === true ? { allow_improve_paths: true } : {}),
+            ...(allow_policy_paths === true ? { allow_policy_paths: true } : {}),
             ...(prior && metaChanged
               ? {
                   prior_meta: {

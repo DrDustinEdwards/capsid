@@ -1,5 +1,7 @@
 import type { limit } from "@dustinedwards/site-runtime/rate-limit";
 
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
 export function rateLimiter(env: {
   RATE_LIMITER?: DurableObjectNamespace;
 }): NonNullable<Parameters<typeof limit>[0]> {

@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { parseSystemModel } from "../src/system-model.ts";
 import { resourceDrift, resourcesDoc } from "../src/system-resources.ts";
 import { bindingOf, userTables, type Binding } from "../src/system-resources-read.ts";
-import { readResources } from "../src/system-facts-store.ts";
 import { toPublicVersions, versionDrift } from "../src/system-versions.ts";
 import type { SharedCodeView } from "../src/ops-types/feed.ts";
 
@@ -255,36 +254,4 @@ test("PLANT: a pin moved back since last night, and a repo that runs no no-bloat
     versionDrift(off, {}, NOW).items.map((i) => i.line),
     ["example-org/sample runs no no-bloat check"],
   );
-});
-
-test("a stored resources doc from before `previews` still reads with an empty list (the Workers tab crashed on it)", async () => {
-  const old = {
-    version: 1,
-    read_at: "2026-11-03T06:00:00.000Z",
-    workers: [
-      {
-        script: "sample-web",
-        system: "sample",
-        error: null,
-        secrets: [],
-        vars: [],
-        d1: [],
-        kv: [],
-        r2: [],
-        durable_objects: [],
-        queues: [],
-        services: [],
-        other: [],
-      },
-    ],
-    databases: [],
-    kv_namespaces: [],
-    buckets: [],
-    problems: [],
-  };
-  const env = { APP_KV: { get: async () => JSON.stringify(old) } } as unknown as Parameters<
-    typeof readResources
-  >[0];
-  const doc = await readResources(env);
-  assert.deepEqual(doc?.workers[0]?.previews, []);
 });

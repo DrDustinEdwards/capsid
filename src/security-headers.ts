@@ -27,8 +27,6 @@ export const REPORT_PATH = "/csp-report";
 // lost; every host now reports to this one (routes.ts answers the Portal's preflight).
 export const REPORT_URL = `https://${MCP_HOST}${REPORT_PATH}`;
 const REPORTING_ENDPOINTS = reportingEndpoints(CSP_REPORT_GROUP, REPORT_URL);
-// Nothing writes under this prefix; the backup prune (backup.ts) reaps what is left.
-export const REPORT_PREFIX = "reports/csp/";
 
 // The policy on every response that names none of its own: nothing loads, nothing may frame it, no
 // <base>, and no string reaches a script sink (Trusted Types; these pages run no script).

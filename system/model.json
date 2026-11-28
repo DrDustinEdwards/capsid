@@ -164,7 +164,7 @@
       "short": "Foxing MCP",
       "family": "product",
       "ring": "used",
-      "description": "Runs Foxing from a chat: stats, users, badges, journal posts and catalog health, all through the foxing Worker. Built, not yet deployed.",
+      "description": "Runs Foxing from a chat: the platform snapshot, readers, the catalog and its health, staff picks, Book of the Month, club picks and the admin audit log, all through the foxing Worker.",
       "repos": ["DrDustinEdwards/foxing"],
       "workers": ["foxing-admin-mcp"]
     },
@@ -1825,14 +1825,6 @@
     {
       "repo": "DrDustinEdwards/recova",
       "why": "Kept off the map (Dustin, 2026-10-23); Foxhound replaces it."
-    },
-    {
-      "repo": "DrDustinEdwards/recova-mcp",
-      "why": "Kept off the map (Dustin, 2026-10-23); goes with Recova."
-    },
-    {
-      "repo": "DrDustinEdwards/foxing-admin-mcp",
-      "why": "Kept off the map (Dustin, 2026-10-23); replaced by Foxing Admin and to be deleted."
     },
     {
       "repo": "DrDustinEdwards/writing",
