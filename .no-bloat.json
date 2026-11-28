@@ -12,7 +12,7 @@
     }
   ],
   "baseline": {
-    "measured_at": "6cee500",
+    "measured_at": "9f40a12",
     "knip (Worker)": {},
     "knip (dashboard)": {},
     "jscpd": {
@@ -38,11 +38,11 @@
     },
     "tests": {
       "files": 202,
-      "cases": 1270
+      "cases": 1272
     },
     "comments": {
-      "lines": 5058,
-      "code": 85813,
+      "lines": 5067,
+      "code": 85915,
       "percentage": 5.57
     }
   }

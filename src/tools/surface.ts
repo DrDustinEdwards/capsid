@@ -73,6 +73,7 @@ const INSPECT_REPO: CompositeSpec = {
     "What state a namespace's repo and site are in: its branches, tags and open pull requests, its commit history, its CI runs, a live check of its site, its Google Search Console and Bing Webmaster Tools data, Cloudflare traffic data and an SEO crawl. Read-only.",
   actions: {
     refs: { op: "repo_refs", summary: "Branches, tags and open pull requests." },
+    settings: { op: "repo_settings", summary: "Merge settings, branch rules and rulesets." },
     history: { op: "repo_history", summary: "Commits and comparisons." },
     ci: { op: "ci_status", summary: "CI runs." },
     site: { op: "site_check", summary: "The live site." },

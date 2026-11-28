@@ -400,6 +400,21 @@ test("a body that changes after the pre-read is refused at commit, with the race
   assert.deepEqual(recorded, [], "a refused predicate still committed statements");
 });
 
+test("an append racing another write is refused, not allowed to drop the other's text", async () => {
+  const { result, text, recorded } = await run(
+    "capsid_write_doc",
+    { action: "write", ...DOC, mode: "append", body: "mine" },
+    {
+      raceAfterPreRead: (live) => {
+        live.body = RACED;
+      },
+    },
+  );
+  assert.equal(result.isError, true);
+  assert.match(text, /append conflict/);
+  assert.deepEqual(recorded, []);
+});
+
 test("an overwrite with no confirm is refused before any commit", async () => {
   const { result, text, recorded } = await run("capsid_write_doc", {
     ...WRITE,

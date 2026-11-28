@@ -65,9 +65,10 @@ const apiHandler = {
         status: 403,
       });
     }
+    // Admin calls count apart, so a fan-out of threads on /mcp cannot lock the coordinator out.
     const limited = await mcpRateLimited(
       env,
-      `access:${email}`,
+      adminRoute ? `access:${email}:admin` : `access:${email}`,
       adminRoute ? ADMIN_SERVER_INFO : SERVER_INFO,
     );
     if (limited) return limited;
