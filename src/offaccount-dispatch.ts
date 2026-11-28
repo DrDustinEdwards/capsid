@@ -3,6 +3,8 @@ import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import { utcDay } from "./time";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
+
 // Starts capsid-backups' nightly copy (offaccount.yml) from this Worker's tick instead of waiting
 // on GitHub's schedule. GitHub documents that a scheduled workflow can be delayed under load, and
 // this one has started hours late or not at all, which left every site's Amazon copy flagged late.
@@ -34,7 +36,7 @@ export async function offaccountDispatchTick(env: Env, now: Date): Promise<Dispa
   if ((await env.APP_KV.get(key)) === day) return { ran: false };
   // A refusal is tried again an hour later, not every five minutes.
   if (await env.APP_KV.get(RETRY_KEY)) return { ran: false };
-  const report = await attempt(env, now, day, key);
+  const report = await attempt(env, now, day, key).catch((err) => unreachable(err));
   if (report.ran && !report.ok) await env.APP_KV.put(RETRY_KEY, "1", { expirationTtl: 3600 });
   return report;
 }
@@ -67,12 +69,20 @@ async function probeOncePerDay(
 ): Promise<Extract<DispatchReport, { ran: true }> | null> {
   if ((await env.APP_KV.get(PROBE_KEY)) === day) return null;
   if (await env.APP_KV.get(PROBE_RETRY_KEY)) return null;
-  const resp = await canDispatch(
-    (path, init) => ghFetch(env, OWNER, REPO, path, init),
-    OWNER,
-    REPO,
-    WORKFLOW,
-  );
+  let resp: { ok: boolean; status: number };
+  try {
+    resp = await canDispatch(
+      (path, init) => ghFetch(env, OWNER, REPO, path, init),
+      OWNER,
+      REPO,
+      WORKFLOW,
+    );
+  } catch (err) {
+    // No token at all (the App's installation does not cover capsid-backups) throws before any
+    // answer. Without this wait it threw on every five-minute tick: 85 failed runs on 2026-11-28.
+    await env.APP_KV.put(PROBE_RETRY_KEY, "1", { expirationTtl: 3600 });
+    return unreachable(err);
+  }
   if (resp.status === 422) {
     await env.APP_KV.put(PROBE_KEY, day, { expirationTtl: 3 * 24 * 3600 });
     return {
@@ -96,6 +106,16 @@ async function probeOncePerDay(
     ran: true,
     ok: false,
     note: `the App may not dispatch ${WORKFLOW} on capsid-backups: probe answered HTTP ${resp.status}; grant Actions: Write (docs/bootstrap.md)`,
+  };
+}
+
+// The App could not get a token for capsid-backups. GitHub answers 422 "not accessible to the parent
+// installation" when the installation's repository list leaves the repo out.
+function unreachable(err: unknown): Extract<DispatchReport, { ran: true }> {
+  return {
+    ran: true,
+    ok: false,
+    note: `the App could not reach ${REPO}: ${errorMessage(err)}. Its installation must include ${REPO} (GitHub, Settings, Applications, Configure, Repository access)`,
   };
 }
 

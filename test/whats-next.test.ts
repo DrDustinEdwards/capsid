@@ -19,6 +19,10 @@ function db(
     applied?: string[];
     failNamespaces?: boolean;
     failStale?: boolean;
+    handoffs?: Array<Record<string, unknown>>;
+    threads?: Array<Record<string, unknown>>;
+    findings?: Array<Record<string, unknown>>;
+    activeWork?: Record<string, unknown> | null;
   } = {},
 ) {
   const answer = (sql: string): unknown[] => {
@@ -31,13 +35,22 @@ function db(
       return opts.blocked ?? [];
     if (flat.trim() === "SELECT name FROM d1_migrations")
       return (opts.applied ?? []).map((name) => ({ name }));
+    if (/FROM documents WHERE path LIKE 'handoff\/%' AND status != 'closed'/.test(flat))
+      return opts.handoffs ?? [];
+    if (/FROM audit_log WHERE action = 'conventions-read'/.test(flat)) return opts.threads ?? [];
+    if (/FROM watcher_findings WHERE state = 'open'/.test(flat)) return opts.findings ?? [];
+    if (/FROM documents WHERE namespace = \?1 AND path = \?2/.test(flat))
+      return opts.activeWork ? [opts.activeWork] : [];
     if (/FROM jobs j WHERE j\.status IN/.test(flat)) {
       if (opts.failStale) throw new Error("D1_ERROR: sample stale read failed");
       return [];
     }
     throw new Error(`unexpected statement: ${flat}`);
   };
-  const stmt = (sql: string) => ({ all: async () => ({ results: answer(sql) }) });
+  const stmt = (sql: string) => ({
+    all: async () => ({ results: answer(sql) }),
+    first: async () => answer(sql)[0] ?? null,
+  });
   return {
     prepare: (sql: string) => ({ ...stmt(sql), bind: () => stmt(sql) }),
   } as unknown as D1Database;
@@ -53,6 +66,7 @@ interface PrFixture {
   body?: string | null;
   checks: Array<{ name: string; status: string; conclusion: string | null }> | "fail";
   detail: { mergeable: boolean | null; mergeable_state: string } | "fail";
+  files?: string[];
 }
 
 const GREEN = [{ name: "verify", status: "completed", conclusion: "success" }];
@@ -82,6 +96,9 @@ function github(full: string, prs: PrFixture[]): Record<string, Route> {
         : { body: { check_runs: p.checks } };
     routes[`GET /repos/${full}/pulls/${p.number}`] =
       p.detail === "fail" ? { status: 500, body: { message: "Server Error" } } : { body: p.detail };
+    routes[`GET /repos/${full}/pulls/${p.number}/files`] = {
+      body: (p.files ?? [`src/only-${p.number}.ts`]).map((filename) => ({ filename })),
+    };
   }
   return routes;
 }
@@ -317,5 +334,73 @@ test("PLANT: a pull request's title and a block's question and command are relay
       r.blocked[0]?.command ?? "",
       /^~~~external source=job-summary ref=job_bbbbbbbbbbbb\nnpm run sample\n~~~$/,
     );
+  });
+});
+
+test("the coordinator board: threads, open handoffs with checklists, what waits on Dustin, findings and same-file overlaps", async () => {
+  const handoff = (path: string, body: string, updated_at: string) => ({
+    namespace: "sample",
+    path,
+    title: `Handoff ${path}`,
+    body,
+    updated_at,
+  });
+  const d = db({
+    namespaces: [{ namespace: "sample", repos: repos("o/r") }],
+    handoffs: [
+      handoff(
+        "handoff/a.md",
+        "Partial.\n\n## Waiting on Dustin\n1. Install the App.\n\n## Next\n- [x] build\n- [ ] verify live\n",
+        "2026-10-10 11:00:00",
+      ),
+      handoff("handoff/b.md", "Full.\n- [x] done\n", "2026-10-09 11:00:00"),
+    ],
+    threads: [
+      {
+        thread: "Fix sample backups",
+        namespace: "sample",
+        last_seen: "2026-10-10 11:30:00",
+        reads: 2,
+      },
+    ],
+    findings: [
+      {
+        fingerprint: "fp1",
+        namespace: "sample",
+        title: "sample.example.com answers 500",
+        first_seen_at: "2026-10-09T00:00:00Z",
+        last_seen_at: "2026-10-10T11:00:00Z",
+        seen_count: 4,
+      },
+    ],
+    activeWork: {
+      path: "active-work.md",
+      body: "- sample work",
+      updated_at: "2026-10-10 10:00:00",
+    },
+  });
+  const prs: PrFixture[] = [
+    { number: 1, checks: GREEN, detail: CLEAN, files: ["src/a.ts", "src/b.ts"] },
+    { number: 2, checks: GREEN, detail: CLEAN, files: ["src/b.ts"] },
+    { number: 3, checks: GREEN, detail: CLEAN, files: ["src/c.ts"] },
+  ];
+  await withFetch(github("o/r", prs), async () => {
+    const r = await whatsNext(env(d), NOW);
+    assert.deepEqual(r.not_checked, ["the watcher has written no pass yet"]);
+    assert.equal(r.threads.length, 1);
+    assert.match(r.threads[0].thread, /Fix sample backups/);
+    assert.equal(r.handoffs.open, 2);
+    assert.equal(r.handoffs.open_items, 1);
+    const a = r.handoffs.list[0];
+    assert.deepEqual([a.checklist?.done, a.checklist?.open], [1, 1]);
+    assert.match(a.checklist?.open_items ?? "", /- \[ \] verify live/);
+    assert.equal(r.handoffs.list[1].checklist?.open_items, null);
+    assert.equal(r.waiting_on_dustin.length, 1);
+    assert.match(r.waiting_on_dustin[0].text, /Install the App\./);
+    assert.doesNotMatch(r.waiting_on_dustin[0].text, /verify live/);
+    assert.equal(r.findings.length, 1);
+    assert.equal("fingerprint" in r.findings[0], false);
+    assert.match(r.active_work?.body ?? "", /sample work/);
+    assert.deepEqual(r.overlaps, [{ repo: "o/r", pr: 1, other: 2, files: ["src/b.ts"] }]);
   });
 });

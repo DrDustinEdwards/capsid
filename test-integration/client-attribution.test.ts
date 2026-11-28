@@ -65,7 +65,7 @@ describe("the MCP client behind a write", () => {
       type: "episodic",
     });
     const brief = await call(undefined, "capsid_start_session", { namespace: "sample" });
-    expect((brief.recent_episodics as Array<{ last_client: string }>)[0]?.last_client).toBe(
+    expect((brief.open_handoffs as Array<{ last_client: string }>)[0]?.last_client).toBe(
       "Sample Bot",
     );
 

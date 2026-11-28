@@ -67,7 +67,7 @@ const OUTPUTS: Record<string, Shape> = {
     conventions: nullable(obj),
     core: nullable(obj),
     open_tasks: rows,
-    recent_episodics: rows,
+    open_handoffs: rows,
     core_links: z.looseObject({ outgoing: rows, incoming: rows }),
     portfolio_documents: z.looseObject({
       namespace: str,

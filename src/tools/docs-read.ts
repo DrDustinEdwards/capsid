@@ -25,6 +25,7 @@ import { portfolioOnly } from "../scope";
 import { documentEdges, readDocument, searchDocuments } from "../doc-reads";
 import { hybridSearch } from "../doc-index";
 import { DOC_STATUS_LIST, DOC_TYPE_LIST } from "../doc-meta";
+import { checklistOf } from "../handoffs";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
@@ -122,7 +123,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "brief",
     {
-      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid rule documents every driver reads first, conventions and core, plus the allowlist it may read, which adds Dustin's rulings as reference records, not rules), its open task docs (non-archived and not status closed) as stubs with path, title, updated_at, last_actor and last_client (the MCP client behind it; read one with capsid_read_doc), the 3 most recent episodics in full (this is where a handoff written as type episodic shows up), and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if the episodics are cut, the \`trimmed\` field says so. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
+      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid rule documents every driver reads first, conventions and core, plus the allowlist it may read, which adds Dustin's rulings as reference records, not rules), its open task docs (non-archived and not status closed) as stubs with path, title, updated_at, last_actor and last_client (the MCP client behind it; read one with capsid_read_doc), every open handoff (a document under handoff/ whose status is not closed, written in the last 14 days; an older one counts as archived) newest first, whole while the packet fits and as stubs after, each with its checklist (the done and open counts of the task list it ends with, \`- [ ]\` and \`- [x]\` lines, and the open items), and the typed edges on core.md, each with updated_at so staleness shows. Close a handoff by setting its status to closed or moving it under archive/. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; the \`trimmed\` field says how many handoff bodies were cut. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
       inputSchema: {
         namespace: nsName,
         thread: z
@@ -150,37 +151,37 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
         portfolioDocuments(db),
       ]);
       // Status records editorial state, not task completion, so only 'closed' and archive/ are excluded. The four remaining reads run together.
-      const [openTasksResult, recentEpisodicsResult, coreOutResult, coreInResult] =
-        await Promise.all([
-          db
-            .prepare(
-              // The only status filter here: status is NOT NULL so it cannot swallow a row via NULL, and test/doc-meta.test.ts asserts it appears once in this file.
-              "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND type = 'task' AND status != 'closed' AND path NOT LIKE 'archive/%' ORDER BY updated_at DESC",
-            )
-            .bind(namespace)
-            .all<StartDoc>(),
-          db
-            .prepare(
-              "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND type = 'episodic' AND path NOT LIKE 'archive/%' ORDER BY created_at DESC LIMIT 3",
-            )
-            .bind(namespace)
-            .all<StartDoc>(),
-          db
-            .prepare(
-              "SELECT type, to_ns, to_path FROM document_links WHERE from_ns = ?1 AND from_path = 'core.md' ORDER BY type, to_ns, to_path",
-            )
-            .bind(namespace)
-            .all(),
-          db
-            .prepare(
-              "SELECT type, from_ns, from_path FROM document_links WHERE to_ns = ?1 AND to_path = 'core.md' ORDER BY type, from_ns, from_path",
-            )
-            .bind(namespace)
-            .all(),
-        ]);
+      const [openTasksResult, handoffsResult, coreOutResult, coreInResult] = await Promise.all([
+        db
+          .prepare(
+            // status is NOT NULL, so this filter cannot swallow a row via NULL.
+            "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND type = 'task' AND status != 'closed' AND path NOT LIKE 'archive/%' ORDER BY updated_at DESC",
+          )
+          .bind(namespace)
+          .all<StartDoc>(),
+        db
+          .prepare(
+            // Every open handoff, not the newest few: a thread picks up any area's handoff (Dustin, 2026-11-28).
+            "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND path LIKE 'handoff/%' AND status != 'closed' AND updated_at >= datetime('now', '-14 days') ORDER BY updated_at DESC",
+          )
+          .bind(namespace)
+          .all<StartDoc>(),
+        db
+          .prepare(
+            "SELECT type, to_ns, to_path FROM document_links WHERE from_ns = ?1 AND from_path = 'core.md' ORDER BY type, to_ns, to_path",
+          )
+          .bind(namespace)
+          .all(),
+        db
+          .prepare(
+            "SELECT type, from_ns, from_path FROM document_links WHERE to_ns = ?1 AND to_path = 'core.md' ORDER BY type, from_ns, from_path",
+          )
+          .bind(namespace)
+          .all(),
+      ]);
       if (conventions) await recordConventionsRead(db, actor, "brief", namespace, thread);
       const openTasks = openTasksResult.results;
-      const recentEpisodics = recentEpisodicsResult.results;
+      const handoffs = handoffsResult.results;
       const coreOut = coreOutResult.results;
       const coreIn = coreInResult.results;
 
@@ -188,7 +189,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       // pairs as one JSON parameter because D1 caps a statement at 100 bound parameters.
       type Keyed = { namespace: string; path: string };
       type Actored<T> = T & { last_actor: string | null; last_client: string | null };
-      const present = [conventions, core, ...openTasks, ...recentEpisodics].filter(
+      const present = [conventions, core, ...openTasks, ...handoffs].filter(
         (r): r is NonNullable<typeof r> => r !== null,
       );
       const actors = new Map<string, { actor: string | null; client: string | null }>();
@@ -226,9 +227,9 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       const conventionsA = withActor(conventions);
       const coreA = withActor(core);
       const openTasksA = withActors(openTasks);
-      const recentEpisodicsA = withActors(recentEpisodics);
+      const handoffsA = withActors(handoffs);
 
-      // Open tasks come back as stubs (the packet is re-read every turn; read one with capsid_read_doc). Episodics stay whole until over budget, then become metadata; floor_exceeds_budget reports when the never-trimmed docs alone exceed it.
+      // Open tasks come back as stubs (the packet is re-read every turn; read one with capsid_read_doc). Handoffs stay whole, newest first, while the packet fits; the rest become stubs. floor_exceeds_budget reports when the never-trimmed docs alone exceed it.
       type Row = {
         namespace: string;
         path: string;
@@ -238,7 +239,6 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
         last_actor?: string | null;
         last_client?: string | null;
       };
-      const bodyChars = (rows: Row[]) => rows.reduce((sum, r) => sum + (r.body?.length ?? 0), 0);
       const toStub = (rows: Row[]) =>
         rows.map((r) => ({
           namespace: r.namespace,
@@ -257,20 +257,28 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       const floorOver = floorChars > BRIEF_BUDGET;
       const trimmed: string[] = [];
       const tasksOut: unknown[] = toStub(openTasksA as Row[]);
-      let total = floorChars + bodyChars(recentEpisodicsA as Row[]);
-      let episodicsOut: unknown[] = recentEpisodicsA;
-      if (!floorOver && total > BRIEF_BUDGET && bodyChars(recentEpisodicsA as Row[]) > 0) {
-        total -= bodyChars(recentEpisodicsA as Row[]);
-        episodicsOut = toStub(recentEpisodicsA as Row[]);
-        trimmed.push(`${recentEpisodicsA.length} episodic bodies`);
-      }
+      // A floor over budget trims nothing (no trim could help); otherwise each handoff that would push
+      // the packet past the budget is a stub, and a smaller one after it may still fit whole.
+      let total = floorChars;
+      let cut = 0;
+      const handoffsOut = (handoffsA as Row[]).map((r) => {
+        const size = r.body?.length ?? 0;
+        const checklist = checklistOf(r.body);
+        if (floorOver || total + size <= BRIEF_BUDGET) {
+          total += size;
+          return { ...r, checklist };
+        }
+        cut += 1;
+        return { ...toStub([r])[0], checklist };
+      });
+      if (cut > 0) trimmed.push(`${cut} handoff bodies`);
 
       return ok({
         namespace,
         conventions: conventionsA,
         core: coreA,
         open_tasks: tasksOut,
-        recent_episodics: episodicsOut,
+        open_handoffs: handoffsOut,
         core_links: { outgoing: coreOut, incoming: coreIn },
         // Portfolio rules, by path, for every namespace; a session reads these first. Rulings are dated records, not rules, so not read first.
         portfolio_documents: {

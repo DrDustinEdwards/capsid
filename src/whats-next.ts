@@ -7,6 +7,7 @@ import { readSnapshot } from "./ops-snapshot";
 import { externalFence } from "./provenance";
 import { appliedMigrations, blockSettled } from "./inbox";
 import { readStaleCache, staleJobs } from "./stale-jobs";
+import { board } from "./board";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 // WHAT NEEDS ME (capsid/research/design-mcp-servers.md, section 3: "the ruling's 'what needs me'":
@@ -217,8 +218,11 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
     notChecked.push(`the watcher's last pass: ${errorMessage(err)}`);
   }
 
+  const coordinator = await board(env, prs, notChecked);
+
   return {
     as_of: now.toISOString(),
+    ...coordinator,
     questions,
     blocked: waiting,
     stale,
