@@ -355,7 +355,7 @@ test("an older document or a guarded write does not warn", async () => {
   assert.equal(
     await warningFor({ updatedAt: recently(1) }, { if_match: sha("prior body") }),
     undefined,
-  );
+  );  assert.equal(await warningFor({ updatedAt: recently(1) }, { mode: "append" }), undefined);
 });
 
 test("a UTC timestamp is not read as local time", () => {

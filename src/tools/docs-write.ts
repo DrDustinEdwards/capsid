@@ -380,7 +380,8 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
           ? { bytes_before: new TextEncoder().encode(prior.body ?? "").length }
           : {}),
         snapshotted,
-        ...(prior && if_match === undefined
+        // An append is guarded at commit, so a racing write already refused it.
+        ...(prior && if_match === undefined && writeMode !== "append"
           ? (() => {
               const warning = concurrentEditWarning(
                 atCommit?.updated_at ?? prior.updated_at,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { searchAllRepos, searchCode } from "../src/github.ts";
+import { toolOutput } from "../src/tools/outputs.ts";
 import { fakeEnv, fakeKv, withFetch, type FetchCall, type Route } from "./fakes.ts";
 
 // search_code greps every blob, one request each, so it most often runs out of quota mid-scan. A skipped blob must not
@@ -239,5 +240,9 @@ test("all_repos searches every readable mapped repo against one file budget and 
     );
     assert.equal(r.truncated, true);
     assert.deepEqual(r.not_searched, ["owner/two"]);
+    assert.ok(
+      toolOutput(["search_code"]).safeParse(r).success,
+      "the served output schema refuses it",
+    );
   });
 });
