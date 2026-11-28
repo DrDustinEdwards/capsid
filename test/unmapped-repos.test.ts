@@ -5,29 +5,9 @@ import { gatherFindings } from "../src/watcher-gather.ts";
 import { type WatcherCheck } from "../src/watcher-checks.ts";
 import { type Finding } from "../src/watcher-detect.ts";
 import { parseOnPurpose, suggestNamespace } from "../src/unmapped-repos.ts";
+import { testPem } from "./test-pem.ts";
 
 const OWNER = "DrDustinEdwards";
-
-// A real RSA key, so createAppJwt signs for real. Generated once.
-let pem: string | null = null;
-async function privateKeyPem(): Promise<string> {
-  if (pem) return pem;
-  const pair = (await crypto.subtle.generateKey(
-    {
-      name: "RSASSA-PKCS1-v1_5",
-      modulusLength: 2048,
-      publicExponent: new Uint8Array([1, 0, 1]),
-      hash: "SHA-256",
-    },
-    true,
-    ["sign", "verify"],
-  )) as CryptoKeyPair;
-  const der = new Uint8Array(
-    (await crypto.subtle.exportKey("pkcs8", pair.privateKey)) as ArrayBuffer,
-  );
-  pem = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...der))}\n-----END PRIVATE KEY-----`;
-  return pem;
-}
 
 type NsRow = { namespace: string; repos: string };
 const ns = (namespace: string, ...repos: string[]): NsRow => ({
@@ -89,7 +69,7 @@ async function gather(
     DB: db(rows, onPurposeDoc),
     APP_KV: fakeKv({ seedToken: true }).kv,
     GITHUB_APP_CLIENT_ID: "app",
-    GITHUB_APP_PRIVATE_KEY: await privateKeyPem(),
+    GITHUB_APP_PRIVATE_KEY: await testPem(),
   });
   const failures: string[] = [];
   const original = console.error;

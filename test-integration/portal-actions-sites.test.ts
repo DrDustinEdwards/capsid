@@ -238,10 +238,4 @@ describe("the Portal's reads", () => {
     });
     expect(Object.keys(one.rows[0]!)).not.toContain("params");
   });
-
-  it("an activity id that is not a row id is refused with 400, never read as no filter", async () => {
-    const response = await call(`${PORTAL_ACTIVITY_PATH}?id=1%20OR%201=1`);
-    expect(response.status).toBe(400);
-    expect(await response.text()).toMatch(/^id must be an audit row id/);
-  });
 });

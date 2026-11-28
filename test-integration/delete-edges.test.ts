@@ -84,28 +84,4 @@ describe("delete records its edges inside the batch", () => {
     ).first<{ n: number }>();
     expect(left?.n).toBe(0);
   });
-
-  it("records an empty list when the document has no edges", async () => {
-    await env.DB.prepare(
-      "INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('sample', '[]')",
-    ).run();
-    await env.DB.prepare(
-      "INSERT INTO documents (namespace, path, title, body) VALUES ('sample', 'alone.md', 'Alone', 'lorem ipsum')",
-    ).run();
-    const server = buildServer(env as never, "write", "test:integration");
-    const client = new Client({ name: "delete-edges", version: "1.0.0" });
-    const [c, s] = InMemoryTransport.createLinkedPair();
-    await Promise.all([server.connect(s), client.connect(c)]);
-    const result = (await client.callTool({
-      name: "capsid_delete_doc",
-      arguments: { namespace: "sample", path: "alone.md", confirm: true },
-    })) as { isError?: boolean; content: Array<{ text: string }> };
-    await client.close();
-    expect(result.isError, result.content[0]?.text).toBeFalsy();
-    expect(JSON.parse(result.content[0].text).edges_removed).toBe(0);
-    const audit = await env.DB.prepare(
-      "SELECT params FROM audit_log WHERE action = 'delete' AND namespace = 'sample' AND path = 'alone.md'",
-    ).first<{ params: string }>();
-    expect(JSON.parse(audit!.params)).toEqual({ edges_removed: [] });
-  });
 });

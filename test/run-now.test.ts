@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { runQueuedCapsidJobs, runSiteJob } from "../src/site-jobs.ts";
-import { fakeD1, fakeEnv, fakeKv, fakeR2 } from "./fakes.ts";
+import { captureErrors, fakeD1, fakeEnv, fakeKv, fakeR2 } from "./fakes.ts";
 
 const DOCS = [{ namespace: "capsid", path: "core.md", body: "core" }];
 const ASK = "capsid:run-now:backup";
@@ -12,16 +12,6 @@ function makeEnv(seedKv: Record<string, string> = {}) {
   const { db } = fakeD1({ documents: DOCS });
   return { env: fakeEnv({ DB: db, MEDIA: r2.bucket, APP_KV: kv.kv }), r2, kv };
 }
-
-const quietly = async <T>(fn: () => Promise<T>): Promise<T> => {
-  const original = console.error;
-  console.error = () => {};
-  try {
-    return await fn();
-  } finally {
-    console.error = original;
-  }
-};
 
 test("PLANT: run now of Capsid's backup answers at once and dumps nothing in the request", async () => {
   const { env, r2, kv } = makeEnv();
@@ -41,7 +31,7 @@ test("PLANT: run now of Capsid's backup answers at once and dumps nothing in the
 
 test("the next tick runs an asked backup once, under a lease that frees within the cron wall", async () => {
   const { env, r2, kv } = makeEnv({ [ASK]: "2026-11-25T16:00:00.000Z access:admin@example.com" });
-  await quietly(() => runQueuedCapsidJobs(env));
+  await captureErrors(() => runQueuedCapsidJobs(env));
   assert.ok(
     [...r2.objects.keys()].some((k) => k.startsWith("backups/json/")),
     "no dump was written",
@@ -52,7 +42,7 @@ test("the next tick runs an asked backup once, under a lease that frees within t
   assert.equal(kv.store.has("backup:lease"), false, "the lease outlived the run");
 
   const before = r2.objects.size;
-  await quietly(() => runQueuedCapsidJobs(env));
+  await captureErrors(() => runQueuedCapsidJobs(env));
   assert.equal(r2.objects.size, before, "one ask ran twice");
 });
 
@@ -62,13 +52,13 @@ test("an ask made while the lease is held waits for the tick after it frees", as
     [ASK]: "2026-11-25T16:20:00.000Z access:admin@example.com",
     "backup:lease": held,
   });
-  await quietly(() => runQueuedCapsidJobs(env));
+  await captureErrors(() => runQueuedCapsidJobs(env));
   assert.equal(r2.objects.size, 0);
   assert.equal(kv.store.get("backup:lease"), held);
   assert.ok(kv.store.has(ASK), "the ask was dropped while the lease was held");
 
   kv.store.delete("backup:lease");
-  await quietly(() => runQueuedCapsidJobs(env));
+  await captureErrors(() => runQueuedCapsidJobs(env));
   assert.ok(r2.objects.size > 0, "the ask never ran once the lease freed");
   assert.equal(kv.store.has(ASK), false);
 });

@@ -67,9 +67,15 @@ test("the model is built once a UTC day and stores the filtered bundled model", 
   const env = fakeEnv({ APP_KV: kv.kv });
   const first = await publicBuildTick(env, NOW, githubSays(ALL));
   assert.equal(first.ran, true, first.note);
-  assert.match(first.note, /20 public and 1 private system\(s\)/);
-
   const doc = PublicModelSchema.parse(JSON.parse(kv.store.get(PUBLIC_MODEL_KEY) ?? "null"));
+  const systems = {
+    public: doc.systems.filter((s) => !s.private).length,
+    private: doc.systems.filter((s) => s.private).length,
+  };
+  assert.match(
+    first.note,
+    new RegExp(`${systems.public} public and ${systems.private} private system`),
+  );
   assert.equal(doc.as_of, "2026-10-11");
   const backups = doc.systems.find((s) => s.id === "capsid-backups");
   assert.ok(backups?.private && backups.description && !("repos" in backups));
@@ -78,7 +84,7 @@ test("the model is built once a UTC day and stores the filtered bundled model", 
   const skills = doc.systems.find((s) => s.id === "skills");
   assert.ok(skills && !skills.private && skills.repos === undefined);
   const stats = PublicStatsSchema.parse(JSON.parse(kv.store.get(PUBLIC_STATS_KEY) ?? "null"));
-  assert.deepEqual(stats.systems, { public: 20, private: 1 });
+  assert.deepEqual(stats.systems, systems);
   assert.equal(stats.as_of, "2026-10-11");
 
   const again = await publicBuildTick(env, new Date("2026-10-11T23:55:00Z"), githubSays(ALL));

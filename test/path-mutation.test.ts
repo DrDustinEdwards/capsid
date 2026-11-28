@@ -49,9 +49,14 @@ const MUTATION_PATTERNS: Array<{ label: string; find: (text: string) => number[]
   { label: "DELETE FROM documents", find: deleteHits },
 ];
 
-// scanner-rule: path mutation invariant: a path mutation goes through pathMutation() and nowhere else
 test("every documents.path mutation in src/ lives inside pathMutation()", () => {
-  const { file, start, end } = helperRange();
+  const { file, text: owner, start, end } = helperRange();
+  // A helper that lost either shape would let the scan pass by matching nothing.
+  for (const { label, find } of MUTATION_PATTERNS)
+    assert.ok(
+      find(owner.slice(start, end)).length > 0,
+      `pathMutation() no longer contains: ${label}`,
+    );
   const offenders: string[] = [];
 
   for (const { name, text } of SOURCES) {
@@ -71,26 +76,4 @@ test("every documents.path mutation in src/ lives inside pathMutation()", () => 
     [],
     `documents.path is mutated outside pathMutation(). Route it through the helper so document_links moves with it:\n  ${offenders.join("\n  ")}`,
   );
-});
-
-// scanner-rule: path mutation invariant: a path mutation goes through pathMutation() and nowhere else (the scan is not vacuous)
-test("the helper actually contains both mutation shapes", () => {
-  const { text, start, end } = helperRange();
-  const body = text.slice(start, end);
-  // If the helper stopped containing these, the test above would pass vacuously.
-  for (const { label, find } of MUTATION_PATTERNS) {
-    assert.ok(find(body).length > 0, `pathMutation() no longer contains: ${label}`);
-  }
-});
-
-test("the UPDATE pattern catches a path assignment anywhere in SET and ignores path in WHERE", () => {
-  const later =
-    "db.prepare(\"UPDATE documents SET updated_at = datetime('now'), path = ?3 WHERE namespace = ?1\")";
-  assert.equal(pathMutationHits(later).length, 1);
-  const pathFirst = 'db.prepare("UPDATE documents SET path = ?3 WHERE namespace = ?1")';
-  assert.equal(pathMutationHits(pathFirst).length, 1);
-  // `path` is in the WHERE clause of nearly every statement in server.ts.
-  const innocent =
-    'db.prepare("UPDATE documents SET status = ?1 WHERE namespace = ?2 AND path = ?3")';
-  assert.deepEqual(pathMutationHits(innocent), []);
 });

@@ -10,9 +10,6 @@ import {
 } from "../src/agents-schema.ts";
 import { type Agent } from "../src/agents.ts";
 import { checkScope } from "../src/scope.ts";
-import { buildServer } from "../src/server.ts";
-import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // "Write a document and nothing else" is an action inside one tool, so a tools entry may be
 // qualified (`capsid_write_doc.write`) and the registrar checks the qualified name.
@@ -32,38 +29,31 @@ function scopedAgent(mutate: (scopes: ReturnType<typeof defaultScopes>) => void 
   };
 }
 
-test("a wildcard axis and an unqualified tool entry allow every action", () => {
-  assert.equal(allowsToolAction("*", "capsid_write_doc", "write"), true);
-  assert.equal(allowsToolAction("*", "capsid_write_doc", undefined), true);
-  const list = ["capsid_write_doc", "capsid_read_doc"];
-  assert.equal(allowsToolAction(list, "capsid_write_doc", "write"), true);
-  assert.equal(allowsToolAction(list, "capsid_write_doc", "move"), true);
-  assert.equal(allowsToolAction(list, "capsid_read_doc", undefined), true);
-});
-
-test("naming ONE action narrows the tool to the actions named, and the rest are refused", () => {
-  const list = ["capsid_write_doc", "capsid_write_doc.write"];
-  assert.equal(allowsToolAction(list, "capsid_write_doc", "write"), true);
-  assert.equal(
-    allowsToolAction(list, "capsid_write_doc", "move"),
-    false,
-    "a qualified entry that did not narrow would be decoration",
-  );
-  assert.equal(allowsToolAction(list, "capsid_write_doc", "restore"), false);
-  assert.equal(allowsToolAction(list, "capsid_write_doc", "archive"), false);
-});
-
-test("a qualified entry narrows only its own tool, and a tool absent from the list is refused", () => {
-  const list = ["capsid_write_doc", "capsid_write_doc.write", "capsid_lint_namespace"];
-  assert.equal(allowsToolAction(list, "capsid_lint_namespace", "gather"), true);
-  assert.equal(allowsToolAction(list, "capsid_lint_namespace", "finalize"), true);
-  assert.equal(allowsToolAction(list, "capsid_close_pr", "close"), false);
-  assert.equal(allowsToolAction(list, "capsid_close_pr", undefined), false);
-  assert.equal(
-    allowsToolAction([], "capsid_write_doc", "write"),
-    false,
-    "an empty list is the fail-closed value and must allow nothing",
-  );
+test("a wildcard or unqualified entry allows every action; a qualified one narrows only its tool; an absent tool and an empty list allow nothing", () => {
+  const plain = ["capsid_write_doc", "capsid_read_doc"];
+  const narrowed = ["capsid_write_doc", "capsid_write_doc.write", "capsid_lint_namespace"];
+  for (const [tools, tool, action, allowed] of [
+    ["*", "capsid_write_doc", "write", true],
+    ["*", "capsid_write_doc", undefined, true],
+    [plain, "capsid_write_doc", "write", true],
+    [plain, "capsid_write_doc", "move", true],
+    [plain, "capsid_read_doc", undefined, true],
+    [narrowed, "capsid_write_doc", "write", true],
+    [narrowed, "capsid_write_doc", "move", false],
+    [narrowed, "capsid_write_doc", "restore", false],
+    // A call path that forgets to pass the action is refused on a narrowed tool.
+    [narrowed, "capsid_write_doc", undefined, false],
+    [narrowed, "capsid_lint_namespace", "gather", true],
+    [narrowed, "capsid_lint_namespace", "finalize", true],
+    [narrowed, "capsid_close_pr", "close", false],
+    [narrowed, "capsid_close_pr", undefined, false],
+    [[], "capsid_write_doc", "write", false],
+  ] as const)
+    assert.equal(
+      allowsToolAction(tools as never, tool, action),
+      allowed,
+      `${String(tools)} ${tool}.${action}`,
+    );
 });
 
 test("the qualified name is what a scopes column round-trips, so the narrowing survives storage", () => {
@@ -103,39 +93,6 @@ test("checkScope refuses an action the tools axis narrowed away, and names the a
     String(refusal),
     /capsid_write_doc, capsid_write_doc\.write/,
     "a refusal that does not say what the scope IS costs a round trip",
-  );
-});
-
-test("the lint tool asks the enforcement point about the qualified name", async () => {
-  // The action must reach the check. An agent narrowed to capsid_lint_namespace.gather is
-  // called through the real tool with two modes.
-  const gatherer = scopedAgent((s) => {
-    s.namespaces = "*";
-    s.tools = ["capsid_lint_namespace", "capsid_lint_namespace.gather"];
-  });
-  const server = buildServer(fakeEnv({ DB: fakeD1({}).db, APP_KV: fakeKv({}).kv }), gatherer);
-  const client = new Client({ name: "roles", version: "1.0.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const call = async (mode: string) =>
-    (
-      (await client.callTool({
-        name: "capsid_lint_namespace",
-        arguments: { mode, namespace: "capsid" },
-      })) as { content: Array<{ text: string }> }
-    ).content[0]?.text ?? "";
-  const reported = await call("report");
-  const gathered = await call("gather");
-  await client.close();
-  assert.match(
-    reported,
-    /capsid_lint_namespace\.report/,
-    "a report by an agent narrowed to capsid_lint_namespace.gather was not refused by the enforcement point",
-  );
-  assert.equal(
-    JSON.parse(gathered).mode,
-    "gather",
-    `the narrowing refused the one mode it allows: ${gathered}`,
   );
 });
 

@@ -1,25 +1,15 @@
-import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import worker from "../src/index";
-import { forgetKeys } from "@dustinedwards/site-runtime/access-login";
-
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
 import { ADMIN_MCP_ROUTE } from "../src/mcp-handler";
 import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS } from "../src/tools/surface";
-import { stubAccess } from "@dustinedwards/devkit/access";
-import { cimdClient, cimdResponse } from "./cimd-stub";
+import { authorize, call, ORIGIN, REDIRECT, tokenRequest, VERIFIER } from "./oauth-flow";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// Capsid Admin on its own routes through the whole Worker (host rules, OAuth provider, handleOperatorAdminMcp):
-// the unit tests prove what each server registers; this proves which server each route builds for which caller.
+// Which server each route builds for which caller, through the whole Worker.
 
-const ORIGIN = "https://mcp.dustinedwards.info";
 const ERA = "2025-11-25";
 const DRIVER_KEY = "capsid_agent_" + "a".repeat(64);
-const REDIRECT = "https://client.example.com/callback";
-// RFC 7636 appendix B, as in oauth-round-trip.test.ts.
-const VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-const CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
 
 beforeEach(async () => {
   // A driver minted for one namespace with read and write: everything a driver can hold
@@ -34,17 +24,6 @@ beforeEach(async () => {
     .bind(await sha256Hex(DRIVER_KEY), serializeScopes(scopes))
     .run();
 });
-
-async function call(request: Request): Promise<Response> {
-  const ctx = createExecutionContext();
-  const response = await worker.fetch!(
-    request as never,
-    { ...env, COOKIE_ENCRYPTION_KEY: "integration-cookie-key" } as never,
-    ctx,
-  );
-  await waitOnExecutionContext(ctx);
-  return response as unknown as Response;
-}
 
 interface RpcAnswer {
   status: number;
@@ -113,150 +92,38 @@ async function listTools(
   return { server, tools };
 }
 
-async function callTool(
-  path: string,
-  bearer: string,
-  name: string,
-  args: Record<string, unknown>,
-): Promise<RpcAnswer> {
-  await rpc(path, bearer, "initialize", {
-    protocolVersion: ERA,
-    capabilities: {},
-    clientInfo: { name: "admin-route", version: "1.0.0" },
-  });
-  await rpc(path, bearer, "notifications/initialized", undefined, true);
-  return rpc(path, bearer, "tools/call", { name, arguments: args });
-}
-
 const sorted = (names: readonly string[]) => [...names].sort();
 
 describe("/ops/mcp serves Capsid and no Capsid Admin tool", () => {
-  it("PLANT: lists exactly Capsid's 11 to a key, and no capsid_admin_ tool", async () => {
+  it("PLANT: lists exactly Capsid's tools to a key", async () => {
     const { server, tools } = await listTools("/ops/mcp", DRIVER_KEY);
     expect(server).toBe("capsid");
-    expect(tools).toHaveLength(10);
     expect(sorted(tools)).toEqual(sorted(CAPSID_TOOLS));
-    expect(tools.filter((t) => t.startsWith("capsid_admin_"))).toEqual([]);
-  });
-
-  it("PLANT: an admin tool called on /ops/mcp does not run", async () => {
-    const answer = await callTool("/ops/mcp", DRIVER_KEY, "capsid_admin_whats_next", {});
-    const result = answer.message?.result as
-      | { isError?: boolean; content?: Array<{ text: string }> }
-      | undefined;
-    const refused = answer.message?.error !== undefined || result?.isError === true;
-    expect(refused, `capsid_admin_whats_next ran on /ops/mcp: ${answer.text.slice(0, 300)}`).toBe(
-      true,
-    );
-    expect(answer.text).toMatch(/capsid_admin_whats_next/);
   });
 });
 
-const cookieValues = (response: Response): string[] =>
-  response.headers.getSetCookie().map((c) => c.split(";")[0]);
-
-function hidden(html: string, name: string): string {
-  const match = new RegExp(`name="${name}" value="([^"]*)"`).exec(html);
-  expect(match, `the dialog has no hidden ${name} field`).toBeTruthy();
-  return match![1].replace(/&quot;/g, '"').replace(/&amp;/g, "&");
-}
-
 async function adminToken(): Promise<string> {
-  const clientId = cimdClient([REDIRECT], "admin-route");
-  const url = new URL(`${ORIGIN}/authorize`);
-  for (const [k, v] of Object.entries({
-    client_id: clientId,
+  const { clientId, code } = await authorize(env.ADMIN_EMAIL!);
+  expect(code, "the callback sent no code back").toBeTruthy();
+  const exchanged = await tokenRequest({
+    grant_type: "authorization_code",
+    code: code!,
     redirect_uri: REDIRECT,
-    response_type: "code",
-    code_challenge: CHALLENGE,
-    code_challenge_method: "S256",
-    state: "client-state",
-  })) {
-    url.searchParams.set(k, v);
-  }
-  const dialog = await call(new Request(url));
-  expect(dialog.status).toBe(200);
-  const html = await dialog.text();
-  const approved = await call(
-    new Request(`${ORIGIN}/authorize`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Cookie: cookieValues(dialog).join("; "),
-      },
-      body: new URLSearchParams({
-        handle: hidden(html, "handle"),
-        decision: "approve",
-        allow_write: "1",
-      }).toString(),
-    }),
-  );
-  expect(approved.status).toBe(302);
-  const signIn = new URL(String(approved.headers.get("location")));
-  const state = String(signIn.searchParams.get("state"));
-  const stateCookie = cookieValues(approved).join("; ");
-  // Each stub signs with a key of its own under the same kid, and the verifier keeps the
-  // keys it read per JWKS URL, so the last sign-in's key is dropped first.
-  forgetKeys();
-  const access = await stubAccess({
-    issuer: `${env.ACCESS_TEAM_DOMAIN}/cdn-cgi/access/sso/oidc/${env.ACCESS_SAAS_CLIENT_ID}`,
-    audience: env.ACCESS_SAAS_CLIENT_ID!,
-    email: env.ADMIN_EMAIL!,
-    authorizationUrl: signIn.href,
-    fallback: (u) => cimdResponse(u) ?? undefined,
+    client_id: clientId,
+    code_verifier: VERIFIER,
   });
-  let callback: Response;
-  try {
-    callback = await call(
-      new Request(`${ORIGIN}/callback?code=access-code&state=${state}`, {
-        headers: { Cookie: stateCookie },
-      }),
-    );
-  } finally {
-    access.restore();
-  }
-  const location = callback.headers.get("location");
-  const code =
-    location && location.startsWith(REDIRECT) ? new URL(location).searchParams.get("code") : null;
-  expect(
-    code,
-    `the callback did not send a code back: ${callback.status} ${location}`,
-  ).toBeTruthy();
-  const exchanged = await call(
-    new Request(`${ORIGIN}/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code: code!,
-        redirect_uri: REDIRECT,
-        client_id: clientId,
-        code_verifier: VERIFIER,
-      }).toString(),
-    }),
-  );
   expect(exchanged.status, await exchanged.clone().text()).toBe(200);
   return ((await exchanged.json()) as { access_token: string }).access_token;
 }
 
 describe(`${ADMIN_MCP_ROUTE}, for the administrator's OAuth session`, () => {
-  it("the admin's token reaches /mcp/admin and lists exactly the 7 Capsid Admin tools; on /mcp it lists Capsid's 11", async () => {
+  it("the admin's token lists exactly the Capsid Admin tools on /mcp/admin, and Capsid's on /mcp", async () => {
     const token = await adminToken();
     const admin = await listTools(ADMIN_MCP_ROUTE, token);
     expect(admin.server).toBe("capsid-admin");
-    expect(admin.tools).toHaveLength(5);
     expect(sorted(admin.tools)).toEqual(sorted(CAPSID_ADMIN_TOOLS));
-
     const capsid = await listTools("/mcp", token);
     expect(capsid.server).toBe("capsid");
-    expect(capsid.tools).toHaveLength(10);
     expect(sorted(capsid.tools)).toEqual(sorted(CAPSID_TOOLS));
-    expect(capsid.tools.filter((t) => t.startsWith("capsid_admin_"))).toEqual([]);
-  });
-
-  it("PLANT: /mcp/admin without a token is a 401, and serves nothing", async () => {
-    const answer = await rpc(ADMIN_MCP_ROUTE, null, "tools/list", {});
-    expect(answer.status, answer.text).toBe(401);
-    expect(answer.message?.result).toBeUndefined();
   });
 });

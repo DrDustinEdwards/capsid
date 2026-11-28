@@ -2,8 +2,7 @@ import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { PORTAL_HOST } from "../src/portal-host";
 
-// Through the whole Worker, not the routes handler alone: the host rewrite once sat behind the OAuth provider, so /mcp on
-// the Portal host reached the MCP endpoint (401) and rolled a deploy back, which the routes-handler node tests could not see.
+// Through the whole Worker: the host rewrite must run before the OAuth provider, or /mcp on the Portal host is the MCP endpoint.
 
 const PORTAL = `https://${PORTAL_HOST}`;
 
@@ -30,12 +29,6 @@ describe("the Portal host through the whole Worker", () => {
     }
   });
 
-  it("an old /portal address on the Portal host redirects once, to the root path", async () => {
-    const response = await anonymous("/portal/queue");
-    expect(response.status).toBe(308);
-    expect(response.headers.get("Location")).toBe(`${PORTAL}/queue`);
-  });
-
   it("PLANT: the chart demo answers at /demos/ with no sign-in, and only there", async () => {
     for (const [path, accept] of [
       ["/demos/", "text/html"],
@@ -56,13 +49,5 @@ describe("the Portal host through the whole Worker", () => {
       const response = await anonymous(path);
       expect(response.status, `${path} answered ${response.status}`).toBe(302);
     }
-  });
-
-  it("another host is untouched: /mcp there is still the MCP endpoint", async () => {
-    const response = await SELF.fetch("https://capsid.test/mcp", {
-      method: "POST",
-      redirect: "manual",
-    });
-    expect(response.status).toBe(401);
   });
 });

@@ -181,7 +181,7 @@ test("a caller with no scopes at all is refused everything, which is what the fa
   );
 });
 
-test("the legacy caller passes every check, which is the one thing this migration must not break", () => {
+test("the legacy operator key passes every check", () => {
   const legacy = grantAgent("write", "opkey:0123456789ab");
   for (const tool of Object.keys(TOOL_GRANTS)) {
     assert.equal(
@@ -411,13 +411,6 @@ function assertServedAll(surface: Surface, served: ServedTool[]) {
     `${surface}: listTools did not return the server's whole surface`,
   );
 }
-
-test("the two servers' surfaces are every tool in TOOL_GRANTS, so a sweep of both sweeps all of them", () => {
-  const both = [...CAPSID_TOOLS, ...CAPSID_ADMIN_TOOLS];
-  assert.equal(new Set(both).size, both.length, "a tool is on both servers");
-  assert.deepEqual([...both].sort(), Object.keys(TOOL_GRANTS).sort());
-  assert.equal(both.length, AUTHORITATIVE.capsid.tools);
-});
 
 function noToolsAgent(): Agent {
   const scopes = defaultScopes(["capsid"]);

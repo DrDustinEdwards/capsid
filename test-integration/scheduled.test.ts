@@ -134,9 +134,9 @@ describe("the replay table is real", () => {
     // A PRIMARY KEY has no get-then-put window, and only real SQLite can show it; a
     // synchronous fake would agree with itself.
     const results = await Promise.all([
-      claimJti(env.DB, "bench:capsid", "raced"),
-      claimJti(env.DB, "bench:capsid", "raced"),
-      claimJti(env.DB, "bench:capsid", "raced"),
+      claimJti(env.DB, "backup", "raced"),
+      claimJti(env.DB, "backup", "raced"),
+      claimJti(env.DB, "backup", "raced"),
     ]);
     expect(
       results.filter((r) => r.ok),

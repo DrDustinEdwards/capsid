@@ -1,22 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-// Reported 2026-09-29: new Activity rows read "in 16s". Two causes: the app compared server timestamps with its own
-// clock, and a zone-less D1 timestamp handed to Date.parse is read as local time, hours ahead behind UTC.
+// Run behind UTC, where Date.parse reads a zone-less D1 timestamp as local time.
 process.env.TZ = "America/Chicago";
 const { ago } = await import("../dashboard/src/lib/format.ts");
 const { parse: ms, serverNow: portalNow } = await import("capsomer/behavior/time");
 
-test("the test really runs behind UTC, so the zone-less cases below mean something", () => {
-  assert.notEqual(
-    Date.parse("2026-09-29T13:00:00"),
-    Date.parse("2026-09-29T13:00:00Z"),
-    "TZ did not take effect",
-  );
-});
-
 test("PLANT: a zone-less server timestamp is read as UTC, in either spelling D1 writes", () => {
   const utc = Date.parse("2026-09-29T13:00:00Z");
+  assert.notEqual(Date.parse("2026-09-29T13:00:00"), utc, "TZ did not take effect");
   assert.equal(ms("2026-09-29 13:00:00"), utc);
   assert.equal(ms("2026-09-29T13:00:00"), utc);
   assert.equal(ms("2026-09-29T13:00:00.250"), utc + 250);

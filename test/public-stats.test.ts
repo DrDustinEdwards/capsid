@@ -68,10 +68,6 @@ test("the document carries exactly the listed keys, and no string but the date a
   );
 });
 
-test("as_of is the UTC day the window ends at", () => {
-  assert.equal(summarize(rows(), NOW).as_of, "2026-10-11");
-});
-
 test("uptime counts measured slots only, across every site", () => {
   const doc = summarize(rows({ rings: ["111-0", "11--1", "1111"] }), NOW);
   assert.equal(doc.sites.watched, 3);

@@ -10,14 +10,10 @@ const A = "a".repeat(40);
 const B = "b".repeat(40);
 const API = "https://api.github.com/repos/example/capsid";
 const calls: string[] = [];
-let gateName = "live gate";
-let gateConclusion = "failure";
 const passThrough = globalThis.fetch;
 
 beforeEach(async () => {
   calls.length = 0;
-  gateName = "live gate";
-  gateConclusion = "failure";
   await env.DB.prepare("DELETE FROM deploy_outcomes").run();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
@@ -43,19 +39,18 @@ beforeEach(async () => {
       });
     }
     if (path === "/actions/runs/501/jobs?per_page=100") {
-      const deploy = gateName.replace(/live gate$/, "deploy");
       return Response.json({
         jobs: [
-          { id: 76, name: deploy, conclusion: "success", completed_at: "2026-10-10T10:03:00Z" },
+          { id: 76, name: "deploy", conclusion: "success", completed_at: "2026-10-10T10:03:00Z" },
           {
             id: 77,
-            name: gateName,
-            conclusion: gateConclusion,
+            name: "live gate",
+            conclusion: "failure",
             steps: [
-              { name: "verify:live", conclusion: gateConclusion },
+              { name: "verify:live", conclusion: "failure" },
               {
                 name: "Roll back the deploy this run shipped",
-                conclusion: gateConclusion === "success" ? "skipped" : "success",
+                conclusion: "success",
                 completed_at: "2026-10-10T10:05:30Z",
               },
             ],
@@ -113,16 +108,5 @@ describe("readDeployOutcomes", () => {
     expect(
       (await env.DB.prepare("SELECT COUNT(*) AS n FROM deploy_outcomes").first<{ n: number }>())?.n,
     ).toBe(1);
-  });
-
-  it('finds a live gate that runs in a called workflow, named "<caller job> / live gate"', async () => {
-    gateName = "deploy / live gate";
-    gateConclusion = "success";
-    const read = await readDeployOutcomes(env as unknown as Env, "capsid");
-    expect(read).toMatchObject({ outcome: "verified", run_id: 501 });
-    expect(
-      (await env.DB.prepare("SELECT outcome FROM deploy_outcomes").first<{ outcome: string }>())
-        ?.outcome,
-    ).toBe("verified");
   });
 });

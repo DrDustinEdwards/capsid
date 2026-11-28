@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import {} from "node:test";
 import { mintConfirm } from "@dustinedwards/site-runtime/confirm-token";
 import { confirmKeys } from "../src/auth.ts";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { PORTAL_CSRF_COOKIE } from "../src/ops-feed.ts";
-import type { OpsSiteConfig } from "../src/ops-types/sites.ts";
 import type { PortalPreview } from "../src/ops-types/portal.ts";
 import {
   handlePortalPerform,
@@ -16,21 +14,10 @@ import {
 import { FEED, fakeD1, fakeKv, type FakeD1, type FakeKv, withPortalSessionEnds } from "./fakes.ts";
 import { fromBase64urlText } from "@dustinedwards/site-runtime/encoding";
 
-// Only the GitHub read of the pull request's head is answered; nothing else here reaches GitHub.
-const APPROVED_HEAD = "a".repeat(40);
-const passThrough = globalThis.fetch;
-globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-  const url = String(input instanceof Request ? input.url : input);
-  if (url === "https://api.github.com/repos/owner/repo/pulls/41")
-    return Response.json({ head: { sha: APPROVED_HEAD }, state: "open", merged: false });
-  return passThrough(input, init);
-}) as typeof fetch;
-
-export const SECRET = "portal-test-cookie-secret";
-export const CSRF = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const SECRET = "portal-test-cookie-secret";
+const CSRF = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 export const NOW = new Date("2026-09-28T12:00:00.000Z");
 export const EMAIL = "admin@example.com";
-export const ACTOR = `access:${EMAIL}`;
 export const LATER = (ms: number) => new Date(NOW.getTime() + ms);
 
 const DRIVER_SCOPES = JSON.stringify({
@@ -41,88 +28,7 @@ const DRIVER_SCOPES = JSON.stringify({
   flags: {},
 });
 
-// ops_sites and ops_packages, which the fake D1 does not model, are answered from these rows;
-// the writes run against real D1 in test-integration/.
-export const site = (over: Partial<OpsSiteConfig>): OpsSiteConfig =>
-  ({
-    script: null,
-    self_probe: false,
-    revision: 1,
-    updated_at: "2026-09-28 00:00:00",
-    operator: null,
-    operator_problem: null,
-    platform: "cloudflare",
-    ...over,
-  }) as OpsSiteConfig;
-const SITE_ROWS = [
-  site({
-    namespace: "capsid",
-    name: "Capsid",
-    origin: "https://capsid.example.com",
-    health_path: "/health",
-    script: "capsid",
-    self_probe: true,
-    revision: 3,
-  }),
-  site({
-    namespace: "sample",
-    name: "Sample",
-    origin: "https://sample.example.com",
-    health_path: "/api/health",
-    operator: {
-      path: "/api/operator",
-      auth_var: "SAMPLE_OPERATOR_TOKEN",
-      repairs: { "content-drift": "sync_posts" },
-      weekly: ["refresh_citations"],
-      secrets: [],
-      backup: true,
-    },
-  }),
-];
-const PACKAGE_ROWS = [
-  {
-    name: "sample-pkg",
-    registry: "npm",
-    repo: "example-org/sample-pkg",
-    formerly: null,
-    revision: 1,
-    updated_at: "2026-09-28 00:00:00",
-  },
-];
-
-function withSites(db: D1Database): D1Database {
-  const sites = SITE_ROWS.map((s) => ({
-    ...s,
-    self_probe: s.self_probe ? 1 : 0,
-    operator: s.operator ? JSON.stringify(s.operator) : null,
-  }));
-  const tables: Array<[RegExp, Array<Record<string, unknown>>, string]> = [
-    [/FROM ops_packages/i, PACKAGE_ROWS, "name"],
-    [/FROM ops_sites/i, sites, "namespace"],
-  ];
-  return new Proxy(db, {
-    get(target, prop, receiver) {
-      if (prop !== "prepare") return Reflect.get(target, prop, receiver);
-      return (sql: string) => {
-        const table = tables.find(([re]) => re.test(sql));
-        if (!table) return target.prepare(sql);
-        const [, rows, key] = table;
-        const statement = {
-          params: [] as unknown[],
-          bind(...params: unknown[]) {
-            statement.params = params;
-            return statement;
-          },
-          first: async () => rows.find((r) => r[key] === statement.params[0]) ?? null,
-          all: async () => ({ results: rows, meta: {} }),
-        };
-        return statement;
-      };
-    },
-  });
-}
-
-export const agent = (id: string, name: string, hash: string, createdBy: string, day: string) => ({
+const agent = (id: string, name: string, hash: string, createdBy: string, day: string) => ({
   id,
   name,
   kind: "driver",
@@ -163,7 +69,7 @@ export function world(opts: { adminEmail?: string; coOwners?: string } = {}): {
     },
   });
   const env = {
-    DB: withPortalSessionEnds(withSites(d1.db)).db,
+    DB: withPortalSessionEnds(d1.db).db,
     APP_KV: kv.kv,
     OAUTH_KV: fakeKv().kv,
     COOKIE_ENCRYPTION_KEY: SECRET,
@@ -173,10 +79,6 @@ export function world(opts: { adminEmail?: string; coOwners?: string } = {}): {
     ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
     ACCESS_SAAS_CLIENT_ID: "sample-client",
     ACCESS_SAAS_CLIENT_SECRET: "sample-secret",
-    SAMPLE_OPERATOR_TOKEN: "sample-operator-token-for-tests-only-0000",
-    // For site_key_rotate's preview: the token it would set the key with is set.
-    CF_SECRETS_TOKEN: "sample-secrets-token",
-    CF_ACCOUNT_ID: "sample-account",
   } as never;
   return { d1, kv, env };
 }
@@ -261,48 +163,6 @@ export async function forge(claims: Record<string, unknown>): Promise<string> {
   const keys = await confirmKeys({ COOKIE_ENCRYPTION_KEY: SECRET }, "capsid-portal-confirm:v2");
   return (await mintConfirm({ keys, claims, ttlSeconds: 60, now: NOW.getTime() })).token;
 }
-
-export const EVERY_ACTION = [
-  ["pr_close", { namespace: "capsid", number: "41", reason: "replaced by #42" }],
-  ["revoke_agent", { name: "capsid-driver" }],
-  ["activate_agent", { name: "capsid-new-driver" }],
-  [
-    "site_add",
-    { namespace: "capsid-new", origin: "https://new.example.com", platform: "cloudflare" },
-  ],
-  [
-    "site_edit",
-    {
-      namespace: "capsid",
-      revision: "3",
-      name: "Capsid",
-      origin: "https://capsid.example.com",
-      health_path: "/healthz",
-      platform: "cloudflare",
-      script: "capsid",
-    },
-  ],
-  ["site_remove", { namespace: "capsid", revision: "3" }],
-  ["package_add", { name: "sample-new", repo: "example-org/sample-new" }],
-  [
-    "package_edit",
-    { name: "sample-pkg", revision: "1", repo: "example-org/sample-pkg", formerly: "sample-old" },
-  ],
-  ["package_remove", { name: "sample-pkg", revision: "1" }],
-  ["site_repair", { namespace: "sample", tool: "sync_posts" }],
-  ["site_backup", {}],
-  ["run_job", { namespace: "capsid", name: "supersede" }],
-  ["namespace_add", { namespace: "sample-added", repo: "example-org/sample-added" }],
-  [
-    "namespace_edit",
-    {
-      namespace: "capsid-new",
-      repos: JSON.stringify([{ repo: "example-org/new", label: "primary" }]),
-    },
-  ],
-  ["namespace_remove", { namespace: "capsid-new" }],
-  ["site_key_rotate", { namespace: "capsid" }],
-] as const;
 
 export function auditRows(d1: FakeD1): string[] {
   return d1.recorded

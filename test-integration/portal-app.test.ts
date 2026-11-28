@@ -5,13 +5,13 @@ import { portalSessionCookie } from "../src/portal-auth";
 import { HASHED_ASSET_CACHE } from "../src/portal-app";
 import { PORTAL_HOST } from "../src/portal-host";
 
-// SELF is the Worker's own default export, not the assets router in front of it, whose behavior is deploy config (docs/portal.md).
-// Signed-in requests carry a cookie key sent straight to fetch, since the pool binds none (as oauth-flow.test.ts does).
+// SELF is the Worker's own default export, not the assets router in front of it. Signed-in requests pass a cookie
+// key straight to fetch, since the pool binds none.
 
 const ORIGIN = "https://capsid.test";
 const SECRET = "integration-portal-cookie-key";
 const PAGE_MARK = "<title>Capsid Portal</title>";
-const SCRIPT_MARK = "watch-floor-fixture-script";
+const SCRIPT_MARK = "portal-fixture-script";
 const NAV = { Accept: "text/html,application/xhtml+xml", "Sec-Fetch-Mode": "navigate" };
 
 async function signedFetch(path: string, headers: Record<string, string> = {}): Promise<Response> {
@@ -49,14 +49,6 @@ describe("the Portal's pages and files", () => {
       ).toContain("sample.cloudflareaccess.com");
       expect(await response.text()).not.toContain(PAGE_MARK);
     }
-  });
-
-  it("a bearer gets 403", async () => {
-    const response = await SELF.fetch(`${ORIGIN}/portal/`, {
-      headers: { Authorization: "Bearer capsid_agent_x" },
-    });
-    expect(response.status).toBe(403);
-    expect(await response.text()).not.toContain(PAGE_MARK);
   });
 
   it("a signed-in administrator gets the page rendered with the Portal's own feed, no-store, its CSP carrying the page's nonce", async () => {

@@ -615,15 +615,23 @@ test("read_repo_file batch returns each file's error INDEPENDENTLY", async () =>
       "GET /repos/o/r/contents/c.md": { body: fileBody("gamma") },
     },
     async () => {
-      const out = await readRepoFiles(makeEnv(), "ns", ["a.md", "gone.md", "c.md"]);
-      // One missing path must not fail the batch, or the caller has to bisect.
-      assert.equal(out.requested, 3);
+      const out = await readRepoFiles(makeEnv(), "ns", [
+        "a.md",
+        "gone.md",
+        "c.md",
+        "../escape.md",
+        "a//b.md",
+      ]);
+      // One missing or bad path must not fail the batch, or the caller has to bisect.
+      assert.equal(out.requested, 5);
       assert.equal(out.ok, 2);
-      assert.equal(out.failed, 1);
+      assert.equal(out.failed, 3);
       const byPath = new Map(out.files.map((f) => [f.path, f]));
       assert.equal((byPath.get("a.md") as { content?: string }).content, "alpha");
       assert.equal((byPath.get("c.md") as { content?: string }).content, "gamma");
       assert.match((byPath.get("gone.md") as { error?: string }).error ?? "", /404/);
+      assert.match((byPath.get("../escape.md") as { error?: string }).error ?? "", /\.\./);
+      assert.match((byPath.get("a//b.md") as { error?: string }).error ?? "", /empty segment/);
     },
   );
 });
@@ -634,23 +642,6 @@ test("read_repo_file batch refuses an empty or oversized paths array", async () 
     await assert.rejects(() => readRepoFiles(env, "ns", []), /paths was empty/);
     const tooMany = Array.from({ length: REPO_BATCH_MAX_FILES + 1 }, (_, i) => `f${i}.md`);
     await assert.rejects(() => readRepoFiles(env, "ns", tooMany), /exceeds the batch maximum/);
-  });
-});
-
-test("read_repo_file batch rejects a bad path per file without a network call", async () => {
-  await withFetch({ "GET /repos/o/r/contents/ok.md": { body: fileBody("fine") } }, async () => {
-    const out = await readRepoFiles(makeEnv(), "ns", ["ok.md", "../escape.md", "a//b.md"]);
-    assert.equal(out.ok, 1);
-    assert.equal(out.failed, 2);
-    const errs = out.files.filter((f) => "error" in f).map((f) => (f as { error: string }).error);
-    assert.ok(
-      errs.some((e) => /\.\./.test(e)),
-      `no dotdot refusal in ${JSON.stringify(errs)}`,
-    );
-    assert.ok(
-      errs.some((e) => /empty segment/.test(e)),
-      `no empty-segment refusal in ${JSON.stringify(errs)}`,
-    );
   });
 });
 

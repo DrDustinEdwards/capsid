@@ -32,9 +32,6 @@ describe("the trends series", () => {
     await audit("access:admin@example.com", "agent-revoked", "2030-01-15 09:04:00");
     await audit("agent:sample-driver", "write", "2030-01-15 15:00:00");
 
-    // Rows the retired auto-merge loop wrote are history the series no longer counts.
-    await audit("system:auto-merge", "auto-merged", "2030-01-14 10:00:00");
-    await audit("system:executor", "approved-merged", "2030-01-14 11:00:00");
     await audit("access:admin@example.com", "manage_pr", "2030-01-14 12:00:00", {
       action: "merge",
       merged: true,

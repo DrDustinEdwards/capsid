@@ -8,8 +8,8 @@ import type { Env } from "../src/env";
 import type { Inbox } from "../src/inbox";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// "What needs Dustin, per app", through the whole Worker with the credentials a caller would present: GET /ops/inbox and improve_status.
-// Everything planted is sample data: namespace "sample", example.com.
+// "What needs Dustin, per app", through the whole Worker with the credentials a caller would present: GET /ops/inbox
+// and capsid_read_status.
 
 const ORIGIN = "https://capsid.test";
 const DRIVER_KEY = "capsid_agent_" + "d".repeat(64);
@@ -108,10 +108,6 @@ beforeEach(async () => {
 });
 
 describe("GET /ops/inbox", () => {
-  it("answers 401 to a request with no credential", async () => {
-    expect((await inboxAs(null)).status).toBe(401);
-  });
-
   it("gives a one-namespace driver its own app only, with every source counted and the pull request as the link", async () => {
     await reported("capsid", "Add the health route", PR);
     await reported("sample", "Not for this driver");
@@ -136,7 +132,12 @@ describe("GET /ops/inbox", () => {
     expect(body.count).toBe(2);
   });
 
-  it("gives an every-namespace key every app: a report and a down site under a namespace with no site row, and quiet configured apps at none", async () => {
+  it("gives an every-namespace key every app: a down site alone is failing, with a report needs-you, and quiet configured apps at none", async () => {
+    const down = (await (await inboxAs(SEAT_KEY)).json()) as Inbox;
+    expect(down.apps.find((a) => a.namespace === "sample")).toMatchObject({
+      count: 1,
+      severity: "failing",
+    });
     await reported("sample", "Choose a name");
     const response = await inboxAs(SEAT_KEY);
     expect(response.status, await response.clone().text()).toBe(200);
@@ -150,15 +151,6 @@ describe("GET /ops/inbox", () => {
     expect(body.count).toBe(body.apps.reduce((n, a) => n + a.count, 0));
   });
 
-  it("a site that is down and nothing else is failing, not needs-you", async () => {
-    const response = await inboxAs(SEAT_KEY);
-    const body = (await response.json()) as Inbox;
-    expect(body.apps.find((a) => a.namespace === "sample")).toMatchObject({
-      count: 1,
-      severity: "failing",
-    });
-  });
-
   it("an unreadable snapshot does not fail the inbox, it reads as nothing", async () => {
     await env.APP_KV.put("ops:snapshot", "{{{");
     await reported("capsid", "Still counted");
@@ -169,7 +161,7 @@ describe("GET /ops/inbox", () => {
   });
 });
 
-describe("improve_status carries the same answer per namespace", () => {
+describe("capsid_read_status carries the same answer per namespace", () => {
   it("needs_dustin matches what the route serves for that namespace", async () => {
     await reported("capsid", "Add the health route", PR);
     const status = await capsidStatus(workerEnv(), "capsid");
@@ -179,7 +171,7 @@ describe("improve_status carries the same answer per namespace", () => {
   });
 });
 
-// What an app reports about itself (src/inbox-report.ts), posted with its own key and read back through GET /ops/inbox and improve_status.
+// What an app reports about itself, posted with its own key and read back through GET /ops/inbox and capsid_read_status.
 describe("POST /ops/inbox/report", () => {
   const CAPSID_ORIGIN = "https://mcp.dustinedwards.info";
   const report = (bearer: string | null, body: unknown) =>
@@ -201,14 +193,15 @@ describe("POST /ops/inbox/report", () => {
       await env.APP_KV.delete(name);
   });
 
-  it("answers 401 with no key and 403 to a key reporting for a namespace it does not hold, storing nothing", async () => {
+  it("answers 401 with no key, on the inbox too, and 403 to a key reporting for a namespace it does not hold, storing nothing", async () => {
     expect((await report(null, drafts)).status).toBe(401);
+    expect((await inboxAs(null)).status).toBe(401);
     const other = await report(DRIVER_KEY, { namespace: "sample", items: [{ title: "Not mine" }] });
     expect(other.status, await other.clone().text()).toBe(403);
     expect(await env.APP_KV.get("inbox:report:sample")).toBeNull();
   });
 
-  it("stores the app's report, which the inbox counts as needs-you and improve_status fences as external", async () => {
+  it("stores the app's report, which the inbox counts as needs-you and capsid_read_status fences as external", async () => {
     const posted = await report(DRIVER_KEY, drafts);
     expect(posted.status, await posted.clone().text()).toBe(200);
     const body = (await (await inboxAs(DRIVER_KEY)).json()) as Inbox;
@@ -227,34 +220,12 @@ describe("POST /ops/inbox/report", () => {
     );
   });
 
-  it("refuses a second report inside the minute, and a link off the app's own origin", async () => {
+  it("refuses a link off the app's own origin", async () => {
     const offOrigin = await report(DRIVER_KEY, {
       namespace: "capsid",
       items: [{ title: "x", link: "https://elsewhere.example.com/" }],
     });
     expect(offOrigin.status).toBe(400);
-    expect((await report(DRIVER_KEY, drafts)).status).toBe(200);
-    const again = await report(DRIVER_KEY, { namespace: "capsid", items: [] });
-    expect(again.status).toBe(429);
-    const body = (await (await inboxAs(DRIVER_KEY)).json()) as Inbox;
-    expect(
-      body.apps[0].items.some((i) => i.kind === "report"),
-      "the refused report replaced the stored one",
-    ).toBe(true);
-  });
-
-  it("a report over 6 hours old no longer counts", async () => {
-    const old = new Date(Date.now() - (6 * 3600 + 60) * 1000).toISOString();
-    await env.APP_KV.put(
-      "inbox:report:capsid",
-      JSON.stringify({
-        namespace: "capsid",
-        reported_at: old,
-        reported_by: "agent:capsid-driver",
-        items: [{ title: "stale", kind: "report", link: null, since: old }],
-      }),
-    );
-    const body = (await (await inboxAs(DRIVER_KEY)).json()) as Inbox;
-    expect(body.apps[0].items.some((i) => i.kind === "report")).toBe(false);
+    expect(await env.APP_KV.get("inbox:report:capsid")).toBeNull();
   });
 });

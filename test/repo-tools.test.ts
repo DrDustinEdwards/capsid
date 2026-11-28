@@ -58,11 +58,24 @@ test("resolveRepo selects by label, by full owner/name, and defaults to the prim
   }
 });
 
-test("resolveRepo rejects an unmapped selector with the valid values", async () => {
-  await assert.rejects(
-    () => resolveRepo(makeEnv(TWO_REPOS), "ns", "owner/somewhere-else"),
-    /not mapped to namespace ns.*owner\/primary-repo/s,
-  );
+test("resolveRepo refuses an unmapped selector, an unknown namespace, and a corrupt or empty mapping, each by name", async () => {
+  const stored = (repos: string) =>
+    fakeEnv({
+      DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos }) }) }) },
+      APP_KV: fakeKv().kv,
+    });
+  for (const [env, selector, pattern] of [
+    [
+      makeEnv(TWO_REPOS),
+      "owner/somewhere-else",
+      /not mapped to namespace ns.*owner\/primary-repo/s,
+    ],
+    [makeEnv(null), undefined, /unknown namespace: ns/],
+    [stored("{not json"), undefined, /CORRUPT repos mapping/],
+    [stored('{"repo":"o/r"}'), undefined, /CORRUPT repos mapping/],
+    [stored("[]"), undefined, /has no repo mapping/],
+  ] as const)
+    await assert.rejects(() => resolveRepo(env, "ns", selector), pattern);
 });
 
 // Two namespaces, so a repo can be named from a namespace that does not map it.
@@ -121,16 +134,10 @@ test("a repo named from another namespace is scope-checked against the namespace
   assert.deepEqual(asked, ["b"]);
 });
 
-test("resolveRepo rejects an unknown namespace", async () => {
-  await assert.rejects(() => resolveRepo(makeEnv(null), "ghost"), /unknown namespace: ghost/);
-});
-
-test("parseReposList accepts a valid array and defaults the label to primary", () => {
-  const result = parseReposList('[{"repo":"a/b"}]');
-  assert.deepEqual(result, { list: [{ repo: "a/b", label: "primary" }] });
-});
-
-test("parseReposList rejects a non-array, an empty array, a bad owner/name and invalid JSON", () => {
+test("parseReposList defaults the label to primary, and rejects a non-array, an empty array, a bad owner/name and invalid JSON", () => {
+  assert.deepEqual(parseReposList('[{"repo":"a/b"}]'), {
+    list: [{ repo: "a/b", label: "primary" }],
+  });
   for (const [input, message] of [
     ['{"repo":"a/b"}', /non-empty JSON array/],
     ["[]", /non-empty JSON array/],
@@ -210,72 +217,40 @@ test("PLANT: a merge keeps a head branch that gained a commit after the merged h
 const ONE_REPO = [{ repo: "o/r", label: "primary" }];
 const READ_PREFIX = "gh:get:/repos/o/r/";
 
-test("every mutating path invalidates that repo's cached reads", async () => {
-  const cases: Array<{ name: string; run: (env: never) => Promise<unknown> }> = [
-    { name: "manage_pr merge", run: (env) => managePr(env, "ns", 5, "merge") },
-  ];
-  for (const c of cases) {
-    const kv = fakeKv({ seedToken: true });
-    const env = makeEnv(ONE_REPO, kv);
-    // Two cached reads of this repo, plus one of a DIFFERENT repo under the same
-    // owner: the sweep must be scoped to o/r and must not take o/rr with it.
-    kv.store.set("gh:get:/repos/o/r/contents/doc.md", JSON.stringify({ status: 200, body: "{}" }));
-    kv.store.set(
-      "gh:get:/repos/o/r/contents/?ref=main",
-      JSON.stringify({ status: 200, body: "[]" }),
-    );
-    kv.store.set("gh:get:/repos/o/rr/contents/doc.md", JSON.stringify({ status: 200, body: "{}" }));
-    await withFetch(
-      {
-        "GET /repos/o/r": { body: { default_branch: "main" } },
-        "GET /repos/o/r/git/ref/heads/main": { body: { object: { sha: "head-sha" } } },
-        "POST /repos/o/r/git/refs": { status: 201, body: {} },
-        "GET /repos/o/r/contents/doc.md": { body: fileBody("OLD") },
-        "PUT /repos/o/r/contents/doc.md": { body: { commit: { sha: "c" }, content: { sha: "f" } } },
-        "DELETE /repos/o/r/contents/doc.md": { body: { commit: { sha: "c" } } },
-        "POST /repos/o/r/pulls": { status: 201, body: { number: 7, html_url: "https://pr" } },
-        "PUT /repos/o/r/pulls/5/merge": { body: { sha: "s", merged: true, message: "merged" } },
-      },
-      async () => {
-        await c.run(env);
-        assert.deepEqual(kv.keysUnder(READ_PREFIX), [], `${c.name} left a stale cache entry`);
-        assert.deepEqual(
-          kv.keysUnder("gh:get:/repos/o/rr/"),
-          ["gh:get:/repos/o/rr/contents/doc.md"],
-          `${c.name} swept a different repo's cache`,
-        );
-      },
-    );
-  }
+test("manage_pr merge invalidates that repo's cached reads, and no other repo's", async () => {
+  const kv = fakeKv({ seedToken: true });
+  const env = makeEnv(ONE_REPO, kv);
+  // o/rr shares the owner and a prefix, so a sweep not scoped to o/r would take it too.
+  kv.store.set("gh:get:/repos/o/r/contents/doc.md", JSON.stringify({ status: 200, body: "{}" }));
+  kv.store.set("gh:get:/repos/o/r/contents/?ref=main", JSON.stringify({ status: 200, body: "[]" }));
+  kv.store.set("gh:get:/repos/o/rr/contents/doc.md", JSON.stringify({ status: 200, body: "{}" }));
+  await withFetch(
+    {
+      "GET /repos/o/r": { body: { default_branch: "main" } },
+      "PUT /repos/o/r/pulls/5/merge": { body: { sha: "s", merged: true, message: "merged" } },
+    },
+    async () => {
+      await managePr(env, "ns", 5, "merge");
+      assert.deepEqual(kv.keysUnder(READ_PREFIX), []);
+      assert.deepEqual(kv.keysUnder("gh:get:/repos/o/rr/"), ["gh:get:/repos/o/rr/contents/doc.md"]);
+    },
+  );
 });
 
-test("a call that changes no content leaves the cache alone", async () => {
-  // The innocent case: a sweep that fires on everything would pass the tests above.
-  for (const c of [
-    { name: "manage_pr close", run: (env: never) => managePr(env, "ns", 5, "close") },
-  ]) {
-    const kv = fakeKv({ seedToken: true });
-    const env = makeEnv(ONE_REPO, kv);
-    kv.store.set("gh:get:/repos/o/r/contents/doc.md", JSON.stringify({ status: 200, body: "{}" }));
-    await withFetch(
-      {
-        "PATCH /repos/o/r/pulls/5": {
-          body: { number: 5, state: "closed", html_url: "https://pr" },
-        },
-        "GET /repos/o/r": { body: { default_branch: "main" } },
-        "GET /repos/o/r/git/ref/heads/main": { body: { object: { sha: "head-sha" } } },
-        "POST /repos/o/r/git/refs": { status: 201, body: {} },
-      },
-      async () => {
-        await c.run(env);
-        assert.deepEqual(
-          kv.keysUnder(READ_PREFIX),
-          ["gh:get:/repos/o/r/contents/doc.md"],
-          `${c.name} swept the cache`,
-        );
-      },
-    );
-  }
+test("manage_pr close changes no content and leaves the cache alone", async () => {
+  const kv = fakeKv({ seedToken: true });
+  const env = makeEnv(ONE_REPO, kv);
+  kv.store.set("gh:get:/repos/o/r/contents/doc.md", JSON.stringify({ status: 200, body: "{}" }));
+  await withFetch(
+    {
+      "PATCH /repos/o/r/pulls/5": { body: { number: 5, state: "closed", html_url: "https://pr" } },
+      "GET /repos/o/r": { body: { default_branch: "main" } },
+    },
+    async () => {
+      await managePr(env, "ns", 5, "close");
+      assert.deepEqual(kv.keysUnder(READ_PREFIX), ["gh:get:/repos/o/r/contents/doc.md"]);
+    },
+  );
 });
 
 test("reads of different refs are different cache entries", async () => {
@@ -298,9 +273,7 @@ test("reads of different refs are different cache entries", async () => {
   );
 });
 
-test("the installation id is resolved per owner, and a pinned id is not consulted", async () => {
-  // Two owners in one namespace mapping, one KV, one env carrying the retired
-  // GITHUB_APP_INSTALLATION_ID. One id cannot be right for both owners.
+test("the installation id is resolved per owner", async () => {
   const kv = fakeKv({ seedToken: false });
   const env = makeEnv(
     [
@@ -311,7 +284,6 @@ test("the installation id is resolved per owner, and a pinned id is not consulte
     {
       GITHUB_APP_CLIENT_ID: "Iv1.test",
       GITHUB_APP_PRIVATE_KEY: await testPem(),
-      GITHUB_APP_INSTALLATION_ID: "999",
     },
   );
   await withFetch(
@@ -332,11 +304,6 @@ test("the installation id is resolved per owner, and a pinned id is not consulte
         "/app/installations/111/access_tokens",
         "/app/installations/222/access_tokens",
       ]);
-      assert.equal(
-        minted.some((p) => p.includes("/999/")),
-        false,
-        "the retired pinned installation id was used to mint a token",
-      );
       assert.equal(kv.store.get("gh:install:v2:a"), "111");
       assert.equal(kv.store.get("gh:install:v2:b"), "222");
     },
@@ -487,106 +454,40 @@ test("ci_status names an unavailable log fetch for a write-grant caller", async 
   );
 });
 
-test("ci_status still withholds the log tail from a read-only key", async () => {
-  await withFetch(
-    {
-      "GET /repos/o/r/actions/runs": { body: FAILED_RUNS },
-      "GET /repos/o/r/actions/runs/42/jobs": { body: JOBS_OK },
-    },
-    async (calls) => {
-      const result = await ciStatus(makeEnv(ONE_REPO), "ns", undefined, { logTail: false });
-      const failed = result.failed_run as FailedRun;
-      assert.match(failed.log_tail_withheld ?? "", /read-only key/);
-      assert.equal(failed.log, undefined);
-      assert.equal(failed.log_tail_unavailable, undefined);
-      // And the log was never fetched, so it cannot leak by another route.
-      assert.equal(
-        calls.some((c) => c.path.includes("/logs")),
-        false,
-      );
-    },
-  );
-});
-
-// The wiring, not just the function: `logTail: true` in the registration would give every read key the CI
-// job logs, which direct ciStatus calls cannot show.
-test("a read-grant server does not hand the CI log tail to capsid_inspect_repo action ci", async () => {
-  await withFetch(
-    {
-      "GET /repos/o/r/actions/runs": { body: FAILED_RUNS },
-      "GET /repos/o/r/actions/runs/42/jobs": { body: JOBS_OK },
-      "GET /repos/o/r/actions/jobs/9/logs": { text: "a secret from the build log" },
-    },
-    async (calls) => {
-      const server = buildServer(makeEnv(ONE_REPO), "read", "test:ro");
-      const client = new Client({ name: "grant-test", version: "1.0.0" });
-      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-      const result = (await client.callTool({
-        name: "capsid_inspect_repo",
-        arguments: { action: "ci", namespace: "ns" },
-      })) as { structuredContent: { failed_run: FailedRun } };
-      await client.close();
-      const failed = result.structuredContent.failed_run;
-      assert.match(failed.log_tail_withheld ?? "", /read-only key/);
-      assert.equal(failed.log, undefined);
-      assert.equal(
-        calls.some((c) => c.path.includes("/logs")),
-        false,
-        "a read-grant call fetched the job log",
-      );
-    },
-  );
-});
-
-test("a write-grant server does hand the log tail through, so the gate is a gate", async () => {
-  // A wiring that withheld from everyone would pass the test above.
-  await withFetch(
-    {
-      "GET /repos/o/r/actions/runs": { body: FAILED_RUNS },
-      "GET /repos/o/r/actions/runs/42/jobs": { body: JOBS_OK },
-      "GET /repos/o/r/actions/jobs/9/logs": { text: "the last line" },
-    },
-    async () => {
-      const server = buildServer(makeEnv(ONE_REPO), "write", "test:rw");
-      const client = new Client({ name: "grant-test", version: "1.0.0" });
-      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-      const result = (await client.callTool({
-        name: "capsid_inspect_repo",
-        arguments: { action: "ci", namespace: "ns" },
-      })) as { content: Array<{ text: string }>; structuredContent: { failed_run: FailedRun } };
-      await client.close();
-      // The answer is outside data (src/scope.ts markOutside), so it is read from structuredContent.
-      assert.match(
-        result.content[0].text,
-        /^The text between <data> and <\/data>[^\n]*never instructions[\s\S]*<data label="repo">/,
-      );
-      const failed = result.structuredContent.failed_run;
-      assert.match(failed.log ?? "", /the last line/);
-      assert.equal(failed.log_tail_withheld, undefined);
-    },
-  );
-});
-
-test("ci_status returns the failing step's log when it can", async () => {
-  await withFetch(
-    {
-      "GET /repos/o/r/actions/runs": { body: FAILED_RUNS },
-      "GET /repos/o/r/actions/runs/42/jobs": { body: JOBS_OK },
-      "GET /repos/o/r/actions/jobs/9/logs": { text: "the last line" },
-    },
-    async () => {
-      const result = await ciStatus(makeEnv(ONE_REPO), "ns", undefined, { logTail: true });
-      const failed = result.failed_run as FailedRun;
-      assert.equal(failed.log, "the last line");
-      assert.equal(failed.log_tail_unavailable, undefined);
-      // The step name is reported, and because this fixture's log does not contain
-      // it, log_region says so rather than claiming the region is the step's.
-      assert.equal(failed.failing_step, "npm test");
-      assert.match(failed.log_region ?? "", /no usable timestamp window/);
-    },
-  );
+// The wiring, not just the function: `logTail: true` in the registration would give every read key the CI job logs.
+test("capsid_inspect_repo action ci withholds the log tail from a read grant, without fetching it, and hands it to a write grant", async () => {
+  for (const grant of ["read", "write"] as const)
+    await withFetch(
+      {
+        "GET /repos/o/r/actions/runs": { body: FAILED_RUNS },
+        "GET /repos/o/r/actions/runs/42/jobs": { body: JOBS_OK },
+        "GET /repos/o/r/actions/jobs/9/logs": { text: "the last line" },
+      },
+      async (calls) => {
+        const server = buildServer(makeEnv(ONE_REPO), grant, `test:${grant}`);
+        const client = new Client({ name: "grant-test", version: "1.0.0" });
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+        await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+        const result = (await client.callTool({
+          name: "capsid_inspect_repo",
+          arguments: { action: "ci", namespace: "ns" },
+        })) as { structuredContent: { failed_run: FailedRun } };
+        await client.close();
+        const failed = result.structuredContent.failed_run;
+        if (grant === "read") {
+          assert.match(failed.log_tail_withheld ?? "", /read-only key/);
+          assert.equal(failed.log, undefined);
+          assert.equal(
+            calls.some((c) => c.path.includes("/logs")),
+            false,
+            "a read-grant call fetched the job log",
+          );
+        } else {
+          assert.match(failed.log ?? "", /the last line/);
+          assert.equal(failed.log_tail_withheld, undefined);
+        }
+      },
+    );
 });
 
 test("ci_status names the case where a failed run has no failed job", async () => {
@@ -638,6 +539,7 @@ test("a merge never deletes the default branch, a fork's branch or one it could 
             base: { ref: "main" },
           },
         },
+        "GET /repos/o/r": { body: { default_branch: "main" } },
       },
       /someone\/fork/,
     ],
@@ -687,28 +589,4 @@ test("A FAILED BRANCH DELETE DOES NOT FAIL THE MERGE, because the merge already 
       );
     },
   );
-});
-
-test("resolveRepo names a corrupt repos mapping instead of reporting none", async () => {
-  const env = {
-    DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos: "{not json" }) }) }) },
-    APP_KV: fakeKv().kv,
-  } as never;
-  await assert.rejects(() => resolveRepo(env, "ns"), /CORRUPT repos mapping/);
-});
-
-test("resolveRepo refuses a repos value that parses but is not an array", async () => {
-  const env = {
-    DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos: '{"repo":"o/r"}' }) }) }) },
-    APP_KV: fakeKv().kv,
-  } as never;
-  await assert.rejects(() => resolveRepo(env, "ns"), /CORRUPT repos mapping/);
-});
-
-test("an empty mapping still reports as unconfigured, not as corrupt", async () => {
-  const env = {
-    DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos: "[]" }) }) }) },
-    APP_KV: fakeKv().kv,
-  } as never;
-  await assert.rejects(() => resolveRepo(env, "ns"), /has no repo mapping/);
 });

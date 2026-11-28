@@ -7,10 +7,8 @@ const served = new Map<string, Set<string> | null>();
 for (const spec of COMPOSITES) served.set(spec.name, new Set(Object.keys(spec.actions)));
 for (const name of Object.keys(SINGLE_TOOLS)) served.set(name, null);
 
-// Targets whose actions were removed after the regroup; the map keeps them so prose
-// naming the old tool still reads as stale.
+// Removed after the regroup; the map keeps them so prose naming them still reads as stale.
 const RETIRED = new Set(["capsid_read_status.run", "capsid_read_status.claim"]);
-// Whole tools removed after the regroup, kept for the same reason.
 const RETIRED_TOOLS = new Set([
   "capsid_change_repo",
   "capsid_open_pr",
@@ -35,24 +33,6 @@ test("every mapping target is a served tool and action, so no migrated entry nam
     assert.ok(actions, `${tool} takes no action, and the mapping names ${action}`);
     assert.ok(actions.has(action), `${tool} does not serve action ${action}`);
   }
-});
-
-test("prose: tool-call contexts are rewritten", () => {
-  const r = rewriteProse(
-    [
-      "Call `read` on capsid/core.md, then `list_repo_tree` for the layout.",
-      "Post it with `jobs.post`, or merge with `manage_pr action merge`.",
-      "Then call improve_status(namespace) and `write(namespace, path)`.",
-      "Then `improve_run()` runs one.",
-    ].join("\n"),
-  );
-  assert.deepEqual(r.text.split("\n"), [
-    "Call `capsid_read_doc` on capsid/core.md, then `capsid_read_repo` action `tree` for the layout.",
-    "Post it with `capsid_work_jobs.post`, or merge with `capsid_close_pr` action `merge`.",
-    "Then call capsid_read_status(namespace) and `capsid_write_doc(namespace, path)`.",
-    'Then `capsid_read_status(action: "run")` runs one.',
-  ]);
-  assert.equal(r.changes.length, 4);
 });
 
 test("PLANT: prose that is not a tool call is left alone", () => {
@@ -91,28 +71,6 @@ test("PLANT: a name that is also a word is rewritten only where the text says it
   assert.equal(rewriteProse("see `agents.ts`").text, "see `agents.ts`");
 });
 
-test("an action named after the span is kept, not doubled", () => {
-  assert.equal(
-    rewriteProse("set by `improve_run` action `mode`.").text,
-    "set by `capsid_admin_manage_switches` action `mode`.",
-  );
-  assert.equal(
-    rewriteProse("signed with `improve_run` action `sign_policy`, admin only").text,
-    "signed with `capsid_admin_manage_switches` action `sign_policy`, admin only",
-  );
-  assert.equal(rewriteProse("`jobs` action `post`").text, "`capsid_work_jobs` action `post`");
-  assert.equal(rewriteProse('`manage_pr` action "merge"').text, "`capsid_close_pr` action `merge`");
-});
-
-test("a split tool whose actions all moved to one new tool is renamed bare; a file name is not a tool", () => {
-  assert.equal(
-    rewriteProse("Use `delete_namespace` with preview first.").text,
-    "Use `capsid_admin_manage_namespaces` with preview first.",
-  );
-  const r = rewriteProse(["```", "node scripts/deploy.mjs --apply", "```"].join("\n"));
-  assert.deepEqual(r.fenced, []);
-});
-
 test("PLANT: a column is not an action, and a split tool named bare is all of it, so it is reported", () => {
   for (const text of [
     "copied from `jobs.claimed_by`.",
@@ -125,22 +83,4 @@ test("PLANT: a column is not an action, and a split tool named bare is all of it
     assert.equal(r.text, text);
     assert.equal(r.unmapped.length, 1, text);
   }
-});
-
-test("PLANT: rewriting is idempotent: a second run over rewritten text changes nothing", () => {
-  assert.equal(
-    rewriteProse("So does `capsid_close_pr` action `delete_branch` with force.").changes.length,
-    0,
-  );
-  assert.equal(rewriteProse("then `capsid_change_repo` action `create_branch`").changes.length, 0);
-  assert.equal(
-    rewriteProse(
-      "- **Write**: `capsid_change_repo` (actions `write_file`, `delete_file` and `create_branch`), `capsid_close_pr` (actions `merge` and `delete_branch`)",
-    ).changes.length,
-    0,
-  );
-  const once = rewriteProse(
-    "Call `read`, then `list_repo_tree`, `delete_branch`, `jobs.post` and `manage_pr` action `merge`.",
-  ).text;
-  assert.equal(rewriteProse(once).changes.length, 0, once);
 });

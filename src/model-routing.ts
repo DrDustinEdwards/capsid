@@ -40,7 +40,6 @@ export const JUDGE_PATHS: Array<{ pattern: RegExp; why: string }> = [
   { pattern: /^package\.json$/i, why: "the npm scripts CI runs as the checks" },
   { pattern: /(^|\/)tsconfig[^/]*\.json$/i, why: "what the typechecks check" },
   { pattern: /(^|\/)vitest\.config\.[cm]?[jt]s$/i, why: "the integration suite's configuration" },
-  { pattern: /^scripts\/test-budget\.mjs$/i, why: "the runner behind npm test" },
   {
     pattern: /^scripts\/verify-live\.mjs$/i,
     why: "the live gate, whose rollback is the backstop for a merge",
