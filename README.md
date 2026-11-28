@@ -77,7 +77,7 @@ Every overwrite or delete stores the previous body in `document_versions` and wr
 
 ### Authorization
 
-An agent's scopes have five axes: `namespaces`, `repos`, `tools`, `grants` (read, or read and write) and `flags`. Two flags control operations with a wide effect: merging, closing, tagging or releasing (`can_merge`), and writing autonomy policy documents (`can_touch_protected`). A new agent receives read access to its named namespaces and no flags. Scopes that fail to parse resolve to no access. The required grant for each tool is declared in `TOOL_GRANTS` (`src/scope.ts`), and a tool absent from that table requires the write grant. See [docs/auth.md](docs/auth.md).
+An agent's scopes have five axes: `namespaces`, `repos`, `tools`, `grants` (read, or read and write) and `flags`. Two flags control operations with a wide effect: merging, closing, tagging or releasing (`can_merge`), and writing the policy documents under `capsid/policy/` (`can_touch_protected`). A new agent receives read access to its named namespaces and no flags. Scopes that fail to parse resolve to no access. The required grant for each tool is declared in `TOOL_GRANTS` (`src/scope.ts`), and a tool absent from that table requires the write grant. See [docs/auth.md](docs/auth.md).
 
 ### GitHub integration
 
@@ -87,7 +87,7 @@ Capsid runs no merge loop: a pull request merges on green, by the session that o
 
 ### Capsid Portal
 
-The Portal is a single-page application in `dashboard/`, served by the Worker as static assets and restricted to the administrator's Cloudflare Access session. It presents items awaiting the owner, site health, open pull requests, deploys, agents, activity and backups, and exposes the administrative controls defined in `src/controls.ts` ([docs/portal.md](docs/portal.md)).
+The Portal is a React Router app in `dashboard/`, rendered on the server by the Worker and restricted to the administrator's Cloudflare Access session. It presents items awaiting the owner, site health, open pull requests, deploys, agents, activity and backups, and exposes the administrative controls defined in `src/controls.ts` ([docs/portal.md](docs/portal.md)).
 
 ![The Portal Health view, rendered from sample data](docs/images/health-light.png)
 
@@ -169,7 +169,7 @@ The complete list, including the signed backup routes, is in [docs/auth.md](docs
 
 ## Installation
 
-An installation requires a Cloudflare account and a GitHub App. The procedure is given in full in [docs/bootstrap.md](docs/bootstrap.md), section 9. In outline:
+An installation requires a Cloudflare account and a GitHub App. The procedure is given in full in [docs/bootstrap.md](docs/bootstrap.md), section 8. In outline:
 
 1. Install dependencies with `npm install`. Node.js 26.11.1 or later is required.
 2. Create a D1 database, two KV namespaces and an R2 bucket with Wrangler.
@@ -195,7 +195,7 @@ An installation requires a Cloudflare account and a GitHub App. The procedure is
 | `npm --prefix dashboard run dev`       | Serve the Portal locally against sample data.              |
 | `EXPECT_SHA=<sha> npm run verify:live` | Verify the deployed Worker.                                |
 
-The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#10-checks-before-a-push). Continuous integration runs these checks on every pull request, and a merge to `master` deploys to production.
+The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#9-checks-before-a-push). Continuous integration runs these checks on every pull request, and a merge to `master` deploys to production.
 
 ## Documentation
 

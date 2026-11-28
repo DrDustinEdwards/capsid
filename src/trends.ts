@@ -5,7 +5,7 @@ import type { Env } from "./env";
 import type { TrendDeployRepo, TrendMinutesWeek, PortalTrends } from "./ops-types/views";
 import { MINUTE_MS, isoWeek, timeMs, utcDay } from "./time";
 
-// The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3): the feed carries nothing
+// The series behind the Portal's charts: the feed carries nothing
 // longer than 7 days, so GET /portal/api/trends (src/portal-trends.ts) reads them on demand. Every time is UTC.
 
 // At most this many activity rows; past it the series says it is cut. Newest are kept, so a cut costs the oldest week.

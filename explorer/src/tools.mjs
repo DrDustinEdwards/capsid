@@ -81,7 +81,7 @@ ${servers
   .map(
     (server) => `<section aria-labelledby="srv-${server === "Capsid" ? "capsid" : "admin"}">
 <h2 id="srv-${server === "Capsid" ? "capsid" : "admin"}">${server}</h2>
-<p class="section-sub">${server === "Capsid" ? "On <code>/mcp</code> for the owners and <code>/ops/mcp</code> for agents with a key." : "On <code>/mcp/admin</code> and <code>/ops/mcp/admin</code>, for the administrator identity only."}</p>
+<p class="section-sub">${server === "Capsid" ? "On <code>/mcp</code> for the owners and <code>/ops/mcp</code> for agents with a key." : "On <code>/mcp/admin</code>, for the administrator identity only."}</p>
 <ul class="tool-cards">${tools
       .filter((t) => t.server === server)
       .map(

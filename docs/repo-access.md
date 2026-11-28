@@ -4,10 +4,10 @@ Capsid reaches mapped repositories through a dedicated GitHub App. The Worker mi
 
 A namespace can map to several repos, each with a label (for example `primary` and `legacy`). Every repo tool takes an optional `repo` parameter, a label or a mapped `owner/name`, defaulting to `primary`. An unmapped repo is rejected, so the namespace mapping is the authorization boundary.
 
-- **Read**: `capsid_read_repo` (actions `tree`, `files` and `search`) and `capsid_inspect_repo` (actions `refs`, `history`, `ci`, `site`, `search` and `bing`: `site` is a live check of the namespace's site, docs/portal.md, `search` its Google Search Console data, docs/search-console.md, and `bing` its Bing Webmaster Tools data, docs/bing-webmaster.md)
+- **Read**: `capsid_read_repo` (actions `tree`, `files` and `search`) and `capsid_inspect_repo` (actions `refs`, `settings`, `history`, `ci`, `site`, `search`, `bing`, `traffic` and `audit`: `site` is a live check of the namespace's site, `search` its Google Search Console data ([search-console.md](search-console.md)), `bing` its Bing Webmaster Tools data ([bing-webmaster.md](bing-webmaster.md)), `traffic` its Cloudflare 404s, 5xx, vitals and AI crawlers, and `audit` an SEO crawl)
 - **Write**: `capsid_close_pr` (actions `merge`, `close`, `delete_branch`, `tag` and `release`)
 
-Capsid does not write files, create branches, open or comment on pull requests, or start workflows. `capsid_change_repo`, `capsid_open_pr` and `capsid_run_ci` did, for agents without their own GitHub access; Dustin removed them on 2026-10-31, after cloud sessions moved to GitHub directly. An agent pushes its branch and opens its pull request with its own credentials.
+Capsid does not write files, create branches, open or comment on pull requests, or start workflows. An agent pushes its branch and opens its pull request with its own credentials.
 
 `capsid_close_pr` action `merge` (squash by default) or `close` ends a pull request, and deletes the head branch when it is safe. Both actions need `can_merge`, because both delete that branch. `capsid_close_pr` action `delete_branch` refuses a branch with an open pull request; `force: true` lifts that refusal and so needs `can_merge` too. `capsid_close_pr` action `delete_branch` with `merged: true` (in place of `branch`) prunes the branches whose latest pull request merged and whose tip is the commit it merged from, so work pushed after a merge is kept: it previews by default and deletes only with `confirm: true`, at most 40 a call, and it never lifts a refusal.
 
@@ -35,8 +35,4 @@ A name two jobs or two steps share is refused with the ids or numbers that tell 
 
 ## Writes and the audit row
 
-Every write to GitHub goes through `guardedWrite` (`src/tools/repo-guards.ts`); the rule and its audit behavior are in docs/auth.md, "Repo mutations and the audit trail".
-
-## The repository's name
-
-The repository was renamed from `capsid-mcp` to `DrDustinEdwards/capsid` on 2026-09-12.
+Every write to GitHub goes through `guardedWrite` (`src/tools/repo-guards.ts`); the rule and its audit behavior are in [auth.md](auth.md), "Repo mutations and the audit trail".

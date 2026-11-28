@@ -2,8 +2,7 @@ import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import { behindGate } from "./portal-auth";
 import { readTrends } from "./trends";
 
-// The Portal's trends: GET /portal/api/trends?weeks= (design-portal-evaluation.md, DECIDE 5:
-// "admin, read-only"). The series behind the charts, from src/trends.ts.
+// GET /portal/api/trends?weeks=: the series behind the charts, from src/trends.ts. Admin only, read-only.
 
 export const PORTAL_TRENDS_PATH = "/portal/api/trends";
 const DEFAULT_WEEKS = 8;

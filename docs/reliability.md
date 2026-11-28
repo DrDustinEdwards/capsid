@@ -1,6 +1,6 @@
 # Reliability target
 
-Status: proposed (2026-11-07). The target and the budget are numbers to measure against. Nothing enforces the pause rule yet; see "What stays open".
+Proposed. The target and the budget are numbers to measure against; nothing enforces the pause rule yet.
 
 ## The target
 
