@@ -62,15 +62,13 @@ the heaviest page is over budget. A missing build is a failure, not a pass. Run 
 - Hashed file names under `assets/`, with Subresource Integrity.
 - Hydration-safe: what the first render reads (the clock, saved preferences, the
   address hash) matches the server's, and changes only after hydration.
-- Read only. A blocked job's drawer copies its command and the resume call; the
-  dashboard never makes the call.
+- Read only, apart from the previewed controls: it never merges and never mints.
 - A number the feed does not have is shown as "No data" with the reason, never as 0.
 
 ## Keyboard
 
-`Ctrl K` or `/` opens the command menu. `g` then `y h s p q o l a k b e` goes to a page
-(Needs you, Health, Sites, Pull requests, Jobs, Projects, Activity, Agents, Packages,
-Library, Settings),
+`Ctrl K` or `/` opens the command menu. `g` then `b h m p o s k a e` goes to a page
+(Board, Health, Memory, Pull requests, Projects, Sites, Packages, Agents, Settings),
 `j` and `k` move through rows, `Enter` opens one, `Esc` closes, `r` refreshes,
-`t` switches theme, `f` focuses the queue filter, `?` shows the sheet, where
+`t` switches theme, `f` focuses the page's filter, `?` shows the sheet, where
 single-key shortcuts can be turned off.

@@ -179,6 +179,6 @@ Capsid Portal (admin Access session only; a request with any `Authorization` hea
 - `GET /portal/` the app, and `GET /portal/callback` its sign-in return
 - `GET /portal/api/ops` the feed, and `POST /portal/api/ops/refresh` an on-demand watcher pass (header `X-Capsid-Ops: refresh`, once per two minutes)
 - `POST /portal/api/actions/preview` and `POST /portal/api/actions/perform` the controls as a preview and a perform (header `X-Capsid-CSRF`)
-- `GET /portal/api/` reads: `namespaces`, `activity`, `maintenance`, `convergence`, `packages/history`, `shared-code`, `resources`, `library`, `trends`
+- `GET /portal/api/` reads: `namespaces`, `activity`, `maintenance`, `convergence`, `packages/history`, `shared-code`, `resources`, `library`, `trends`, `board`, `prs`, `figures`
 - `GET` and `POST /portal/api/push` phone alerts, and `POST /portal/api/sign-out`
 - Any other path under `/portal/api/` is a JSON 404. Nothing answers under `/console`
