@@ -1,15 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as plot from "enarratio/plot";
-import { backupAges, findingsRange, whoActed, writesCalendar } from "../src/figures.ts";
+import { heatThresholds, whoActed, writesRecent, writesYear } from "../src/figures.ts";
 import { actorLabel, agentRows, heatRows } from "../src/portal-figures.ts";
 import { threadsPerDay, topNames } from "../src/portal-board.ts";
 import { unfence, externalFence } from "../src/provenance.ts";
 import { lastDays } from "../src/trends-days.ts";
-import type { PortalBackups } from "../src/ops-types/views.ts";
-
-// The Portal's server-drawn charts on data shaped like production's (fake names): each is drawn,
-// states its finding, carries its data table and no style attribute (the Portal's CSP).
 
 const NOW = new Date("2026-11-28T12:00:00.000Z");
 
@@ -22,12 +18,32 @@ function assertFigure(html: string | null, alt: RegExp): string {
   return html;
 }
 
-test("the year's writes are drawn as a calendar that names its busiest day", () => {
+test("the year's writes lie flat, weeks across, and a phone gets the last 13 weeks", () => {
   const days = lastDays(NOW, 365);
   const counts = new Map(days.map((d, i) => [d, i % 7 === 0 ? 0 : (i * 13) % 90]));
-  const html = assertFigure(writesCalendar(plot, days, counts), /Document writes per day/);
-  assert.match(html, /the most \d+ on 20\d\d-\d\d-\d\d/);
-  assert.equal(writesCalendar(plot, days, new Map()), null, "an empty year is no chart");
+  const year = assertFigure(
+    writesYear(plot, days, counts),
+    /Document writes per day over 52 weeks/,
+  );
+  assert.match(year, /the most \d+ on 20\d\d-\d\d-\d\d/);
+  assert.match(
+    year,
+    /stroke-dasharray/,
+    "a day with no write is an outlined cell, not the lightest step",
+  );
+  assertFigure(writesRecent(plot, days, counts), /over the last 13 weeks/);
+  assert.equal(writesYear(plot, days, new Map()), null, "an empty year is no chart");
+});
+
+test("heat steps sit at the quintiles of the non-zero values, so one busy row cannot wash out the rest", () => {
+  const values = [0, 0, 1, 2, 2, 3, 4, 5, 6, 8, 300];
+  const t = heatThresholds(values)!;
+  assert.ok(t[3] < 20, `the top step starts at ${t[3]}, not near 300`);
+  assert.ok(
+    t.every((v, i) => i === 0 || v > t[i - 1]!),
+    "the steps ascend",
+  );
+  assert.equal(heatThresholds([0, 1, 1]), undefined, "too few values fall back to equal steps");
 });
 
 test("who acted: one row per actor and client, the rest as Other, wide by day and narrow by week", () => {
@@ -58,66 +74,6 @@ test("who acted: one row per actor and client, the rest as Other, wide by day an
   );
   assertFigure(whoActed(plot, days, heat, "week"), /Actions per week/);
   assert.equal(whoActed(plot, days, [], "day"), null);
-});
-
-test("open problems are drawn from first to last seen, the oldest first", () => {
-  const html = assertFigure(
-    findingsRange(
-      plot,
-      [
-        {
-          namespace: "sample",
-          title: "The site answered 503",
-          first_seen_at: "2026-11-27 12:00:00",
-          last_seen_at: "2026-11-28 11:00:00",
-        },
-        {
-          namespace: "sample",
-          title: "The site answered 503",
-          first_seen_at: "2026-11-20T12:00:00.000Z",
-          last_seen_at: "2026-11-28T11:30:00.000Z",
-        },
-      ],
-      NOW,
-    ),
-    /2 open problems.*the oldest, sample: The site answered 503 \(2\), first seen 8\.0 days ago/,
-  );
-  assert.ok(html.length > 0);
-  assert.equal(findingsRange(plot, [], NOW), null);
-});
-
-test("backup ages are drawn against the 26-hour target, and a site with none is named", () => {
-  const b: PortalBackups = {
-    read_at: NOW.toISOString(),
-    capsid: {
-      status: { last_ok: "2026-11-28T03:00:00.000Z", age_hours: 9 },
-      amazon: { newest: "2026-11-28T05:00:00.000Z", bytes: 1 },
-    },
-    sites: [
-      {
-        namespace: "sample",
-        origin: "https://sample.example.com",
-        status: { last_ok: null, age_hours: 31 },
-        error: null,
-        amazon: null,
-      },
-      {
-        namespace: "sample-two",
-        origin: "https://two.example.com",
-        status: null,
-        error: "unreachable",
-        amazon: null,
-      },
-    ],
-    amazon_report_at: null,
-    not_configured: [],
-  };
-  const dump = backupAges(plot, b, "dump", NOW);
-  assertFigure(dump.chart, /against the 26-hour target: sample 31 h past it/);
-  assert.deepEqual(dump.missing, ["sample-two"]);
-  const amazon = backupAges(plot, b, "amazon", NOW);
-  assertFigure(amazon.chart, /newest Amazon copy.*all 1 site on time/);
-  assert.deepEqual(amazon.missing, ["sample", "sample-two"]);
 });
 
 test("threads are counted on the day each was first seen, the top five projects and Other", () => {

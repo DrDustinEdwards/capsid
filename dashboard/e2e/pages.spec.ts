@@ -1,8 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { visit } from "./views.ts";
 
-// The pages Portal v2 changed: each shows its charts, drawn, with their tables, and keeps its links.
-
 const chart = (page: Page, title: string) =>
   page.locator(".cap-chart").filter({ has: page.locator("figcaption", { hasText: title }) });
 
@@ -14,9 +12,9 @@ test("Memory: the handoffs tab draws the year's writes and the weekly handoffs, 
     "aria-current",
     "page",
   );
-  await expect(chart(page, "How often is memory written?").locator("svg[role='img']")).toHaveCount(
-    1,
-  );
+  await expect(
+    chart(page, "How often is memory written?").first().locator("svg[role='img']"),
+  ).toBeVisible();
   await expect(
     chart(page, "How often are handoffs written?").locator("svg[role='img']"),
   ).toHaveCount(1);
@@ -62,14 +60,17 @@ test("Agents: a roster row opens the agent's drawer, and Activity shows who acte
   await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
 });
 
-test("Health: open problems by age, and the backups' ages and runs", async ({ page }) => {
+test("Health: findings with how long each has been open, and the backups' ages against their targets", async ({
+  page,
+}) => {
   await visit(page, "health");
-  await expect(
-    chart(page, "How long has each open problem been open?").locator("svg[role='img']"),
-  ).toHaveCount(1);
+  await expect(page.locator("#problems .frow").first()).toContainText("days open");
   await page.getByRole("link", { name: "Backups" }).click();
-  await expect(chart(page, "Backup age by site").locator("svg[role='img']")).toHaveCount(1);
-  await expect(chart(page, "Amazon copy age by site").locator("svg[role='img']")).toHaveCount(1);
+  const age = page.locator(".cap-panel", {
+    has: page.getByRole("heading", { name: "Backup age" }),
+  });
+  await expect(age.getByRole("meter")).toHaveCount(2);
+  await expect(age.getByText("Past the 26 h target")).toBeVisible();
   await expect(chart(page, "Backup runs, last 14 days").locator("svg[role='img']")).toHaveCount(1);
   await expect(page.getByText("Weekly", { exact: true })).toBeVisible();
 });

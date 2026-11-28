@@ -71,8 +71,6 @@ function specsFor(
       out.push(trends, { key: ["maintenance"], path: "/maintenance" });
       const tab = p.get("tab");
       if (tab === "resources") out.push({ key: ["resources"], path: "/resources" });
-      if (!tab || tab === "problems") out.push(figures("problems"));
-      if (tab === "backups") out.push(figures("backups"));
       break;
     }
     case "sites": {

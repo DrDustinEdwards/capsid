@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { useApp } from "../app/ctx";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
@@ -16,7 +17,7 @@ import { memoryDocHref } from "./memory-links";
 import { Problems } from "./Problems";
 import { PageHead } from "./shared";
 
-const HandoffsProgress = boardChart("HandoffsProgress");
+const HandoffsRing = boardChart("HandoffsRing");
 const HandoffsTable = boardChart("HandoffsTable");
 const ThreadsChart = boardChart("ThreadsChart");
 const RecentThreads = boardChart("RecentThreads");
@@ -47,7 +48,6 @@ const newTab = ({ children, ...props }: RowLinkProps) => (
   </a>
 );
 
-// A handoff's "Waiting on Dustin" section in one line: its first line of text, without list marks.
 function firstLine(text: string): string {
   const line = text
     .split("\n")
@@ -74,8 +74,7 @@ function Waiting({ board }: { board: PortalBoard | null }) {
               title={firstLine(a.text)}
               href={memoryDocHref(a.namespace, a.path)}
               renderLink={rowLink}
-              detail={a.title || a.path}
-              meta={a.namespace}
+              detail={`${a.namespace} · ${a.title || a.path}`}
             />
           ))}
           {listed.map(({ app, item }, i) => {
@@ -91,7 +90,7 @@ function Waiting({ board }: { board: PortalBoard | null }) {
                 title={item.title}
                 href={item.link ?? undefined}
                 renderLink={newTab}
-                meta={`${app.name} · ${ago(parse(item.since), now)}`}
+                detail={`${app.name} · ${ago(parse(item.since), now)}`}
               />
             );
           })}
@@ -205,7 +204,19 @@ function Handoffs({
   loading: boolean;
 }) {
   return (
-    <Panel flush title="Open handoffs" id="handoffs" count={board?.handoffs.open}>
+    <Panel
+      flush
+      title="Open handoffs"
+      id="handoffs"
+      count={board?.handoffs.open}
+      src={
+        board && (
+          <Suspense fallback={null}>
+            <HandoffsRing board={board} />
+          </Suspense>
+        )
+      }
+    >
       <div className="body cap-stack" data-gap="4">
         {!board ? (
           <p className="cap-text" data-tone="dim">
@@ -215,7 +226,6 @@ function Handoffs({
           <p className="cap-text">No open handoff.</p>
         ) : (
           <ChartSlot>
-            <HandoffsProgress board={board} />
             <HandoffsTable board={board} />
           </ChartSlot>
         )}

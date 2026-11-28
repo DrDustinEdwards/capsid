@@ -271,7 +271,6 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
 
 // As if it started when the plan was read: the plan holds estimates, not a start time, and the axis is a UTC clock.
 // Heavy lanes share one session so run in turn; the window runs a tenth past the end so the last tick is not on the edge.
-const missing = (v: number): string => (v >= 1 ? "missing" : "kept");
 
 export function BackupSlots() {
   const { data, error, loading } = useTrends();
@@ -296,17 +295,18 @@ export function BackupSlots() {
           ).map(([name, span, slots]) => {
             const kept = slots.filter((s) => s.filled).length;
             const opts = {
-              values: slots.map((s) => (s.filled ? 0 : 1)),
+              values: slots.map((s) => (s.filled ? 1 : null)),
               min: 0,
               max: 1,
               title: name,
               subtitle: `${kept} of ${slots.length} kept`,
               label: `${name} backups, the last ${span}`,
-              source: { name: "backup bucket, complete runs" },
               height: 20,
               cellLabels: slots.map((s) => s.key),
-              formatValue: missing,
-            };
+              formatValue: () => "kept",
+              csv: false,
+              summary: false,
+            } as const;
             return (
               <ChartFrame
                 key={name}
@@ -315,6 +315,12 @@ export function BackupSlots() {
               />
             );
           })
+        )}
+        {b?.slots && (
+          <p className="cap-text slot-key" data-tone="dim">
+            <span className="slot-swatch" data-kept="" aria-hidden="true" /> kept{" "}
+            <span className="slot-swatch" aria-hidden="true" /> missing
+          </p>
         )}
       </div>
     </Panel>
@@ -371,9 +377,10 @@ export function CiHistory() {
                 notes: r.truncated ? "Over 100 runs; early days may be missing some." : undefined,
                 height: 20,
                 cellLabels: r.days.map((d) => d.day),
-                source: { name: "GitHub Actions, default branch runs" },
                 formatValue: (v: number) => (v >= 1 ? "red" : "green"),
-              };
+                csv: false,
+                summary: false,
+              } as const;
               return (
                 <div key={r.namespace} data-ci={r.namespace}>
                   <ChartFrame inline draw={(width, fit) => heatStrip({ ...opts, width, ...fit })} />

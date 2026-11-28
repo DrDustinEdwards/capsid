@@ -44,7 +44,6 @@ export function Maintenance() {
   const load = useAnswer<PortalMaintenance>(["maintenance"], fetchMaintenance);
 
   const data = load.data;
-  // A list stored before a rule was retired can still hold its items: they are not shown.
   const items = data
     ? data.items
         .filter((i) => Object.hasOwn(RULE, i.rule))

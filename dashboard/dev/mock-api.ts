@@ -1422,9 +1422,9 @@ function backups(st: MockState): PortalBackups {
       .map((s) => ({
         namespace: s.namespace,
         origin: s.origin!,
-        status: { ...fresh(7 * 3_600_000), files: { media: fresh(7 * 3_600_000) } },
+        status: { ...fresh(31 * 3_600_000), files: { media: fresh(7 * 3_600_000) } },
         error: null,
-        amazon: { newest: iso(9 * 3_600_000), bytes: 1_800_000 },
+        amazon: { newest: iso(33 * 3_600_000), bytes: 1_800_000 },
       })),
     amazon_report_at: iso(2 * 3_600_000),
     not_configured: [],

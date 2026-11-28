@@ -14,7 +14,7 @@ import { parse, utc } from "capsomer/behavior/time";
 import { ago, hostOf, pct, shortId } from "../lib/format";
 import { shortCount } from "capsomer/behavior/format";
 import { Meter } from "capsomer/react/meter";
-import { KIND_STATUS, PROBE, cfOk, cfShort, siteKey } from "../lib/derive";
+import { BACKUP_TARGET_HOURS, KIND_STATUS, PROBE, cfOk, cfShort, siteKey } from "../lib/derive";
 import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
 import { Pill, Status } from "capsomer/react/status";
 import { FilterEmpty, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
@@ -231,7 +231,6 @@ function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
 }
 
 // Only Capsid's own backup is in the feed; every other site's is no data, never "none" or a zero.
-const BACKUP_LIMIT_HOURS = 26;
 
 function BackupCell({ s }: { s: SiteSnapshot }) {
   const { feed } = useApp();
@@ -248,12 +247,12 @@ function BackupCell({ s }: { s: SiteSnapshot }) {
     <Meter
       size="sm"
       label={<span className="cap-sr-only">Backup age</span>}
-      value={Math.min(backup.age_hours, BACKUP_LIMIT_HOURS)}
-      max={BACKUP_LIMIT_HOURS}
+      value={Math.min(backup.age_hours, BACKUP_TARGET_HOURS)}
+      max={BACKUP_TARGET_HOURS}
       warnAt={0.75}
       critAt={1}
-      valueText={`${age} of ${BACKUP_LIMIT_HOURS} hours`}
-      display={`${age}h / ${BACKUP_LIMIT_HOURS}h`}
+      valueText={`${age} of ${BACKUP_TARGET_HOURS} hours`}
+      display={`${age}h / ${BACKUP_TARGET_HOURS}h`}
     />
   );
 }

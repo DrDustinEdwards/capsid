@@ -2,6 +2,7 @@ import { progressRing, tableChart, timeline, type TimelineEvent } from "enarrati
 import { barChart } from "enarratio/lite/bar";
 import { ChartFrame } from "capsomer/react/chart-frame";
 import { parse } from "capsomer/behavior/time";
+import { statusHtml } from "capsomer/behavior/status";
 import { useApp } from "../app/ctx";
 import { agentState, nsList, rosterAgents } from "../lib/agents";
 import { DAY, ago } from "../lib/format";
@@ -9,39 +10,54 @@ import { useHtmlLinks } from "../lib/router";
 import type { AgentDaily, BoardHandoffRow, OpsTask, PortalBoard, PortalPrs } from "../types";
 import { memoryDocHref } from "./memory-links";
 
-// The Board's, Memory's, Pull requests' and Agents' charts drawn in the browser with Enarratio's core and lite
-// charts (no Observable Plot), and the frame for the charts the Worker draws (src/figures.ts). A chunk of its own
-// (views/charts.ts), never in the initial bundle.
-
 interface RowLink {
   href: string;
-  // A Portal path, moved to in the app; otherwise another site, opened in a new tab.
   route: boolean;
 }
 
 const attr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
-/** A tableChart's row headers as links, in data order: Enarratio's cells are text. */
-export function linkRows(html: string, links: ReadonlyArray<RowLink | null>): string {
-  let i = 0;
-  return html.replace(/<th scope="row">([\s\S]*?)<\/th>/g, (whole, inner: string) => {
-    const l = links[i++];
-    if (!l) return whole;
-    const how = l.route ? " data-route" : ' target="_blank" rel="noopener noreferrer"';
-    return `<th scope="row"><a href="${attr(l.href)}"${how}>${inner}</a></th>`;
-  });
+export function tableCards(
+  html: string,
+  links: ReadonlyArray<RowLink | null> = [],
+  cell?: (row: number, col: number) => string | undefined,
+): string {
+  const labels = [...html.matchAll(/<th scope="col">([\s\S]*?)<\/th>/g)].map((m) => m[1]!);
+  let row = -1;
+  return html
+    .replace(
+      '<div class="enarratio-data enarratio-table-chart"',
+      '<div class="enarratio-data enarratio-table-chart cap-table-wrap" data-reflow=""',
+    )
+    .replace("<table>", '<table class="cap-table">')
+    .replace(/<tr>(?=<th scope="row">)([\s\S]*?)<\/tr>/g, (_, cells: string) => {
+      row++;
+      let col = -1;
+      const out = cells.replace(
+        /<(th scope="row"|td)>([\s\S]*?)<\/(?:th|td)>/g,
+        (_w, tag: string, inner: string) => {
+          col++;
+          const body = cell?.(row, col) ?? inner;
+          if (tag === "td") return `<td data-label="${labels[col]}">${body}</td>`;
+          const l = links[row];
+          if (!l) return `<th scope="row">${body}</th>`;
+          const how = l.route ? " data-route" : ' target="_blank" rel="noopener noreferrer"';
+          return `<th scope="row"><a href="${attr(l.href)}"${how}>${body}</a></th>`;
+        },
+      );
+      return `<tr>${out}</tr>`;
+    });
 }
 
-function LinkedChart({ html, className }: { html: string; className?: string }) {
+function LinkedChart({ html }: { html: string }) {
   const { onClick } = useHtmlLinks();
   return (
     <div onClick={onClick}>
-      <ChartFrame chart={html} className={className} />
+      <ChartFrame chart={html} className="table-bare" />
     </div>
   );
 }
 
-/** A chart the Worker drew, as it sent it: the same string on the server and in the browser. */
 export function ServerFigure({ html, narrow }: { html: string; narrow?: string }) {
   if (!narrow) return <ChartFrame chart={html} />;
   return (
@@ -59,21 +75,21 @@ export function ServerFigure({ html, narrow }: { html: string; narrow?: string }
 const sortHandoffs = (a: BoardHandoffRow, b: BoardHandoffRow) =>
   (b.checklist?.open ?? 0) - (a.checklist?.open ?? 0) || b.updated_at.localeCompare(a.updated_at);
 
-export function HandoffsProgress({ board }: { board: PortalBoard }) {
-  const { done_items: done, open_items: open, open: count } = board.handoffs;
+export function HandoffsRing({ board }: { board: PortalBoard }) {
+  const { done_items: done, open_items: open } = board.handoffs;
   const total = done + open;
   if (total === 0) return null;
+  const words = `${done} of ${total} done`;
+  const ring = progressRing({ value: done, max: total, size: 24, title: words, alt: words }).match(
+    /<svg class="enarratio enarratio-progress-ring"[\s\S]*<\/svg>/,
+  )?.[0];
   return (
-    <ChartFrame
-      inline
-      chart={progressRing({
-        value: done,
-        max: total,
-        size: 56,
-        title: "Checklist items done",
-        alt: `${done} of ${total} checklist items done across ${count} open handoffs.`,
-      })}
-    />
+    <span className="ring-head">
+      {ring && (
+        <span className="enarratio" aria-hidden="true" dangerouslySetInnerHTML={{ __html: ring }} />
+      )}
+      {words}
+    </span>
   );
 }
 
@@ -106,13 +122,16 @@ export function HandoffsTable({ board }: { board: PortalBoard }) {
   });
   return (
     <LinkedChart
-      html={linkRows(
+      html={tableCards(
         html,
         rows.map((h) => ({ href: href(memoryDocHref(h.namespace, h.path)), route: true })),
       )}
     />
   );
 }
+
+const shortDay = (d: Date) =>
+  d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 export function ThreadsChart({ threads }: { threads: PortalBoard["threads"] }) {
   const busiest = Object.entries(
@@ -135,7 +154,8 @@ export function ThreadsChart({ threads }: { threads: PortalBoard["threads"] }) {
     yLabel: "Threads",
     height: 220,
     title: `How many threads started each day?`,
-    subtitle: `${threads.total} in ${threads.days} days`,
+    formatX: shortDay,
+    summary: false,
     alt: `Threads started per day over the last ${threads.days} days, by project: ${threads.total} in all${busiest[1] ? `, the most ${busiest[1]} on ${busiest[0]}` : ""}.`,
     source: { name: "Capsid audit log, start of session" },
   } as const;
@@ -146,27 +166,40 @@ export function RecentThreads({ threads }: { threads: PortalBoard["threads"] }) 
   const { now } = useApp();
   return (
     <ChartFrame
-      chart={tableChart({
-        id: "recent-threads",
-        data: threads.recent.map((t) => ({
-          thread: t.thread,
-          project: t.namespace ?? "none",
-          seen: ago(parse(t.last_seen), now),
-        })),
-        columns: [
-          { field: "thread", label: "Thread" },
-          { field: "project", label: "Project" },
-          { field: "seen", label: "Last seen" },
-        ],
-        title: "Recent threads",
-        alt: `The ${threads.recent.length} threads seen most recently, newest first.`,
-        summary: false,
-      })}
+      chart={tableCards(
+        tableChart({
+          id: "recent-threads",
+          data: threads.recent.map((t) => ({
+            thread: t.thread,
+            project: t.namespace ?? "none",
+            seen: ago(parse(t.last_seen), now),
+          })),
+          columns: [
+            { field: "thread", label: "Thread" },
+            { field: "project", label: "Project" },
+            { field: "seen", label: "Last seen" },
+          ],
+          title: "Recent threads",
+          alt: `The ${threads.recent.length} threads seen most recently, newest first.`,
+          summary: false,
+        }),
+      )}
     />
   );
 }
 
-const yesNo = (v: boolean | null) => (v === null ? "not known" : v ? "yes" : "no");
+const CI: Record<string, [Parameters<typeof statusHtml>[0], string]> = {
+  success: ["ok", "Green"],
+  failure: ["crit", "CI red"],
+};
+const ciBadge = (ci: string | null) =>
+  ci === null ? statusHtml("nodata", "No checks") : statusHtml(...(CI[ci] ?? ["warn", ci]));
+const conflictBadge = (v: boolean | null) =>
+  v === null
+    ? statusHtml("nodata", "Not known")
+    : v
+      ? statusHtml("warn", "Conflict")
+      : statusHtml("ok", "Mergeable");
 
 export function PrTable({ data }: { data: PortalPrs }) {
   const { now } = useApp();
@@ -184,7 +217,7 @@ export function PrTable({ data }: { data: PortalPrs }) {
       repo: `${p.repo.split("/")[1]}#${p.number}`,
       age: Math.max(0, Math.floor((now - parse(p.created_at)) / DAY)),
       ci: p.ci ?? "none",
-      conflict: yesNo(p.conflict),
+      conflict: p.conflict === null ? "not known" : p.conflict ? "conflict" : "mergeable",
       overlap: overlaps.get(`${p.repo}#${p.number}`) ?? 0,
     })),
     columns: [
@@ -196,14 +229,20 @@ export function PrTable({ data }: { data: PortalPrs }) {
       { field: "overlap", label: "Shares files with" },
     ],
     title: "Open pull requests",
-    alt: `${rows.length} open pull requests, oldest first: ${rows.filter((p) => p.ci === "failure").length} red, ${rows.filter((p) => p.conflict).length} in conflict, ${data.overlaps.length} pairs sharing files.`,
+    alt: `${plural(rows.length, "open pull request")}, oldest first: ${rows.filter((p) => p.ci === "failure").length} red, ${rows.filter((p) => p.conflict).length} in conflict, ${plural(data.overlaps.length, "pair")} sharing files.`,
     summary: false,
   });
   return (
     <LinkedChart
-      html={linkRows(
+      html={tableCards(
         html,
         rows.map((p) => ({ href: p.url, route: false })),
+        (row, col) =>
+          col === 3
+            ? ciBadge(rows[row]!.ci)
+            : col === 4
+              ? conflictBadge(rows[row]!.conflict)
+              : undefined,
       )}
     />
   );
@@ -234,7 +273,7 @@ export function HandoffWeeksChart({
     yLabel: "Writes",
     height: 220,
     title: "How often are handoffs written?",
-    subtitle: `${total} handoff writes in 12 weeks`,
+    summary: false,
     alt: `Handoff writes per ISO week over 12 weeks, by project: ${total} in all.`,
     source: { name: "Capsid audit log, handoff writes" },
   } as const;
@@ -283,12 +322,12 @@ export function RosterTable({ actors }: { actors: AgentDaily[] | null }) {
       ...(actors ? ([{ field: "total", label: "30 days", kind: "bar" }] as const) : []),
     ],
     title: "Live agents",
-    alt: `${data.length} live agents${actors ? `; the busiest over 30 days, ${busiest.agent}, with ${busiest.total} actions` : ""}.`,
+    alt: `${plural(data.length, "live agent")}${actors ? `; the busiest over 30 days, ${busiest.agent}, with ${busiest.total} actions` : ""}.`,
     summary: false,
   });
   return (
     <LinkedChart
-      html={linkRows(
+      html={tableCards(
         html,
         agents.map((a) => ({
           href: href(`/agents/agent/${encodeURIComponent(a.name)}`),
@@ -301,7 +340,6 @@ export function RosterTable({ actors }: { actors: AgentDaily[] | null }) {
 
 const BACKUP_TASK = /backup|dump|offaccount|amazon/i;
 
-/** The backup tasks' recent runs, one lane per task the feed reports. */
 export function BackupRuns({ tasks }: { tasks: OpsTask[] }) {
   const { now } = useApp();
   const start = now - 14 * DAY;
@@ -320,6 +358,7 @@ export function BackupRuns({ tasks }: { tasks: OpsTask[] }) {
   if (lanes.length === 0 || events.length === 0)
     return <ChartFrame noData={{ title, reason: "No backup task ran in 14 days." }} />;
   const failed = events.filter((e) => e.status === "error").length;
+  const words = `${plural(events.length, "run")} in 14 days, ${failed} failed or refused.`;
   const opts = {
     events,
     lanes: lanes.map((t) => t.label),
@@ -327,8 +366,19 @@ export function BackupRuns({ tasks }: { tasks: OpsTask[] }) {
     end: now,
     title,
     label: title,
-    alt: `${events.length} backup runs in 14 days across ${lanes.length} tasks: ${failed} failed or refused.`,
+    alt: `${plural(events.length, "backup run")} in 14 days across ${plural(lanes.length, "task")}: ${failed} failed or refused.`,
     source: { name: "Capsid's scheduled tasks" },
   };
-  return <ChartFrame draw={(width, fit) => timeline({ ...opts, width, ...fit })} />;
+  return (
+    <ChartFrame
+      draw={(width, fit) =>
+        width < NARROWEST
+          ? `<figure class="enarratio"><figcaption class="enarratio-head"><p class="enarratio-title">${title}</p></figcaption><p class="cap-text">${words}</p></figure>`
+          : timeline({ ...opts, width, ...fit })
+      }
+    />
+  );
 }
+
+const NARROWEST = 480;
+const plural = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;

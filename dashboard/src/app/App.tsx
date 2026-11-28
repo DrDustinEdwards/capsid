@@ -64,7 +64,7 @@ const TABS: ViewId[] = ["board", "health", "prs"];
 const GROUPS: Array<{ label?: string; views: ViewId[] }> = [
   { label: "Now", views: ["board", "health"] },
   { label: "Work", views: ["memory", "prs", "projects"] },
-  { label: "Sites", views: ["sites", "packages"] },
+  { label: "Network", views: ["sites", "packages"] },
   { label: "Access", views: ["agents"] },
   { views: ["settings"] },
 ];

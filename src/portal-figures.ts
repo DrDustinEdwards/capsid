@@ -1,22 +1,16 @@
 import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import { kvCached } from "@dustinedwards/site-runtime/kv-cache";
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-import { findings } from "./board";
 import type { Env } from "./env";
-import { backupAges, findingsRange, whoActed, writesCalendar } from "./figures";
+import { whoActed, writesRecent, writesYear } from "./figures";
 import type { AgentDaily, FigureSet, PortalFigures } from "./ops-types/board";
 import { OTHER, topNames } from "./portal-board";
 import { behindGate } from "./portal-auth";
-import { readSiteBackups } from "./site-backup";
 import { lastDays, mondayOf, weekStarts } from "./trends-days";
 import { isoWeek } from "./time";
 
-// GET /portal/api/figures?set=memory|agents|problems|backups: the Portal's charts that need
-// Observable Plot, drawn here and kept in KV for ten minutes, so a page's polling never redraws
-// them. enarratio/plot is imported inside the read, never at the Worker's start.
-
 export const PORTAL_FIGURES_PATH = "/portal/api/figures";
-const SETS: readonly FigureSet[] = ["memory", "agents", "roster", "problems", "backups"];
+const SETS: readonly FigureSet[] = ["memory", "agents", "roster"];
 const CACHE_SECONDS = 10 * 60;
 const YEAR_DAYS = 365;
 const AGENT_DAYS = 30;
@@ -26,7 +20,6 @@ const TOP_ACTORS = 10;
 
 type Plot = typeof import("enarratio/plot");
 
-/** A readable name for an audit_log actor and client: one row per pair, so threads and the Portal part. */
 export function actorLabel(actor: string, client: string | null): string {
   const c = client?.trim() || null;
   if (actor.startsWith("access:") || actor.includes("@")) {
@@ -55,7 +48,8 @@ async function memory(env: Env, plot: Plot, now: Date): Promise<Partial<PortalFi
       .all<{ day: string; namespace: string | null; n: number }>(),
   ]);
   const counts = new Map(writes.results.map((r) => [r.day, r.n]));
-  const chart = writesCalendar(plot, days, counts);
+  const wide = writesYear(plot, days, counts);
+  const narrow = writesRecent(plot, days, counts);
   const totals = new Map<string, number>();
   for (const r of handoffs.results) {
     const ns = r.namespace ?? "none";
@@ -70,8 +64,8 @@ async function memory(env: Env, plot: Plot, now: Date): Promise<Partial<PortalFi
     sums.set(key, (sums.get(key) ?? 0) + r.n);
   }
   return {
-    figures: chart ? { writes: chart } : {},
-    empty: chart ? {} : { writes: "No document was written in the last year." },
+    figures: wide ? { writes: wide, ...(narrow ? { writes_recent: narrow } : {}) } : {},
+    empty: wide ? {} : { writes: "No document was written in the last year." },
     handoff_weeks: mondays.flatMap((m) =>
       projects.map((project) => ({
         week: isoWeek(new Date(`${m}T00:00:00Z`)),
@@ -110,7 +104,6 @@ export function agentRows(
   return [...by.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
 }
 
-/** The heatmap's rows: the busiest ten labels, the rest summed as "Other". */
 export function heatRows(rows: AgentDaily[], days: string[]): AgentDaily[] {
   const byLabel = new Map<string, AgentDaily>();
   for (const r of rows) {
@@ -145,7 +138,6 @@ async function actorDays(env: Env, now: Date): Promise<{ days: string[]; actors:
   return { days, actors: agentRows(results, days) };
 }
 
-// The roster's sparklines: the counts only, no figure.
 async function roster(env: Env, _plot: Plot, now: Date): Promise<Partial<PortalFigures>> {
   return actorDays(env, now);
 }
@@ -161,35 +153,10 @@ async function agents(env: Env, plot: Plot, now: Date): Promise<Partial<PortalFi
   };
 }
 
-async function problems(env: Env, plot: Plot, now: Date): Promise<Partial<PortalFigures>> {
-  const chart = findingsRange(plot, await findings(env.DB), now);
-  return {
-    figures: chart ? { open: chart } : {},
-    empty: chart ? {} : { open: "No problem is open." },
-  };
-}
-
-async function backups(env: Env, plot: Plot, now: Date): Promise<Partial<PortalFigures>> {
-  const b = await readSiteBackups(env);
-  const dump = backupAges(plot, b, "dump", now);
-  const amazon = backupAges(plot, b, "amazon", now);
-  const figures: Record<string, string> = {};
-  const empty: Record<string, string> = {};
-  if (dump.chart) figures.dump = dump.chart;
-  else empty.dump = "No site reported a backup.";
-  if (amazon.chart) figures.amazon = amazon.chart;
-  else empty.amazon = "No Amazon copy is reported.";
-  const notChecked = [
-    ...(dump.missing.length ? [`no backup age for ${dump.missing.join(", ")}`] : []),
-    ...(amazon.missing.length ? [`no Amazon copy for ${amazon.missing.join(", ")}`] : []),
-  ];
-  return { figures, empty, not_checked: notChecked };
-}
-
 const READERS: Record<
   FigureSet,
   (env: Env, plot: Plot, now: Date) => Promise<Partial<PortalFigures>>
-> = { memory, agents, roster, problems, backups };
+> = { memory, agents, roster };
 
 async function readFigures(env: Env, set: FigureSet, now: Date): Promise<PortalFigures> {
   const base: PortalFigures = {
@@ -213,7 +180,7 @@ export const handlePortalFigures = behindGate(async (request, env, now) => {
     return jsonResponse({ error: `set must be one of ${SETS.join(", ")}.` }, 400);
   const body = await kvCached(
     env.APP_KV,
-    `portal:figures:${set}:v1`,
+    `portal:figures:${set}:v2`,
     {
       ttl: CACHE_SECONDS,
       valid: (kept) => typeof (kept as Partial<PortalFigures> | null)?.figures === "object",

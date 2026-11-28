@@ -7,7 +7,7 @@ import { attentionList } from "../lib/derive";
 
 export function Problems() {
   const { feed, now, href } = useApp();
-  const { items, groups } = attentionList(feed, now, href);
+  const { items, groups } = attentionList(feed, now, href, true);
   return (
     <div id="attention">
       <AttentionList

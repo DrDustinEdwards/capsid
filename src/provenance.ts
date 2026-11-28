@@ -22,8 +22,6 @@ export function externalFence(source: string, ref: string, text: string, maxText
   return `${OPEN} source=${source} ref=${cleanRef}\n${body}\n${FENCE}`;
 }
 
-// The text inside one external fence, for a page that shows it as text (React escapes it): the
-// fence and its escapes are for a model reading the text, not for a person. Anything else is kept.
 export function unfence(text: string): string {
   const m = text.match(/^~~~external source=[a-z][a-z0-9-]{0,31} ref=[^\n]*\n([\s\S]*)\n~~~$/);
   return m ? m[1]!.replace(/^([ \t]{0,3})\\(~{3,})/gm, "$1$2") : text;

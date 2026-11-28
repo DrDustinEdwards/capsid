@@ -18,7 +18,7 @@ export function PullRequests() {
       <PageHead title="Pull requests" />
       <Panel
         flush
-        title="Open"
+        title="Open pull requests"
         id="open-prs"
         count={data?.prs.length}
         src={data ? `as of ${ago(parse(data.as_of), now)}, ${data.repos_read} repos` : undefined}

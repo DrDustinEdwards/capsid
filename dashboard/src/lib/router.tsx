@@ -62,9 +62,6 @@ export function rowLink({
   );
 }
 
-// Links a chart's server HTML carries (a table's row headers, views/BoardCharts.tsx linkRows): `href` puts
-// the page's base in front of a Portal path, and `onClick`, on the chart's wrapper, moves to an
-// anchor marked data-route in the app, as a Link would, instead of loading the page again.
 export function useHtmlLinks() {
   const base = pageBase(useRouterLocation().pathname);
   const nav = useNavigate();

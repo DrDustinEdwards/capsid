@@ -105,7 +105,7 @@ async function activeWork(db: D1Database): Promise<Board["active_work"]> {
   };
 }
 
-export async function findings(db: D1Database): Promise<Board["findings"]> {
+async function findings(db: D1Database): Promise<Board["findings"]> {
   const { results } = await db
     .prepare(
       "SELECT fingerprint, namespace, title, first_seen_at, last_seen_at, seen_count FROM watcher_findings WHERE state = 'open' ORDER BY last_seen_at DESC LIMIT ?1",

@@ -78,8 +78,6 @@ export const handlePortalLibrary = behindGate(async (request, env, now) => {
   // walk reads it. ORDER BY namespace, path walks the (namespace, path) unique
   // index, so the read stops at the LIMIT and never bare-scans documents
   // (test-integration/query-plans.test.ts). archive/ is history, not a shelf.
-  // Handoffs, newest first through documents_updated; open as src/handoffs.ts counts it (not
-  // closed, written in the last 14 days).
   const [{ results }, handoffs] = await Promise.all([
     env.DB.prepare(
       `SELECT namespace, path, title, type, status, updated_at
@@ -110,7 +108,6 @@ export const handlePortalLibrary = behindGate(async (request, env, now) => {
     generated,
     shelves,
     truncated: results.length > MAX_ROWS,
-    // Open first, each part newest first.
     handoffs: [...rows.filter((r) => r.open), ...rows.filter((r) => !r.open)],
     handoffs_truncated: handoffs.results.length > HANDOFF_ROWS,
   };

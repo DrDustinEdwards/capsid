@@ -151,7 +151,7 @@ function Roster() {
   const figs = useFigures("roster");
   return (
     <div className="cap-stack">
-      <Panel flush title="Roster">
+      <Panel flush title="Live agents">
         <div className="body">
           <ChartSlot>
             <RosterTable actors={figs.data?.actors ?? null} />

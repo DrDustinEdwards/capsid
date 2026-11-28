@@ -26,7 +26,7 @@ Every control opens a dialog that previews what will change and the audit rows i
 **Board** is the home page (`/portal/`), the answer to "what do I have to decide" (docs/design/design-portal-evaluation.md, DECIDE 1, ruled 2026-10-09; Portal v2, 2026-11-28). It holds, in order:
 
 - **Waiting on you**: each open handoff's "Waiting on Dustin" section, its first line with the handoff's title and project, then the inbox (`GET /ops/inbox`, src/inbox.ts, carried as `live.inbox`). Empty is "Nothing waits on you." The header's inbox count is this list's number;
-- **Problems**, critical then warnings, without what is already waiting above. Rows of one kind and cause fold into one row that opens in place to its first five. A critical row is never folded. Past eight rows the rest of the warnings wait behind "N more warnings". One **Notices** row at the foot, closed, holds facts with nothing to do now. "Health not read" and "Amazon copy not read" stay warnings, because an unknown backup is not a quiet fact;
+- **Problems**, critical then warnings, without what is already waiting above (a site down and CI failing are inbox items, so they are listed only there). Rows of one kind and cause fold into one row that opens in place to its first five. A critical row is never folded. Past eight rows the rest of the warnings wait behind "N more warnings". One **Notices** row at the foot, closed, holds facts with nothing to do now. "Health not read" and "Amazon copy not read" stay warnings, because an unknown backup is not a quiet fact;
 - **Pull request trouble**: the open pull requests with red CI or a conflict, and the pairs that change the same file, from `GET /portal/api/prs`, with when they were read and a link to Pull requests;
 - **Open handoffs**: a progress ring of checklist items done over all open handoffs, and a table of them, newest first, each a link to its document on Memory;
 - **Threads**: threads per day over 21 days by the day each was first seen, stacked as the top five projects and Other (an Enarratio lite bar chart), and the ten most recent.
@@ -172,13 +172,13 @@ Since Enarratio 0.4 and Capsomer 0.53 (2026-10-31), every chart is Enarratio's w
 
 ## Server-drawn charts
 
-`GET /portal/api/figures?set=memory|agents|roster|problems|backups` (`src/portal-figures.ts`, drawn by `src/figures.ts`) serves the charts that need Observable Plot, through `enarratio/plot`, drawn on the Worker as HTML with no style attribute and kept in KV for ten minutes (`portal:figures:<set>:v1`), so a page's polling never redraws them. `enarratio/plot` is imported inside the read, never at the Worker's start. Each figure is a whole Enarratio figure with its finding as the text alternative and its data table; a set with no data names why in `empty`, and a part it could not read is in `not_checked`. Admin only, read-only.
+`GET /portal/api/figures?set=memory|agents|roster` (`src/portal-figures.ts`, drawn by `src/figures.ts`) serves the charts that need Observable Plot, through `enarratio/plot`, drawn on the Worker as HTML with no style attribute and kept in KV for ten minutes (`portal:figures:<set>:v1`), so a page's polling never redraws them. `enarratio/plot` is imported inside the read, never at the Worker's start. Each figure is a whole Enarratio figure with its finding as the text alternative and its data table; a set with no data names why in `empty`, and a part it could not read is in `not_checked`. Admin only, read-only.
 
-- `memory`: the year's document writes as a calendar heatmap, and handoff writes per ISO week over 12 weeks, the top five projects and Other (drawn in the browser, a lite bar chart).
+- `memory`: the year's document writes as a heatmap, weekdays down and 52 ISO weeks across (on a phone, the last 13 weeks as a calendar), and handoff writes per ISO week over 12 weeks, the top five projects and Other (drawn in the browser, a lite bar chart).
 - `agents`: who acted over 30 days, one row per actor and client (so "Project threads" and "You (Portal)" are apart), the top ten and Other, as a heatmap by day on a wide screen and by week on a phone.
 - `roster`: the same counts with no figure, for the Roster tab's sparklines and bars (a tableChart).
-- `problems`: each open finding from first to last seen, as a range plot, the oldest first (Health, Problems tab).
-- `backups`: each site's backup age and Amazon copy age as bullet charts against their targets (26 hours for a dump, 30 for a copy), a site with none named in `not_checked` (Health, Backups tab, above the backup runs timeline).
+
+In every heatmap a zero is an outlined empty cell, and the five steps sit at the quintiles of the non-zero values, so one busy row cannot wash out the rest; the lightest step is mixed toward the page's surface in `styles.css`. Health's Findings list shows how long each finding has been open as a bar, and its Backups tab each site's backup and Amazon copy age as Capsomer meters against their targets (26 and 30 hours), with the stale limit (50 and 36) as the scale's end.
 
 Tests: test/figures.test.ts.
 

@@ -1,14 +1,8 @@
-// Dev and tests only: the Board's, Pull requests' and the server charts' answers (src/portal-board.ts,
-// src/portal-figures.ts) in sample names, on the mock's clock. The charts are drawn by the Worker's own
-// code (src/figures.ts) with enarratio/plot, so the page shows what the Worker would send. The quiet
-// cookie (wf-mock=quiet) answers the empty states: no handoff, no thread, the pull requests not yet read.
-
 import * as plot from "enarratio/plot";
-import { backupAges, findingsRange, whoActed, writesCalendar } from "../../src/figures.ts";
+import { whoActed, writesRecent, writesYear } from "../../src/figures.ts";
 import type {
   FigureSet,
   LibraryHandoff,
-  PortalBackups,
   PortalBoard,
   PortalFigures,
   PortalPrs,
@@ -192,7 +186,6 @@ function mockPrs(now: number): PortalPrs {
 
 function mockFigures(set: FigureSet, now: number): PortalFigures {
   const base: PortalFigures = { set, generated: iso(now), figures: {}, empty: {}, not_checked: [] };
-  const today = new Date(now);
   if (set === "memory") {
     const days = daysBack(now, 365);
     const counts = new Map(
@@ -201,7 +194,10 @@ function mockFigures(set: FigureSet, now: number): PortalFigures {
     const weeks = Array.from({ length: 12 }, (_, i) => `2026-W${String(37 + i).padStart(2, "0")}`);
     return {
       ...base,
-      figures: { writes: writesCalendar(plot, days, counts)! },
+      figures: {
+        writes: writesYear(plot, days, counts)!,
+        writes_recent: writesRecent(plot, days, counts)!,
+      },
       handoff_weeks: weeks.flatMap((week, i) =>
         ["sample", "sample-b", "sample-c", "Other"].map((project, k) => ({
           week,
@@ -245,73 +241,10 @@ function mockFigures(set: FigureSet, now: number): PortalFigures {
       },
     };
   }
-  if (set === "problems") {
-    const findings = [
-      { namespace: "sample", title: "The sitemap answered 500", d: 9, l: 0.1 },
-      { namespace: "sample-b", title: "TLS certificate expires in 12 days", d: 4, l: 0.2 },
-      { namespace: "sample-c", title: "Search Console reports 3 new 404s", d: 1.5, l: 0.6 },
-    ];
-    return {
-      ...base,
-      figures: {
-        open: findingsRange(
-          plot,
-          findings.map((f) => ({
-            namespace: f.namespace,
-            title: f.title,
-            first_seen_at: iso(now - f.d * DAY),
-            last_seen_at: iso(now - f.l * DAY),
-          })),
-          today,
-        )!,
-      },
-    };
-  }
-  const b: PortalBackups = {
-    read_at: iso(now),
-    capsid: {
-      status: { last_ok: iso(now - 9 * HOUR), age_hours: 9 },
-      amazon: { newest: iso(now - 7 * HOUR), bytes: 1 },
-    },
-    sites: [
-      {
-        namespace: "sample",
-        origin: "https://sample.example.com",
-        status: { last_ok: iso(now - 14 * HOUR), age_hours: 14 },
-        error: null,
-        amazon: { newest: iso(now - 13 * HOUR), bytes: 1 },
-      },
-      {
-        namespace: "sample-b",
-        origin: "https://b.example.com",
-        status: { last_ok: iso(now - 31 * HOUR), age_hours: 31 },
-        error: null,
-        amazon: { newest: iso(now - 33 * HOUR), bytes: 1 },
-      },
-      {
-        namespace: "sample-c",
-        origin: "https://c.example.com",
-        status: null,
-        error: "unreachable",
-        amazon: null,
-      },
-    ],
-    amazon_report_at: iso(now - 2 * HOUR),
-    not_configured: [],
-  };
-  const dump = backupAges(plot, b, "dump", today);
-  const amazon = backupAges(plot, b, "amazon", today);
-  return {
-    ...base,
-    figures: { dump: dump.chart!, amazon: amazon.chart! },
-    not_checked: [
-      `no backup age for ${dump.missing.join(", ")}`,
-      `no Amazon copy for ${amazon.missing.join(", ")}`,
-    ],
-  };
+  return base;
 }
 
-const SETS: readonly FigureSet[] = ["memory", "agents", "roster", "problems", "backups"];
+const SETS: readonly FigureSet[] = ["memory", "agents", "roster"];
 
 export function mockBoardRoute(
   path: string,

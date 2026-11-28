@@ -12,6 +12,9 @@ import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
+
+const branches = (n: number, what = "") =>
+  `${n} ${what ? `${what} ` : ""}${n === 1 ? "branch" : "branches"}`;
 // On, at most PRUNE_CAP per repo per run are deleted, each re-read just before and audit-logged
 // with the sha it pointed at so it can be put back. A keep list in APP_KV (empty default) names
 // branches never pruned and never listed.
@@ -142,7 +145,7 @@ export async function gatherBranchItems(
         items.push({
           rule: "branch-merged",
           namespace,
-          line: `${done.remaining} more merged branch(es) in ${plan.repo} wait for the next run (${PRUNE_CAP} are deleted per repo per run).`,
+          line: `${branches(done.remaining, "more merged")} in ${plan.repo} wait for the next run (${PRUNE_CAP} are deleted per repo per run).`,
         });
       }
     } else if (plan.prune.length > 0) {
@@ -156,7 +159,7 @@ export async function gatherBranchItems(
       items.push({
         rule: "branch-merged",
         namespace,
-        line: `${plan.prune.length} merged branch(es) in ${plan.repo} would be pruned; the auto-prune, on by default, is turned off, so none was deleted.`,
+        line: `${branches(plan.prune.length, "merged")} in ${plan.repo} would be pruned; the auto-prune, on by default, is turned off, so none was deleted.`,
       });
     }
 
@@ -175,7 +178,7 @@ export async function gatherBranchItems(
       items.push(
         notChecked(
           namespace,
-          `${orphans.length - reading.length} branch(es) in ${plan.repo} with no open pull request had their age not read`,
+          `${branches(orphans.length - reading.length)} in ${plan.repo} with no open pull request had their age not read`,
         ),
       );
     }
@@ -237,7 +240,7 @@ export async function gatherBranchItems(
         items.push({
           rule: "branch-stale",
           namespace,
-          line: `${done.remaining} more old branch(es) in ${plan.repo} wait for the next run (${PRUNE_CAP} are deleted per repo per run).`,
+          line: `${branches(done.remaining, "more old")} in ${plan.repo} wait for the next run (${PRUNE_CAP} are deleted per repo per run).`,
         });
       }
       continue;

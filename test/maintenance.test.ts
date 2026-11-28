@@ -218,7 +218,7 @@ test("with the auto-prune set off, a merged branch is listed with a count and no
     assert.match(merged[0], /branch feat\/merged-clean is merged \(pull request #1, tip a1\)/);
     assert.match(
       merged[1],
-      /^1 merged branch\(es\) in o\/r would be pruned; the auto-prune, on by default, is turned off/,
+      /^1 merged branch in o\/r would be pruned; the auto-prune, on by default, is turned off/,
     );
     // Old, with no open pull request, not merged by the rule: listed with its age. A
     // keep-listed, open, merged or recent branch is not.
@@ -367,7 +367,7 @@ test("the pass deletes at most 25 merged branches per repo per run and says how 
   assert.equal(audits.length, 25, "one audit row per delete");
   assert.match(
     lines(got.items, "branch-merged")[0],
-    /^5 more merged branch\(es\) in o\/r wait for the next run/,
+    /^5 more merged branches in o\/r wait for the next run/,
   );
 });
 

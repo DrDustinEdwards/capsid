@@ -29,6 +29,13 @@ const SHELVES: Array<{ id: LibraryShelf; title: string; none: string }> = [
   { id: "research", title: "Research", none: "No research yet." },
 ];
 
+const plainSnippet = (text: string) =>
+  text
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/(^|\n)\s*(?:#{1,6}|>|[-*+]|\d+\.)\s+/g, "$1")
+    .replace(/(^|\s)#{1,6}\s+/g, "$1")
+    .replace(/(\*\*|__|\*|`)/g, "");
+
 const WritesFigure = boardChart("ServerFigure");
 const HandoffWeeksChart = boardChart("HandoffWeeksChart");
 
@@ -100,8 +107,8 @@ export function Memory() {
         </>
       ) : (
         <>
-          <MemoryCharts />
           <Handoffs rows={data.handoffs} truncated={data.handoffs_truncated} now={now} />
+          <MemoryCharts />
         </>
       )}
     </div>
@@ -122,7 +129,7 @@ function MemoryCharts() {
       <ChartSlot>
         {d.handoff_weeks && <HandoffWeeksChart weeks={d.handoff_weeks} />}
         {d.figures.writes ? (
-          <WritesFigure html={d.figures.writes} />
+          <WritesFigure html={d.figures.writes} narrow={d.figures.writes_recent} />
         ) : (
           <p className="cap-text">{d.empty.writes ?? "No writes."}</p>
         )}
@@ -305,7 +312,7 @@ function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" 
               · {r.type} · {ago(parse(r.updated_at), now)}
             </span>
             <div className="cap-search-snippet">
-              <Snippet text={r.snippet} />
+              <Snippet text={plainSnippet(r.snippet)} />
             </div>
           </li>
         ))}

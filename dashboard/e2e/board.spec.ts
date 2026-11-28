@@ -8,7 +8,6 @@ const quiet = (page: Page) =>
 test("PLANT: the home is the Board, and what waits on you comes first", async ({ page }) => {
   await page.goto("./");
   await expect(page.getByRole("heading", { level: 1, name: "Board" })).toBeVisible();
-  // Two handoff asks and the inbox's two items.
   await expect(waiting(page).locator(".cap-row")).toHaveCount(4);
   const order = await page.evaluate(() =>
     ["#waiting", "#attention", "#pr-trouble", "#handoffs", "#threads"].map(
@@ -40,7 +39,6 @@ test("the open handoffs, the threads and the pull request trouble are drawn", as
     .locator("#handoffs")
     .getByRole("table", { name: "Data for: Open handoffs" });
   await expect(handoffs).toBeVisible();
-  // Sorted by open items: the layout pass (4 open) first, its title a link to the handoff.
   await expect(handoffs.locator("tbody th").first()).toHaveText("Portal layout pass");
   await expect(handoffs.getByRole("link", { name: "Portal layout pass" })).toHaveAttribute(
     "href",

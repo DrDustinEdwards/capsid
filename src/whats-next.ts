@@ -26,7 +26,6 @@ interface RawPr {
   head: { sha: string; ref: string };
 }
 
-
 /** The repos each registered namespace maps, deduplicated across namespaces. */
 export async function mappedRepos(
   db: D1Database,
@@ -106,7 +105,6 @@ async function openPrs(
   return out;
 }
 
-/** Every open pull request in every mapped repo, read in turn (slow: one GitHub read per PR and more). */
 export async function readOpenPrs(
   env: Env,
   notChecked: string[],

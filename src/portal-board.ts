@@ -10,11 +10,6 @@ import { unfence } from "./provenance";
 import { lastDays } from "./trends-days";
 import { readOpenPrs } from "./whats-next";
 
-// The Portal's Board (GET /portal/api/board) and Pull requests (GET /portal/api/prs): the
-// coordinator board capsid_admin_whats_next serves (src/board.ts, src/whats-next.ts), split so
-// the cheap D1 parts are read live and the slow GitHub part is kept in KV and loaded after the
-// page paints. Text is unfenced here: the page shows it as text, never as markup.
-
 export const PORTAL_BOARD_PATH = "/portal/api/board";
 export const PORTAL_PRS_PATH = "/portal/api/prs";
 
@@ -27,7 +22,6 @@ export const OTHER = "Other";
 const PRS_CACHE_KEY = "portal:prs:v1";
 const PRS_CACHE_SECONDS = 15 * 60;
 
-/** The `top` names with the largest totals, largest first; the rest are counted as "Other". */
 export function topNames(totals: Map<string, number>, top: number): string[] {
   return [...totals.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -119,7 +113,6 @@ async function readPrsFresh(env: Env, now: Date): Promise<PortalPrs> {
   };
 }
 
-/** The open pull requests, kept 15 minutes; a read that reached no repo is served but not kept. */
 function readPortalPrs(env: Env, now: Date): Promise<PortalPrs> {
   return kvCached(
     env.APP_KV,

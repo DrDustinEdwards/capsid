@@ -48,4 +48,6 @@ jobs:
       # from wrangler.jsonc.example, so no secret is needed. Raised on 2026-11-03 from 1872 KiB raw and 540 KiB gzip to
       # 2885 and 850 (Dustin: the Portal rendered on the server like the network's other sites). Raised on 2026-11-11 to
       # 3216 and 955 (10% above 2924 and 868): the Public Suffix List for registrableDomain (tldts, 129 KiB raw, 46 KiB gzip).
+      # Raised on 2026-11-28 to 4022 and 1234 (10% above 3656 and 1122): enarratio/plot for the Portal's server-drawn
+      # charts needs Observable Plot and linkedom, imported only by the figure route (Dustin's Rule #1).
       worker-size-prepare: npm ci --prefix dashboard && npm --prefix dashboard run build && node scripts/dry-run-config.mjs

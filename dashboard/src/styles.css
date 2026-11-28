@@ -55,6 +55,16 @@ main {
   letter-spacing: var(--tracking-tight);
   text-wrap: balance;
 }
+@media (max-width: 40rem) {
+  .pagehead:not(:has(> :not(h1))) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 
 .ns {
   font-family: var(--mono);
@@ -157,6 +167,9 @@ table.workers-stores .cap-status {
   align-items: start;
 }
 .upct {
+  gap: var(--space-2);
+  max-width: 420px;
+  white-space: nowrap;
   font-size: var(--fs-label);
   color: var(--muted);
   display: flex;
@@ -208,6 +221,27 @@ table.workers-stores .cap-status {
   color: var(--muted);
   text-align: right;
   white-space: nowrap;
+  width: 7rem;
+}
+.age-bar {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin-top: var(--space-1);
+  background: var(--line);
+}
+.age-bar rect {
+  fill: var(--warn);
+}
+.age-bar rect[data-tone="crit"] {
+  fill: var(--crit);
+}
+.age-meters {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 tr.click {
@@ -339,8 +373,6 @@ main .sev-crit[data-row]:focus-visible {
 .navicon-lg {
   --icon-size: var(--title-4);
 }
-
-/* A chart the Worker draws twice (wide by day, narrow by week): one shows, by the page's width. */
 .fig-narrow {
   display: none;
 }
@@ -351,4 +383,91 @@ main .sev-crit[data-row]:focus-visible {
   .fig-narrow {
     display: block;
   }
+}
+
+.slot-swatch {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-inline-start: var(--space-2);
+  vertical-align: -0.05em;
+  border: 1px dashed var(--nodata);
+}
+.slot-swatch[data-kept] {
+  border: 0;
+  background: var(--enarratio-sequential-5, var(--ramp-5));
+}
+
+.enarratio-finding,
+.table-bare .enarratio-head {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.enarratio-table-chart td:not(:has(.enarratio-numeric)) {
+  text-align: start;
+}
+.enarratio-table-chart th[scope="row"] {
+  width: 40%;
+}
+@container cap-table (max-width: 639px) {
+  .enarratio-table-chart.cap-table-wrap > .cap-table > tbody > tr {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 7rem), 1fr));
+    & > :is(td, th) {
+      width: auto;
+      border: 0;
+      text-align: start;
+    }
+  }
+}
+#attention .cap-attention-src {
+  display: none;
+}
+.ring-head {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+.ring-head svg {
+  display: block;
+}
+#waiting :is(.cap-row-title, .cap-row-detail) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.uptime-cell .cap-uptime-strip svg {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+}
+@container cap-table (max-width: 1099px) {
+  .fleet .uptime-cell {
+    grid-column: 1 / -1;
+    width: auto;
+  }
+}
+@media (max-width: 40rem) {
+  .cap-tabs-list {
+    mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+    animation: tabs-fade linear both;
+    animation-timeline: scroll(self inline);
+  }
+}
+@keyframes tabs-fade {
+  to {
+    mask-image: none;
+  }
+}
+/* The year's 52 week columns are too narrow for every number: every other one is printed (the table has all). */
+#memory-writes [data-enarratio-mark="x-axis tick label"] text:nth-child(even) {
+  display: none;
+}
+.enarratio {
+  --enarratio-sequential-1: color-mix(in srgb, var(--ramp-1) 35%, var(--surface));
+  --enarratio-sequential-text-1: var(--text);
 }

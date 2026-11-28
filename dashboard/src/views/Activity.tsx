@@ -23,7 +23,6 @@ import { ChartSlot } from "../ui/ChartSlot";
 const MinutesTile = trendChart("MinutesTile");
 const ServerFigure = boardChart("ServerFigure");
 
-// Who acted, by day where the page is wide and by week on a phone (the Worker draws both).
 function WhoActed() {
   const figs = useFigures("agents");
   const d = figs.data;
@@ -132,7 +131,7 @@ export function Activity() {
         {!data && load.loading ? (
           <Spinner layout="page" label="Reading the activity..." />
         ) : data && data.rows.length ? (
-          <div className="cap-table-wrap">
+          <div className="cap-table-wrap" data-reflow="">
             <table className="cap-table">
               <thead>
                 <tr>
@@ -152,21 +151,25 @@ export function Activity() {
                     data-open={`audit:${r.id}`}
                     tabIndex={0}
                   >
-                    <td className="cap-num" title={utc(parse(r.at))}>
+                    <td data-label="When" className="cap-num" title={utc(parse(r.at))}>
                       {ago(parse(r.at), now)}
                     </td>
-                    <td className="cap-mono">
-                      {r.actor ?? <Missing />}
+                    <td data-label="Who" className="cap-mono">
+                      {r.actor ?? <Missing reason="the row names no actor">unrecorded</Missing>}
                       {r.client && <div className="src">via {r.client}</div>}
                     </td>
-                    <td>
+                    <td data-label="What">
                       {actionWords(r.action) ?? (
                         <span className="cap-mono">{r.action ?? <Missing />}</span>
                       )}
                       {actionWords(r.action) && <div className="src cap-mono">{r.action}</div>}
                     </td>
-                    <td className="cap-mono">{r.namespace ?? <Missing />}</td>
-                    <td className="cap-mono wrap">{r.path ?? <Missing />}</td>
+                    <td data-label="Project" className="cap-mono">
+                      {r.namespace ?? <Missing />}
+                    </td>
+                    <td data-label="Path" className="cap-mono wrap">
+                      {r.path ?? <Missing />}
+                    </td>
                   </tr>
                 ))}
               </tbody>
