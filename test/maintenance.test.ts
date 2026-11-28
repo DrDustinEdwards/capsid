@@ -287,9 +287,9 @@ const deletes = (calls: Array<{ method: string; path: string }>) =>
 const lines = (items: Array<{ rule: string; line: string }>, rule: string) =>
   items.filter((i) => i.rule === rule).map((i) => i.line);
 
-test("with the auto-prune off, a merged branch is listed with a count and nothing is deleted", async () => {
+test("with the auto-prune set off, a merged branch is listed with a count and nothing is deleted", async () => {
   await withFetch(branchRoutes(), async (calls) => {
-    const { env, audits } = branchEnv({ [BRANCH_KEEP_KEY]: KEEP });
+    const { env, audits } = branchEnv({ [PRUNE_SWITCH_KEY]: "off", [BRANCH_KEEP_KEY]: KEEP });
     const got = await gatherBranchItems(env, ["sample"], githubBranchReaders(env), NOW);
     assert.deepEqual(deletes(calls), [], "the switch is off: nothing is deleted");
     assert.equal(audits.length, 0);
@@ -313,9 +313,9 @@ test("with the auto-prune off, a merged branch is listed with a count and nothin
   });
 });
 
-test("with the auto-prune on, the merged branch is deleted and audit-logged, and a keep-listed or open one is not", async () => {
+test("with no switch set the auto-prune is on: the merged branch is deleted and audit-logged, and a keep-listed or open one is not", async () => {
   await withFetch(branchRoutes(), async (calls) => {
-    const { env, audits } = branchEnv({ [PRUNE_SWITCH_KEY]: "on", [BRANCH_KEEP_KEY]: KEEP });
+    const { env, audits } = branchEnv({ [BRANCH_KEEP_KEY]: KEEP });
     const got = await gatherBranchItems(env, ["sample"], githubBranchReaders(env), NOW);
     assert.deepEqual(
       deletes(calls),
@@ -478,7 +478,7 @@ test("a failed branch read or an unreadable keep list is listed as not checked, 
   });
 
   await withFetch(branchRoutes([BRANCHES[0], BRANCHES[7]]), async () => {
-    const { env } = branchEnv({});
+    const { env } = branchEnv({ [PRUNE_SWITCH_KEY]: "off" });
     const got = await gatherBranchItems(env, ["sample"], githubBranchReaders(env), NOW);
     assert.deepEqual(got.items, []);
     assert.deepEqual(

@@ -11,6 +11,7 @@ import {
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
+import { testPem } from "./test-pem.ts";
 
 function makeEnv(
   repos: unknown[] | null,
@@ -224,30 +225,6 @@ test("reads of different refs are different cache entries", async () => {
     },
   );
 });
-
-// A real key, so createAppJwt and importPrivateKey run rather than being stubbed around.
-let pemPromise: Promise<string> | null = null;
-function testPem(): Promise<string> {
-  pemPromise ??= (async () => {
-    const pair = (await crypto.subtle.generateKey(
-      {
-        name: "RSASSA-PKCS1-v1_5",
-        modulusLength: 2048,
-        publicExponent: new Uint8Array([1, 0, 1]),
-        hash: "SHA-256",
-      },
-      true,
-      ["sign", "verify"],
-    )) as CryptoKeyPair;
-    const der = new Uint8Array(
-      (await crypto.subtle.exportKey("pkcs8", pair.privateKey)) as ArrayBuffer,
-    );
-    let binary = "";
-    for (const byte of der) binary += String.fromCharCode(byte);
-    return `-----BEGIN PRIVATE KEY-----\n${btoa(binary)}\n-----END PRIVATE KEY-----`;
-  })();
-  return pemPromise;
-}
 
 test("the installation id is resolved per owner, and a pinned id is not consulted", async () => {
   // Two owners in one namespace mapping, one KV, one env carrying the retired

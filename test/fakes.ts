@@ -958,8 +958,8 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
         const wanted = types[1].split(",").map((t) => t.trim().replace(/'/g, ""));
         out = out.filter((d) => wanted.includes(String(d.type)));
       }
-      if (/path NOT LIKE 'archive\/%'/i.test(flat))
-        out = out.filter((d) => !d.path.startsWith("archive/"));
+      const like = flat.match(/path (NOT )?LIKE '([a-z]+\/)%'/i);
+      if (like) out = out.filter((d) => d.path.startsWith(like[2]!) !== Boolean(like[1]));
       if (/ORDER BY created_at/i.test(flat))
         out.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
       else if (/ORDER BY updated_at/i.test(flat))

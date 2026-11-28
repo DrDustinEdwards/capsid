@@ -341,8 +341,7 @@ describe("maintenanceTick", () => {
     expect(nextDay.ran).toBe(true);
   });
 
-  it("writes one audit_log row per branch the switched-on prune deleted, with the sha to put it back", async () => {
-    await env.APP_KV.put(PRUNE_SWITCH_KEY, "on");
+  it("writes one audit_log row per branch the default-on prune deleted, with the sha to put it back", async () => {
     const ONE_MERGED: BranchReaders = {
       ...NO_BRANCHES,
       plan: async (namespace) => ({

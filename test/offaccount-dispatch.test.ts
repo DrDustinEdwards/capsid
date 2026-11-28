@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { offaccountDispatchTick } from "../src/offaccount-dispatch.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
+import { testPem } from "./test-pem.ts";
 
 // GitHub's schedule can be hours late, so the tick starts the workflow itself, once a day. A daily probe asks for a missing
 // branch: GitHub answers 422 to an App that may dispatch and 403 to one that may not, and starts nothing.
@@ -70,4 +71,35 @@ test("a forbidden dispatch is a failure the ledger shows, tried again an hour la
       assert.equal(calls.filter((c) => c.method === "POST").length, 2);
     },
   );
+});
+
+test("an installation that leaves capsid-backups out is one refused run an hour, not a throw every tick", async () => {
+  // 2026-11-28: the App's installation was cut to six repos, the token mint answered 422 and the
+  // probe threw on every five-minute tick (85 runs) instead of waiting an hour.
+  const kv = fakeKv({ seed: { "gh:install:v2:DrDustinEdwards": "144" } });
+  const env = fakeEnv({
+    APP_KV: kv.kv,
+    GITHUB_APP_CLIENT_ID: "Iv1.test",
+    GITHUB_APP_PRIVATE_KEY: await testPem(),
+  });
+  const MINT = "POST /app/installations/144/access_tokens";
+  const refused: Route = {
+    status: 422,
+    body: {
+      message:
+        "There is at least one repository that does not exist or is not accessible to the parent installation.",
+    },
+  };
+  await withFetch({ [MINT]: refused }, async (calls) => {
+    const report = await offaccountDispatchTick(env, new Date("2026-11-28T06:00:00.000Z"));
+    assert.equal(report.ran && !report.ok, true);
+    assert.match(
+      report.ran ? report.note : "",
+      /could not reach capsid-backups.*422.*installation must include/,
+    );
+    assert.equal(kv.puts.find((p) => p.key === "offaccount-dispatch:probe-retry")?.ttl, 3600);
+    const next = await offaccountDispatchTick(env, new Date("2026-11-28T06:05:00.000Z"));
+    assert.deepEqual(next, { ran: false });
+    assert.equal(calls.filter((c) => c.path.endsWith("/access_tokens")).length, 1);
+  });
 });

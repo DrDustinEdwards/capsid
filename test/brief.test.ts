@@ -5,7 +5,7 @@ import { buildServer } from "../src/server.ts";
 import { BRIEF_BUDGET } from "../src/limits.ts";
 import { type DocRow, fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 
-// Open tasks come back as stubs and episodics (the handoff) stay whole until the packet is over budget; nothing is cut when the documents it never
+// Open tasks come back as stubs and every open handoff stays whole while the packet fits; nothing is cut when the documents it never
 // trims are over budget on their own, since no trim could help.
 
 async function brief(opts: FakeD1Options) {
@@ -37,12 +37,14 @@ const task = (i: number, size: number): DocRow => ({
   body: text(size),
   updated_at: `2026-09-0${i + 1} 00:00:00`,
 });
-const episodic = (i: number, size: number): DocRow => ({
+const handoff = (i: number, size: number, extra: Partial<DocRow> = {}): DocRow => ({
   namespace: "capsid",
-  path: `session-${i}.md`,
+  path: `handoff/area-${i}.md`,
   type: "episodic",
+  status: "published",
   body: text(size),
-  created_at: `2026-08-0${i + 1} 00:00:00`,
+  updated_at: `2026-08-0${i + 1} 00:00:00`,
+  ...extra,
 });
 
 const auditReads = (reads: Array<{ sql: string }>) =>
@@ -74,25 +76,58 @@ test("open tasks come back as stubs whatever the budget, and keep their provenan
   assert.ok(out.approx_chars < 1000, `approx_chars ${out.approx_chars} counts task bodies`);
 });
 
-test("episodics, which carry the handoff, stay whole under budget and are cut only over it", async () => {
-  const whole = await brief({ documents: [...floor(5000), episodic(0, 3000)] });
-  assert.equal(whole.out.trimmed, undefined);
-  assert.equal(whole.out.recent_episodics[0].body.length, 3000);
-  const cut = await brief({ documents: [...floor(5000), episodic(0, BRIEF_BUDGET)] });
-  assert.deepEqual(cut.out.trimmed, ["1 episodic bodies"]);
-  assert.match(cut.out.recent_episodics[0].body, /not in the packet/);
-  assert.ok(cut.out.approx_chars <= BRIEF_BUDGET);
+test("every open handoff comes back, newest first, whole while the packet fits and a stub after", async () => {
+  // 2026-11-28: start_session returned the 3 newest episodics, so a fourth area's handoff was
+  // invisible to the next thread. Five open handoffs, one closed, one archived, one plain note.
+  const docs = [
+    ...floor(5000),
+    ...[0, 1, 2, 3, 4].map((i) => handoff(i, 3000)),
+    handoff(5, 10, { status: "closed" }),
+    { ...handoff(6, 10), path: "archive/handoff/old.md" },
+    { ...handoff(7, 10), path: "session-7.md" },
+  ];
+  const { out } = await brief({ documents: docs });
+  assert.deepEqual(
+    out.open_handoffs.map((h: { path: string }) => h.path),
+    [4, 3, 2, 1, 0].map((i) => `handoff/area-${i}.md`),
+  );
+  assert.equal(out.trimmed, undefined);
+  assert.equal(out.open_handoffs[4].body.length, 3000);
+
+  const big = await brief({
+    documents: [...floor(5000), handoff(0, 2000), handoff(1, BRIEF_BUDGET), handoff(2, 2000)],
+  });
+  assert.deepEqual(big.out.trimmed, ["1 handoff bodies"]);
+  const [newest, middle, oldest] = big.out.open_handoffs;
+  assert.equal(newest.body.length, 2000);
+  assert.match(middle.body, /not in the packet/);
+  assert.equal(oldest.body.length, 2000, "a smaller handoff after the cut still fits whole");
+  assert.ok(big.out.approx_chars <= BRIEF_BUDGET);
+});
+
+test("each handoff carries its checklist counts, stub or whole", async () => {
+  const body = "Partial.\n\n- [x] fixed the dispatch\n- [ ] verify live\n* [X] tests\n";
+  const { out } = await brief({
+    documents: [...floor(10), handoff(0, 0, { body }), handoff(1, 0, { body: "no list" })],
+  });
+  const byPath = new Map(out.open_handoffs.map((h: { path: string }) => [h.path, h]));
+  assert.deepEqual((byPath.get("handoff/area-0.md") as { checklist: unknown }).checklist, {
+    done: 2,
+    open: 1,
+    open_items: ["verify live"],
+  });
+  assert.equal((byPath.get("handoff/area-1.md") as { checklist: unknown }).checklist, null);
 });
 
 test("provenance costs ONE audit_log query however many documents the brief carries", async () => {
   const tasks = Array.from({ length: 6 }, (_, i) => task(i, 10));
   const { out, reads } = await brief({
-    documents: [...floor(10), ...tasks, episodic(0, 10), episodic(1, 10)],
+    documents: [...floor(10), ...tasks, handoff(0, 10), handoff(1, 10)],
     auditLog: [
       { namespace: "capsid", path: "core.md", actor: "github:someone" },
       { namespace: "capsid", path: "core.md", actor: "agent:capsid-driver" },
       { namespace: "capsid", path: "TASK-2.md", actor: "agent:seat" },
-      { namespace: "capsid", path: "session-1.md", actor: "agent:other" },
+      { namespace: "capsid", path: "handoff/area-1.md", actor: "agent:other" },
     ],
     links: [
       {
@@ -122,12 +157,12 @@ test("provenance costs ONE audit_log query however many documents the brief carr
   assert.equal(byPath.get("TASK-2.md"), "agent:seat");
   assert.equal(byPath.get("TASK-0.md"), null);
   const ep = new Map(
-    out.recent_episodics.map((t: { path: string; last_actor: string | null }) => [
+    out.open_handoffs.map((t: { path: string; last_actor: string | null }) => [
       t.path,
       t.last_actor,
     ]),
   );
-  assert.equal(ep.get("session-1.md"), "agent:other");
+  assert.equal(ep.get("handoff/area-1.md"), "agent:other");
 });
 
 test("a namespace with no core.md still resolves provenance for what it has", async () => {
