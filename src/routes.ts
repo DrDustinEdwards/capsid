@@ -84,6 +84,13 @@ import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH } from "./p
 import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "./portal-library";
 import { handlePortalTrends, PORTAL_TRENDS_PATH } from "./portal-trends";
 import {
+  handlePortalBoard,
+  handlePortalPrs,
+  PORTAL_BOARD_PATH,
+  PORTAL_PRS_PATH,
+} from "./portal-board";
+import { handlePortalFigures, PORTAL_FIGURES_PATH } from "./portal-figures";
+import {
   handlePortalCompleteness,
   handlePortalNotFound,
   handlePortalPackageHistory,
@@ -410,6 +417,12 @@ function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
     return handlePortalLibrary(request, env);
   if (url.pathname === PORTAL_TRENDS_PATH && request.method === "GET")
     return handlePortalTrends(request, env);
+  if (url.pathname === PORTAL_BOARD_PATH && request.method === "GET")
+    return handlePortalBoard(request, env);
+  if (url.pathname === PORTAL_PRS_PATH && request.method === "GET")
+    return handlePortalPrs(request, env);
+  if (url.pathname === PORTAL_FIGURES_PATH && request.method === "GET")
+    return handlePortalFigures(request, env);
   if (url.pathname === PORTAL_PUSH_PATH && request.method === "GET")
     return handlePortalPushGet(request, env);
   if (url.pathname === PORTAL_PUSH_PATH && request.method === "POST")

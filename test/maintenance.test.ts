@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { readMaintenance } from "../src/maintenance.ts";
 import {
   gatherPrItems,
-  greenAwaitingSeat,
   redTooLong,
   type OpenPr,
   type PrCheck,
@@ -49,28 +48,6 @@ const readers = (
   failingStep: async () => step,
 });
 
-test("a green pull request is listed with its age, and a red, pending or draft one is not", () => {
-  const prs = [
-    pr(1),
-    pr(2, { checks: [check({ conclusion: "failure" })] }),
-    pr(3, { checks: [check({ status: "in_progress", conclusion: null })] }),
-    pr(4, { draft: true }),
-    pr(5, { checks: [] }),
-  ];
-  const items = greenAwaitingSeat("sample", prs, NOW);
-  assert.deepEqual(
-    items.map((i) => i.pr),
-    [prs[0].url],
-  );
-  assert.equal(items[0].rule, "pr-awaiting-seat");
-  assert.match(items[0].line, /open 3\.0 days/);
-  assert.deepEqual(
-    greenAwaitingSeat("sample", prs.slice(1), NOW),
-    [],
-    "no green pull request, nothing listed",
-  );
-});
-
 test("a pull request red for more than 48 hours is listed from its first failure, and a newer red one is not", () => {
   const old = pr(7, {
     checks: [
@@ -97,7 +74,7 @@ test("the gathered list names the failing step, counts what it read, and stays q
     checks: [check({ conclusion: "failure", completed_at: "2026-10-05T08:00:00.000Z" })],
   });
   const got = await gatherPrItems(["sample"], readers([red, pr(9)]), NOW);
-  assert.deepEqual(got.items.map((i) => i.rule).sort(), ["pr-awaiting-seat", "pr-red"]);
+  assert.deepEqual(got.items.map((i) => i.rule).sort(), ["pr-red"]);
   assert.match(
     got.items.find((i) => i.rule === "pr-red")!.line,
     /red for 3\.2 days: "test" failed at step "Run unit tests"/,
@@ -241,7 +218,7 @@ test("with the auto-prune set off, a merged branch is listed with a count and no
     assert.match(merged[0], /branch feat\/merged-clean is merged \(pull request #1, tip a1\)/);
     assert.match(
       merged[1],
-      /^1 merged branch\(es\) in o\/r would be pruned; the auto-prune is off/,
+      /^1 merged branch\(es\) in o\/r would be pruned; the auto-prune, on by default, is turned off/,
     );
     // Old, with no open pull request, not merged by the rule: listed with its age. A
     // keep-listed, open, merged or recent branch is not.

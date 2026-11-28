@@ -156,7 +156,7 @@ export async function gatherBranchItems(
       items.push({
         rule: "branch-merged",
         namespace,
-        line: `${plan.prune.length} merged branch(es) in ${plan.repo} would be pruned; the auto-prune is off, so none was deleted.`,
+        line: `${plan.prune.length} merged branch(es) in ${plan.repo} would be pruned; the auto-prune, on by default, is turned off, so none was deleted.`,
       });
     }
 

@@ -31,7 +31,7 @@ Every control opens a dialog that previews what will change and the audit rows i
 
 The trend charts are on Activity, below the audit log.
 
-In chat, `capsid_admin_whats_next` (`src/whats-next.ts`, admin only, read-only) answers the same question in one read: every open pull request in every mapped repo with its CI verdict and whether it conflicts (marked `waiting_on_seat` when it is green, not a draft and mergeable), and the watcher's checks that found something or could not run. A part it could not read is named in `not_checked`, never reported as nothing found.
+In chat, `capsid_admin_whats_next` (`src/whats-next.ts`, admin only, read-only) answers the same question in one read: every open pull request in every mapped repo with its CI verdict and whether it conflicts, and the watcher's checks that found something or could not run. A part it could not read is named in `not_checked`, never reported as nothing found.
 
 Browser tests: dashboard/e2e/needs.spec.ts.
 

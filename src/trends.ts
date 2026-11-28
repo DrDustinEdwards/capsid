@@ -2,12 +2,7 @@ import { median } from "capsomer/behavior/format";
 import { mondayOf, weekStarts } from "./trends-days";
 import { readBackups, readCi } from "./trends-outside";
 import type { Env } from "./env";
-import type {
-  TrendDeployRepo,
-  TrendMergeWeek,
-  TrendMinutesWeek,
-  PortalTrends,
-} from "./ops-types/views";
+import type { TrendDeployRepo, TrendMinutesWeek, PortalTrends } from "./ops-types/views";
 import { MINUTE_MS, isoWeek, timeMs, utcDay } from "./time";
 
 // The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3): the feed carries nothing
@@ -62,66 +57,6 @@ async function readMinutes(
       sessions: minutes.get(m)!.sessions,
     })),
     truncated,
-  };
-}
-
-async function readMerges(
-  db: D1Database,
-  mondays: string[],
-): Promise<{ weeks: TrendMergeWeek[]; rollbacks: PortalTrends["merges"]["rollbacks"] }> {
-  const from = `${mondays[0]} 00:00:00`;
-  const [rows, rollbacks] = await Promise.all([
-    // manage_pr is the seat, pr-closed the Portal.
-    db
-      .prepare(
-        `SELECT substr(at, 1, 10) AS day,
-                CASE WHEN action = 'pr-closed' THEN 'closed'
-                     WHEN params LIKE '%"action":"close"%' THEN 'closed'
-                     ELSE 'seat' END AS kind,
-                COUNT(*) AS n
-         FROM audit_log
-         WHERE at >= ?1
-           AND (action = 'pr-closed'
-                OR (action = 'manage_pr' AND (params LIKE '%"merged":true%' OR params LIKE '%"action":"close"%')))
-         GROUP BY day, kind`,
-      )
-      .bind(from)
-      .all<{ day: string; kind: "seat" | "closed"; n: number }>(),
-    db
-      .prepare(
-        "SELECT repo, pr, run_at, outcome FROM deploy_outcomes WHERE run_at >= ?1 AND outcome IN ('rolled_back', 'rollback_failed') ORDER BY run_at",
-      )
-      .bind(mondays[0])
-      .all<{
-        repo: string;
-        pr: number | null;
-        run_at: string;
-        outcome: "rolled_back" | "rollback_failed";
-      }>(),
-  ]);
-  const weeks = new Map<string, TrendMergeWeek>(
-    mondays.map((m) => [
-      m,
-      {
-        week: isoWeek(new Date(`${m}T00:00:00Z`)),
-        start: m,
-        seat: 0,
-        closed: 0,
-      },
-    ]),
-  );
-  for (const r of rows.results) {
-    const w = weeks.get(mondayOf(r.day));
-    if (w) w[r.kind] += r.n;
-  }
-  return {
-    weeks: [...weeks.values()],
-    rollbacks: rollbacks.results.map((r) => ({
-      at: r.run_at,
-      repo: r.repo,
-      pr: r.pr,
-      outcome: r.outcome,
-    })),
   };
 }
 
@@ -195,9 +130,8 @@ async function readDeploys(db: D1Database, mondays: string[]): Promise<TrendDepl
 
 export async function readTrends(env: Env, now: Date, weeks: number): Promise<PortalTrends> {
   const mondays = weekStarts(now, weeks);
-  const [minutes, merges, deploys, backups, ci] = await Promise.all([
+  const [minutes, deploys, backups, ci] = await Promise.all([
     readMinutes(env.DB, mondays),
-    readMerges(env.DB, mondays),
     readDeploys(env.DB, mondays),
     readBackups(env, now),
     readCi(env, now),
@@ -210,7 +144,6 @@ export async function readTrends(env: Env, now: Date, weeks: number): Promise<Po
       truncated: minutes.truncated,
       note: "An estimate: the administrator's own writes, sessions split at a 5-minute gap, plus 1 minute each. Reading the Portal without acting is not counted.",
     },
-    merges,
     deploys: { repos: deploys },
     backups,
     ci,

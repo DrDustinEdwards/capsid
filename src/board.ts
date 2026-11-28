@@ -59,22 +59,34 @@ async function part<T>(
   }
 }
 
+export interface ThreadRow {
+  thread: string;
+  namespace: string | null;
+  first_seen: string;
+  last_seen: string;
+  reads: number;
+}
+
 // Threads name themselves on capsid_start_session (`thread`), which leaves one conventions-read
-// audit row per thread per hour.
-async function threads(db: D1Database): Promise<Board["threads"]> {
+// audit row per thread per hour. The names are as the threads wrote them, unfenced.
+export async function readThreads(db: D1Database, days: number, max: number): Promise<ThreadRow[]> {
   const { results } = await db
     .prepare(
       `SELECT json_extract(params, '$.thread') AS thread,
          json_extract(params, '$.for_namespace') AS namespace,
-         MAX(at) AS last_seen, COUNT(*) AS reads
+         MIN(at) AS first_seen, MAX(at) AS last_seen, COUNT(*) AS reads
        FROM audit_log
        WHERE action = 'conventions-read' AND at >= datetime('now', ?1)
          AND json_extract(params, '$.thread') IS NOT NULL
        GROUP BY thread, namespace ORDER BY last_seen DESC LIMIT ?2`,
     )
-    .bind(`-${THREADS_DAYS} days`, THREADS_MAX)
-    .all<{ thread: string; namespace: string | null; last_seen: string; reads: number }>();
-  return (results ?? []).map((r) => ({
+    .bind(`-${days} days`, max)
+    .all<ThreadRow>();
+  return results ?? [];
+}
+
+async function threads(db: D1Database): Promise<Board["threads"]> {
+  return (await readThreads(db, THREADS_DAYS, THREADS_MAX)).map(({ first_seen: _f, ...r }) => ({
     ...r,
     thread: externalFence("thread-name", r.namespace ?? "none", r.thread, 120),
   }));
@@ -93,7 +105,7 @@ async function activeWork(db: D1Database): Promise<Board["active_work"]> {
   };
 }
 
-async function findings(db: D1Database): Promise<Board["findings"]> {
+export async function findings(db: D1Database): Promise<Board["findings"]> {
   const { results } = await db
     .prepare(
       "SELECT fingerprint, namespace, title, first_seen_at, last_seen_at, seen_count FROM watcher_findings WHERE state = 'open' ORDER BY last_seen_at DESC LIMIT ?1",
@@ -112,7 +124,7 @@ async function findings(db: D1Database): Promise<Board["findings"]> {
 
 // Same-file overlaps between the open pull requests of each repo, each pair once, the older
 // pull request first (src/pr-overlaps.ts).
-async function overlaps(
+export async function overlaps(
   env: Env,
   prs: BoardPr[],
   notChecked: string[],
