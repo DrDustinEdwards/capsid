@@ -1,6 +1,7 @@
 import { progressRing, tableChart, timeline, type TimelineEvent } from "enarratio";
 import { barChart } from "enarratio/lite/bar";
 import { ChartFrame } from "capsomer/react/chart-frame";
+import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { parse } from "capsomer/behavior/time";
 import { statusHtml } from "capsomer/behavior/status";
 import { useApp } from "../app/ctx";
@@ -15,7 +16,6 @@ interface RowLink {
   route: boolean;
 }
 
-const attr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
 export function tableCards(
   html: string,
@@ -42,7 +42,7 @@ export function tableCards(
           const l = links[row];
           if (!l) return `<th scope="row">${body}</th>`;
           const how = l.route ? " data-route" : ' target="_blank" rel="noopener noreferrer"';
-          return `<th scope="row"><a href="${attr(l.href)}"${how}>${body}</a></th>`;
+          return `<th scope="row"><a href="${escapeHtml(l.href)}"${how}>${body}</a></th>`;
         },
       );
       return `<tr>${out}</tr>`;
