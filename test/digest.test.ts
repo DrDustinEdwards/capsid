@@ -16,6 +16,7 @@ function world(
     deploys?: Row[];
     findings?: Row[];
     findingsThrow?: boolean;
+    devices?: Row[];
   } = {},
 ) {
   const sent: Array<{ from: string; to: string; subject: string; text: string }> = [];
@@ -33,7 +34,11 @@ function world(
           if (opts.findingsThrow && /FROM watcher_findings/.test(sql)) throw new Error("D1 down");
           return {
             results: selectRows(
-              /FROM watcher_findings/.test(sql) ? (opts.findings ?? []) : deploys,
+              /FROM watcher_findings/.test(sql)
+                ? (opts.findings ?? [])
+                : /FROM push_subscriptions/.test(sql)
+                  ? (opts.devices ?? [])
+                  : deploys,
               sql,
               params,
             ),
@@ -214,4 +219,37 @@ test("a failing weekly read is a one-line note and the mail still goes out", asy
   const other = world({ findingsThrow: true });
   await digestTick(other.env, NOON);
   assert.doesNotMatch(other.sent[0]!.text, /Weekly digest/, "a non-Monday read the findings");
+});
+
+test("a device that stopped getting alerts is named every day until it is turned on again", async () => {
+  const gone = {
+    id: 2,
+    label: "Chrome on Android",
+    status: "gone",
+    created_at: "2026-10-01T09:00:00.000Z",
+    closed_at: "2026-10-05T21:45:33.765Z",
+  };
+  const w = world({ devices: [gone] });
+  await digestTick(w.env, NOON);
+  assert.match(w.sent[0]!.text, /Phone alerts stopped \(1\)/);
+  assert.match(w.sent[0]!.text, /Chrome on Android stopped getting alerts on 2026-10-05/);
+  assert.match(w.sent[0]!.text, /turn phone alerts on again/);
+  assert.doesNotMatch(w.sent[0]!.text, /Nothing happened/);
+
+  const back = world({
+    devices: [
+      gone,
+      { ...gone, id: 3, status: "active", created_at: "2026-10-06T08:00:00.000Z", closed_at: null },
+    ],
+  });
+  await digestTick(back.env, NOON);
+  assert.doesNotMatch(back.sent[0]!.text, /Phone alerts stopped/);
+
+  const old = world({ devices: [{ ...gone, closed_at: "2026-09-20T00:00:00.000Z" }] });
+  await digestTick(old.env, NOON);
+  assert.doesNotMatch(
+    old.sent[0]!.text,
+    /Phone alerts stopped/,
+    "a device gone over 14 days ago still nags",
+  );
 });

@@ -7,11 +7,14 @@ import { weeklyDigestLines } from "./watcher-digest";
 import { DAY_MS, utcDay } from "./time";
 
 // Once a UTC day, after DIGEST_HOUR_UTC, the tick mails one plain-text message to ALERT_EMAIL:
-// the rollbacks since the last digest, and on Mondays the watcher's weekly digest.
+// the rollbacks since the last digest, any device that stopped getting phone alerts, and on
+// Mondays the watcher's weekly digest.
 
 export const DIGEST_LAST_KEY = "digest:last";
 const DIGEST_HOUR_UTC = 12;
 const LIST_MAX = 15;
+// How long a device that stopped getting alerts is named, unless it is turned on again sooner.
+const GONE_NAMED_MS = 14 * DAY_MS;
 const PORTAL_URL = `https://${PORTAL_HOST}/`;
 
 interface LastDigest {
@@ -72,6 +75,22 @@ async function composeDigest(
     .all<{ repo: string; head_sha: string; outcome: string }>();
   const rollbacks = rolled.results ?? [];
 
+  // A push service drops a subscription (410) and src/push.ts marks it gone without a word, so the
+  // device just goes quiet. Named here until a newer device with the same label is on.
+  const devices = await env.DB.prepare(
+    `SELECT label, status, created_at, closed_at FROM push_subscriptions WHERE status = 'active' OR status = 'gone' ORDER BY id LIMIT 50`,
+  ).all<{ label: string | null; status: string; created_at: string; closed_at: string | null }>();
+  const rows = devices.results ?? [];
+  const stopped = rows.filter(
+    (d) =>
+      d.status === "gone" &&
+      d.closed_at !== null &&
+      now.getTime() - Date.parse(d.closed_at) < GONE_NAMED_MS &&
+      !rows.some(
+        (a) => a.status === "active" && a.label === d.label && a.created_at > d.closed_at!,
+      ),
+  );
+
   const day = utcDay(now);
   const text: string[] = [`Capsid, ${day}. Since ${since.replace("T", " ").slice(0, 16)} UTC.`, ""];
   const section = (title: string, lines: string[]) => {
@@ -83,6 +102,14 @@ async function composeDigest(
       rollbacks,
       (r) =>
         `${r.repo} at ${r.head_sha.slice(0, 7)}: ${r.outcome === "rollback_failed" ? "the rollback failed" : "rolled back"}`,
+    ),
+  );
+  section(
+    `Phone alerts stopped (${stopped.length})`,
+    list(
+      stopped,
+      (d) =>
+        `${d.label ?? "A device"} stopped getting alerts on ${d.closed_at!.slice(0, 10)}. Open the Portal's Settings on that device and turn phone alerts on again.`,
     ),
   );
   // Mondays UTC only: the watcher's hygiene findings, per site (src/watcher-digest.ts). A failed
@@ -101,7 +128,8 @@ async function composeDigest(
     }
   }
   if (weekly.length) text.push(...weekly, "");
-  if (rollbacks.length === 0 && weekly.length === 0) text.push("Nothing happened.", "");
+  if (rollbacks.length === 0 && stopped.length === 0 && weekly.length === 0)
+    text.push("Nothing happened.", "");
   text.push(`Open the Portal: ${PORTAL_URL}`);
   return {
     subject: `Capsid digest ${day}: ${rollbacks.length === 0 ? "no rollbacks" : `${rollbacks.length} rollback(s)`}`,
