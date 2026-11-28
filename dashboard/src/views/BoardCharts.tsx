@@ -16,7 +16,6 @@ interface RowLink {
   route: boolean;
 }
 
-
 export function tableCards(
   html: string,
   links: ReadonlyArray<RowLink | null> = [],
