@@ -339,3 +339,16 @@ main .sev-crit[data-row]:focus-visible {
 .navicon-lg {
   --icon-size: var(--title-4);
 }
+
+/* A chart the Worker draws twice (wide by day, narrow by week): one shows, by the page's width. */
+.fig-narrow {
+  display: none;
+}
+@media (max-width: 40rem) {
+  .fig-wide {
+    display: none;
+  }
+  .fig-narrow {
+    display: block;
+  }
+}

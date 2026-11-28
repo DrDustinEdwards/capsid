@@ -1,5 +1,5 @@
 import { Alert, Banner } from "capsomer/react/banner";
-import { trendChart } from "./charts";
+import { boardChart, trendChart } from "./charts";
 import { Fragment, Suspense } from "react";
 import { useApp } from "../app/ctx";
 import { ago } from "../lib/format";
@@ -12,6 +12,8 @@ import { Time } from "capsomer/react/time";
 import { Panel } from "capsomer/react/panel";
 import { ReadAgain } from "capsomer/react/read-state";
 import { NoSnapshot } from "./shared";
+import { useFigures } from "../lib/trends";
+import { ChartSlot } from "../ui/ChartSlot";
 import { Spinner } from "capsomer/react/skeleton";
 import { fetchBackups } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
@@ -20,6 +22,24 @@ import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
 
 const BackupSlots = trendChart("BackupSlots");
+const BackupRuns = boardChart("BackupRuns");
+const ServerFigure = boardChart("ServerFigure");
+
+function BackupAges() {
+  const d = useFigures("backups").data;
+  if (!d) return null;
+  return (
+    <ChartSlot>
+      {d.figures.dump && <ServerFigure html={d.figures.dump} />}
+      {d.figures.amazon && <ServerFigure html={d.figures.amazon} />}
+      {d.not_checked.length > 0 && (
+        <p className="cap-text" data-tone="dim">
+          Not drawn: {d.not_checked.join("; ")}.
+        </p>
+      )}
+    </ChartSlot>
+  );
+}
 
 export function Backups() {
   const { feed, now } = useApp();
@@ -36,6 +56,12 @@ export function Backups() {
   const os = o ? offaccountState(o, now) : null;
   return (
     <div className="cap-stack">
+      <BackupAges />
+      {feed.scheduled.tasks && (
+        <ChartSlot>
+          <BackupRuns tasks={feed.scheduled.tasks} />
+        </ChartSlot>
+      )}
       <div className="cap-panes" data-even data-gap="5">
         <Panel flush title="Primary: Capsid D1">
           <div className="body cap-stack" data-gap="4">

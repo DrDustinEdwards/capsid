@@ -12,10 +12,14 @@ import { Incidents, ScheduledTasks } from "./Incidents";
 import { Overview } from "./Overview";
 import { UnownedResources } from "./Workers";
 import { PageHead } from "./shared";
+import { useFigures } from "../lib/trends";
+import { ChartSlot } from "../ui/ChartSlot";
+import { boardChart } from "./charts";
 
 const Maintenance = lazy(() => import("./Maintenance").then((m) => ({ default: m.Maintenance })));
 
 const NAMED = 3;
+const ServerFigure = boardChart("ServerFigure");
 
 export function Health() {
   const tab: HealthTab = tabOf(HEALTH_TABS, useTabParam()) ?? HEALTH_TABS[0].id;
@@ -38,6 +42,7 @@ function TabPanel({ tab }: { tab: HealthTab }): ReactNode {
     case "problems":
       return (
         <>
+          <OpenProblems />
           <Incidents />
           <Suspense fallback={null}>
             <Maintenance />
@@ -53,6 +58,16 @@ function TabPanel({ tab }: { tab: HealthTab }): ReactNode {
     case "resources":
       return <UnownedResources siteScripts={siteScripts(feed)} />;
   }
+}
+
+function OpenProblems() {
+  const d = useFigures("problems").data;
+  if (!d?.figures.open) return null;
+  return (
+    <ChartSlot>
+      <ServerFigure html={d.figures.open} />
+    </ChartSlot>
+  );
 }
 
 function HealthVerdict() {
@@ -76,7 +91,7 @@ function HealthVerdict() {
       )}
       named={NAMED}
       more={(rest) => (
-        <button type="button" className="cap-link-btn" onClick={() => open("view:needs#attention")}>
+        <button type="button" className="cap-link-btn" onClick={() => open("view:board#attention")}>
           {rest} more
         </button>
       )}

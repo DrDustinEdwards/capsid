@@ -41,6 +41,7 @@ export type {
 } from "../../src/ops-types/sites";
 export type {
   LibraryEntry,
+  LibraryHandoff,
   LibraryShelf,
   PortalLibrary,
   PortalTrends,
@@ -55,6 +56,14 @@ export type {
   OpsMaintenanceItem,
   MaintenanceRule,
 } from "../../src/ops-types/views";
+export type {
+  AgentDaily,
+  BoardHandoffRow,
+  FigureSet,
+  PortalBoard,
+  PortalFigures,
+  PortalPrs,
+} from "../../src/ops-types/board";
 export type {
   PortalSiteSearch,
   PortalSiteTraffic,

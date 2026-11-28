@@ -1,7 +1,7 @@
 import { browserLoader, viewLoader, viewPage } from "../server/view-route";
-import { NeedsYou } from "../views/NeedsYou";
+import { Board } from "../views/Board";
 
-export const loader = viewLoader("needs");
+export const loader = viewLoader("board");
 export const clientLoader = browserLoader;
-const NeedsYouPage = viewPage(NeedsYou);
-export default NeedsYouPage;
+const BoardPage = viewPage(Board);
+export default BoardPage;

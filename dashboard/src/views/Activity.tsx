@@ -15,15 +15,31 @@ import { Row, RowList } from "capsomer/react/row-list";
 import "capsomer/group.css";
 import "capsomer/row-list.css";
 import { ReadAgain } from "capsomer/react/read-state";
-import { PageHead, ProjectSelect } from "./shared";
-import { trendChart } from "./charts";
+import { ProjectSelect } from "./shared";
+import { useFigures } from "../lib/trends";
+import { boardChart, trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 
 const MinutesTile = trendChart("MinutesTile");
+const ServerFigure = boardChart("ServerFigure");
+
+// Who acted, by day where the page is wide and by week on a phone (the Worker draws both).
+function WhoActed() {
+  const figs = useFigures("agents");
+  const d = figs.data;
+  if (!d) return null;
+  if (!d.figures.who_acted)
+    return <p className="cap-text">{d.empty.who_acted ?? "No one acted."}</p>;
+  return (
+    <ChartSlot>
+      <ServerFigure html={d.figures.who_acted} narrow={d.figures.who_acted_weeks} />
+    </ChartSlot>
+  );
+}
 
 export function Activity() {
   const { feed, now: appNow } = useApp();
-  const filters = useUrlFilters(["namespace", "actor"] as const);
+  const filters = useUrlFilters(["namespace", "actor"] as const, { fixed: { tab: "activity" } });
   const { namespace, actor } = filters.applied;
   const { namespace: nsInput, actor: actorInput } = filters.input;
 
@@ -42,9 +58,9 @@ export function Activity() {
   ].sort();
 
   return (
-    <div className="cap-admin-page">
-      <PageHead title="Activity" />
+    <div className="cap-stack">
       <WeeklyDigest />
+      <WhoActed />
       <form
         className="cap-cluster"
         data-gap="3"

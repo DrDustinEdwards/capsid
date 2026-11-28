@@ -81,7 +81,7 @@ test("a control's preview open, light", async ({ page }) => {
 });
 
 test("activity, light", async ({ page }) => {
-  await open(page, "activity");
+  await open(page, "agents#activity");
   await shoot(page, "activity-light");
 });
 

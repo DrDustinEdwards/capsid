@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 test.use({ javaScriptEnabled: false });
 
 for (const [path, charts] of [
-  ["demos/activity", 1],
+  ["demos/agents?tab=activity", 3],
   ["demos/sites?tab=deploys", 1],
   ["demos/sites/sample", 2],
   ["demos/packages", 1],

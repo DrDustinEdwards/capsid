@@ -2,15 +2,14 @@ import { createContext, useContext } from "react";
 import type { OpsFeed, PortalAction, PortalPerformed } from "../types";
 
 export const VIEWS = [
-  { id: "needs", label: "Needs you", key: "y" },
+  { id: "board", label: "Board", key: "b" },
   { id: "health", label: "Health", key: "h" },
-  { id: "sites", label: "Sites", key: "s" },
+  { id: "memory", label: "Memory", key: "m" },
   { id: "prs", label: "Pull requests", key: "p" },
   { id: "projects", label: "Projects", key: "o" },
-  { id: "activity", label: "Activity", key: "l" },
-  { id: "agents", label: "Agents", key: "a" },
+  { id: "sites", label: "Sites", key: "s" },
   { id: "packages", label: "Packages", key: "k" },
-  { id: "library", label: "Library", key: "b" },
+  { id: "agents", label: "Agents", key: "a" },
   { id: "settings", label: "Settings", key: "e" },
 ] as const;
 
@@ -29,10 +28,20 @@ export const SITES_TABS = [
 ] as const;
 
 export const AGENT_TABS = [
-  { id: "roster", label: "Agents" },
+  { id: "roster", label: "Roster" },
+  { id: "activity", label: "Activity" },
   { id: "archive", label: "Archive" },
   { id: "access", label: "AI access" },
 ] as const;
+
+export const MEMORY_TABS = [
+  { id: "handoffs", label: "Handoffs" },
+  { id: "decisions", label: "Decisions" },
+  { id: "rulings", label: "Rulings" },
+  { id: "research", label: "Research" },
+  { id: "search", label: "Search" },
+] as const;
+export type MemoryTab = (typeof MEMORY_TABS)[number]["id"];
 
 export const PACKAGE_TABS = [
   { id: "published", label: "Published" },
@@ -53,6 +62,7 @@ const PAGE_TABS: Partial<Record<(typeof VIEWS)[number]["id"], ReadonlyArray<{ id
   health: HEALTH_TABS,
   sites: SITES_TABS,
   agents: AGENT_TABS,
+  memory: MEMORY_TABS,
   packages: PACKAGE_TABS,
 };
 
@@ -170,7 +180,7 @@ export function parseRoute(path: string): Route {
         return s;
       }
     });
-  let view: ViewId = "needs";
+  let view: ViewId = "board";
   let site: string | null = null;
   let i = 0;
   if (isView(segs[0])) {
@@ -188,7 +198,7 @@ export function parseRoute(path: string): Route {
 
 export function placePath(id: string): string {
   const [page, anchor] = id.split("#");
-  if (!isView(page)) return routePath("needs");
+  if (!isView(page)) return routePath("board");
   const tabs = PAGE_TABS[page];
   const tab = tabs ? tabOf(tabs, anchor) : null;
   if (tab) return `${routePath(page)}${tab === tabs![0]!.id ? "" : `?tab=${tab}`}`;
@@ -215,8 +225,8 @@ export function routePath(
   drawer?: { type: DrawerType; id: string } | null,
   site?: string | null,
 ): string {
-  const page = site && view === "sites" ? sitePath(site) : view === "needs" ? "/" : `/${view}`;
+  const page = site && view === "sites" ? sitePath(site) : view === "board" ? "/" : `/${view}`;
   if (drawer)
-    return `${page === "/" ? "/needs" : page}/${drawer.type}/${encodeURIComponent(drawer.id)}`;
+    return `${page === "/" ? "/board" : page}/${drawer.type}/${encodeURIComponent(drawer.id)}`;
   return page;
 }

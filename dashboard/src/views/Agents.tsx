@@ -1,14 +1,18 @@
 import { AGENT_TABS, tabOf, useApp } from "../app/ctx";
-import { KIND_STATUS } from "../lib/derive";
-import { agentState, archiveAgents, nsList, rosterAgents } from "../lib/agents";
+import { archiveAgents, nsList } from "../lib/agents";
+import { useFigures } from "../lib/trends";
+import { ChartSlot } from "../ui/ChartSlot";
+import { Activity } from "./Activity";
+import { boardChart } from "./charts";
 import { DAY, ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import { Status } from "capsomer/react/status";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
-import { Missing } from "capsomer/react/empty";
 import type { OpsAgent } from "../types";
+
+const RosterTable = boardChart("RosterTable");
 
 export function Agents() {
   const tab = tabOf(AGENT_TABS, useTabParam()) ?? AGENT_TABS[0].id;
@@ -16,7 +20,15 @@ export function Agents() {
     <div className="cap-admin-page">
       <PageHead title="Agents" />
       <PageTabs label="Agents" path="/agents" tabs={AGENT_TABS} current={tab} />
-      {tab === "archive" ? <Archive /> : tab === "access" ? <Access /> : <Roster />}
+      {tab === "archive" ? (
+        <Archive />
+      ) : tab === "access" ? (
+        <Access />
+      ) : tab === "activity" ? (
+        <Activity />
+      ) : (
+        <Roster />
+      )}
     </div>
   );
 }
@@ -136,54 +148,14 @@ function Access() {
 }
 
 function Roster() {
-  const { feed, now } = useApp();
-  const live = feed.live;
+  const figs = useFigures("roster");
   return (
     <div className="cap-stack">
       <Panel flush title="Roster">
-        <div className="cap-table-wrap" data-reflow="wide">
-          <table className="cap-table">
-            <thead>
-              <tr>
-                <th>Agent</th>
-                <th>Last seen</th>
-                <th>Flags</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rosterAgents(live.agents).map((a) => {
-                const st = agentState(a, now);
-                return (
-                  <tr
-                    key={a.name}
-                    className="click"
-                    data-row=""
-                    data-open={`agent:${a.name}`}
-                    tabIndex={0}
-                  >
-                    <AgentName a={a} />
-                    <td data-label="Last seen">
-                      <Status {...KIND_STATUS[st.kind]}>{st.label}</Status>
-                      <div className="src">
-                        {a.last_seen ? ago(parse(a.last_seen), now) : "never"}
-                      </div>
-                    </td>
-                    <td data-label="Flags">
-                      {a.flags.length ? (
-                        a.flags.map((f) => (
-                          <span key={f} className="cap-pill" data-variant="outline">
-                            {f}
-                          </span>
-                        ))
-                      ) : (
-                        <Missing />
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="body">
+          <ChartSlot>
+            <RosterTable actors={figs.data?.actors ?? null} />
+          </ChartSlot>
         </div>
       </Panel>
     </div>

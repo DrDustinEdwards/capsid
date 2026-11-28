@@ -1,7 +1,7 @@
 import { browserLoader, viewLoader, viewPage } from "../server/view-route";
-import { Library } from "../views/Library";
+import { Memory } from "../views/Memory";
 
-export const loader = viewLoader("library");
+export const loader = viewLoader("memory");
 export const clientLoader = browserLoader;
-const LibraryPage = viewPage(Library);
-export default LibraryPage;
+const MemoryPage = viewPage(Memory);
+export default MemoryPage;
