@@ -307,3 +307,49 @@ export async function deleteBranch(
   await invalidateRepoReads(env, owner, repo);
   return { repo: full, branch, deleted: true, forced: opts.force === true };
 }
+
+// Merge settings, the default branch's rules, the rulesets and private vulnerability reporting,
+// all readable with the App's Metadata permission. Fields GitHub shows only to an admin come back
+// null rather than guessed.
+export async function repoSettings(env: Env, namespace: string, repoSelector?: string) {
+  const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
+  const base = `/repos/${owner}/${repo}`;
+  const json = async (path: string) => {
+    const resp = await cachedGet(env, owner, repo, `${base}${path}`);
+    if (!resp.ok)
+      throw new Error(
+        `repo_settings ${path || "/"} failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`,
+      );
+    return resp.json() as Promise<Record<string, unknown>>;
+  };
+  const info = await json("");
+  const branch = info.default_branch as string;
+  const [rules, rulesets, pvr] = await Promise.all([
+    json(`/rules/branches/${encodeURIComponent(branch)}`) as Promise<unknown>,
+    json("/rulesets?per_page=100") as Promise<unknown>,
+    json("/private-vulnerability-reporting"),
+  ]);
+  const pick = (k: string) => info[k] ?? null;
+  return {
+    repo: full,
+    default_branch: branch,
+    visibility: pick("visibility"),
+    archived: pick("archived"),
+    allow_auto_merge: pick("allow_auto_merge"),
+    allow_squash_merge: pick("allow_squash_merge"),
+    allow_merge_commit: pick("allow_merge_commit"),
+    allow_rebase_merge: pick("allow_rebase_merge"),
+    delete_branch_on_merge: pick("delete_branch_on_merge"),
+    security_and_analysis: pick("security_and_analysis"),
+    private_vulnerability_reporting: pvr.enabled ?? null,
+    branch_rules: (rules as Array<{ type: string; ruleset_id?: number; parameters?: unknown }>).map(
+      ({ type, ruleset_id, parameters }) => ({ type, ruleset_id, parameters }),
+    ),
+    rulesets: (rulesets as Array<Record<string, unknown>>).map((r) => ({
+      id: r.id,
+      name: r.name,
+      target: r.target,
+      enforcement: r.enforcement,
+    })),
+  };
+}

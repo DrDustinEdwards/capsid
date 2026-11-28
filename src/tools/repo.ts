@@ -18,6 +18,7 @@ import {
   REPO_PATCH_BUDGET,
   repoHistory,
   repoRefs,
+  repoSettings,
   searchAllRepos,
   searchCode,
 } from "../github";
@@ -232,7 +233,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "ci_status",
     {
-      description: `Recent CI workflow runs for a namespace's repo (name, head sha, status, conclusion, timestamps). Optional ref narrows to one branch or head sha; optional run_id returns just that run. For the most recent failed run it also returns the failing jobs and steps and, for a write-grant caller, the failing step's log, up to ${CI_LOG_BUDGET} bytes from its end, with log_region naming the region returned. With run_id, jobs: true returns every job of that run (latest attempt, at most ${CI_JOBS_MAX}) with its steps, conclusions and times, for any run, failed or not; job (a name or id) returns that one job; job with step (a name or number) also returns that step's log, cut to the step by timestamp and capped at ${CI_LOG_BUDGET} bytes from its end. Logs have secrets replaced by [REDACTED:<kind>], counted in log_redactions. A read-only caller gets a note that the log was withheld. REFUSES: a run_id that does not exist on the repo, jobs or job without run_id, step without job, jobs together with job, and a job or step name that is missing or that two entries share.`,
+      description: `Recent CI workflow runs for a namespace's repo (name, head sha, status, conclusion, timestamps). Optional ref narrows to one branch or head sha; optional run_id returns just that run. For the most recent failed run it also returns the failing jobs and steps and, for a write-grant caller, the failing step's log, up to ${CI_LOG_BUDGET} bytes from its end, with log_region naming the region returned. With run_id, jobs: true returns every job of that run (latest attempt, at most ${CI_JOBS_MAX}) with its steps, conclusions and times, for any run, failed or not; job (a name or id) returns that one job; job with step (a name or number) also returns that step's log, cut to the step by timestamp and capped at ${CI_LOG_BUDGET} bytes from its end. Logs have secrets replaced by [REDACTED:<kind>], counted in log_redactions. A read-only caller gets a note that the log was withheld.`,
       inputSchema: {
         namespace: nsName,
         repo: repoSelector.optional().describe(REPO_ARG),
@@ -295,6 +296,17 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     },
     ({ namespace, repo }) =>
       guardedRead("repo_refs", namespace, repo, () => repoRefs(env, namespace, repo)),
+  );
+
+  ctx.ops.define(
+    "repo_settings",
+    {
+      description:
+        "Visibility, merge settings, the default branch's rules and the rulesets; admin-only fields are null.",
+      inputSchema: { namespace: nsName, repo: repoSelector.optional().describe(REPO_ARG) },
+    },
+    ({ namespace, repo }) =>
+      guardedRead("repo_settings", namespace, repo, () => repoSettings(env, namespace, repo)),
   );
 
   ctx.ops.define(

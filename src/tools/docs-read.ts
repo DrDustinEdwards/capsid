@@ -26,6 +26,8 @@ import { documentEdges, readDocument, searchDocuments } from "../doc-reads";
 import { hybridSearch } from "../doc-index";
 import { DOC_STATUS_LIST, DOC_TYPE_LIST } from "../doc-meta";
 import { checklistOf } from "../handoffs";
+import { readThreads } from "../board";
+import { externalFence } from "../provenance";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 
@@ -123,7 +125,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "brief",
     {
-      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid rule documents every driver reads first, conventions and core, plus the allowlist it may read, which adds Dustin's rulings as reference records, not rules), its open task docs (non-archived and not status closed) as stubs with path, title, updated_at, last_actor and last_client (the MCP client behind it; read one with capsid_read_doc), every open handoff (a document under handoff/ whose status is not closed, written in the last 14 days; an older one counts as archived) newest first, whole while the packet fits and as stubs after, each with its checklist (the done and open counts of the task list it ends with, \`- [ ]\` and \`- [x]\` lines, and the open items), and the typed edges on core.md, each with updated_at so staleness shows. Close a handoff by setting its status to closed or moving it under archive/. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; the \`trimmed\` field says how many handoff bodies were cut. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
+      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid rule documents every driver reads first, conventions and core, plus the allowlist it may read, which adds Dustin's rulings as reference records, not rules), its open task docs (non-archived and not status closed) as stubs with path, title, updated_at, last_actor and last_client (the MCP client behind it; read one with capsid_read_doc), every open handoff (a document under handoff/ whose status is not closed, written in the last 14 days; an older one counts as archived) newest first, whole while the packet fits and as stubs after, each with its checklist (the done and open counts of the task list it ends with, \`- [ ]\` and \`- [x]\` lines, and the open items), the typed edges on core.md, each with updated_at so staleness shows, and \`working_here\`: the other threads that started a session in this namespace in the last day, with first and last seen (check capsid_inspect_repo action refs for their open pull requests before changing the same files). Close a handoff by setting its status to closed or moving it under archive/. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; the \`trimmed\` field says how many handoff bodies were cut. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
       inputSchema: {
         namespace: nsName,
         thread: z
@@ -179,6 +181,14 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
           .bind(namespace)
           .all(),
       ]);
+      // Other threads that started here in the last day, so a thread sees a sibling mid-change.
+      const workingHere = (await readThreads(db, 1, 60))
+        .filter((t) => t.namespace === namespace && t.thread !== thread)
+        .map((t) => ({
+          thread: externalFence("thread-name", namespace, t.thread, 120),
+          first_seen: t.first_seen,
+          last_seen: t.last_seen,
+        }));
       if (conventions) await recordConventionsRead(db, actor, "brief", namespace, thread);
       const openTasks = openTasksResult.results;
       const handoffs = handoffsResult.results;
@@ -280,6 +290,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
         open_tasks: tasksOut,
         open_handoffs: handoffsOut,
         core_links: { outgoing: coreOut, incoming: coreIn },
+        working_here: workingHere,
         // Portfolio rules, by path, for every namespace; a session reads these first. Rulings are dated records, not rules, so not read first.
         portfolio_documents: {
           namespace: PORTFOLIO_DOCS.namespace,

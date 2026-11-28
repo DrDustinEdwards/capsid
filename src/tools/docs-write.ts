@@ -169,7 +169,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         }>();
 
       // Optimistic concurrency: on an if_match mismatch nothing is written and the error carries
-      // the current sha. Opt-in, because append is safe by construction.
+      // the current sha.
       const commit = guardedCommit({
         db,
         namespace,
@@ -188,9 +188,11 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
             `Re-read the document and retry as an update if you still mean to change it.`,
           deletedInFlight: `conflict on ${namespace}/${path}: the document was deleted while this write was in flight. Nothing was written.`,
           bodyChanged: (currentSha, elicited) =>
-            `${if_match !== undefined ? "if_match mismatch" : "stale confirmation"} on ${namespace}/${path}: the stored body changed after this write read it${elicited && if_match === undefined ? " and while the overwrite confirmation was pending" : ""}. Nothing was written. ` +
-            `Current sha256 is ${currentSha}. ` +
-            `Re-read the document, reapply your change to the current body, and retry.`,
+            writeMode === "append"
+              ? `append conflict on ${namespace}/${path}: another write landed while this one ran. Nothing was written. An append does not depend on the body, so re-run the same call.`
+              : `${if_match !== undefined ? "if_match mismatch" : "stale confirmation"} on ${namespace}/${path}: the stored body changed after this write read it${elicited && if_match === undefined ? " and while the overwrite confirmation was pending" : ""}. Nothing was written. ` +
+                `Current sha256 is ${currentSha}. ` +
+                `Re-read the document, reapply your change to the current body, and retry.`,
           batchFailed: (reason) => `write failed, nothing was written: ${reason}`,
         },
       });
@@ -337,7 +339,9 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
             .bind(namespace, path)
             .first<{ updated_at: string }>()
         : null;
-      const committed = await commit.run(elicited, statements);
+      // An append rebuilds the whole body from the one it read, so it is guarded too: two at once
+      // must not drop one.
+      const committed = await commit.run(elicited || writeMode === "append", statements);
       if ("refusal" in committed) return fail(committed.refusal);
       // From the snapshot statement's own result: with no guard armed, a row deleted after the
       // pre-read is snapshotted by nothing.

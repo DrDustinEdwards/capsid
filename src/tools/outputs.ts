@@ -49,6 +49,7 @@ const OUTPUTS: Record<string, Shape> = {
     open_tasks: rows,
     open_handoffs: rows,
     core_links: z.looseObject({ outgoing: rows, incoming: rows }),
+    working_here: rows,
     portfolio_documents: z.looseObject({
       namespace: str,
       read_first: strs,
@@ -232,6 +233,12 @@ const OUTPUTS: Record<string, Shape> = {
     branches: rows,
     tags: rows,
     pull_requests: rows,
+  },
+  repo_settings: {
+    repo: str,
+    default_branch: str,
+    branch_rules: rows,
+    rulesets: rows,
   },
   repo_history: mergeOutputs([
     { repo: str, mode: str, commit: obj, files: obj },

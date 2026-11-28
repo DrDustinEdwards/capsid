@@ -125,6 +125,8 @@ interface Reached {
   latency_ms: number | null;
   body: string | null;
   error: string | null;
+  // The site answered with its Cloudflare Access sign-in: up, but not this URL's own answer.
+  signIn?: true;
 }
 
 async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Promise<Reached> {
@@ -144,6 +146,8 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
     const offSite = redirectedOffSite(res, url);
     if (offSite) {
       await res.body?.cancel();
+      if (new URL(res.url).hostname.endsWith(".cloudflareaccess.com"))
+        return { status: res.status, latency_ms, body: null, error: null, signIn: true };
       return { status: null, latency_ms: null, body: null, error: offSite };
     }
     if (!withBody) {
@@ -230,7 +234,7 @@ export async function probeSite(
     home ? reach(fetchImpl, site.origin + "/", false) : Promise.resolve(null),
   ]);
   const read = parseHealth(health.body);
-  if (is2xx(health.status) && read.status !== "down") {
+  if (is2xx(health.status) && !health.signIn && read.status !== "down") {
     const homeFails = early !== null && (early.status === null || early.status >= 500);
     const problems = [
       read.status === "degraded" ? (read.problem ?? "the health route reports degraded") : null,
@@ -248,6 +252,7 @@ export async function probeSite(
   const root = early ?? (await reach(fetchImpl, site.origin + "/", false));
   const why =
     health.error ??
+    (health.signIn ? "health route redirects to the sign-in" : null) ??
     `health route answered ${health.status}${read.status === "down" ? " fail" : ""}${read.problem ? ` (${read.problem})` : ""}`;
   return is2xx(root.status)
     ? {

@@ -141,6 +141,18 @@ test("a health route that redirects to another host is not that site's answer", 
   assert.match(String(p.error), /redirected off the site to https:\/\/other\.example\.net/);
 });
 
+test("a root that redirects to the Access sign-in is up, and a health route behind it is not", async () => {
+  const signIn = async (url: string) => {
+    const res = new Response("<html>sign in</html>", { status: 200 });
+    Object.defineProperty(res, "url", {
+      value: `https://team.cloudflareaccess.com/login?r=${url}`,
+    });
+    return res;
+  };
+  assert.equal((await probeSite(site({ healthPath: null }), signIn, NOW, null)).state, "liveness");
+  assert.equal((await probeSite(site({}), signIn, NOW, null)).state, "degraded");
+});
+
 test("a failing health route on a site whose root answers is degraded, not down", async () => {
   const f = fetchFor({
     "https://sample.example.com/health": 404,

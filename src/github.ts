@@ -21,6 +21,6 @@ export {
   REPO_PATCH_BUDGET,
   repoHistory,
 } from "./github/history";
-export { deleteBranch, managePr, repoRefs } from "./github/refs";
+export { deleteBranch, managePr, repoRefs, repoSettings } from "./github/refs";
 export { pruneMergedBranches, pruneVerdict } from "./github/prune";
 export { CI_JOBS_MAX, CI_LOG_BUDGET, ciStatus } from "./github/actions";

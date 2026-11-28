@@ -47,8 +47,9 @@ const handoff = (i: number, size: number, extra: Partial<DocRow> = {}): DocRow =
   ...extra,
 });
 
+// Provenance reads only; the working_here read of conventions-read rows is one fixed query.
 const auditReads = (reads: Array<{ sql: string }>) =>
-  reads.filter((r) => /FROM audit_log/i.test(r.sql)).length;
+  reads.filter((r) => /FROM audit_log/i.test(r.sql) && !/conventions-read/.test(r.sql)).length;
 
 test("a floor over budget with no tasks reports the floor, not a trim of nothing", async () => {
   const each = Math.ceil(BRIEF_BUDGET / 2) + 1000;
@@ -144,8 +145,8 @@ test("provenance costs ONE audit_log query however many documents the brief carr
   assert.equal(out.core_links?.outgoing.length, 1, "the outgoing-edge read came back empty");
   assert.equal(auditReads(reads), 1, `brief issued ${auditReads(reads)} audit_log queries`);
   assert.ok(
-    reads.length <= 8,
-    `brief issued ${reads.length} queries, more than 2 documents, the portfolio list, 4 section reads and 1 provenance`,
+    reads.length <= 9,
+    `brief issued ${reads.length} queries, more than 2 documents, the portfolio list, 4 section reads, 1 provenance and the working_here read`,
   );
   // And the answer is still right per document: the newest actor wins, and a
   // document with no audit row reads null rather than borrowing a neighbor's.
