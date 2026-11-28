@@ -25,30 +25,10 @@ import { MINUTE_MS } from "./time";
 const WATCHER_NAME = "watcher";
 export const WATCHER_ACTOR = `agent:${WATCHER_NAME}`;
 
-const WATCHER_CADENCE_KEY = "watcher:cadence-minutes";
 export const WATCHER_LAST_KEY = "watcher:last";
 
-// KV-configurable. The tick runs every five minutes, so all but one invocation in six
-// returns after a single KV read.
-export const DEFAULT_CADENCE_MINUTES = 30;
-
-// The floor. Zero or a negative number would run every check on every tick, which
-// turns a bounded cost into an unbounded one, so an unusable value falls back rather
-// than being obeyed.
-const MIN_CADENCE_MINUTES = 5;
-
-export async function cadenceMinutes(env: Env): Promise<number> {
-  try {
-    const raw = await env.APP_KV.get(WATCHER_CADENCE_KEY);
-    if (raw === null) return DEFAULT_CADENCE_MINUTES;
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed) || parsed < MIN_CADENCE_MINUTES) return DEFAULT_CADENCE_MINUTES;
-    return Math.floor(parsed);
-  } catch {
-    // An unreadable store means the default.
-    return DEFAULT_CADENCE_MINUTES;
-  }
-}
+// The tick runs every five minutes, so all but one invocation in six returns after one KV read.
+export const WATCHER_CADENCE_MINUTES = 30;
 
 export type DueVerdict = { due: true; reason: string } | { due: false; reason: string };
 
@@ -125,11 +105,10 @@ export async function watcherTick(
   gather: () => Promise<Gathered>,
   opts: { force?: boolean } = {},
 ): Promise<WatcherReport> {
-  const minutes = await cadenceMinutes(env);
   const last = await env.APP_KV.get(WATCHER_LAST_KEY).catch(() => null);
   const due: DueVerdict = opts.force
     ? { due: true, reason: "an on-demand pass." }
-    : passDue(last, minutes, now);
+    : passDue(last, WATCHER_CADENCE_MINUTES, now);
   if (!due.due) return { ran: false, note: due.reason, recorded: [], cleared: [] };
 
   const started = Date.now();
@@ -147,7 +126,7 @@ export async function watcherTick(
     buildSnapshot(await readSnapshot(env), {
       now,
       pass_ms: Date.now() - started,
-      cadence_min: minutes,
+      cadence_min: WATCHER_CADENCE_MINUTES,
       checks: checkStates(gathered),
       health: o.health,
       offaccount: o.offaccount,

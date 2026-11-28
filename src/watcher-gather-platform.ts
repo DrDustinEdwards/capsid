@@ -1,6 +1,8 @@
 import { mapLimit } from "./map-limit";
 import { DEPLOY_ROSTER, readDeployOutcomes, deployFindings } from "./deploy-outcomes";
-import { defaultBranchSha, ciStatus, listRepoTree } from "./github";
+import { defaultBranchSha } from "./github/client";
+import { ciStatus } from "./github/actions";
+import { listRepoTree } from "./github/contents";
 import { healthReport } from "./health";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES } from "./offaccount";

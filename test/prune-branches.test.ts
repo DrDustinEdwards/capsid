@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { pruneMergedBranches, pruneVerdict } from "../src/github.ts";
+import { pruneMergedBranches, pruneVerdict } from "../src/github/prune.ts";
 import { deletePruneCandidates, readPrunePlan } from "../src/github/prune.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 

@@ -63,10 +63,8 @@ test("PLANT: an oversize rule document is a problem, and one byte under its cap 
 
 test("PLANT: each stale tool reference is found, and served names are not", () => {
   const stale = [
-    "Use the `register_namespace` tool to add one.", // an old tool in a span
-    "Call `jobs.post` with the body.", // an old tool.action
-    "1. `lint(namespace)` returns the packet.", // an old call
-    "a merge stays with manage_pr behind can_merge", // an old name outside backticks
+    "Call `capsid_work_jobs.post` with the body.", // a removed tool, dotted
+    "1. `capsid_open_pr(namespace)` opens one.", // a removed tool, called
     "ask `capsid_jobs` for the queue", // a capsid_ name the Worker does not serve
     "`capsid_write_doc` action `approve`", // a served tool with an action it does not take
     "`capsid_read_repo.read_file`", // the same, dotted
@@ -76,19 +74,13 @@ test("PLANT: each stale tool reference is found, and served names are not", () =
     "Use `capsid_admin_manage_namespaces` action `register`.",
     "Call `capsid_write_doc` action `write`, then `capsid_find_docs`.",
     "`capsid_inspect_repo` (actions `refs` and `history`)",
-    "the `write` grant, the `jobs` table, `jobs.claimed_by`",
+    "the `write` grant, the `jobs` table, `jobs.claimed_by`, manage_pr",
     "`capsid_close_pr` action `delete_branch`",
     "the capsid-driver agent and capsid/decisions.md",
-    "```sql\nSELECT jobs.status FROM jobs;\nregister_namespace(x)\n```",
-    "Each write(s) is snapshotted, and list(s) are bounded.",
+    "```sql\nSELECT jobs.status FROM jobs;\ncapsid_jobs(x)\n```",
     "The health route reports `capsid_sha`; the Portal sets capsid_portal_csrf.",
   ];
   for (const text of clean) assert.deepEqual(staleToolNames(text), [], `false positive: ${text}`);
-  assert.equal(
-    staleToolNames("then manage_pr(...) it, and manage_pr again").length,
-    2,
-    "a call and a bare name are two references, not three",
-  );
   for (const tool of Object.keys(TOOL_GRANTS)) {
     assert.deepEqual(staleToolNames(`call \`${tool}\``), [], tool);
     assert.equal(staleToolNames(`call \`${tool}x\``).length, 1, `${tool}x read as served`);
@@ -112,25 +104,30 @@ test("a write may cut an over-cap document or leave an old stale name, never mak
     null,
     "a cut that is still over the cap",
   );
-  const old = "a merge stays with manage_pr.\n";
+  const old = "a merge stays with the `capsid_open_pr` tool.\n";
   assert.equal(
     ruleDocWriteRefusal("capsid", "conventions-sample.md", old, `${old}A new line.\n`),
     null,
     "an append beside an old stale name",
   );
   assert.match(
-    ruleDocWriteRefusal("capsid", "conventions-sample.md", old, `${old}Call \`jobs.post\`.\n`) ??
+    ruleDocWriteRefusal("capsid", "conventions-sample.md", old, `${old}Call \`capsid_jobs\`.\n`) ??
       "",
     /does not serve/,
     "a second stale name",
   );
   assert.equal(
-    ruleDocWriteRefusal("capsid", "research/notes.md", null, `${big} manage_pr`),
+    ruleDocWriteRefusal("capsid", "research/notes.md", null, `${big} \`capsid_jobs\``),
     null,
     "a record",
   );
   assert.equal(
-    ruleDocWriteRefusal("sample", "core.md", "Call `jobs` here. one", "Call `jobs` here. two"),
+    ruleDocWriteRefusal(
+      "sample",
+      "core.md",
+      "Call `capsid_jobs` here. one",
+      "Call `capsid_jobs` here. two",
+    ),
     null,
     "an edit elsewhere on a line that already held a stale name",
   );
@@ -150,9 +147,9 @@ test("the truth report names both checks, judged over the rule documents only", 
     now: new Date("2026-10-11T00:00:00Z"),
     docs: [
       doc("decisions.md", "x".repeat(RULE_DOC_CAP_BYTES + 1)),
-      doc("conventions-sample.md", "Use `register_namespace`."),
+      doc("conventions-sample.md", "Use `capsid_jobs`."),
       doc("conventions.md", "fine"),
-      doc("research/r.md", "manage_pr"),
+      doc("research/r.md", "call `capsid_jobs`"),
     ],
     edges: [],
     danglingEdges: [],
@@ -206,7 +203,7 @@ test("PLANT: capsid_write_doc refuses a stale tool name in a rule document and w
       namespace: "capsid",
       path: "conventions-sample.md",
       mode: "append",
-      body: "\nUse the `register_namespace` tool.",
+      body: "\nUse the `capsid_jobs` tool.",
     });
     assert.equal(out.isError, true, "a stale tool name reached a rule document");
     assert.match(out.content[0].text, /rule document .*does not serve/);
@@ -270,14 +267,14 @@ test("a move of a rule document to the archive, and a restore that recreates one
         namespace: "capsid",
         path: "decisions.md",
         title: "Log",
-        body: `${big}\nmanage_pr`,
+        body: `${big}\ncall \`capsid_jobs\``,
         type: "decision",
       },
       {
         namespace: "capsid",
         path: "research/big.md",
         title: "Old design",
-        body: "a merge stays with manage_pr",
+        body: "a merge stays with the `capsid_open_pr` tool",
         type: "spec",
       },
     ],

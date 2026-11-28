@@ -92,14 +92,7 @@ async function changeWithAudit(
       `INSERT INTO audit_log (actor, action, namespace, path, params, client)
        SELECT ?1, ?2, 'agents', ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM agents WHERE id = ?6 AND ${guard})`,
     )
-    .bind(
-      actor,
-      action,
-      row.name,
-      JSON.stringify(params),
-      clientOf(actor, params, undefined),
-      row.id,
-    );
+    .bind(actor, action, row.name, JSON.stringify(params), clientOf(actor, undefined), row.id);
   const update = db
     .prepare(`UPDATE agents SET ${set} WHERE id = ?1 AND ${guard} RETURNING id`)
     .bind(...(extra === undefined ? [row.id] : [row.id, extra]));

@@ -19,7 +19,7 @@ function counts(feed: OpsFeed) {
   return {
     down: sites.filter((s) => s.state === "down").length,
     degraded: sites.filter((s) => s.state === "degraded").length,
-    findings: incidents(feed).filter((x) => x.open).length,
+    findings: incidents(feed).length,
     ciRed: (feed.snapshot?.ci ?? []).filter((c) => ciState(c).red).length,
   };
 }

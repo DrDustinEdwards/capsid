@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import type { FetchLike } from "./live-checks";
+import type { FetchLike } from "./http";
 import { CF_API, CF_GRAPHQL, cfGetAll, cloudflareCredentials } from "./ops-cloudflare";
 import {
   AI_SEARCH_BOTS,
@@ -10,6 +10,7 @@ import {
 import { reportSite } from "./site-reports";
 import type { ServerErrors } from "./ops-types/sites";
 import { callSignal } from "./call-signal";
+import { DAY_MS, HOUR_MS } from "./time";
 
 // What Cloudflare saw at a namespace's site, served as capsid_inspect_repo action traffic (the SEO
 // plan). not_found: the paths that answered 404 over a window, a scanner's probe marked and listed
@@ -17,7 +18,6 @@ import { callSignal } from "./call-signal";
 
 const SQL_API = `${CF_API}/analytics/sql`;
 const TIMEOUT_MS = 15_000;
-const DAY_MS = 86_400_000;
 
 export const TRAFFIC_REPORTS = ["not_found", "server_errors", "web_vitals", "ai_crawlers"] as const;
 export const MAX_TRAFFIC_DAYS = 30;
@@ -370,8 +370,6 @@ export async function siteTraffic(
     ...notFoundRows(rows, limit),
   };
 }
-
-const HOUR_MS = 3_600_000;
 
 // How many path and status pairs a finding names.
 const TOP_5XX = 5;

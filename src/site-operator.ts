@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import type { FetchLike } from "./http";
 import type { SiteOperator } from "./ops-types/sites";
 import { MINUTE_MS } from "./time";
 import { callSignal } from "./call-signal";
@@ -160,8 +161,6 @@ export function tokenSet(env: Env, operator: SiteOperator): boolean {
   const value = (env as unknown as Record<string, unknown>)[operator.auth_var];
   return typeof value === "string" && value.length > 0;
 }
-
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 // What one call to the operator API came to. `converged` is the tool's own read-back verdict where
 // it gives one; a 200 without it proves nothing and says so.

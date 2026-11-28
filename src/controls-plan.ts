@@ -15,7 +15,7 @@ import { deleteRefusals, planFingerprint, readDeletePlan, summarize } from "./na
 import { type Plan, refused } from "./controls-plan-base";
 import { planSiteAction } from "./controls-plan-sites";
 import type { Env } from "./env";
-import { resolveRepo } from "./github";
+import { resolveRepo } from "./github/client";
 import type { PortalAction } from "./ops-types/portal";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
@@ -121,7 +121,7 @@ export async function planAction(
         ok: true,
         changes: [
           `${full}#${p.number}: open -> closed, not merged. GitHub refuses it at perform if it is already closed or merged, and nothing is written then.`,
-          "Its head branch is deleted as capsid_close_pr action close deletes it: never the default branch, a loop branch or a fork's.",
+          "Its head branch is deleted as capsid_close_pr action close deletes it: never the default branch or a fork's.",
         ],
         audit: [`pr-closed by ${actor}`, click],
       };

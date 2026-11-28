@@ -188,17 +188,17 @@ describe("capsid_admin_manage_namespaces delete_preview refusals", () => {
     expect(withCascade.token).toBeTruthy();
   });
 
-  it("PLANT: a policy document refuses it without allow_improve_paths", async () => {
+  it("PLANT: a policy document refuses it without allow_policy_paths", async () => {
     const ns = fresh();
     await register(ns);
     await doc(ns, "policy/gates.md", "lorem ipsum");
     const p = await preview(ns, { cascade: true });
     expect(p.verdict).toBe("refused");
-    expect(p.refusals.join(" ")).toMatch(/allow_improve_paths/);
+    expect(p.refusals.join(" ")).toMatch(/allow_policy_paths/);
     expect(p.policy_paths).toEqual(["policy/gates.md"]);
     const allowed = await preview(ns, {
       cascade: true,
-      allow_improve_paths: true,
+      allow_policy_paths: true,
     });
     expect(allowed.verdict, allowed.refusals.join(" ")).toBe("allowed");
   });
@@ -207,7 +207,7 @@ describe("capsid_admin_manage_namespaces delete_preview refusals", () => {
     await register("germomics");
     const p = await preview("germomics", {
       cascade: true,
-      allow_improve_paths: true,
+      allow_policy_paths: true,
     });
     expect(p.verdict).toBe("refused");
     expect(p.refusals.join(" ")).toMatch(/roster/);
@@ -342,7 +342,7 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
       {
         namespace: ns,
         cascade: false,
-        allow_improve_paths: false,
+        allow_policy_paths: false,
         actor: ACTOR,
         plan: planFingerprint(plan),
       },
@@ -365,7 +365,7 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
     const token = await forge(workerEnv(), {
       namespace: ns,
       cascade: false,
-      allow_improve_paths: false,
+      allow_policy_paths: false,
       actor: "access:someone-else@example.com",
       plan: planFingerprint(plan),
     });
@@ -387,7 +387,7 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
       {
         namespace: ns,
         cascade: false,
-        allow_improve_paths: false,
+        allow_policy_paths: false,
         actor: ACTOR,
         plan: planFingerprint(plan),
       },
@@ -640,7 +640,7 @@ describe("capsid_admin_manage_namespaces delete batch cap", () => {
     const token = await forge(workerEnv(), {
       namespace: ns,
       cascade: true,
-      allow_improve_paths: false,
+      allow_policy_paths: false,
       actor: ACTOR,
       plan: planFingerprint(plan),
     });

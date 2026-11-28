@@ -1,27 +1,23 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { toolSurfaceOf } from "./surface";
 import { z } from "zod";
+import { CI_JOBS_MAX, CI_LOG_BUDGET, ciStatus } from "../github/actions";
 import {
-  CI_JOBS_MAX,
-  CI_LOG_BUDGET,
-  ciStatus,
-  deleteBranch,
   listRepoTree,
-  managePr,
-  pruneMergedBranches,
   readRepoFile,
   readRepoFiles,
   REPO_BATCH_MAX_FILES,
   REPO_FILE_BUDGET,
+} from "../github/contents";
+import {
   REPO_HISTORY_DEFAULT_LIMIT,
   REPO_HISTORY_MAX_LIMIT,
   REPO_PATCH_BUDGET,
   repoHistory,
-  repoRefs,
-  repoSettings,
-  searchAllRepos,
-  searchCode,
-} from "../github";
+} from "../github/history";
+import { pruneMergedBranches } from "../github/prune";
+import { deleteBranch, HeadMovedError, managePr, repoRefs, repoSettings } from "../github/refs";
+import { searchAllRepos, searchCode } from "../github/search";
 import {
   bounded,
   DEFAULT_SCAN_FILES,
@@ -38,8 +34,6 @@ import {
 import { fail, type ToolCtx } from "./docs";
 import { tagRelease } from "../github/releases";
 import { repoGuards } from "./repo-guards";
-
-import { HeadMovedError } from "../github/refs";
 
 // Thrown rather than returned, because guardedWrite reports a value returned from its callback as
 // success.

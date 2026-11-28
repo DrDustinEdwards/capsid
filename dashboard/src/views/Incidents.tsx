@@ -22,7 +22,7 @@ export function Incidents() {
     <div className="cap-stack">
       <NsChips list={all.map((x) => x.ns)} />
       <div className="cap-panes" data-even data-gap="5">
-        <Panel flush title="Findings" count={all.filter((x) => x.open).length}>
+        <Panel flush title="Findings" count={all.length}>
           {emptied ? (
             <FilterEmpty onShowAll={() => setNs("all")}>
               No finding in the project {ns}.

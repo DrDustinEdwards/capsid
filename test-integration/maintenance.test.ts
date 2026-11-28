@@ -13,7 +13,6 @@ import {
   PRUNE_SWITCH_KEY,
   type BranchReaders,
 } from "../src/maintenance-branches";
-import type { DeployReaders } from "../src/maintenance-deploys";
 import worker from "../src/index";
 import type { Env } from "../src/env";
 import type { PortalMaintenance } from "../src/ops-types/views";
@@ -48,13 +47,6 @@ const NO_BRANCHES: BranchReaders = {
   prune: async () => ({ deleted: [], skipped: [], remaining: 0 }),
 };
 
-// The undeployed-merge rule reads the watcher snapshot (test/maintenance.test.ts); here there are no sites, so it is quiet.
-const NO_DEPLOYS: DeployReaders = {
-  snapshot: async () => ({ sites: [] }) as never,
-  defaultHead: async () => {
-    throw new Error("not called");
-  },
-};
 // The model drift check has its own tests (test/model-drift.test.ts); here it reads nothing.
 const NO_DRIFT = async () => ({ items: [], read: 0 });
 // One drift item, so a stored list holds something to read back.
@@ -130,7 +122,7 @@ describe("rule documents", () => {
   it("PLANT: lists an over-cap rule document and one naming a stale tool, and leaves records and clean ones alone", async () => {
     const planted: Array<[string, string, string]> = [
       ["sample", "decisions.md", "x".repeat(RULE_DOC_CAP_BYTES + 1)],
-      ["capsid", "conventions-sample.md", "Use the `register_namespace` tool."],
+      ["capsid", "conventions-sample.md", "Use the `capsid_jobs` tool."],
       ["sample", "core.md", "Ask `capsid_find_docs` action `namespaces`."],
       ["capsid", "research/old-design.md", "manage_pr ".repeat(3000)],
       ["sample", "archive/decisions-old.md", "x".repeat(RULE_DOC_CAP_BYTES + 1)],
@@ -149,7 +141,7 @@ describe("rule documents", () => {
         ["rule-doc", "capsid", "capsid/conventions-sample.md"],
         ["rule-doc", "sample", "sample/decisions.md"],
       ]);
-      expect(mine[0].line).toContain("register_namespace");
+      expect(mine[0].line).toContain("capsid_jobs");
       expect(mine[1].line).toContain("over its 20480-byte cap");
       // Three rule documents were read; the research note and the archived volume are records.
       expect(out.read).toBeGreaterThanOrEqual(3);
@@ -169,20 +161,12 @@ describe("maintenanceTick", () => {
       new Date("2026-10-08T09:00:00.000Z"),
       NO_PRS,
       NO_BRANCHES,
-      NO_DEPLOYS,
       NO_DRIFT,
     );
     expect(early.ran).toBe(false);
     expect(await readMaintenance(env as never)).toBeNull();
 
-    const first = await maintenanceTick(
-      env as never,
-      NOW,
-      NO_PRS,
-      NO_BRANCHES,
-      NO_DEPLOYS,
-      ONE_DRIFT,
-    );
+    const first = await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, ONE_DRIFT);
     expect(first.ran).toBe(true);
     expect((await readMaintenance(env as never))?.items.map((i) => i.rule)).toEqual([
       "model-drift",
@@ -200,7 +184,6 @@ describe("maintenanceTick", () => {
       new Date("2026-10-08T15:00:00.000Z"),
       NO_PRS,
       NO_BRANCHES,
-      NO_DEPLOYS,
       NO_DRIFT,
     );
     expect(second.ran).toBe(false);
@@ -209,7 +192,6 @@ describe("maintenanceTick", () => {
       new Date("2026-10-09T12:00:00.000Z"),
       NO_PRS,
       NO_BRANCHES,
-      NO_DEPLOYS,
       NO_DRIFT,
     );
     expect(nextDay.ran).toBe(true);
@@ -222,17 +204,10 @@ describe("maintenanceTick", () => {
       throw new Error("GitHub answered 502");
     };
     const at = (minutes: number) => new Date(NOW.getTime() + minutes * 60_000);
-    await expect(
-      maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, failing),
-    ).rejects.toThrow(/502/);
-    const soon = await maintenanceTick(
-      env as never,
-      at(5),
-      NO_PRS,
-      NO_BRANCHES,
-      NO_DEPLOYS,
-      failing,
+    await expect(maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, failing)).rejects.toThrow(
+      /502/,
     );
+    const soon = await maintenanceTick(env as never, at(5), NO_PRS, NO_BRANCHES, failing);
     expect(soon.ran).toBe(false);
     expect(runs).toBe(1);
   });
@@ -250,14 +225,7 @@ describe("maintenanceTick", () => {
       },
     };
     try {
-      const ran = await maintenanceTick(
-        env as never,
-        NOW,
-        NO_PRS,
-        ONE_MERGED,
-        NO_DEPLOYS,
-        NO_DRIFT,
-      );
+      const ran = await maintenanceTick(env as never, NOW, NO_PRS, ONE_MERGED, NO_DRIFT);
       expect(ran.ran && ran.note).toContain("1 pruned");
       const rows = await env.DB.prepare(
         "SELECT actor, namespace, params FROM audit_log WHERE action = ?1",
@@ -319,13 +287,13 @@ describe("GET /portal/api/maintenance, through the Worker", () => {
     expect(before.body.generated).toBeNull();
     expect(before.body.items).toEqual([]);
 
-    expect(
-      (await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, ONE_DRIFT)).ran,
-    ).toBe(true);
+    expect((await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, ONE_DRIFT)).ran).toBe(
+      true,
+    );
     const after = await read();
     expect(after.cache).toBe("private, no-store");
     expect(after.body.generated).toBe(NOW.toISOString());
     expect(after.body.items.map((i) => i.rule)).toEqual(["model-drift"]);
-    expect(after.body.read).toEqual({ prs: 0, branches: 7, repos: 7, roster: 7, deploys: 0 });
+    expect(after.body.read).toEqual({ prs: 0, branches: 7, repos: 7, roster: 7 });
   });
 });

@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import type { FetchLike } from "./http";
 import type { OpsSite } from "./ops-sites";
 import type { CfDeploy, HourBucket, SiteCloudflare } from "./ops-types/sites";
 import type { WebAnalyticsSite } from "./ops-types/views";
@@ -15,8 +16,6 @@ const ERROR_HOURS = 24;
 // Script names are inlined into the GraphQL query as a list literal, so only a name
 // that cannot break out of a string literal is sent.
 const SCRIPT_NAME = /^[A-Za-z0-9_-]{1,63}$/;
-
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export type CfCredentials =
   | { ok: true; token: string; account: string }

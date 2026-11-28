@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { FetchLike } from "../src/http.ts";
 import { test } from "node:test";
 import { STANDARD_SECURITY_HEADERS } from "@dustinedwards/site-runtime/headers";
 import {
@@ -6,7 +7,6 @@ import {
   liveChecks,
   parseLiveConfig,
   readPage,
-  type FetchLike,
   type LiveRule,
 } from "../src/live-checks.ts";
 import {

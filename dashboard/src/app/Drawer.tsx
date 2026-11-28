@@ -1,13 +1,5 @@
 import { Alert } from "capsomer/react/banner";
-import {
-  Fragment,
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
-  type ReactNode,
-} from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { Dialog } from "capsomer/react/dialog";
 import { Missing as NoValue } from "capsomer/react/empty";
 import { Spinner } from "capsomer/react/skeleton";
@@ -328,7 +320,6 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
 
 // Native showModal, so the page behind is inert and Tab stays inside (audit DECIDE 9).
 export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => void }) {
-  const { open } = useApp();
   const [shown, setShown] = useState<Ref | null>(route);
   if (route && (shown?.type !== route.type || shown.id !== route.id)) setShown(route);
   const routed = useRef(route != null);
@@ -342,13 +333,6 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
   } else if (ref?.type === "audit") {
     body = <AuditBody key={ref.id} id={ref.id} onClose={onClose} />;
   }
-  const openRow = (e: ReactMouseEvent | ReactKeyboardEvent): boolean => {
-    const t = e.target as Element;
-    const el = t.closest<HTMLElement>("[data-open]");
-    if (!el?.dataset.open || t.closest("a,button")) return false;
-    open(el.dataset.open);
-    return true;
-  };
   return (
     <Dialog
       open={route != null}
@@ -359,13 +343,6 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
       closeButton={false}
       className="drawer cap-detail"
       aria-labelledby="drawerTitle"
-      onClick={(e) => {
-        openRow(e);
-      }}
-      onKeyDown={(e) => {
-        // Enter on a focused row: cancel its default so the new panel's Close button is not activated by the same key.
-        if (e.key === "Enter" && openRow(e)) e.preventDefault();
-      }}
     >
       {body}
     </Dialog>

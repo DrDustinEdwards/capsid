@@ -1,8 +1,9 @@
 import { bingWebmaster } from "./bing-webmaster";
+import type { FetchLike } from "./http";
 import type { Env } from "./env";
 import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 import { namespaceNameRefusal } from "./namespace-admin";
-import { cloudflareCredentials, type FetchLike } from "./ops-cloudflare";
+import { cloudflareCredentials } from "./ops-cloudflare";
 import { readSiteRow, sitesFrom } from "./ops-sites";
 import type {
   BingSearchData,

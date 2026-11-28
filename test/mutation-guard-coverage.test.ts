@@ -129,7 +129,7 @@ test("PLANT: without the opt-in, every mutation entry point refuses a policy doc
 test("PLANT: with the opt-in and without can_touch_protected, every tool that takes the opt-in refuses", async () => {
   // The opt-in is the caller's to pass, so it is not a permission; the flag is.
   for (const [op, plant] of Object.entries(PLANTS).filter(([op]) => op !== "lint")) {
-    const { tool, args } = servedCall(op, { ...plant, allow_improve_paths: true });
+    const { tool, args } = servedCall(op, { ...plant, allow_policy_paths: true });
     const { result, recorded } = await callAs(driver([]), tool, args);
     assert.equal(result.isError, true, `${tool} honored the opt-in without the flag`);
     assert.match(
@@ -143,7 +143,7 @@ test("PLANT: with the opt-in and without can_touch_protected, every tool that ta
 
 test("THE INNOCENT DIRECTION: with the opt-in and the flag, every tool that takes the opt-in lands", async () => {
   for (const [op, plant] of Object.entries(PLANTS).filter(([op]) => op !== "lint")) {
-    const { tool, args } = servedCall(op, { ...plant, allow_improve_paths: true });
+    const { tool, args } = servedCall(op, { ...plant, allow_policy_paths: true });
     const { result, recorded } = await callAs(driver(["can_touch_protected"]), tool, args);
     assert.notEqual(
       result.isError,

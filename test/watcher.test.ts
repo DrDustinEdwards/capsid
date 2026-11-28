@@ -11,7 +11,7 @@ import {
   type EvidenceEntry,
   type FindingRow,
 } from "../src/watcher-findings.ts";
-import { DEFAULT_CADENCE_MINUTES, cadenceMinutes, passDue } from "../src/watcher.ts";
+import { passDue } from "../src/watcher.ts";
 import { runPass } from "../src/watcher-pass.ts";
 import { readHealth } from "../src/site-watch.ts";
 import { MAX_HEALTH_BYTES } from "../src/ops-snapshot.ts";
@@ -379,7 +379,6 @@ test("a sighting's verdict, for every state a row can be in", () => {
     [
       ["no row", "record", onSighting(null, NOW)],
       ["open", "record", onSighting(row(), NOW)],
-      ["dismissed", "quiet", onSighting(row({ state: "dismissed" }), NOW)],
       [
         "cleared, inside the quiet period",
         "quiet",
@@ -455,15 +454,6 @@ test("A CLEARED FINDING IS NOT RECORDED AGAIN until it has stayed quiet", async 
   assert.equal(mem.rows.get(fp)?.reopen_after, null);
 });
 
-test("a dismissed finding stays dismissed while it is seen", async () => {
-  const fp = "ci-red-sample";
-  const mem = fakeFindingMemory([findingRow(fp, { state: "dismissed" })]);
-  const result = await pass([fakeFinding(fp)], mem, NOW);
-  assert.deepEqual([result.recorded, result.held], [[], [fp]]);
-  assert.equal(mem.rows.get(fp)?.state, "dismissed");
-  assert.equal(mem.rows.get(fp)?.seen_count, 4, "the sighting is counted");
-});
-
 test("a cleared row is not cleared again each pass, so its quiet period does not slide forever", async () => {
   const fp = "backup-stale";
   const mem = fakeFindingMemory([
@@ -475,44 +465,18 @@ test("a cleared row is not cleared again each pass, so its quiet period does not
 });
 
 test("a finding whose check did not run is not cleared", async () => {
-  const mem = fakeFindingMemory([
-    findingRow("ci-red-sample", { state: "dismissed" }),
-    findingRow("backup-stale"),
-  ]);
+  const mem = fakeFindingMemory([findingRow("ci-red-sample"), findingRow("backup-stale")]);
   await pass([], mem, NOW, new Set(WATCHER_CHECKS.filter((c) => c !== "ci")));
   assert.equal(
     mem.rows.get("ci-red-sample")?.state,
-    "dismissed",
-    "a failed CI read cleared a dismissed incident",
+    "open",
+    "a failed CI read cleared an open incident",
   );
   assert.equal(mem.rows.get("backup-stale")?.state, "cleared");
 });
 
 // The pieces the pass is built from, exported because they carry rules worth
 // guarding; this file is their caller for the dead-export check.
-
-test("an unset, unusable or unreadable cadence falls back to the default", async () => {
-  const env = (get: () => Promise<string | null>) => ({ APP_KV: { get } }) as never;
-  assert.equal(await cadenceMinutes(env(async () => null)), DEFAULT_CADENCE_MINUTES);
-  assert.equal(await cadenceMinutes(env(async () => "0")), DEFAULT_CADENCE_MINUTES);
-  assert.equal(await cadenceMinutes(env(async () => "not a number")), DEFAULT_CADENCE_MINUTES);
-  assert.equal(
-    await cadenceMinutes(
-      env(async () => {
-        throw new Error("KV is down");
-      }),
-    ),
-    DEFAULT_CADENCE_MINUTES,
-    "an unreadable store must fall back to the safe value, not to whatever was last in memory",
-  );
-  // And a usable value IS obeyed, so the fallback is a floor rather than a ceiling.
-  assert.equal(await cadenceMinutes(env(async () => "120")), 120);
-  assert.equal(
-    await cadenceMinutes(env(async () => "7.9")),
-    7,
-    "a fractional cadence floors rather than being refused",
-  );
-});
 
 test("newestMigration takes the last by name, and ignores what is not a migration", () => {
   assert.equal(

@@ -85,8 +85,8 @@ const CANON_TYPES: ReadonlySet<string> = new Set([
   "procedural",
   "reference",
 ]);
-// Dated records say what was true when written (src/rule-docs.ts); an old path there is history.
-const DATED_PREFIXES = ["archive/", "research/", "reports/", "audits/", "jobs/"];
+// Dated records say what was true when written; an old path there is history.
+const DATED_PREFIXES = ["archive/", "research/", "reports/", "audits/"];
 const RETIRED_STATUSES: ReadonlySet<string> = new Set(["superseded", "closed"]);
 
 export interface CanonDoc {

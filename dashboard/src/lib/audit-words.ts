@@ -9,9 +9,6 @@ const WORDS: Record<string, string> = {
   "ops-package-added": "Added a package",
   "ops-package-edited": "Changed a package",
   "ops-package-removed": "Removed a package",
-  "canon-proposed": "Proposed a rule change",
-  "canon-rejected": "Rejected a rule change",
-  "lint.finalize": "Finished a lint pass",
   "site-repair": "Ran a site repair",
 };
 

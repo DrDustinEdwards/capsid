@@ -1,8 +1,9 @@
 import { checkSecurityHeaders, failures } from "@dustinedwards/site-runtime/check";
+import type { FetchLike } from "./http";
 import { siteForOrigin } from "@dustinedwards/site-runtime/sites";
 import type { Env } from "./env";
 import { healthReport } from "./health";
-import { readPage, type FetchLike } from "./live-checks";
+import { readPage } from "./live-checks";
 import { probeSite } from "./ops-snapshot";
 import { readSiteRow, sitesFrom } from "./ops-sites";
 import { callSignal } from "./call-signal";

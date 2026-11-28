@@ -79,16 +79,6 @@ const row = (over: Partial<FindingRow>): FindingRow => ({
   ...over,
 });
 
-test("A DISMISSED DIGEST OR ATTENTION ROW STAYS DISMISSED", async () => {
-  const memory = fakeFindingMemory([
-    row({ state: "dismissed" }),
-    row({ fingerprint: "anomaly-rate-x", state: "dismissed" }),
-  ]);
-  await pass([fake("live-headers-sample-home"), fake("anomaly-rate-x")], memory).result;
-  assert.equal(memory.rows.get("live-headers-sample-home")!.state, "dismissed");
-  assert.equal(memory.rows.get("anomaly-rate-x")!.state, "dismissed");
-});
-
 test("A CLEARED DIGEST ROW STAYS CLEARED INSIDE THE QUIET PERIOD and reopens outside it", async () => {
   const inside = row({
     state: "cleared",

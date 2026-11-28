@@ -16,8 +16,6 @@ import {
 import { ghFetch } from "./github/client";
 import { bearerToken } from "@dustinedwards/site-runtime/agent-keys";
 import { textResponse } from "@dustinedwards/site-runtime/http";
-import { pathClassOf, type PathClass } from "./merge-class";
-import { worthReviewer, type ChangedFile } from "./model-routing";
 import { auditStatement } from "./store-guards";
 
 const ISSUER = "https://token.actions.githubusercontent.com";
@@ -76,36 +74,47 @@ export type ReviewResult =
   | { status: "skipped"; reasons: string[]; head_sha: string }
   | { status: "error"; error: string; head_sha: string };
 
-// Path classes nothing in the diff can go wrong in quietly: prose and pictures, tests alone,
-// lockfiles and manifests (routine bumps), and the Portal's stylesheets. A pull request made
-// only of these is skipped to save the cost; anything else, code or config, is reviewed.
-const SKIPPED_CLASSES: ReadonlySet<PathClass> = new Set([
-  "docs",
-  "tests",
-  "deps-other",
-  "dashboard-css",
-]);
+// Never skipped: money by name (broad on purpose), migrations, CI, scripts, workers, deploy and
+// install configuration and secrets files, even when the file is prose or a test.
+const MONEY_PATH =
+  /(^|\/)(billing|payments?|checkout|invoices?|pricing|subscriptions?|stripe|payouts?|refunds?)(\/|[-_.]|$)/i;
+const ALWAYS_REVIEWED =
+  /(^|\/)(migrations|scripts|workers|\.github|\.husky|\.aislop)\/|(^|\/)(wrangler\.(jsonc?|toml)(\.example)?|tsconfig[^/]*\.json|vitest\.config\.[cm]?[jt]s|\.npmrc|\.gitmodules|Dockerfile[^/]*|Makefile)$|(^|\/)(\.dev\.vars|\.env($|\.))/i;
+const LOCKFILE =
+  /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$/i;
+const TEST_FILE =
+  /(^|\/)(test|tests|test-integration|e2e|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/i;
+const DOC_FILE = /\.(md|mdx|txt|png|jpe?g|gif|svg|webp)$/i;
 
-/** Whether a pull request's files are worth a review, and why. */
+/** Whether a changed path cannot go wrong quietly: prose, pictures, tests, a lockfile or manifest, a Portal stylesheet. */
+export function skippable(path: string): boolean {
+  if (MONEY_PATH.test(path) || ALWAYS_REVIEWED.test(path)) return false;
+  return (
+    LOCKFILE.test(path) ||
+    /(^|\/)package\.json$/i.test(path) ||
+    TEST_FILE.test(path) ||
+    /^dashboard\/.*\.css$/i.test(path) ||
+    /^docs\//i.test(path) ||
+    DOC_FILE.test(path)
+  );
+}
+
+interface ChangedFile {
+  filename: string;
+  previous_filename?: string;
+  status?: string;
+  patch?: string;
+}
+
+/** Whether a pull request's files are worth a review, and why. A rename is judged under both names. */
 export function reviewScope(files: readonly ChangedFile[]): { review: boolean; reasons: string[] } {
   if (files.length === 0) return { review: false, reasons: ["no changed files were read"] };
-  const paths = files.flatMap((f) =>
-    f.previous_filename ? [f.previous_filename, f.filename] : [f.filename],
-  );
-  const reviewed = paths.filter((p) => !SKIPPED_CLASSES.has(pathClassOf(p)));
-  if (reviewed.length === 0)
-    return {
-      review: false,
-      reasons: ["only documents, images, tests, lockfiles or manifests changed"],
-    };
-  const worth = worthReviewer(files);
-  return {
-    review: true,
-    reasons:
-      worth.level === "worth"
-        ? worth.reasons
-        : [`${reviewed.length} changed file(s) hold code or configuration`],
-  };
+  const reviewed = files
+    .flatMap((f) => (f.previous_filename ? [f.previous_filename, f.filename] : [f.filename]))
+    .filter((p) => !skippable(p));
+  return reviewed.length === 0
+    ? { review: false, reasons: ["only documents, images, tests, lockfiles or manifests changed"] }
+    : { review: true, reasons: [`${reviewed.length} changed file(s) hold code or configuration`] };
 }
 
 export interface ReviewCaller {
@@ -179,14 +188,10 @@ async function readPull(env: Env, who: ReviewCaller): Promise<Pull> {
   };
 }
 
-interface PullFile extends ChangedFile {
-  patch?: string;
-}
-
-async function readFiles(env: Env, who: ReviewCaller): Promise<PullFile[]> {
-  const files: PullFile[] = [];
+async function readFiles(env: Env, who: ReviewCaller): Promise<ChangedFile[]> {
+  const files: ChangedFile[] = [];
   for (let page = 1; files.length < MAX_FILES; page++) {
-    const batch = await ghJson<PullFile[]>(
+    const batch = await ghJson<ChangedFile[]>(
       env,
       who,
       `/pulls/${who.pr}/files?per_page=100&page=${page}`,
@@ -213,11 +218,11 @@ async function readRules(env: Env, who: ReviewCaller, base: string): Promise<str
 
 // The diff as the model reads it: each file's patch under its name, lockfiles left out, cut at the
 // cap with a line that says so.
-function diffText(files: readonly PullFile[]): string {
+function diffText(files: readonly ChangedFile[]): string {
   let out =
     files.length >= MAX_FILES ? `[only the first ${MAX_FILES} changed files were read]\n` : "";
   for (const f of files) {
-    if (pathClassOf(f.filename) === "deps-other" && !/package\.json$/i.test(f.filename)) {
+    if (LOCKFILE.test(f.filename)) {
       out += `--- ${f.filename} (${f.status ?? "modified"}; a lockfile, not shown)\n`;
       continue;
     }

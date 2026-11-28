@@ -68,13 +68,7 @@ function Archive() {
               </thead>
               <tbody>
                 {rows.map((a) => (
-                  <tr
-                    key={a.name}
-                    className="click"
-                    data-row=""
-                    data-open={`agent:${a.name}`}
-                    tabIndex={0}
-                  >
+                  <tr key={a.name} data-row="" data-open={`agent:${a.name}`} tabIndex={0}>
                     <AgentName a={a} />
                     <td data-label="Revoked">{ago(parse(a.revoked_at as string), now)}</td>
                     <td data-label="Archive">

@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { severityOf } from "../src/inbox.ts";
+import { parseReport, reportItems, spendReportRate } from "../src/inbox-report.ts";
 import {
   MAX_REPORT_ITEMS,
   MAX_REPORT_TITLE,
   REPORT_TTL_SECONDS,
-  parseReport,
-  reportItems,
-  spendReportRate,
-} from "../src/inbox-report.ts";
+} from "@dustinedwards/site-runtime/inbox-report";
 import { fakeKv } from "./fakes.ts";
 
 // The pure parts of the inbox report; the queries and the route are test-integration/inbox.test.ts.

@@ -1,13 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  ciStatus,
-  managePr,
-  parseReposList,
-  readRepoFile,
-  requireSinglePrimary,
-  resolveRepo,
-} from "../src/github.ts";
+import { parseReposList, requireSinglePrimary, resolveRepo } from "../src/github/client.ts";
+import { readRepoFile } from "../src/github/contents.ts";
+import { managePr } from "../src/github/refs.ts";
+import { ciStatus } from "../src/github/actions.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";

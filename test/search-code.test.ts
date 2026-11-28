@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { searchAllRepos, searchCode } from "../src/github.ts";
+import { searchAllRepos, searchCode } from "../src/github/search.ts";
 import { toolOutput } from "../src/tools/outputs.ts";
 import { fakeEnv, fakeKv, withFetch, type FetchCall, type Route } from "./fakes.ts";
 

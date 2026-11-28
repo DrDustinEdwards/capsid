@@ -13,14 +13,11 @@ import { resolveAgent } from "./agents";
 import { checkScope } from "./scope";
 import { gatherInbox, restrictInbox } from "./inbox";
 import { VERIFY_LIVE_CLIENT_PATH, handleClientDocument } from "./oauth-client-docs";
+import { parseReport, reportCallerRefusal, spendReportRate, storeReport } from "./inbox-report";
 import {
   MAX_INBOX_REPORT_BYTES,
   REPORT_TTL_SECONDS,
-  parseReport,
-  reportCallerRefusal,
-  spendReportRate,
-  storeReport,
-} from "./inbox-report";
+} from "@dustinedwards/site-runtime/inbox-report";
 import { readSiteConfig } from "./ops-sites";
 import { consentDialogHeaders, REPORT_PATH, securityHeadersFor } from "./security-headers";
 import { receiveCspReport } from "@dustinedwards/site-runtime/csp-report";

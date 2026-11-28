@@ -33,7 +33,7 @@ export function DefaultBranches() {
                 {snap.ci.map((c) => {
                   const st = ciState(c);
                   return (
-                    <tr key={c.namespace} className={c.latest?.url ? "click" : undefined}>
+                    <tr key={c.namespace}>
                       <td>
                         <b>{c.namespace}</b>
                       </td>

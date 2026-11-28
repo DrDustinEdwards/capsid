@@ -1,15 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  CI_LOG_BUDGET,
-  REPO_BATCH_MAX_FILES,
-  REPO_FILE_BUDGET,
-  ciStatus,
-  deleteBranch,
-  readRepoFiles,
-  repoHistory,
-  repoRefs,
-} from "../src/github.ts";
+import { REPO_BATCH_MAX_FILES, REPO_FILE_BUDGET, readRepoFiles } from "../src/github/contents.ts";
+import { repoHistory } from "../src/github/history.ts";
+import { deleteBranch, repoRefs } from "../src/github/refs.ts";
+import { CI_LOG_BUDGET, ciStatus } from "../src/github/actions.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // Real handlers against a stubbed GitHub, because the refusals matter most: a tool that deletes the default

@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import type { FetchLike } from "./live-checks";
+import type { FetchLike } from "./http";
 import { checkInspectUrl, pageOnSite, reportSite } from "./site-reports";
 import { dateWindow } from "./search-console";
 import { callSignal } from "./call-signal";

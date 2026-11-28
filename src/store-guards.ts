@@ -160,15 +160,10 @@ export function documentUpsert(
 }
 
 // Who made a write when no MCP client did: the Worker's own passes ("system:maintenance",
-// "capsid:push", the improve loop) are "system".
-export function clientOf(
-  actor: string,
-  params: unknown,
-  client: string | undefined,
-): string | null {
+// "capsid:push") are "system".
+export function clientOf(actor: string, client: string | undefined): string | null {
   if (client) return client;
-  if (/^(system|capsid):/.test(actor) || actor === "improve-loop") return "system";
-  return null;
+  return /^(system|capsid):/.test(actor) ? "system" : null;
 }
 
 // The audit row, spelled once. Every write path appends one (snapshot invariant,
@@ -187,7 +182,7 @@ export function auditStatement(
     .prepare(
       "INSERT INTO audit_log (actor, action, namespace, path, params, client) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
     )
-    .bind(actor, action, namespace, path, JSON.stringify(params), clientOf(actor, params, client));
+    .bind(actor, action, namespace, path, JSON.stringify(params), clientOf(actor, client));
 }
 
 // The audit row of a write that has already committed (a revision-guarded RETURNING write cannot

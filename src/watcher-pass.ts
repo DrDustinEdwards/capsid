@@ -16,7 +16,7 @@ interface PassResult {
   // Opened, or seen again while open.
   recorded: string[];
   cleared: string[];
-  // Seen and left as it is: dismissed, or inside the quiet period.
+  // Seen inside the quiet period and left as it is.
   held: string[];
 }
 

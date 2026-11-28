@@ -62,9 +62,9 @@ export function revisionOf(raw: string | undefined): number | null {
 export function deleteOptionsFrom(
   params: ActionParams,
 ):
-  | { ok: true; opts: { cascade: boolean; allowImprovePaths: boolean } }
+  | { ok: true; opts: { cascade: boolean; allowPolicyPaths: boolean } }
   | { ok: false; refusal: string } {
-  for (const key of ["cascade", "allow_improve_paths"] as const) {
+  for (const key of ["cascade", "allow_policy_paths"] as const) {
     if (params[key] !== undefined && params[key] !== "true")
       return {
         ok: false,
@@ -75,7 +75,7 @@ export function deleteOptionsFrom(
     ok: true,
     opts: {
       cascade: params.cascade === "true",
-      allowImprovePaths: params.allow_improve_paths === "true",
+      allowPolicyPaths: params.allow_policy_paths === "true",
     },
   };
 }

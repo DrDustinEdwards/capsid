@@ -5,6 +5,7 @@ import {
   reviewCaller,
   reviewKey,
   reviewScope,
+  skippable,
   REVIEW_OWNER_ID,
 } from "../src/review.ts";
 import { parseVerdict, toolArguments } from "../src/review-answer.ts";
@@ -93,6 +94,7 @@ test("reviewScope skips documents, tests and lockfiles alone and reviews any cod
       { filename: "README.md" },
       { filename: "test/a.test.ts" },
       { filename: "package-lock.json" },
+      { filename: "dashboard/src/styles.css" },
     ]).review,
     false,
   );
@@ -100,7 +102,39 @@ test("reviewScope skips documents, tests and lockfiles alone and reviews any cod
     reviewScope([{ filename: "README.md" }, { filename: "apps/web/app/routes/home.tsx" }]).review,
     true,
   );
+  assert.equal(
+    reviewScope([{ filename: "docs/a.md", previous_filename: "src/a.ts" }]).review,
+    true,
+    "a rename is judged under both names",
+  );
   assert.equal(reviewScope([]).review, false);
+});
+
+test("money, migrations, CI, scripts and deploy configuration are never skipped", () => {
+  for (const path of [
+    "app/billing/charge.md",
+    "src/payments.ts",
+    "test/stripe-client.test.ts",
+    "routes/checkout/index.tsx",
+    "docs/invoice-pdf.md",
+    "migrations/0040_x.sql",
+    "test/fixtures/migrations/0001.sql",
+    ".github/workflows/ci.yml",
+    "scripts/README.md",
+    "workers/cron/test/a.test.ts",
+    "wrangler.jsonc.example",
+    "tsconfig.test.json",
+    ".dev.vars.example",
+  ])
+    assert.equal(skippable(path), false, path);
+  for (const path of [
+    "app/routes/billboards.md",
+    "docs/repayment-history.md",
+    "test/unsubscribe-token.test.ts",
+    "package.json",
+    "dashboard/src/styles.css",
+  ])
+    assert.equal(skippable(path), true, path);
 });
 
 test("a verdict is kept per head commit, so a later push is reviewed again", () => {

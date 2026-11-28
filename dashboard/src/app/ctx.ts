@@ -81,38 +81,26 @@ function isView(v: string | undefined): v is ViewId {
   return VIEWS.some((x) => x.id === v);
 }
 
-export interface Filters {
-  q: string;
-  range: "24h" | "7d" | "30d";
-}
-
 export interface Ctx {
   feed: OpsFeed;
   now: number;
-  view: ViewId;
   open: (ref: string) => void;
   href: (ref: string) => string;
-  go: (view: ViewId) => void;
-  filters: Filters;
-  setFilters: (f: Partial<Filters>) => void;
-  copy: (text: string) => void;
-  say: (msg: string) => void;
   confirm: (req: ConfirmRequest) => void;
-  performed: (p: PortalPerformed) => void;
   signOut: () => void;
 }
 
+// The controls the Portal itself asks for; pr_close and run_job are served to MCP only.
+type ConfirmAction = Exclude<PortalAction, "pr_close" | "run_job">;
+
 export interface ConfirmRequest {
-  action: PortalAction;
+  action: ConfirmAction;
   params: Record<string, string>;
   title: string;
   onDone?: (p: PortalPerformed) => void;
 }
 
-export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["pr_close"]);
-
-const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) => string)> = {
-  pr_close: "Close pull request",
+const PERFORM_LABEL: Record<ConfirmAction, string | ((p: Record<string, string>) => string)> = {
   revoke_agent: "Revoke agent",
   activate_agent: "Activate agent",
   site_add: "Add site",
@@ -123,14 +111,13 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   package_remove: "Remove package",
   site_repair: (p) => `Run ${p.tool ?? "repair"}`,
   site_backup: (p) => (p.namespace ? `Back up ${p.namespace} now` : "Back up every site now"),
-  run_job: (p) => `Run ${p.name ?? "job"} now`,
   namespace_add: "Add project",
   namespace_edit: "Save changes",
   namespace_remove: "Delete project",
   site_key_rotate: "Rotate key",
 };
 
-export function performLabel(action: PortalAction, params: Record<string, string>): string {
+export function performLabel(action: ConfirmAction, params: Record<string, string>): string {
   const l = PERFORM_LABEL[action];
   return typeof l === "function" ? l(params) : l;
 }
@@ -139,7 +126,6 @@ export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>([
   "revoke_agent",
   "site_remove",
   "package_remove",
-  "pr_close",
   "namespace_remove",
   "site_key_rotate",
 ]);

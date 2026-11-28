@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  deleteBranch,
-  encodePath,
-  parseReposList,
-  readRepoFile,
-  repoTokenOk,
-} from "../src/github.ts";
+import { encodePath, parseReposList, repoTokenOk } from "../src/github/client.ts";
+import { readRepoFile } from "../src/github/contents.ts";
+import { deleteBranch } from "../src/github/refs.ts";
 import { repoPathProblem } from "../src/limits.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 

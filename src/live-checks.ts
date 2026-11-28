@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import type { FetchLike } from "./http";
 import { ghFetch, getDefaultBranch, getRefSha, resolveRepo } from "./github/client";
 import type { OpsSite } from "./ops-sites";
 import type { SiteProbe } from "./ops-types/sites";
@@ -93,8 +94,6 @@ export function parseLiveConfig(body: string): LiveConfig {
     return { error: `more than ${MAX_SHA_RULES} sha rules; each is a GitHub read inside one pass` };
   return { rules };
 }
-
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 // Why an answer is not the site's: its final URL is on another origin (a followed redirect), else null.
 export function redirectedOffSite(res: Response, origin: string): string | null {

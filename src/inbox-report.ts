@@ -3,18 +3,19 @@ import type { Agent } from "./agents";
 import type { InboxItem } from "./inbox";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// - The key must hold the write grant on the namespace the report names, through checkScope (one
-// enforcement point, test/scope.test.ts); - A report replaces the last one whole and expires after
-// 6 hours: a stale "needs you" is worse than none.
+import {
+  INBOX_REPORT_PATH,
+  MAX_REPORT_ITEMS,
+  MAX_REPORT_TITLE,
+  REPORT_TTL_SECONDS,
+} from "@dustinedwards/site-runtime/inbox-report";
 
-const INBOX_REPORT_PATH = "/ops/inbox/report";
+// The key must hold the write grant on the namespace the report names. A report replaces the last
+// one whole and expires after 6 hours: a stale "needs you" is worse than none.
+
 const REPORT_PREFIX = "inbox:report:";
 const REPORT_RATE_PREFIX = "inbox:report-rate:";
-export const REPORT_TTL_SECONDS = 6 * 3600;
 const REPORT_RATE_SECONDS = 60;
-export const MAX_REPORT_ITEMS = 20;
-export const MAX_REPORT_TITLE = 200;
-export const MAX_INBOX_REPORT_BYTES = 16384;
 
 export interface StoredReport {
   namespace: string;

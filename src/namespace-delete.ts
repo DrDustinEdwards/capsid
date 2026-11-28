@@ -51,9 +51,7 @@ export interface DeletePlan {
 
 export interface DeleteOptions {
   cascade: boolean;
-  // allow_improve_paths keeps its name from the improve loop; it now covers only the policy
-  // documents (policyWriteRefusal in src/policy-docs.ts).
-  allowImprovePaths: boolean;
+  allowPolicyPaths: boolean;
 }
 
 function count(result: D1Result | undefined): number {
@@ -103,7 +101,7 @@ export async function readDeletePlan(db: D1Database, namespace: string): Promise
       )
       .bind(namespace),
     // The policy documents (policyWriteRefusal in src/policy-docs.ts), matched case-exactly on
-    // the same prefix. Deleting one is a ruling, so it needs allow_improve_paths as a document delete
+    // the same prefix. Deleting one is a ruling, so it needs allow_policy_paths as a document delete
     // does.
     db
       .prepare(
@@ -194,10 +192,10 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
       `${ns} holds ${plural(plan.counts.documents_live, "live document")}. Pass cascade: true to delete them; each is snapshotted to document_versions first. Archived documents (archive/...) are kept either way.`,
     );
   }
-  if (plan.counts.policy_documents > 0 && !opts.allowImprovePaths) {
+  if (plan.counts.policy_documents > 0 && !opts.allowPolicyPaths) {
     refusals.push(
       `${ns} holds ${plural(plan.counts.policy_documents, "policy document")} (${named(plan.policy_paths, plan.counts.policy_documents)}). ` +
-        `Deleting one is a ruling, so it needs allow_improve_paths: true, which needs the can_touch_protected flag and is audit-logged.`,
+        `Deleting one is a ruling, so it needs allow_policy_paths: true, which needs the can_touch_protected flag and is audit-logged.`,
     );
   }
   return refusals;

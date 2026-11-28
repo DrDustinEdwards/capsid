@@ -13,7 +13,6 @@ import {
 } from "react";
 import { Spinner } from "capsomer/react/skeleton";
 import { useNow, useRemembered } from "capsomer/react/hooks";
-import { copyText } from "capsomer/behavior/copy";
 import { Freshness } from "capsomer/react/freshness";
 import { shareLeft } from "capsomer/behavior/freshness";
 import "capsomer/freshness.css";
@@ -41,7 +40,6 @@ import {
   refPath,
   type ConfirmRequest,
   type Ctx,
-  type Filters,
   type ViewId,
 } from "./ctx";
 import type { OpsFeed, PortalPerformed } from "../types";
@@ -127,7 +125,6 @@ function PortalApp() {
     if (feed) setSkew(parse(feed.live.generated) - Date.now());
   }, [feed]);
   const now = serverNow(tick, skew, feed ? parse(feed.live.generated) : 0);
-  const [filters, setFiltersState] = useState<Filters>({ q: "", range: "7d" });
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
   const [helpUsed, setHelpUsed] = useState(false);
@@ -191,15 +188,6 @@ function PortalApp() {
     [navigate, route.view, route.site, qs],
   );
 
-  const copy = useCallback(
-    (text: string) => {
-      void copyText(text).then((ok) =>
-        ok ? say("Copied") : fail("Copy failed: select the text and copy it."),
-      );
-    },
-    [say, fail],
-  );
-
   const refresh = useCallback(async () => {
     if (spinning) return;
     setSpinning(true);
@@ -253,10 +241,6 @@ function PortalApp() {
     [rememberRail],
   );
   const toggleRail = useCallback(() => setRail(!railRef.current), [setRail]);
-
-  const setFilters = useCallback((f: Partial<Filters>) => {
-    setFiltersState((p) => ({ ...p, ...f }));
-  }, []);
 
   // j and k move focus itself among the visible [data-row] elements, so no index goes stale when the feed changes;
   // a row outside the tab order is made focusable by script only (tabIndex -1).
@@ -347,10 +331,9 @@ function PortalApp() {
       refresh: () => void refresh(),
       theme,
       help: () => setHelp(true),
-      copy,
       confirm,
     }),
-    [go, open, refresh, theme, copy, confirm, setHelp],
+    [go, open, refresh, theme, confirm, setHelp],
   );
   const [paletteUsed, setPaletteUsed] = useState(false);
   if (palette && !paletteUsed) setPaletteUsed(true);
@@ -416,16 +399,9 @@ function PortalApp() {
     ? {
         feed,
         now,
-        view: route.view,
         open,
         href,
-        go,
-        filters,
-        setFilters,
-        copy,
-        say,
         confirm,
-        performed,
         signOut,
       }
     : null;

@@ -10,7 +10,6 @@ import {
   TOOL_GRANTS,
   TOOL_ACTION_GRANTS,
   checkScope,
-  isMoneyPath,
   repoWriteFlags,
   requiredForAction,
   requiredGrant,
@@ -216,30 +215,6 @@ test("repoWriteFlags derives the flags from the CALL, not from the tool name alo
   assert.deepEqual(repoWriteFlags("capsid_close_pr", "delete_branch", { force: true }), [
     "can_merge",
   ]);
-});
-
-test("a money path is matched by name, and an innocent path is not", () => {
-  for (const path of [
-    "app/billing/charge.ts",
-    "src/payments.ts",
-    "lib/stripe-client.ts",
-    "routes/checkout/index.tsx",
-    "src/invoice-pdf.ts",
-  ]) {
-    assert.ok(isMoneyPath(path), `${path} should trip the money-path tripwire`);
-  }
-  for (const path of [
-    "src/server.ts",
-    "app/routes/billboards.ts",
-    "docs/repayment-history.md",
-    "src/unsubscribe-token.ts",
-  ]) {
-    assert.equal(
-      isMoneyPath(path),
-      false,
-      `${path} is not a money path and a guard that fires on it gets deleted rather than fixed`,
-    );
-  }
 });
 
 // The tool list comes from listTools, so a later tool is swept once registered. Arguments are built from each tool's

@@ -4,7 +4,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
-import { deleteBranch } from "../src/github.ts";
+import { deleteBranch } from "../src/github/refs.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // One plant per flag, through a real MCP connection against a scoped caller, in both directions: a refusal test alone passes against a broken tool.

@@ -144,13 +144,7 @@ export function Activity() {
               </thead>
               <tbody>
                 {data.rows.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="click"
-                    data-row=""
-                    data-open={`audit:${r.id}`}
-                    tabIndex={0}
-                  >
+                  <tr key={r.id} data-row="" data-open={`audit:${r.id}`} tabIndex={0}>
                     <td data-label="When" className="cap-num" title={utc(parse(r.at))}>
                       {ago(parse(r.at), now)}
                     </td>

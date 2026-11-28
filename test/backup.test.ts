@@ -186,9 +186,6 @@ test("no single R2 delete call exceeds R2's 1000-key ceiling", async () => {
   for (let i = 0; i < 1001; i++) {
     seed[`backups/markdown/capsid/stale-${String(i).padStart(5, "0")}.md`] = "gone";
   }
-  for (let i = 0; i < 1200; i++) {
-    seed[`reports/csp/2020-01-01/${String(i).padStart(5, "0")}.json`] = "{}";
-  }
   const { env, r2 } = makeEnv({ documents: DOCS }, seed);
   const result = await runBackup(env);
   assert.equal(result.ran, true);
@@ -202,7 +199,6 @@ test("no single R2 delete call exceeds R2's 1000-key ceiling", async () => {
   );
   // A chunker that dropped the tail would satisfy the assertion above.
   assert.equal(result.markdown_pruned, 1001);
-  assert.equal(result.reports_pruned, 1200);
   const leftover = [...r2.objects.keys()].filter((k) => k.includes("/stale-"));
   assert.deepEqual(leftover, [], "chunking lost keys: stale mirror objects survived the prune");
 });

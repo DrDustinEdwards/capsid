@@ -6,7 +6,7 @@ import {
   runCheckedBackup,
   type DumpResult,
 } from "@dustinedwards/d1-dump";
-import { deleteInChunks, pruneD1, pruneDaily, pruneReports } from "./backup-prune";
+import { deleteInChunks, pruneD1, pruneDaily } from "./backup-prune";
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { probeFts } from "./store-probe";
@@ -41,9 +41,6 @@ const PAGED = {
 // left out: rows are push credentials and a dump leaves the account. A restore leaves it empty.
 export const EXCLUDED = ["d1_migrations", "push_subscriptions"] as const;
 
-// Columns that match d1-dump's credential pattern by name but hold no token. None since 0072 dropped bench_runs.
-const CREDENTIAL_ALLOW: Record<string, string> = {};
-
 // Every real table; test-integration/backup-package.test.ts checks it against the migrated schema. Excluded: documents_fts and
 // its shadow tables (rebuilt by triggers) and sqlite_sequence.
 export const TABLES = [
@@ -56,7 +53,7 @@ export const TABLES = [
   // audit entries still resolve.
   "agents",
   "ops_sites",
-  // Hand-edited configuration and weekly rows kept nowhere else (migrations/0028).
+  // Hand-edited configuration kept nowhere else.
   "ops_packages",
   "watcher_findings",
   "task_runs",
@@ -80,7 +77,6 @@ interface BackupSummary {
   json_backups_kept: number;
   json_backups_pruned: number;
   json_backups_locked: number;
-  reports_pruned: number;
   versions_pruned: number;
   audit_pruned: number;
   deploys_pruned: number;
@@ -255,7 +251,6 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
       exclude: [...EXCLUDED],
       sidecars: { kv: { keys: await readKvPins(env) } },
       required: ["documents"],
-      credentials: { allow: CREDENTIAL_ALLOW },
       check: async (d) => {
         docs = await dumpedDocs(env, d);
         const checked = await preflight(env, docs);
@@ -299,7 +294,6 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
       json_backups_kept: 0,
       json_backups_pruned: 0,
       json_backups_locked: 0,
-      reports_pruned: 0,
       versions_pruned: 0,
       audit_pruned: 0,
       deploys_pruned: 0,
@@ -309,7 +303,6 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
   }
 
   const markdownPruned = await mirrorMarkdown(env, docs);
-  const reports = await pruneReports(env, now);
   const history = await pruneD1(env);
   await pruneDaily(env, new Date(now));
 
@@ -325,7 +318,6 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
     json_backups_kept: pruned.kept,
     json_backups_pruned: pruned.pruned,
     json_backups_locked: pruned.locked,
-    reports_pruned: reports,
     versions_pruned: history.versions,
     audit_pruned: history.audit,
     deploys_pruned: history.deploys,

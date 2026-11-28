@@ -1,5 +1,6 @@
 import type { Env } from "./env";
-import { CF_API, cfGetAll, cloudflareCredentials, type FetchLike } from "./ops-cloudflare";
+import type { FetchLike } from "./http";
+import { CF_API, cfGetAll, cloudflareCredentials } from "./ops-cloudflare";
 import { registrableDomain } from "./domain-expiry";
 import { DAY_MS } from "./time";
 

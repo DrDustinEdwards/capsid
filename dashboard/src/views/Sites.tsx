@@ -13,8 +13,7 @@ import { Spinner } from "capsomer/react/skeleton";
 import { parse, utc } from "capsomer/behavior/time";
 import { ago, hostOf, pct, shortId } from "../lib/format";
 import { shortCount } from "capsomer/behavior/format";
-import { Meter } from "capsomer/react/meter";
-import { BACKUP_TARGET_HOURS, KIND_STATUS, PROBE, cfOk, cfShort, siteKey } from "../lib/derive";
+import { KIND_STATUS, PROBE, cfOk, cfShort, siteKey } from "../lib/derive";
 import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
 import { Pill, Status } from "capsomer/react/status";
 import { FilterEmpty, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
@@ -230,33 +229,6 @@ function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
   );
 }
 
-// Only Capsid's own backup is in the feed; every other site's is no data, never "none" or a zero.
-
-function BackupCell({ s }: { s: SiteSnapshot }) {
-  const { feed } = useApp();
-  const backup = s.namespace === "capsid" ? feed.snapshot?.health?.backup : undefined;
-  if (!backup)
-    return (
-      <Status tone="nodata" reason="not reported by the site" brief>
-        No data
-      </Status>
-    );
-  if (backup.age_hours == null) return <Status tone="crit">Never</Status>;
-  const age = backup.age_hours.toFixed(1);
-  return (
-    <Meter
-      size="sm"
-      label={<span className="cap-sr-only">Backup age</span>}
-      value={Math.min(backup.age_hours, BACKUP_TARGET_HOURS)}
-      max={BACKUP_TARGET_HOURS}
-      warnAt={0.75}
-      critAt={1}
-      valueText={`${age} of ${BACKUP_TARGET_HOURS} hours`}
-      display={`${age}h / ${BACKUP_TARGET_HOURS}h`}
-    />
-  );
-}
-
 function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
   const { now } = useApp();
   return (
@@ -269,9 +241,6 @@ function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
             <th>Uptime, 2-hour ticks</th>
             <th>Live deploy</th>
             <th>Errors 24h</th>
-            <th>
-              Backup age <span className="cap-table-note">only Capsid reports one</span>
-            </th>
             <th>Probe</th>
           </tr>
         </thead>
@@ -301,9 +270,6 @@ function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
                 </td>
                 <td data-label="Errors 24h">
                   <ErrorTotalsCell s={s} />
-                </td>
-                <td data-label="Backup age">
-                  <BackupCell s={s} />
                 </td>
                 <td data-label="Probe">
                   <span className="cap-num">

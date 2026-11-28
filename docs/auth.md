@@ -7,7 +7,7 @@ Scopes are five axes. `namespaces` and `repos` are a list or `*`. `tools` is an 
 | flag                  | what it gates                                                                                                                                                                                                                                                                |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `can_merge`           | merging or closing a pull request (close deletes the head branch, the same destruction), `capsid_close_pr` action `delete_branch` with `force: true` (force lifts the open-PR refusal), and actions `tag` and `release` (a tag or release can start a deploy as a merge can) |
-| `can_touch_protected` | writing or deleting an autonomy policy document under `capsid/policy/` (`allow_improve_paths`), which decides what this Worker does without a human                                                                                                                          |
+| `can_touch_protected` | writing or deleting an autonomy policy document under `capsid/policy/` (`allow_policy_paths`), which decides what this Worker does without a human                                                                                                                           |
 
 A stored scopes JSON that names a retired flag or `max_claims` still loads; the extra field is ignored and dropped the next time the scopes are written.
 

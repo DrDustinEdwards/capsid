@@ -1,14 +1,9 @@
 import type { Env } from "./env";
+import type { FetchLike } from "./http";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { readSiteRow } from "./ops-sites";
 import type { SiteOperator } from "./ops-types/sites";
-import {
-  callLine,
-  callOperator,
-  toolRefusal,
-  type FetchLike,
-  type OperatorCall,
-} from "./site-operator";
+import { callLine, callOperator, toolRefusal, type OperatorCall } from "./site-operator";
 import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";
 import { MINUTE_MS, DAY_MS } from "./time";

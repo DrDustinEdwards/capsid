@@ -148,8 +148,6 @@ export type MaintenanceRule =
   | "branch-pruned"
   | "branch-stale"
   | "branches-not-checked"
-  | "undeployed-merge"
-  | "deploys-not-checked"
   | "model-drift"
   | "model-not-checked"
   | "rule-doc"
@@ -166,7 +164,7 @@ export interface PortalMaintenance {
   generated: string | null;
   items: OpsMaintenanceItem[];
   /** What the pass read, so an empty list differs from one that read nothing. */
-  read: { prs: number; branches: number; repos: number; roster: number; deploys: number };
+  read: { prs: number; branches: number; repos: number; roster: number };
 }
 
 // GET /portal/api/convergence -> PortalConvergence (src/site-convergence.ts): per opted-in site, its sync_status,

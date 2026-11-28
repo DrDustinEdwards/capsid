@@ -298,17 +298,8 @@ function adminReason(tool: string): string {
     : "It acts on more than one namespace's scope.";
 }
 
-// `allow_improve_paths` lets a document write reach an autonomy policy document (capsid/policy/).
-export const IMPROVE_OVERRIDE_FLAGS = ["can_touch_protected"] as const;
-
-// Money paths, matched by name: a tripwire, not an authorization boundary. Broad on purpose: a false
-// positive costs one refusal, a false negative is a payment file edited by an unscoped credential.
-const MONEY_PATH =
-  /(^|\/)(billing|payments?|checkout|invoices?|pricing|subscriptions?|stripe|payouts?|refunds?)(\/|[-_.]|$)/i;
-
-export function isMoneyPath(path: string): boolean {
-  return MONEY_PATH.test(path);
-}
+// The flag `allow_policy_paths` needs: a write or delete that reaches capsid/policy/.
+export const POLICY_OVERRIDE_FLAGS = ["can_touch_protected"] as const;
 
 export function repoWriteFlags(
   tool: string,

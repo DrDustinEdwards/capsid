@@ -1,13 +1,11 @@
-// The rule documents: the ones sessions follow as rules rather than read as records Two checks hold
-// them: - the cap. A namespace's core.md stays under 8KB, any other rule document under 20KB. -
-// stale tool names. A rule document names no tool or action the Worker does not serve.
+// The rule documents sessions follow as rules: a namespace's core.md stays under 8KB, any other
+// rule document under 20KB, and none names a tool or action the Worker does not serve.
 
-import { rewriteProse, OLD_TOOLS } from "../scripts/tool-names-lib";
 import { TOOL_GRANTS } from "./scope";
 import { COMPOSITES } from "./tools/surface";
 import type { OpsMaintenanceItem } from "./ops-types/views";
-
 import { errorMessage } from "@dustinedwards/site-runtime/log";
+
 export const CORE_CAP_BYTES = 8 * 1024;
 export const RULE_DOC_CAP_BYTES = 20 * 1024;
 
@@ -34,29 +32,6 @@ const SERVED: ReadonlyMap<string, ReadonlySet<string> | null> = (() => {
   return out;
 })();
 
-// Every action some served tool takes. An old tool name that is still an action somewhere
-// (delete_branch) is not stale when it stands alone.
-const SERVED_ACTIONS: ReadonlySet<string> = new Set(
-  [...SERVED.values()].flatMap((a) => (a ? [...a] : [])),
-);
-
-// Old names with an underscore are not words, so outside backticks they still name the old tool.
-// rewriteProse reads only backtick spans and calls; this reads the rest. open_pr is excluded for
-// the reason rewriteProse gives (it is also a gate class).
-const BARE_OLD = OLD_TOOLS.filter(
-  (name) => name.includes("_") && name !== "open_pr" && !SERVED_ACTIONS.has(name),
-);
-const BARE_OLD_RE = new RegExp(`(?<![\\w./-])(${BARE_OLD.join("|")})(?![\\w(-])`, "g");
-
-// An old tool name as a whole word, to say which names a line rewriteProse rewrote held.
-// Inside capsid_lint_namespace, "lint" follows an underscore and is not a match.
-const OLD_WORD = new RegExp(
-  `(?<![\\w-])(${OLD_TOOLS.slice()
-    .sort((a, b) => b.length - a.length)
-    .join("|")})(?![\\w-])`,
-  "g",
-);
-
 // A capsid_* name where the text says it is a tool: a call, a dotted action, an action
 // after it, the word tool after it, or "call" before it. A capsid_* field, column or
 // cookie (capsid_sha, capsid_portal_csrf) is not a tool and is not read. A Capsid Admin
@@ -81,19 +56,6 @@ function multiset(names: string[]): Map<string, number> {
 // a SQL or JS example there is not a tool reference.
 export function staleToolNames(text: string): StaleName[] {
   const found: StaleName[] = [];
-  // "write(s)" and "item(es)" are plurals, not calls.
-  const prose = rewriteProse(text.replace(/\((?:s|es)\)/g, ""));
-  // Old names in backtick spans and calls, the migration's own reading of prose. Each
-  // rewritten line reports the old names it lost, so an edit elsewhere on the line is not
-  // a new stale name.
-  for (const c of prose.changes) {
-    const lost = multiset([...c.before.matchAll(OLD_WORD)].map((m) => m[1]));
-    for (const m of c.after.matchAll(OLD_WORD)) lost.set(m[1], (lost.get(m[1]) ?? 0) - 1);
-    for (const [name, n] of lost)
-      for (let k = 0; k < n; k++) found.push({ line: c.line, text: name });
-  }
-  for (const u of prose.unmapped)
-    found.push({ line: u.line, text: [...u.text.matchAll(OLD_WORD)][0]?.[1] ?? u.text.trim() });
   let fenced = false;
   text.split("\n").forEach((raw, i) => {
     if (/^\s*(```|~~~)/.test(raw)) {
@@ -102,9 +64,6 @@ export function staleToolNames(text: string): StaleName[] {
     }
     if (fenced) return;
     const line = i + 1;
-    const outside = raw.replace(/`[^`]*`/g, "``");
-    for (const m of outside.matchAll(BARE_OLD_RE)) found.push({ line, text: m[1] });
-    // capsid_* names: the tool must be served, and an action given must be one of its own.
     for (const m of raw.matchAll(CAPSID_NAME)) {
       const [whole, tool, called, dotted, named] = m;
       const said =
@@ -122,7 +81,7 @@ export function staleToolNames(text: string): StaleName[] {
         found.push({ line, text: `${tool} action ${action}` });
     }
   });
-  return found.sort((a, b) => a.line - b.line);
+  return found;
 }
 
 /** The stale names as one clause: the count and the first five. */
@@ -216,8 +175,7 @@ export async function gatherRuleDocItems(
       .all<{ namespace: string; path: string }>();
     const rule = (paths.results ?? []).filter((r) => ruleDocCap(r.namespace, r.path) !== null);
     const items: OpsMaintenanceItem[] = [];
-    // One statement per document, in one batch: never one placeholder per row in a single
-    // query (conventions 8.2).
+    // One statement per document in one batch, not one placeholder per row in a single query.
     const bodies =
       rule.length === 0
         ? []

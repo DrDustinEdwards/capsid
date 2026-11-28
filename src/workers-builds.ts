@@ -1,11 +1,6 @@
 import type { Env } from "./env";
-import {
-  CF_API,
-  cfGet,
-  cloudflareCredentials,
-  CfReadError,
-  type FetchLike,
-} from "./ops-cloudflare";
+import type { FetchLike } from "./http";
+import { CF_API, cfGet, cloudflareCredentials, CfReadError } from "./ops-cloudflare";
 import { readSiteRow } from "./ops-sites";
 import { externalFence } from "./provenance";
 import { redactText } from "@dustinedwards/site-runtime/redact";

@@ -96,7 +96,7 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   // The digest of the mapping its preview read is bound into the token (Plan.bind).
   namespace_edit: ["namespace", "repos"],
   // The plan's fingerprint is bound into the token (Plan.bind), as the tool's own token binds it.
-  namespace_remove: ["namespace", "cascade", "allow_improve_paths"],
+  namespace_remove: ["namespace", "cascade", "allow_policy_paths"],
   site_key_rotate: ["namespace"],
 };
 
