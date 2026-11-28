@@ -283,16 +283,7 @@ describe("GET /portal/api/maintenance, through the Worker", () => {
     expect(before.body.items).toEqual([]);
 
     expect(
-      (
-        await maintenanceTick(
-          env as never,
-          NOW,
-          NO_PRS,
-          NO_BRANCHES,
-          NO_DEPLOYS,
-          ONE_DRIFT,
-        )
-      ).ran,
+      (await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, ONE_DRIFT)).ran,
     ).toBe(true);
     const after = await read();
     expect(after.cache).toBe("private, no-store");

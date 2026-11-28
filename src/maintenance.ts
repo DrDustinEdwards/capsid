@@ -137,7 +137,9 @@ export async function readMaintenance(env: Env): Promise<MaintenanceList | null>
     return {
       ...parsed,
       // The disk and release-tag rules were removed; a list stored before then may still carry their items.
-      items: parsed.items.filter((i) => !i.rule.startsWith("disk-") && !i.rule.startsWith("release-")),
+      items: parsed.items.filter(
+        (i) => !i.rule.startsWith("disk-") && !i.rule.startsWith("release-"),
+      ),
       prs_read: counts(parsed.prs_read),
       branches_read: counts(parsed.branches_read),
       deploys_read: counts(parsed.deploys_read),
