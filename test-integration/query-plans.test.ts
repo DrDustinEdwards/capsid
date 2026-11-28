@@ -187,15 +187,11 @@ describe("query plans", () => {
     }
   });
 
-  it("PLANT: the prompt, agent-record and anomaly reads use the indexes 0070 added", async () => {
+  it("PLANT: the prompt and anomaly reads use the indexes 0070 added", async () => {
     for (const [sql, index] of [
       [
         "SELECT namespace, path, title, body FROM documents WHERE type = 'prompt' ORDER BY namespace, path",
         "documents_type_ns_path",
-      ],
-      [
-        "SELECT claimed_by AS actor, status, COUNT(*) AS n FROM jobs WHERE claimed_by IS NOT NULL GROUP BY claimed_by, status",
-        "jobs_claimed_by",
       ],
       [
         "SELECT actor, action, strftime('%Y-%m-%dT%H', at) AS hour, COUNT(*) AS n FROM audit_log WHERE at >= 'x' AND actor LIKE 'agent:%' AND actor <> 'y' GROUP BY actor, action, hour",

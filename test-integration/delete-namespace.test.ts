@@ -120,14 +120,6 @@ async function edge(fromNs: string, fromPath: string, toNs: string, toPath: stri
     .run();
 }
 
-async function job(ns: string, id: string, status: string): Promise<void> {
-  await env.DB.prepare(
-    "INSERT INTO jobs (id, namespace, title, body, status, posted_by) VALUES (?1, ?2, ?3, 'body', ?4, 'github:sample')",
-  )
-    .bind(id, ns, `a ${status} job ${id}`, status)
-    .run();
-}
-
 async function agent(name: string, namespaces: string[], revoked: boolean): Promise<void> {
   const scopes = defaultScopes(namespaces);
   await env.DB.prepare(
@@ -160,10 +152,9 @@ describe("capsid_admin_manage_namespaces delete_preview refusals", () => {
     expect(result.content[0].text).toMatch(/namespace not found/);
   });
 
-  it("a job row left by the retired queue, a revoked agent and archived documents do not refuse it", async () => {
+  it("a revoked agent and archived documents do not refuse it", async () => {
     const ns = fresh();
     await register(ns);
-    await job(ns, `job_${ns.slice(-12)}`, "queued");
     await agent(`${ns}-gone`, [ns], true);
     await doc(ns, "archive/old.md");
     const p = await preview(ns);
@@ -429,7 +420,6 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     await edge(ns, "archive/old.md", ns, "archive/older.md");
     // Already dangling: its end in ns names no document, so no pathMutation touches it.
     await edge(other, "x.md", ns, "never-existed.md");
-    await job(ns, `job_${ns.slice(-12)}`, "done");
     await agent(`${ns}-gone`, [ns], true);
     await env.DB.prepare(
       "INSERT INTO ops_sites (namespace, name, origin, platform) VALUES (?1, 'Sample', 'https://sample.example.com', 'cloudflare')",
@@ -506,7 +496,6 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
         ns,
       ),
     ).toBe(1);
-    expect(await n("SELECT COUNT(*) AS n FROM jobs WHERE namespace = ?1", ns)).toBe(1);
     expect(await n("SELECT COUNT(*) AS n FROM agents WHERE name = ?1", `${ns}-gone`)).toBe(1);
 
     const audit = await env.DB.prepare(
