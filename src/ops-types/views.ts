@@ -153,11 +153,7 @@ export type MaintenanceRule =
   | "model-drift"
   | "model-not-checked"
   | "rule-doc"
-  | "rule-docs-not-checked"
-  | "release-tagged"
-  | "release-untagged"
-  | "release-backwards"
-  | "releases-not-checked";
+  | "rule-docs-not-checked";
 
 export interface OpsMaintenanceItem {
   rule: MaintenanceRule;

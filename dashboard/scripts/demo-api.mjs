@@ -1,8 +1,8 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEMO_CAPTURED, demoFile, demoFileName } from "../src/lib/demo.ts";
+import { DEMO_CAPTURED, demoFile } from "../src/lib/demo.ts";
 import { DEMO_BASE } from "../src/lib/demo-base.ts";
 
 // The demo keeps one answer per route (src/lib/demo.ts drops the query), captured for the sample site.
@@ -51,22 +51,7 @@ try {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(await res.json()));
   }
-  const ops = JSON.parse(readFileSync(join(out, "ops.json"), "utf8"));
-  const names = (ops.live?.packages ?? []).map((/** @type {{ name: string }} */ p) => p.name);
-  mkdirSync(join(out, "packages", "history"), { recursive: true });
-  for (const name of names) {
-    const res = await fetch(
-      `${origin}/portal/api/packages/history?${new URLSearchParams({ name })}`,
-    );
-    if (!res.ok) throw new Error(`the mock answered ${res.status} for the history of ${name}`);
-    writeFileSync(
-      join(out, "packages", "history", `${demoFileName(name)}.json`),
-      JSON.stringify(await res.json()),
-    );
-  }
-  console.log(
-    `demo-api: ${ROUTES.length} answers and ${names.length} package histories in build/client/demos/api/`,
-  );
+  console.log(`demo-api: ${ROUTES.length} answers in build/client/demos/api/`);
 } finally {
   server.close();
 }

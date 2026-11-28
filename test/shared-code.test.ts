@@ -210,9 +210,6 @@ test("a package.json's release fields, and one that is not an object is refused"
 const npmOk = (latest: string): ReleaseRead["npm"] => ({
   state: "ok",
   latest,
-  dist_tags: { latest },
-  versions: 3,
-  modified: null,
 });
 
 test("PLANT: the view says untagged, on npm, private, and what was not read", () => {

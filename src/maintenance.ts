@@ -4,19 +4,10 @@ import { ROSTER } from "./roster";
 import { gatherBranchItems, githubBranchReaders, type BranchReaders } from "./maintenance-branches";
 import { gatherPrItems, githubPrReaders, type PrReaders } from "./maintenance-prs";
 import { gatherDeployItems, githubDeployReaders, type DeployReaders } from "./maintenance-deploys";
-import {
-  gatherReleaseItems,
-  githubReleaseReaders,
-  type ReleaseReaders,
-} from "./maintenance-releases";
 import { gatherModelDriftItems } from "./model-drift";
 import { readFactsDrift } from "./system-facts-store";
 import { bundledModel } from "./public-data";
 import { gatherRuleDocItems } from "./rule-docs";
-
-// The tags ride this daily pass, not the five-minute tick: tagging within a day is soon enough for
-// the bump pull requests they start, and the pass already has the switch, the cap, the audit
-// pattern and the list where a version it would not tag belongs.
 
 const MAINTENANCE_KEY = "maintenance:list";
 export const MAINTENANCE_LAST_KEY = "maintenance:last";
@@ -41,7 +32,6 @@ interface MaintenanceList {
   model_read: number;
   /** Rule documents checked for their cap and for stale tool names (src/rule-docs.ts). */
   rule_docs_read: number;
-  releases_read: number;
 }
 
 type MaintenanceReport =
@@ -62,7 +52,6 @@ async function gatherMaintenance(
     ];
     return { items: [...model.items, ...facts.items], read: model.read + facts.read };
   },
-  releaseReaders: ReleaseReaders = githubReleaseReaders(env),
 ): Promise<MaintenanceList> {
   const items: MaintenanceItem[] = [];
 
@@ -83,9 +72,6 @@ async function gatherMaintenance(
   const ruleDocs = await gatherRuleDocItems(env.DB);
   items.push(...ruleDocs.items);
 
-  const releases = await gatherReleaseItems(env, releaseReaders);
-  items.push(...releases.items);
-
   return {
     generated: now.toISOString(),
     items,
@@ -94,7 +80,6 @@ async function gatherMaintenance(
     deploys_read: deploys.read,
     model_read: drift.read,
     rule_docs_read: ruleDocs.read,
-    releases_read: releases.read,
   };
 }
 
@@ -110,7 +95,6 @@ export async function maintenanceTick(
   branchReaders?: BranchReaders,
   deployReaders?: DeployReaders,
   driftReader?: DriftReader,
-  releaseReaders?: ReleaseReaders,
 ): Promise<MaintenanceReport> {
   const today = now.toISOString().slice(0, 10);
   if (now.getUTCHours() < DAILY_AFTER_UTC_HOUR)
@@ -124,7 +108,6 @@ export async function maintenanceTick(
     branchReaders,
     deployReaders,
     driftReader,
-    releaseReaders,
   );
   await env.APP_KV.put(MAINTENANCE_KEY, JSON.stringify(list));
   await env.APP_KV.put(MAINTENANCE_LAST_KEY, now.toISOString());
@@ -134,10 +117,9 @@ export async function maintenanceTick(
   const branchRepos = Object.keys(list.branches_read).length;
   const pruned = list.items.filter((i) => i.rule === "branch-pruned").length;
   const deploySites = Object.keys(list.deploys_read).length;
-  const tagged = list.items.filter((i) => i.rule === "release-tagged").length;
   return {
     ran: true,
-    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${deploySites} site deploy(s) compared; ${list.model_read} fact(s) compared with the system model; ${list.rule_docs_read} rule document(s) checked; ${list.releases_read} shared package version(s) compared with their tags, ${tagged} tagged`,
+    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${deploySites} site deploy(s) compared; ${list.model_read} fact(s) compared with the system model; ${list.rule_docs_read} rule document(s) checked`,
     list,
   };
 }
@@ -154,14 +136,15 @@ export async function readMaintenance(env: Env): Promise<MaintenanceList | null>
       v && typeof v === "object" ? (v as Record<string, number>) : {};
     return {
       ...parsed,
-      // The disk rule was removed; a list stored before then may still carry its items.
-      items: parsed.items.filter((i) => !i.rule.startsWith("disk-")),
+      // The disk and release-tag rules were removed; a list stored before then may still carry their items.
+      items: parsed.items.filter(
+        (i) => !i.rule.startsWith("disk-") && !i.rule.startsWith("release-"),
+      ),
       prs_read: counts(parsed.prs_read),
       branches_read: counts(parsed.branches_read),
       deploys_read: counts(parsed.deploys_read),
       model_read: typeof parsed.model_read === "number" ? parsed.model_read : 0,
       rule_docs_read: typeof parsed.rule_docs_read === "number" ? parsed.rule_docs_read : 0,
-      releases_read: typeof parsed.releases_read === "number" ? parsed.releases_read : 0,
     };
   } catch {
     return null;

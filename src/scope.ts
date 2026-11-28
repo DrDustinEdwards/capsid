@@ -289,7 +289,7 @@ const ADMIN_REASON: Record<string, string> = {
   capsid_admin_read_ops:
     "It reads the watcher's last pass, the Cloudflare account's Access and Email Routing configuration, and every Workers Build, across every namespace, which is wider than any one caller's scope.",
   capsid_admin_run_controls:
-    "It runs the administrator's controls (revoke an agent, edit the sites and packages the Portal watches), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
+    "It runs the administrator's controls (revoke an agent, edit the sites the Portal watches and the npm packages it lists), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
 };
 
 function adminReason(tool: string): string {

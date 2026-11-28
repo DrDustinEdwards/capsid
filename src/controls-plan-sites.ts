@@ -163,7 +163,7 @@ export async function planSiteAction(
         ok: true,
         changes: [
           `ops_packages: add ${describePackage(checked.pkg)}.`,
-          "The watcher reads it from its next pass: about nine requests to npm, deps.dev and GitHub per pass. The Packages view appears once a package is configured.",
+          "The nightly build reads its versions from npm for the Shared tab's versions table, once it names a GitHub repository.",
         ],
         audit: [`ops-package-added by ${actor}`, click],
       };
@@ -205,7 +205,7 @@ export async function planSiteAction(
       return {
         ok: true,
         changes: [
-          `ops_packages: remove ${describePackage(before)}. The row is kept in the audit row, and its weekly GitHub rows stay.`,
+          `ops_packages: remove ${describePackage(before)}. The row is kept in the audit row, and the next nightly build leaves it out of the versions table.`,
         ],
         audit: [`ops-package-removed by ${actor}`, click],
       };

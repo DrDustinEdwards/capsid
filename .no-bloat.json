@@ -12,13 +12,13 @@
     }
   ],
   "baseline": {
-    "measured_at": "74902cc",
+    "measured_at": "d8e1129",
     "knip (Worker)": {},
     "knip (dashboard)": {},
     "jscpd": {
-      "clones": 89,
-      "lines": 723,
-      "percentage": 0.73,
+      "clones": 88,
+      "lines": 713,
+      "percentage": 0.72,
       "unread": 4
     },
     "shared copies": {
@@ -27,7 +27,7 @@
     },
     "legacy": {},
     "size": {
-      "dashboard/dev/mock-api.ts": 2087,
+      "dashboard/dev/mock-api.ts": 2049,
       "dashboard/src/app/App.tsx": 585,
       "dashboard/src/views/SiteTraffic.tsx": 605,
       "explorer/src/explorer.css": 1435,
@@ -37,13 +37,13 @@
       "test/fakes.ts": 1232
     },
     "tests": {
-      "files": 204,
-      "cases": 1292
+      "files": 202,
+      "cases": 1267
     },
     "comments": {
-      "lines": 5125,
-      "code": 87406,
-      "percentage": 5.54
+      "lines": 5052,
+      "code": 85632,
+      "percentage": 5.55
     }
   }
 }

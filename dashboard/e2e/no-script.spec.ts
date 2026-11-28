@@ -7,7 +7,6 @@ for (const [path, charts] of [
   ["demos/agents?tab=activity", 3],
   ["demos/sites?tab=deploys", 1],
   ["demos/sites/sample", 2],
-  ["demos/packages", 1],
 ] as const) {
   test(`PLANT: with scripts off, ${path} has its ${charts} charts, each drawn with its table`, async ({
     page,

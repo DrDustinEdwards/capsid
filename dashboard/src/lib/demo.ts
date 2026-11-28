@@ -40,14 +40,13 @@ export function shiftTimes(value: unknown, delta: number, days = false): unknown
   return value;
 }
 
-/** A package name as a captured file's name: a scoped name's @ and / would be read as a path. */
-export function demoFileName(name: string): string {
+/** A chart set's name as a captured file's name: an @ or / would be read as a path. */
+function demoFileName(name: string): string {
   return name.replace(/[^a-z0-9._-]/gi, "_");
 }
 
 /** The demo's reads, answered from the captured files: GET /demos/api/<name>?... reads
- *  /demos/api/<name>.json (the query is not kept), moved to now; a package's history
- *  (?name=<package>) reads /demos/api/packages/history/<package>.json. Anything else under /demos/api/
+ *  /demos/api/<name>.json (the query is not kept), moved to now. Anything else under /demos/api/
  *  is refused in the browser with 409 and plain text, which the app shows as the server's words. */
 export function installDemoFetch(): void {
   const prefix = `${DEMO_BASE}/api/`;
@@ -72,14 +71,11 @@ export function installDemoFetch(): void {
 }
 
 /** The captured file a demo read answers from: "/x?..." is /demos/api/x.json (the query is not
- *  kept), a package's history (/packages/history?name=<package>) its own file, and a chart set
- *  (/figures?set=<set>) its own. */
+ *  kept), and a chart set (/figures?set=<set>) its own. */
 export function demoFile(path: string): string {
   const url = new URL(path, "https://demo.invalid");
-  const pkg = url.pathname === "/packages/history" ? url.searchParams.get("name") : null;
   const set = url.pathname === "/figures" ? url.searchParams.get("set") : null;
-  const own = pkg ?? set;
-  return `${DEMO_BASE}/api${url.pathname}${own ? `/${demoFileName(own)}` : ""}.json`;
+  return `${DEMO_BASE}/api${url.pathname}${set ? `/${demoFileName(set)}` : ""}.json`;
 }
 
 /** A captured answer with every time moved to now. */

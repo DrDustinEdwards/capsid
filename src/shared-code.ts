@@ -1,5 +1,4 @@
 import { asTag, type NoBloatJob } from "./lockfiles";
-import type { PackageSnapshot } from "./ops-types/sites";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "./ops-types/feed";
 
 // SHARED CODE: how far the centralization has got (capsid/rulings/shared-homes-2026-10-06.md).
@@ -146,10 +145,15 @@ export function releaseDecision(version: string | null, tags: readonly string[])
   return { kind: "tag", tag, newest };
 }
 
+/** What npm answered for a package: its latest dist-tag, or why there is none. */
+export type NpmRead =
+  | { state: "ok"; latest: string | null }
+  | { state: "none" | "error"; reason: string };
+
 /** What was read of a package's own repo and of npm, or why the repo was not read. */
 export interface ReleaseRead {
   manifest: RootManifest | string;
-  npm: PackageSnapshot["npm"] | null;
+  npm: NpmRead | null;
 }
 
 export interface AppRead {

@@ -14,8 +14,6 @@ import {
   readCloudflare,
   readSecretNames,
 } from "./ops-cloudflare";
-import { readPackage } from "./ops-packages";
-import { readPackageConfig } from "./ops-package-config";
 import { readSiteConfig, type OpsSite, sitesFrom, siteMapDrift } from "./ops-sites";
 import { probeSite, readSnapshot } from "./ops-snapshot";
 import { secretPresence, storeSecrets } from "./secret-presence";
@@ -298,19 +296,6 @@ export async function gatherFindings(
       for (const f of tls.failed)
         logEvent("WATCHER_TLS_UNREAD", { message: `${f.host}: ${f.error}` }, { level: "warn" });
     }
-  }
-
-  // The configured packages, for the Portal's Packages view (src/ops-packages.ts).
-  // Read, never judged: no finding comes from a package. With none configured nothing
-  // is fetched; each package's sources fail on their own inside readPackage.
-  const packageConfig = await attempt("package config", () => readPackageConfig(env.DB));
-  if (packageConfig) {
-    const read = await attempt("packages", async () => {
-      return mapLimit(packageConfig, READ_CONCURRENCY, (cfg) =>
-        readPackage(env, cfg, fetchImpl, now),
-      );
-    });
-    if (read) observed.packages = read;
   }
 
   return { findings: out, ran, observed };

@@ -17,7 +17,6 @@ import type {
   PortalActivity,
   PortalNamespaces,
   PortalNotFound,
-  PortalPackageHistory,
   PortalPerformed,
   PortalPreview,
   PortalSiteSearch,
@@ -45,7 +44,6 @@ const PREVIEW_URL = `${BASE}/api/actions/preview`;
 const PERFORM_URL = `${BASE}/api/actions/perform`;
 const NAMESPACES_URL = `${BASE}/api/namespaces`;
 const ACTIVITY_URL = `${BASE}/api/activity`;
-const PACKAGE_HISTORY_URL = `${BASE}/api/packages/history`;
 const SHARED_CODE_URL = `${BASE}/api/shared-code`;
 const NOT_FOUND_URL = `${BASE}/api/not-found`;
 const COMPLETENESS_URL = `${BASE}/api/completeness`;
@@ -218,12 +216,6 @@ export function fetchActivity(filter: {
   if (filter.actor) qs.set("actor", filter.actor);
   const s = qs.toString();
   return getAnswer<PortalActivity>(s ? `${ACTIVITY_URL}?${s}` : ACTIVITY_URL);
-}
-
-export function fetchPackageHistory(name: string): Promise<Answer<PortalPackageHistory>> {
-  return getAnswer<PortalPackageHistory>(
-    `${PACKAGE_HISTORY_URL}?${new URLSearchParams({ name }).toString()}`,
-  );
 }
 
 export function fetchSharedCode(): Promise<Answer<SharedCodeView>> {

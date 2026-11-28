@@ -354,14 +354,6 @@ const UNGUARDED_EXCEPTIONS: Array<{ site: string; why: string }> = [
     site: "maintenance-branches.ts: deletePruneCandidates",
     why: "the maintenance pass's branch prune, a system action behind its KV switch; audited per branch",
   },
-  {
-    site: "maintenance-releases.ts: createTag",
-    why: "the maintenance pass's release tagging, a system action behind its KV switch; audited per tag",
-  },
-  {
-    site: "maintenance-releases.ts: publishRelease",
-    why: "the same pass publishing the tag's release notes; audited with the tag",
-  },
 ];
 
 test("DERIVED: every repo mutation goes through the one wrapper that computes the flags", () => {
