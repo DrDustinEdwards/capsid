@@ -58,4 +58,24 @@ describe("brief provenance", () => {
     );
     expect(byPath).toEqual({ "TASK-a.md": null, "TASK-b.md": "agent:seat" });
   });
+
+  it("returns open handoffs written in the last 14 days, not older, closed or archived ones", async () => {
+    const doc = (path: string, status: string, age: string) =>
+      env.DB.prepare(
+        "INSERT INTO documents (namespace, path, title, body, type, status, updated_at) VALUES ('sample-h', ?1, 't', 'b', 'episodic', ?2, datetime('now', ?3))",
+      )
+        .bind(path, status, age)
+        .run();
+    await doc("handoff/new.md", "published", "-1 days");
+    await doc("handoff/edge.md", "published", "-13 days");
+    await doc("handoff/old.md", "published", "-15 days");
+    await doc("handoff/closed.md", "closed", "-1 days");
+    await doc("archive/handoff/gone.md", "published", "-1 days");
+    await doc("note.md", "published", "-1 days");
+    const out = await brief("sample-h");
+    expect(out.open_handoffs.map((h: { path: string }) => h.path)).toEqual([
+      "handoff/new.md",
+      "handoff/edge.md",
+    ]);
+  });
 });

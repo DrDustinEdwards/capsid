@@ -123,7 +123,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "brief",
     {
-      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid rule documents every driver reads first, conventions and core, plus the allowlist it may read, which adds Dustin's rulings as reference records, not rules), its open task docs (non-archived and not status closed) as stubs with path, title, updated_at, last_actor and last_client (the MCP client behind it; read one with capsid_read_doc), every open handoff (a document under handoff/ whose status is not closed) newest first, whole while the packet fits and as stubs after, each with its checklist (the done and open counts of the task list it ends with, \`- [ ]\` and \`- [x]\` lines, and the open items), and the typed edges on core.md, each with updated_at so staleness shows. Close a handoff by setting its status to closed or moving it under archive/. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; the \`trimmed\` field says how many handoff bodies were cut. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
+      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid rule documents every driver reads first, conventions and core, plus the allowlist it may read, which adds Dustin's rulings as reference records, not rules), its open task docs (non-archived and not status closed) as stubs with path, title, updated_at, last_actor and last_client (the MCP client behind it; read one with capsid_read_doc), every open handoff (a document under handoff/ whose status is not closed, written in the last 14 days; an older one counts as archived) newest first, whole while the packet fits and as stubs after, each with its checklist (the done and open counts of the task list it ends with, \`- [ ]\` and \`- [x]\` lines, and the open items), and the typed edges on core.md, each with updated_at so staleness shows. Close a handoff by setting its status to closed or moving it under archive/. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; the \`trimmed\` field says how many handoff bodies were cut. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
       inputSchema: {
         namespace: nsName,
         thread: z
@@ -162,7 +162,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
         db
           .prepare(
             // Every open handoff, not the newest few: a thread picks up any area's handoff (Dustin, 2026-11-28).
-            "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND path LIKE 'handoff/%' AND status != 'closed' ORDER BY updated_at DESC",
+            "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND path LIKE 'handoff/%' AND status != 'closed' AND updated_at >= datetime('now', '-14 days') ORDER BY updated_at DESC",
           )
           .bind(namespace)
           .all<StartDoc>(),

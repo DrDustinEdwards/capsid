@@ -1,5 +1,7 @@
 // Handoffs: the documents under handoff/ that threads leave for the next thread. Open means status
-// is not closed; closing one is setting its status to closed or moving it under archive/.
+// is not closed and the handoff was written in the last 14 days; one left untouched longer counts
+// as archived, so about 70 a week do not flood the start packet. Closing one early is setting its
+// status to closed or moving it under archive/; writing to an old one opens it again.
 // capsid_start_session returns a namespace's open handoffs; the coordinator board
 // (capsid_admin_whats_next) lists them across namespaces with their checklists and what waits on
 // Dustin, so open work is counted without reading the prose.
@@ -66,7 +68,7 @@ export interface BoardHandoff {
 export async function openHandoffs(db: D1Database, limit: number): Promise<BoardHandoff[]> {
   const { results } = await db
     .prepare(
-      "SELECT namespace, path, title, body, updated_at FROM documents WHERE path LIKE 'handoff/%' AND status != 'closed' ORDER BY updated_at DESC LIMIT ?1",
+      "SELECT namespace, path, title, body, updated_at FROM documents WHERE path LIKE 'handoff/%' AND status != 'closed' AND updated_at >= datetime('now', '-14 days') ORDER BY updated_at DESC LIMIT ?1",
     )
     .bind(limit)
     .all<{
