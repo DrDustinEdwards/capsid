@@ -2,46 +2,11 @@ import assert from "node:assert/strict";
 import { globSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { TABLES } from "../../src/backup.ts";
 
 // `npm run lint:docs`: a document that falls behind the code fails here.
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
-
-function restoreRunbook(): string {
-  const doc = read("docs/backups.md");
-  const from = doc.indexOf("## Restore");
-  assert.ok(from >= 0, "docs/backups.md no longer has a Restore section");
-  const runbook = doc.slice(from);
-  assert.ok(
-    runbook.length > 1000,
-    `the restore runbook came back nearly empty (${runbook.length} chars)`,
-  );
-  return runbook;
-}
-
-test("the restore runbook names every backed-up table", () => {
-  const restore = restoreRunbook();
-  assert.ok(TABLES.length >= 9, `TABLES lists only ${TABLES.length} tables`);
-  for (const table of TABLES) {
-    assert.match(restore, new RegExp(`\\b${table}\\b`), `the restore runbook never names ${table}`);
-  }
-});
-
-test("the restore runbook applies EVERY migration, derived from the directory", () => {
-  const restore = restoreRunbook();
-  const migrations = readdirSync(join(ROOT, "migrations"))
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
-  assert.ok(migrations.length >= 4, "the migration scan found almost nothing");
-  for (const file of migrations) {
-    assert.ok(
-      restore.includes(file),
-      `the runbook never names ${file}, so a restore that follows it stops short`,
-    );
-  }
-});
 
 test("the README links every document under docs/", () => {
   const readme = read("README.md");

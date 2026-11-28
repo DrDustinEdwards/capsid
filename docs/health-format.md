@@ -1,6 +1,6 @@
 # Health format
 
-One format for a site's health route, defined here so the watcher's `sha` live check (docs/live-checks.md) reads every site the same way. Code: site-runtime `./health-read`.
+One format for a site's health route, defined here so the watcher's `sha` live check ([live-checks.md](live-checks.md)) reads every site the same way. Code: site-runtime `./health-read`.
 
 ## The body
 
@@ -14,12 +14,12 @@ JSON. The family's format is site-runtime's `/health` (the IETF health-check dra
 | `db`, `backup`, `time` | optional; `backup` is `{ last_ok, age_hours, warning? }` |
 | `checks`               | `[{ name, status, detail? }]`                            |
 
-The watcher also reads the bodies sites sent before it: no `status`, only `ok`, `backup.warning` and `checks` whose entries carry `ok`, and Capsid's own before 2026-10-31, whose `status` is `"ok"`, `"degraded"` or `"down"` (Capsid's /health is the family shape since). Either JSON content type is read. Nothing secret goes in the body: no token, no binding id, no row content.
+The watcher also reads older site bodies: no `status`, only `ok`, `backup.warning` and `checks` whose entries carry `ok`, with `status` possibly `"ok"`, `"degraded"` or `"down"`. Either JSON content type is read. Nothing secret goes in the body: no token, no binding id, no row content.
 
 ## The response
 
 - `Cache-Control: no-store`, so a poll after a deploy reads the new version.
-- `503` only on `fail` (or Capsid's `down`, and its `degraded` when D1 or FTS fails, which the live gate relies on). The watcher reads the body whatever the code.
+- `503` only on `fail` (or `down`). The watcher reads the body whatever the code.
 
 ## How the watcher reads it
 
@@ -33,7 +33,3 @@ The watcher also reads the bodies sites sent before it: no `status`, only `ok`, 
 The probe (`probeSite`, `src/ops-snapshot.ts`) calls a 2xx ok or degraded as the body says. A non-2xx answer or a `fail` body is a failed health route, and the probe reads the root: a root that answers 2xx makes the site degraded, and one that does not makes it down. A body that is not JSON, or a field of the wrong type, reads as absent, so a 2xx with no readable body is ok and a site that reports no sha is the `live-sha-unreported-<site>` finding, never a crash in the probe. A sha is cut to 40 characters; a short sha is allowed and matches by prefix once it is 7 characters or more.
 
 A health path is a path on the site's origin, or an https URL where a site serves its health on another host (Carrel's public one is on `carrel-mcp.dustinedwards.info`, its app being behind Access); the root fallback stays on the origin.
-
-## Where each site stands
-
-Read on 2026-10-30: foxing, foxhound, txasm, bsw, julieedwards, germomics and Carrel answer the older `ok` body (foxhound, txasm, bsw, julieedwards and Carrel with a sha), dustinedwards.info answers it at `/api/health` with `checks`, and Capsid answers its own. Each moves to site-runtime's body as it takes that version. A `sha` line in `capsid/policy/live-checks.md` is the seat's to add once a site reports one.

@@ -14,7 +14,7 @@ import { errorTotals } from "../ui/charts";
 import { Status } from "capsomer/react/status";
 import "./TrendCharts.css";
 
-// The Portal's charts drawn with Enarratio's primitives (docs/design/design-portal-evaluation.md section 3; DECIDE 6 and 7). Each is
+// The Portal's charts drawn with Enarratio's primitives Each is
 // Enarratio's whole figure in Capsomer's chart frame, from enarratio/lite (no Observable Plot, to fit the chunk budget). Loads with the
 // page that shows a chart, never in the initial bundle; uptime's UptimeTicks is in ui/charts.tsx.
 
