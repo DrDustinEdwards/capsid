@@ -1,4 +1,3 @@
-import { SHIPPED_VERSION } from "./policy-version.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
@@ -213,13 +212,8 @@ test("a switch without a reason, or a Portal-only control from chat, is refused 
       params: { value: "off", reason: "x", site: "y" },
     });
     assert.equal(stray.isError, true, "a param the control does not take was carried");
-    // Chat cannot sign the auto-merge policy or set a site key: both take a Portal click.
+    // Chat cannot set a site key or activate an agent: both take a Portal click.
     for (const [control, params] of [
-      [
-        "sign_policy_change",
-        { change: "promote", unit: "capsid/tests", confirm: `${SHIPPED_VERSION + 1}` },
-      ],
-      ["sign_policy_from_repo", { confirm: `${SHIPPED_VERSION + 1}` }],
       ["site_key_rotate", { namespace: "sample" }],
       ["activate_agent", { name: "sample-driver" }],
     ] as const) {

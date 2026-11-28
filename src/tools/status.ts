@@ -4,7 +4,6 @@ import { z } from "zod";
 import { bounded, MAX_DOC_STATUS, nsName } from "../limits";
 import { capsidStatus } from "../status";
 import { signPolicyDocument } from "../policy-sign";
-import { AUTO_MERGE_POLICY_PATH } from "../auto-merge-policy";
 import { resetBreaker } from "../job-breaker";
 import { fail, ok, type ToolCtx } from "./docs";
 
@@ -15,7 +14,7 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "admin_control",
     {
-      description: `The administrator's switches. action "breaker_reset" closes the queue's circuit breaker for namespace, so jobs its drivers failed before now stop counting toward the threshold (default 3 holder fails in 24 hours), and with threshold sets that threshold for every namespace; audit-logged and read back. action "overnight" sets the overnight run's switch (value "off" | "api" | "subscription", and a reason, both required): off unless set, with a "Runs on" choice of API key or subscription; choosing subscription records Dustin's decision, its date and its reasoning with the switch; audit-logged and read back. action "sign_policy" signs the policy document already stored at path (namespace "capsid", path under "policy/"), never a body the caller supplies, and only when sha256 is the sha256 of the body below its frontmatter as the caller read it; the prior body is snapshotted and the signing is audit-logged. It never signs policy/auto-merge.md: that is signed by the sign_policy_change and sign_policy_from_repo controls. Admin only.`,
+      description: `The administrator's switches. action "breaker_reset" closes the queue's circuit breaker for namespace, so jobs its drivers failed before now stop counting toward the threshold (default 3 holder fails in 24 hours), and with threshold sets that threshold for every namespace; audit-logged and read back. action "overnight" sets the overnight run's switch (value "off" | "api" | "subscription", and a reason, both required): off unless set, with a "Runs on" choice of API key or subscription; choosing subscription records Dustin's decision, its date and its reasoning with the switch; audit-logged and read back. action "sign_policy" signs the policy document already stored at path (namespace "capsid", path under "policy/"), never a body the caller supplies, and only when sha256 is the sha256 of the body below its frontmatter as the caller read it; the prior body is snapshotted and the signing is audit-logged. Admin only.`,
       inputSchema: {
         action: z.enum(["sign_policy", "breaker_reset", "overnight"]),
         namespace: nsName
@@ -59,10 +58,6 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
             return fail(
               "sign_policy needs the namespace, the path of the policy document and the sha256 of the body you read.",
             );
-          if (path === AUTO_MERGE_POLICY_PATH)
-            return fail(
-              `sign_policy does not sign ${AUTO_MERGE_POLICY_PATH}: its author allowlist and Auto units decide what merges with no person, so it is signed only by the sign_policy_change and sign_policy_from_repo controls, which show the change first. Nothing was signed.`,
-            );
           const signed = await signPolicyDocument(env, ctx.actor, namespace, path, sha256);
           return signed.ok ? ok(signed) : fail(signed.error);
         }
@@ -81,7 +76,7 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
     "status",
     {
       description:
-        "Capsid's state per namespace: a jobs block (queued, claimed and blocked counts, jobs finished today, and each blocked job with the command it is waiting on), the queue's breaker, the latest lint report, the pull requests auto-merge declined, the daily maintenance list and what needs Dustin. Also the signed policies' versions, the overnight switch, the auto-merge safety meter, canon_paths (the canon documents and rulings an agent key may not change) and, for the admin, agents: every minted agent with its kind, namespaces, grants, the flags it holds, when it was last seen and whether it is revoked. Never returns a key or a stored verifier. Read-only.",
+        "Capsid's state per namespace: a jobs block (queued, claimed and blocked counts, jobs finished today, and each blocked job with the command it is waiting on), the queue's breaker, the latest lint report, the daily maintenance list and what needs Dustin. Also the gate policy's version, the overnight switch, canon_paths (the canon documents and rulings an agent key may not change) and, for the admin, agents: every minted agent with its kind, namespaces, grants, the flags it holds, when it was last seen and whether it is revoked. Never returns a key or a stored verifier. Read-only.",
       inputSchema: {
         namespace: nsName
           .optional()

@@ -3,8 +3,6 @@ import { archivedAgentByName } from "./agents-archive";
 import { agentActor, parseScopes, SCOPE_FLAGS } from "./agents-schema";
 import {
   type Surface,
-  AUTOMERGE_RESUME_REASON,
-  UNIT_RESUME_REASON,
   clickAuditAction,
   deleteOptionsFrom,
   switchReasonRefusal,
@@ -25,8 +23,6 @@ import { planSiteAction } from "./controls-plan-sites";
 import type { Env } from "./env";
 import { resolveRepo } from "./github";
 import { breakerState } from "./job-breaker";
-import { planResume } from "./merge-safety";
-import { planLift } from "./merge-units";
 import type { PortalAction } from "./ops-types/portal";
 import {
   overnightValueRefusal,
@@ -35,9 +31,6 @@ import {
   decisionFor,
   OVERNIGHT_MODE_KEY,
 } from "./overnight";
-import { planPolicyChange } from "./policy-sign-change";
-import { planPolicyFromRepo } from "./policy-sign-repo";
-import { planApproval } from "./pr-approvals";
 import { APP_ROSTER } from "./roster";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
@@ -122,58 +115,6 @@ export async function planAction(
     case "unpark_job":
     case "run_job":
       return planJobAction(env, action, p, actor, click);
-    case "approve_pr": {
-      const plan = await planApproval(env, actor, p, surface, click);
-      return plan.ok
-        ? { ok: true, changes: plan.changes, audit: plan.audit }
-        : refused(plan.refusal);
-    }
-    case "sign_policy_change": {
-      const plan = await planPolicyChange(env, p.change, p.unit);
-      return plan.ok
-        ? { ok: true, changes: plan.changes, audit: [`policy-changed by ${actor}`, click] }
-        : refused(plan.error);
-    }
-    case "sign_policy_from_repo": {
-      const plan = await planPolicyFromRepo(env);
-      // A typed version, when one comes with the preview, is checked now and bound into the token.
-      if (plan.ok && p.confirm && p.confirm !== plan.to)
-        return refused(
-          `${p.confirm} is not the version in docs/policy/auto-merge.md, which says ${plan.to}. Type ${plan.to} to sign it. Nothing was signed.`,
-        );
-      return plan.ok
-        ? {
-            ok: true,
-            changes: plan.changes,
-            audit: [`policy-loaded-from-repo by ${actor}`, click],
-            bind: { source_sha: plan.newSha },
-          }
-        : refused(plan.error);
-    }
-    case "unit_resume": {
-      if (!p.reason) return refused(UNIT_RESUME_REASON);
-      const plan = await planLift(env.APP_KV, p.unit);
-      if (!plan.ok) return refused(plan.refusal);
-      return {
-        ok: true,
-        changes: [
-          `${plan.unit}: suspended since ${plan.suspension.since} ("${plan.suspension.reason}") -> lifted. The tick may merge its pull requests unattended again; a rollback after now suspends it again.`,
-        ],
-        audit: [`merge-unit-resumed by ${actor}`, click],
-      };
-    }
-    case "automerge_resume": {
-      if (!p.reason) return refused(AUTOMERGE_RESUME_REASON);
-      const plan = await planResume(env.APP_KV, p.namespace);
-      if (!plan.ok) return refused(plan.refusal);
-      return {
-        ok: true,
-        changes: [
-          `${plan.namespace}: auto-merge paused since ${plan.paused.since} ("${plan.paused.reason}") -> lifted. The tick may merge its pull requests unattended again; new bad merges pause it again.`,
-        ],
-        audit: [`auto-merge-resumed by ${actor}`, click],
-      };
-    }
     case "namespace_add": {
       const bad = namespaceNameRefusal(p.namespace);
       if (bad) return refused(bad);

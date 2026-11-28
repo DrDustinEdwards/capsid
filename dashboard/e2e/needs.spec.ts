@@ -1,9 +1,6 @@
 import { expect, test, type Page, type Request } from "@playwright/test";
 import { visit } from "./views.ts";
 
-const PREVIEW_URL = "**/api/actions/preview";
-const PERFORM_URL = "**/api/actions/perform";
-
 function previews(page: Page): Array<{ action: string; params: Record<string, string> }> {
   const sent: Array<{ action: string; params: Record<string, string> }> = [];
   page.on("request", (r: Request) => {
@@ -11,19 +8,6 @@ function previews(page: Page): Array<{ action: string; params: Record<string, st
       sent.push(r.postDataJSON() as { action: string; params: Record<string, string> });
   });
   return sent;
-}
-
-// Performs are answered with the feed as it is, so the mock's state stays for every other spec.
-async function performsLeaveFeed(page: Page, summary: string): Promise<{ count: number }> {
-  const seen = { count: 0 };
-  await page.route(PERFORM_URL, async (route) => {
-    seen.count++;
-    const feed = await (await page.request.get("api/ops")).json();
-    await route.fulfill({
-      json: { action: "approve_pr", summary, warning: null, feed },
-    });
-  });
-  return seen;
 }
 
 const waiting = (page: Page) => page.locator("#waiting");
@@ -34,8 +18,6 @@ test("PLANT: the home is Needs you, and the list comes first by kind", async ({ 
   await page.goto("./");
   await expect(page.getByRole("heading", { level: 1, name: "Needs you" })).toBeVisible();
   await expect(waiting(page).locator(".cap-group-heading")).toHaveText([
-    /^Pull requests, ?2/,
-    /^Auto-merge, ?3/,
     /^Questions and blocked jobs, ?3/,
     /^Paused after repeated failures, ?1/,
     /^Also waiting, ?2/,
@@ -45,14 +27,11 @@ test("PLANT: the home is Needs you, and the list comes first by kind", async ({ 
   );
   expect(order[0]).toBeLessThan(order[1]!);
   await expect(
-    page.locator("header.cap-site-header").getByRole("link", { name: "Inbox, 11 waiting on you" }),
+    page.locator("header.cap-site-header").getByRole("link", { name: "Inbox, 6 waiting on you" }),
   ).toHaveCount(1);
   await expect(
     page.locator("nav.cap-admin-menu").getByRole("link", { name: /^Needs you/ }),
   ).toHaveAccessibleName("Needs you");
-  const title = group(page, "w-prs").locator(".cap-row-title a").first();
-  await expect(title).toHaveAttribute("href", "https://github.com/example-org/sample-c/pull/32");
-  await expect(title).toHaveAttribute("target", "_blank");
   await expect(page.getByRole("heading", { level: 2, name: "Problems" })).toBeVisible();
   await expect(
     page.locator("#attention").getByText(/waiting on you|await the seat|canon proposal/),
@@ -61,112 +40,11 @@ test("PLANT: the home is Needs you, and the list comes first by kind", async ({ 
 
 test("PLANT: the list does not move once the page has loaded", async ({ page }) => {
   await page.goto("./");
-  const h = page.locator('[data-group="w-prs"] .cap-group-heading');
+  const h = page.locator('[data-group="w-jobs"] .cap-group-heading');
   await expect(h).toBeVisible();
   const before = await h.evaluate((el) => el.getBoundingClientRect().top);
   await page.waitForTimeout(1500);
   expect(await h.evaluate((el) => el.getBoundingClientRect().top)).toBe(before);
-});
-
-test("PLANT: Approve on a pull request row previews approve_pr at the head the tick judged, then performs", async ({
-  page,
-}) => {
-  const sent = previews(page);
-  const done = await performsLeaveFeed(page, "Approved example-org/sample-c#32.");
-  await visit(page, "needs");
-  await group(page, "w-prs")
-    .getByRole("button", {
-      name: "Approve example-org/sample-c #32",
-      exact: true,
-    })
-    .click();
-  await expect(
-    dialog(page).getByRole("heading", {
-      name: "Approve pull request example-org/sample-c #32",
-    }),
-  ).toBeVisible();
-  await expect(dialog(page).getByRole("button", { name: "Approve", exact: true })).toBeVisible();
-  expect(sent).toEqual([
-    {
-      action: "approve_pr",
-      params: {
-        namespace: "sample-c",
-        repo: "example-org/sample-c",
-        prs: "32",
-        shas: "4f2c9a1e8b7d6c5f4a3b2c1d0e9f8a7b6c5d4e3f",
-      },
-    },
-  ]);
-  await dialog(page).getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(dialog(page)).toBeHidden();
-  expect(done.count).toBe(1);
-  await expect(page.locator(".cap-message")).toContainText("Approved example-org/sample-c#32.");
-});
-
-test("PLANT: Close on a pull request row asks a reason, then previews pr_close with it", async ({
-  page,
-}) => {
-  const sent = previews(page);
-  await visit(page, "needs");
-  await group(page, "w-prs")
-    .getByRole("button", {
-      name: "Close example-org/sample-c #33",
-      exact: true,
-    })
-    .click();
-  await dialog(page)
-    .getByRole("textbox", { name: "Reason", exact: true })
-    .fill("replaced by a newer pull request");
-  await dialog(page).getByRole("button", { name: "Preview" }).click();
-  await expect(
-    dialog(page).getByRole("button", {
-      name: "Close pull request",
-      exact: true,
-    }),
-  ).toBeVisible();
-  expect(sent).toEqual([
-    {
-      action: "pr_close",
-      params: {
-        namespace: "sample-c",
-        repo: "example-org/sample-c",
-        number: "33",
-        reason: "replaced by a newer pull request",
-      },
-    },
-  ]);
-  await dialog(page).getByRole("button", { name: "Cancel" }).click();
-  await expect(dialog(page)).toBeHidden();
-});
-
-test("PLANT: ticking two pull requests approves both in one confirm, each previewed and performed as its own approve_pr", async ({
-  page,
-}) => {
-  const sent = previews(page);
-  const done = await performsLeaveFeed(page, "Approved one.");
-  await visit(page, "needs");
-  const prs = group(page, "w-prs");
-  await expect(prs.getByRole("region", { name: "Approve pull requests together" })).toBeHidden();
-  await prs.getByRole("checkbox", { name: "Select example-org/sample-c #32" }).check();
-  const bar = prs.getByRole("region", { name: "Approve pull requests together" });
-  await expect(bar.getByRole("status")).toHaveText("1 selected");
-  await bar.getByRole("button", { name: "Select all 2 in view" }).click();
-  await expect(bar.getByRole("status")).toHaveText("2 selected");
-  await bar.getByRole("button", { name: "Approve selected" }).click();
-  await expect(
-    dialog(page).getByRole("heading", { name: "Approve 2 pull requests" }),
-  ).toBeVisible();
-  await expect(dialog(page).locator("[data-batch-item]")).toHaveCount(2);
-  await expect(dialog(page).getByRole("button", { name: "Approve 2" })).toBeVisible();
-  expect(sent.map((s) => [s.action, s.params.prs])).toEqual([
-    ["approve_pr", "32"],
-    ["approve_pr", "33"],
-  ]);
-  await expect(dialog(page).getByRole("button", { name: "Cancel" })).toBeFocused();
-  await dialog(page).getByRole("button", { name: "Approve 2" }).click();
-  await expect(dialog(page)).toBeHidden();
-  expect(done.count).toBe(2);
-  await expect(page.locator(".cap-message")).toContainText("Approved one. Approved one.");
 });
 
 test("PLANT: Answer opens a reply box on the row, and Send previews resume_job with the reply as its reason", async ({
@@ -223,22 +101,6 @@ test("Resume on a blocked job row previews resume_job; its title opens its panel
   await expect(page.locator("dialog.drawer[open]")).toBeVisible();
 });
 
-test("PLANT: auto-merge's asks are here, each opening its control: Resume, Promote, Lift suspension", async ({
-  page,
-}) => {
-  await visit(page, "needs");
-  const g = group(page, "w-automerge");
-  for (const [button, title] of [
-    ["Resume auto-merge for sample-c", "Resume auto-merge for sample-c"],
-    ["Promote sample-b/tests", "Promote sample-b/tests to auto-merge"],
-    ["Lift the suspension of sample-c/docs", "Lift the suspension of sample-c/docs"],
-  ] as const) {
-    await g.getByRole("button", { name: button }).click();
-    await expect(dialog(page)).toContainText(title);
-    await dialog(page).getByRole("button", { name: "Cancel" }).click();
-  }
-});
-
 test("PLANT: a stopped queue is here with Reset, which previews reset_breaker for its namespace", async ({
   page,
 }) => {
@@ -253,29 +115,6 @@ test("PLANT: a stopped queue is here with Reset, which previews reset_breaker fo
   await dialog(page).getByRole("button", { name: "Cancel" }).click();
 });
 
-test.describe("on a touch phone", () => {
-  test.use({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true });
-
-  test("on a phone each row's buttons are touch targets of 44 px, and the first is on the first screen", async ({
-    page,
-  }) => {
-    await visit(page, "needs");
-    const approve = group(page, "w-prs").getByRole("button", {
-      name: "Approve example-org/sample-c #32",
-      exact: true,
-    });
-    const close = group(page, "w-prs").getByRole("button", {
-      name: "Close example-org/sample-c #32",
-      exact: true,
-    });
-    const a = (await approve.boundingBox())!;
-    const c = (await close.boundingBox())!;
-    expect(a.height).toBeGreaterThanOrEqual(44);
-    expect(c.height).toBeGreaterThanOrEqual(44);
-    expect(a.y + a.height).toBeLessThan(915);
-  });
-});
-
 test("with nothing waiting it says so", async ({ page }) => {
   await page
     .context()
@@ -283,31 +122,4 @@ test("with nothing waiting it says so", async ({ page }) => {
   await visit(page, "needs");
   await expect(waiting(page).getByText("Nothing needs you.")).toBeVisible();
   await expect(waiting(page).locator(".cap-group")).toHaveCount(0);
-});
-
-test("a preview refused for one ticked row still lists the others, and names the refusal", async ({
-  page,
-}) => {
-  await page.route(PREVIEW_URL, async (route) => {
-    const body = route.request().postDataJSON() as {
-      params: Record<string, string>;
-    };
-    if (body.params.prs === "33")
-      return route.fulfill({
-        status: 400,
-        contentType: "text/plain",
-        body: "#33 moved: its head is new now.",
-      });
-    return route.fallback();
-  });
-  await visit(page, "needs");
-  const prs = group(page, "w-prs");
-  await prs.getByRole("checkbox", { name: "Select example-org/sample-c #32" }).check();
-  await prs.getByRole("checkbox", { name: "Select example-org/sample-c #33" }).check();
-  await prs.getByRole("button", { name: "Approve selected" }).click();
-  await expect(dialog(page).locator('[data-batch-item="example-org/sample-c #33"]')).toContainText(
-    "#33 moved",
-  );
-  await expect(dialog(page).getByRole("button", { name: "Approve 1" })).toBeVisible();
-  await dialog(page).getByRole("button", { name: "Cancel" }).click();
 });

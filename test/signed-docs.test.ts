@@ -23,7 +23,7 @@ test("the signing key is derived under its own context, unequal to the backup ke
 });
 
 test("a signed document round-trips and verifies", async () => {
-  const body = "# Auto-merge policy\n\n- version: 7\n";
+  const body = "# Gate policy\n\n- version: 7\n";
   const signed = await signTaskBody(ROOT, body);
   assert.match(signed, new RegExp(`^---\\n${TASK_SIGNATURE_FIELD}: [0-9a-f]{64}\\n---\\n`));
   const split = splitSignedTask(signed);
@@ -34,7 +34,7 @@ test("a signed document round-trips and verifies", async () => {
 test("PLANT: a signed document with any other line in its frontmatter is refused", async () => {
   // The HMAC covers only the body below the frontmatter, so a line added beside the
   // signature leaves the signature valid. The Worker writes exactly one line there.
-  const body = "# Auto-merge policy\n\n- enabled: false\n";
+  const body = "# Gate policy\n\n- enabled: false\n";
   const signed = await signTaskBody(ROOT, body);
   const sigLine = signed.split("\n")[1];
   const plants = [
@@ -64,7 +64,7 @@ test("PLANT: a signed document with any other line in its frontmatter is refused
 });
 
 test("PLANT: a document edited after signing is refused", async () => {
-  const body = "# Auto-merge policy\n\n- enabled: false\n";
+  const body = "# Gate policy\n\n- enabled: false\n";
   const signed = await signTaskBody(ROOT, body);
   // The attack: keep the signature line, rewrite the body under it.
   const tampered = signed.replace("- enabled: false", "- enabled: true");
@@ -75,20 +75,20 @@ test("PLANT: a document edited after signing is refused", async () => {
 });
 
 test("PLANT: an unsigned document is refused", async () => {
-  const verdict = await verifySignedBody(ROOT, "# Auto-merge policy\n\n- enabled: true\n", WHAT);
+  const verdict = await verifySignedBody(ROOT, "# Gate policy\n\n- enabled: true\n", WHAT);
   assert.equal(verdict.ok, false);
   assert.match(String(verdict.ok === false && verdict.reason), /carries no capsid-task-signature/);
 });
 
 test("PLANT: a document signed with the wrong key is refused", async () => {
-  const signed = await signTaskBody("some-other-root", "# Auto-merge policy\n");
+  const signed = await signTaskBody("some-other-root", "# Gate policy\n");
   const verdict = await verifySignedBody(ROOT, signed, WHAT);
   assert.equal(verdict.ok, false);
   assert.match(String(verdict.ok === false && verdict.reason), /does not match its body/);
 });
 
 test("an unconfigured Worker refuses every signed document rather than skipping the check", async () => {
-  const signed = await signTaskBody(ROOT, "# Auto-merge policy\n");
+  const signed = await signTaskBody(ROOT, "# Gate policy\n");
   const verdict = await verifySignedBody(undefined, signed, WHAT);
   assert.equal(verdict.ok, false);
   assert.match(String(verdict.ok === false && verdict.reason), /not configured/);

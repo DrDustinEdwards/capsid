@@ -1,5 +1,4 @@
 // Runs the unit suite and prints its wall clock; enforces no budget.
-// Kept under this name because the auto-merge policy lists it as the runner behind npm test.
 
 import { spawnSync } from "node:child_process";
 

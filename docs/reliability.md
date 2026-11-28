@@ -27,5 +27,5 @@ The exceptions follow Google's: a Cloudflare-wide outage, load tests and other p
 ## What stays open
 
 - The 28-day baseline from visitor-only counts. The first measurement used Cloudflare's raw status counts, which include intended 501s and bots, so it overstates errors (julieedwards.info read 10% raw, almost all 501s). The visitor-only report covers 7 days at most; the target needs a stored 28-day series per site.
-- The pause itself is a change to auto-merge (`docs/policy/auto-merge.md`, a refused path), so it waits for the seat, with the watcher code that computes the 28-day rate.
+- The pause itself, with the watcher code that computes the 28-day rate.
 - Germomics returned bursts of 503s on `.data` requests until 2026-11-06. They came from one automated visitor at fixed hours. If they are counted, they decide whether germomics met the target that week.

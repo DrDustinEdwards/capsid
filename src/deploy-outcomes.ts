@@ -164,7 +164,7 @@ const mk = (
   namespace,
   title: `Watcher: ${headline} [${fingerprint}]`,
   body: [
-    "The live gate refused a deploy (docs/design/design-merge-pipeline.md section 6). Read",
+    'The live gate refused a deploy (docs/autonomy.md, "Deploys"). Read',
     "the run, then land a fix or revert the commit; master still points at it.",
     "",
     "## Evidence",

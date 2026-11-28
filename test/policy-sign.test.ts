@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { policyDocument } from "./policy-doc.ts";
 import { test } from "node:test";
 import { signPolicyDocument } from "../src/policy-sign.ts";
 import { signTaskBody, splitSignedTask, verifySignedBody } from "../src/signed-docs.ts";
-import { loadMergePolicy, AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy.ts";
+import { GATE_POLICY_PATH, loadGatePolicy } from "../src/gate-policy.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
 import { COMPOSITES } from "../src/tools/surface.ts";
@@ -17,7 +16,18 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 const SECRET = "test-improve-secret";
 
-const POLICY_BODY = policyDocument(1, { enabled: false });
+const POLICY_BODY = [
+  "# Pre-approved gates",
+  "",
+  "- version: 1",
+  "- enabled: false",
+  "",
+  "## Classes",
+  "",
+  "- `additive_migration` an additive migration.",
+  "- `push_branch` a branch push.",
+  "- `open_pr` a pull request.",
+].join("\n");
 
 // The body the signer committed, read out of the documents upsert it recorded.
 // documentUpsert binds (namespace, path, title, body, ...), so the body is params[3].
@@ -53,9 +63,9 @@ test("sign_policy refuses what it must not sign: another namespace, a path outsi
   }> = [
     {
       label: "another namespace",
-      docs: [doc("foxhound", "policy/auto-merge.md", POLICY_BODY)],
+      docs: [doc("foxhound", "policy/gates.md", POLICY_BODY)],
       namespace: "foxhound",
-      path: "policy/auto-merge.md",
+      path: "policy/gates.md",
       error: /only signs documents in 'capsid'/,
     },
     ...["core.md", "improve/scores.md", "decisions.md", "policy/../core.md"].map((path) => ({
@@ -68,23 +78,23 @@ test("sign_policy refuses what it must not sign: another namespace, a path outsi
       label: "a document that does not exist",
       docs: [],
       namespace: "capsid",
-      path: AUTO_MERGE_POLICY_PATH,
-      error: /no document at capsid\/policy\/auto-merge\.md/,
+      path: GATE_POLICY_PATH,
+      error: /no document at capsid\/policy\/gates\.md/,
     },
     {
       // An empty policy would otherwise be a valid signature over nothing.
       label: "an empty policy",
-      docs: [doc("capsid", AUTO_MERGE_POLICY_PATH, "   \n\n")],
+      docs: [doc("capsid", GATE_POLICY_PATH, "   \n\n")],
       namespace: "capsid",
-      path: AUTO_MERGE_POLICY_PATH,
+      path: GATE_POLICY_PATH,
       error: /empty body/,
     },
     {
       label: "no signing secret",
-      docs: [doc("capsid", AUTO_MERGE_POLICY_PATH, POLICY_BODY)],
+      docs: [doc("capsid", GATE_POLICY_PATH, POLICY_BODY)],
       secret: "",
       namespace: "capsid",
-      path: AUTO_MERGE_POLICY_PATH,
+      path: GATE_POLICY_PATH,
       error: /signing is not configured/,
     },
   ];
@@ -99,13 +109,13 @@ test("sign_policy refuses what it must not sign: another namespace, a path outsi
 
 test("a signed policy verifies, and the same store then loads it", async () => {
   const { fake, env } = envWith([
-    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
+    { namespace: "capsid", path: GATE_POLICY_PATH, title: "p", body: POLICY_BODY },
   ]);
   const result = await signPolicyDocument(
     env,
     "github:DrDustinEdwards",
     "capsid",
-    AUTO_MERGE_POLICY_PATH,
+    GATE_POLICY_PATH,
   );
   assert.equal(result.ok, true, result.ok ? "" : result.error);
   assert.equal(result.ok && result.resigned, false, "a first signature is not a re-sign");
@@ -114,13 +124,13 @@ test("a signed policy verifies, and the same store then loads it", async () => {
   // The fake does not apply upserts back onto its rows, so the bytes that were
   // written are read from the statement the signer committed: what would land in D1.
   const written = signedBodyFrom(fake.recorded);
-  const verdict = await verifySignedBody(SECRET, written, "merge policy");
+  const verdict = await verifySignedBody(SECRET, written, "gate policy");
   assert.equal(verdict.ok, true, verdict.ok ? "" : verdict.reason);
 
   const { env: reloaded } = envWith([
-    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: written },
+    { namespace: "capsid", path: GATE_POLICY_PATH, title: "p", body: written },
   ]);
-  const loaded = await loadMergePolicy(reloaded);
+  const loaded = await loadGatePolicy(reloaded);
   assert.ok(
     "policy" in loaded,
     `the signed policy must load: ${"error" in loaded ? loaded.error : ""}`,
@@ -135,25 +145,20 @@ test("a signed policy verifies, and the same store then loads it", async () => {
 
 test("signing an already-signed policy replaces the frontmatter rather than nesting it", async () => {
   const { fake, env } = envWith([
-    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
+    { namespace: "capsid", path: GATE_POLICY_PATH, title: "p", body: POLICY_BODY },
   ]);
-  const first = await signPolicyDocument(
-    env,
-    "github:DrDustinEdwards",
-    "capsid",
-    AUTO_MERGE_POLICY_PATH,
-  );
+  const first = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", GATE_POLICY_PATH);
   assert.equal(first.ok, true);
   const onceSigned = signedBodyFrom(fake.recorded);
 
   const { fake: again, env: envAgain } = envWith([
-    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: onceSigned },
+    { namespace: "capsid", path: GATE_POLICY_PATH, title: "p", body: onceSigned },
   ]);
   const second = await signPolicyDocument(
     envAgain,
     "github:DrDustinEdwards",
     "capsid",
-    AUTO_MERGE_POLICY_PATH,
+    GATE_POLICY_PATH,
   );
   assert.equal(second.ok, true);
   assert.equal(
@@ -183,9 +188,9 @@ test("signing an already-signed policy replaces the frontmatter rather than nest
 
 test("signing snapshots the prior body and writes an audit row, in one batch", async () => {
   const { fake, env } = envWith([
-    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
+    { namespace: "capsid", path: GATE_POLICY_PATH, title: "p", body: POLICY_BODY },
   ]);
-  await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+  await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", GATE_POLICY_PATH);
 
   const sqls = fake.recorded.map((r) => r.sql.replace(/\s+/g, " "));
   assert.ok(
@@ -196,7 +201,7 @@ test("signing snapshots the prior body and writes an audit row, in one batch", a
   assert.ok(audit, "signing must be audit-logged");
   assert.equal(audit.params[1], "policy-signed");
   assert.equal(audit.params[2], "capsid");
-  assert.equal(audit.params[3], AUTO_MERGE_POLICY_PATH);
+  assert.equal(audit.params[3], GATE_POLICY_PATH);
   const params = JSON.parse(String(audit.params[4])) as Record<string, unknown>;
   assert.match(String(params.signature), /^[0-9a-f]{64}$/);
   assert.equal(params.resigned, false);
@@ -213,7 +218,7 @@ test("signing snapshots the prior body and writes an audit row, in one batch", a
   );
 });
 
-test("sign_policy is admin only, never signs the auto-merge policy, and signs only the body read", async () => {
+test("sign_policy is admin only and signs only the body read", async () => {
   // Served as capsid_admin_manage_switches action "sign_policy", an admin tool enforced by the registrar; no driver tool
   // (capsid_read_status serves two reads) can name sign_policy.
   assert.equal(
@@ -243,10 +248,9 @@ test("sign_policy is admin only, never signs the auto-merge policy, and signs on
   assert.match(refusal, /admin only/);
   assert.match(refusal, /widen/i, "the refusal should say why, not only that it refused");
 
-  // PLANT: even the admin's raw switch never signs the auto-merge policy, and signs another
-  // policy only when it names the sha256 of the body it read.
+  // PLANT: even the admin's raw switch signs a policy only when it names the sha256 of the body
+  // it read.
   const { env } = envWith([
-    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
     { namespace: "capsid", path: "policy/gates.md", title: "g", body: "# Gates\n\n- version: 2\n" },
   ]);
   const server = buildAdminServer(env, adminAgentForEmail("admin@example.com"));
@@ -258,9 +262,6 @@ test("sign_policy is admin only, never signs the auto-merge policy, and signs on
       name: "capsid_admin_manage_switches",
       arguments: { action: "sign_policy", namespace: "capsid", path, sha256 },
     }) as Promise<{ isError?: boolean; content: Array<{ text: string }> }>;
-  const merge = await sign(AUTO_MERGE_POLICY_PATH, await sha256Hex(POLICY_BODY));
-  assert.equal(merge.isError, true, "the raw switch signed the auto-merge policy");
-  assert.match(merge.content[0].text, /does not sign policy\/auto-merge\.md/);
   const stale = await sign("policy/gates.md", "0".repeat(64));
   assert.equal(stale.isError, true, "the switch signed a body its caller did not read");
   assert.match(stale.content[0].text, /not the body you read/);
@@ -274,19 +275,17 @@ test("sign_policy is admin only, never signs the auto-merge policy, and signs on
 
 function pinnedStore(kvOpts: Parameters<typeof fakeKv>[0] = {}) {
   const fake = fakeD1({
-    documents: [
-      { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
-    ],
+    documents: [{ namespace: "capsid", path: GATE_POLICY_PATH, title: "p", body: POLICY_BODY }],
   });
   const kv = fakeKv(kvOpts);
   const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: kv.kv });
-  const row = fake.rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)!;
+  const row = fake.rows.documents.find((d) => d.path === GATE_POLICY_PATH)!;
   const sign = async (): Promise<string> => {
     const result = await signPolicyDocument(
       env,
       "github:DrDustinEdwards",
       "capsid",
-      AUTO_MERGE_POLICY_PATH,
+      GATE_POLICY_PATH,
     );
     assert.equal(result.ok, true, result.ok ? "" : result.error);
     const upserts = fake.recorded.filter((r) => /INSERT INTO documents/i.test(r.sql));
@@ -303,22 +302,22 @@ test("PLANT: an older signed policy put back after a newer one was signed does n
   const signedV1 = await sign();
   row.body = VERSION_2;
   const signedV2 = await sign();
-  const current = await loadMergePolicy(env);
+  const current = await loadGatePolicy(env);
   assert.equal("policy" in current && current.policy.version, "2");
 
   // What `restore` of the earlier version writes: the version 1 text, signature and all.
   row.body = signedV1;
-  const rolledBack = await loadMergePolicy(env);
+  const rolledBack = await loadGatePolicy(env);
   assert.ok("error" in rolledBack, "an older signed policy put back in place loaded");
   assert.match(rolledBack.error, /version 1, .* not the one last signed \(version 2,/);
 
   // The seat means it: signing version 1 again makes it current, and version 2 put
   // back after that is refused although its number is higher.
   await sign();
-  const resigned = await loadMergePolicy(env);
+  const resigned = await loadGatePolicy(env);
   assert.equal("policy" in resigned && resigned.policy.version, "1");
   row.body = signedV2;
-  const newerPutBack = await loadMergePolicy(env);
+  const newerPutBack = await loadGatePolicy(env);
   assert.ok("error" in newerPutBack, "a withdrawn version 2 put back loaded");
   assert.match(newerPutBack.error, /version 2, .* not the one last signed \(version 1,/);
 });
@@ -326,11 +325,11 @@ test("PLANT: an older signed policy put back after a newer one was signed does n
 test("the seat re-signing the same body keeps it loading", async () => {
   const { env, kv, sign } = pinnedStore();
   await sign();
-  assert.ok("policy" in (await loadMergePolicy(env)));
+  assert.ok("policy" in (await loadGatePolicy(env)));
   await sign();
-  const again = await loadMergePolicy(env);
+  const again = await loadGatePolicy(env);
   assert.ok("policy" in again, "error" in again ? again.error : "");
-  const pins = kv.puts.filter((p) => p.key === "policy:signed:policy/auto-merge.md");
+  const pins = kv.puts.filter((p) => p.key === "policy:signed:policy/gates.md");
   assert.equal(pins.length, 2);
   assert.equal(pins[0].value, pins[1].value, "a re-sign of the same body recorded a different pin");
 });
@@ -338,11 +337,11 @@ test("the seat re-signing the same body keeps it loading", async () => {
 test("the first load with no record pins the signed policy it finds, and refuses a different one after", async () => {
   const { env, kv, row } = pinnedStore();
   row.body = await signTaskBody(SECRET, VERSION_2);
-  const first = await loadMergePolicy(env);
+  const first = await loadGatePolicy(env);
   assert.ok("policy" in first, "error" in first ? first.error : "");
-  assert.equal(JSON.parse(kv.store.get("policy:signed:policy/auto-merge.md") ?? "{}").version, "2");
+  assert.equal(JSON.parse(kv.store.get("policy:signed:policy/gates.md") ?? "{}").version, "2");
   row.body = await signTaskBody(SECRET, POLICY_BODY);
-  const other = await loadMergePolicy(env);
+  const other = await loadGatePolicy(env);
   assert.ok("error" in other);
   assert.match(other.error, /not the one last signed/);
 });
@@ -350,7 +349,7 @@ test("the first load with no record pins the signed policy it finds, and refuses
 test("a load whose record cannot be read is refused", async () => {
   const { env, row } = pinnedStore({ failGet: true });
   row.body = await signTaskBody(SECRET, POLICY_BODY);
-  const loaded = await loadMergePolicy(env);
+  const loaded = await loadGatePolicy(env);
   assert.ok("error" in loaded);
   assert.match(loaded.error, /anti-rollback record .* could not be read/);
 });
@@ -361,7 +360,7 @@ test("sign_policy stores nothing when the record cannot be written", async () =>
     env,
     "github:DrDustinEdwards",
     "capsid",
-    AUTO_MERGE_POLICY_PATH,
+    GATE_POLICY_PATH,
   );
   assert.equal(result.ok, false);
   assert.match(result.ok ? "" : result.error, /anti-rollback record .* could not be written/);

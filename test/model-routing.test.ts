@@ -404,7 +404,7 @@ test("worthReviewer: money, judges, guards, migrations, workflows and backup cod
   const cases: Array<[string, RegExp]> = [
     ["app/payments/charge.ts", /billing or payment code/],
     ["src/scope.ts", /isMoneyPath/],
-    ["src/auto-merge-policy.ts", /auto-merge source/],
+    ["src/gate-policy.ts", /gate policy source/],
     ["src/jobs-transition.ts", /job transitions/],
     ["scripts/check-commit-trailers.mjs", /check script/],
     ["migrations/0040_x.sql", /migration/],

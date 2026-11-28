@@ -181,7 +181,7 @@ export function numbersHtml(stats) {
         "policy",
         "Ended by policy",
         g.share_ended_by_policy_30d,
-        `The signed auto-merge policy, not a person, ended ${percent(g.share_ended_by_policy_30d)} of the approval waits in the last 30 days.`,
+        `The signed gate policy, not a person, ended ${percent(g.share_ended_by_policy_30d)} of the approval waits in the last 30 days.`,
         "Approval waits that ended, last 30 days.",
       ),
     );

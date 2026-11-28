@@ -1,4 +1,3 @@
-import { SHIPPED_VERSION } from "./policy-version.ts";
 import assert from "node:assert/strict";
 import {} from "node:test";
 import { mintConfirm } from "@dustinedwards/site-runtime/confirm-token";
@@ -15,13 +14,6 @@ import {
   PORTAL_PREVIEW_PATH,
 } from "../src/portal-actions.ts";
 import { FEED, fakeD1, fakeKv, type FakeD1, type FakeKv, withPortalSessionEnds } from "./fakes.ts";
-import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick.ts";
-import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy.ts";
-import { SUSPENDED_KEY } from "../src/merge-units.ts";
-import { PAUSED_KEY } from "../src/merge-safety.ts";
-import { policyPin, policyPinKey, signTaskBody } from "../src/signed-docs.ts";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { fromBase64urlText } from "@dustinedwards/site-runtime/encoding";
 
 // Only the GitHub read of the pull request's head is answered; nothing else here reaches GitHub.
@@ -31,20 +23,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input instanceof Request ? input.url : input);
   if (url === "https://api.github.com/repos/owner/repo/pulls/41")
     return Response.json({ head: { sha: APPROVED_HEAD }, state: "open", merged: false });
-  // sign_policy_from_repo reads docs/policy/auto-merge.md: the shipped policy, a version on.
-  if (url === "https://api.github.com/repos/owner/repo/contents/docs/policy/auto-merge.md") {
-    const text = readFileSync(
-      join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"),
-      "utf8",
-    ).replace(/^- version: (\d+)$/m, (_, v: string) => `- version: ${Number(v) + 1}`);
-    return Response.json({
-      type: "file",
-      encoding: "base64",
-      content: Buffer.from(text, "utf8").toString("base64"),
-      size: text.length,
-      sha: "f".repeat(40),
-    });
-  }
   return passThrough(input, init);
 }) as typeof fetch;
 
@@ -119,7 +97,6 @@ function withSites(db: D1Database): D1Database {
     operator: s.operator ? JSON.stringify(s.operator) : null,
   }));
   const tables: Array<[RegExp, Array<Record<string, unknown>>, string]> = [
-    [/FROM pr_approvals/i, [], ""],
     [/FROM ops_packages/i, PACKAGE_ROWS, "name"],
     [/FROM ops_sites/i, sites, "namespace"],
   ];
@@ -144,15 +121,6 @@ function withSites(db: D1Database): D1Database {
     },
   });
 }
-
-// The signed auto-merge policy as shipped, signed with the world's key so it loads as the Worker's copy does.
-const POLICY_BODY = readFileSync(
-  join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"),
-  "utf8",
-);
-const SIGNED_POLICY = await signTaskBody("portal-test-signing-secret", POLICY_BODY);
-// Its anti-rollback pin, as a Worker that has loaded the policy before holds it.
-const POLICY_PIN = JSON.stringify(await policyPin(POLICY_BODY));
 
 export const agent = (id: string, name: string, hash: string, createdBy: string, day: string) => ({
   id,
@@ -181,14 +149,6 @@ export function world(opts: { adminEmail?: string; coOwners?: string } = {}): {
   env: never;
 } {
   const d1 = fakeD1({
-    documents: [
-      {
-        namespace: "capsid",
-        path: AUTO_MERGE_POLICY_PATH,
-        title: "Auto-merge policy",
-        body: SIGNED_POLICY,
-      },
-    ],
     namespaces: [
       { namespace: "capsid", repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) },
       { namespace: "capsid-new", repos: JSON.stringify([{ repo: "owner/new", label: "primary" }]) },
@@ -215,36 +175,7 @@ export function world(opts: { adminEmail?: string; coOwners?: string } = {}): {
   });
   const kv = fakeKv({
     seed: {
-      [AWAITING_SEAT_KEY]: JSON.stringify([
-        {
-          namespace: "capsid",
-          repo: "owner/repo",
-          number: 41,
-          failed: "path_class",
-          why: "a src change",
-          at: NOW.toISOString(),
-          class: "approve",
-          path_class: "src-routine",
-          class_reasons: [],
-        },
-      ]),
       "gh:token:v3:owner/repo": "test-token",
-      [policyPinKey(AUTO_MERGE_POLICY_PATH)]: POLICY_PIN,
-      // A merge unit a rollback suspended (src/merge-units.ts), for unit_resume.
-      [SUSPENDED_KEY]: JSON.stringify([
-        {
-          unit: "capsid/docs",
-          since: "2026-09-27T00:00:00.000Z",
-          reason: "owner/repo#40 merged unattended and was rolled back",
-        },
-      ]),
-      // A namespace the safety shutoff paused (src/merge-safety.ts), for automerge_resume.
-      [PAUSED_KEY]: JSON.stringify({
-        capsid: {
-          since: "2026-09-27T00:00:00.000Z",
-          reason: "2 of the pull requests auto-merge merged were rolled back or reverted in 7 days",
-        },
-      }),
     },
   });
   const env = {
@@ -358,7 +289,6 @@ export const EVERY_ACTION = [
   ["park_job", { id: "job_queued000001", reason: "comes back when the design is ruled" }],
   ["unpark_job", { id: "job_parked000001" }],
   ["pr_close", { namespace: "capsid", number: "41", reason: "replaced by #42" }],
-  ["approve_pr", { namespace: "capsid", prs: "41", shas: "a".repeat(40) }],
   ["revoke_agent", { name: "capsid-driver" }],
   ["activate_agent", { name: "capsid-new-driver" }],
   [
@@ -388,13 +318,6 @@ export const EVERY_ACTION = [
   ["site_repair", { namespace: "sample", tool: "sync_posts" }],
   ["site_backup", {}],
   ["run_job", { namespace: "capsid", name: "supersede" }],
-  [
-    "sign_policy_change",
-    { change: "promote", unit: "capsid/tests", confirm: `${SHIPPED_VERSION + 1}` },
-  ],
-  ["sign_policy_from_repo", { confirm: `${SHIPPED_VERSION + 1}` }],
-  ["unit_resume", { unit: "capsid/docs", reason: "the rollback's cause is fixed" }],
-  ["automerge_resume", { namespace: "capsid", reason: "both rollbacks are answered" }],
   ["namespace_add", { namespace: "sample-added", repo: "example-org/sample-added" }],
   [
     "namespace_edit",

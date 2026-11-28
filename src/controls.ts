@@ -56,10 +56,6 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Unpark job ${id}. It goes back to the queue at its priority, and the next free session may claim it.`;
     case "pr_close":
       return `Close pull request #${params.number ?? ""} in ${ns}${params.repo ? ` (${params.repo})` : ""} without merging it. Its head branch is deleted as capsid_close_pr action close deletes it. GitHub can reopen it; the Portal does not.`;
-    case "approve_pr":
-      return params.undo === "true"
-        ? `Void the open approval of pull request ${params.prs ?? ""} in ${ns}. The executor will not merge it.`
-        : `Approve pull request ${params.prs ?? ""} in ${ns} at the head you reviewed. Nothing merges now: the executor merges an approved pull request once CI is green on that exact sha, and a new push, red CI or 7 days voids the approval.`;
     case "revoke_agent":
       return `Revoke the agent ${params.name ?? ""}. Its key stops resolving immediately. The row stays, so its audit history still reads, and the name can never be minted again.`;
     case "activate_agent":
@@ -90,16 +86,6 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
           : "Back up every site now: each site's own backup jobs (its D1 dump and its files passes) run through its operator API's run_job, at once, the same jobs as their nightly crons, recorded in their cron_runs.";
     case "run_job":
       return `Run ${params.name ?? ""} on ${ns} now: the job its cron runs, through the same code and record, at once instead of at its hour. Capsid asks the site to run its own job; it never runs a site's work itself.`;
-    case "sign_policy_change":
-      return params.change === "demote"
-        ? `Write and sign the next version of the auto-merge policy without the merge unit ${params.unit ?? ""}: its pull requests wait for an approval again.`
-        : `Write and sign the next version of the auto-merge policy with the merge unit ${params.unit ?? ""} promoted to auto: its pull requests may merge with no human when every other check passes. This widens autonomy, so the new version number is typed as confirm.`;
-    case "sign_policy_from_repo":
-      return "Write the auto-merge policy from docs/policy/auto-merge.md on the default branch, exactly as it reads there, and sign it. The version in the file is typed as confirm, because the policy decides what merges with no human.";
-    case "unit_resume":
-      return `Lift the suspension of the merge unit ${params.unit ?? ""}. The tick may merge its pull requests unattended again, and the rollbacks before now suspend it no more.`;
-    case "automerge_resume":
-      return `Lift the pause on auto-merge for ${ns}. The tick may merge its pull requests unattended again, and the rollbacks and reverts before now count against it no more.`;
     case "namespace_add":
       return `Register the project ${ns} with its repo mapping. The repo tools resolve through the mapping, so it is what an agent scoped to ${ns} may reach; its driver agent is minted separately.`;
     case "namespace_edit":
@@ -123,7 +109,6 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   park_job: ["id", "reason", "undo"],
   unpark_job: ["id", "reason", "undo"],
   pr_close: ["namespace", "repo", "number", "reason"],
-  approve_pr: ["namespace", "repo", "prs", "shas", "confirm", "reason", "undo"],
   revoke_agent: ["name"],
   activate_agent: ["name"],
   site_add: ["namespace", "name", "origin", "health_path", "platform", "script", "operator"],
@@ -145,11 +130,6 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   site_repair: ["namespace", "tool"],
   site_backup: ["namespace"],
   run_job: ["namespace", "name"],
-  sign_policy_change: ["change", "unit", "confirm", "reason"],
-  // The hash its preview read is bound into the token (Plan.bind), so a caller cannot send one.
-  sign_policy_from_repo: ["confirm", "reason"],
-  unit_resume: ["unit", "reason"],
-  automerge_resume: ["namespace", "reason"],
   namespace_add: ["namespace", "repo", "label", "repos"],
   // The digest of the mapping its preview read is bound into the token (Plan.bind).
   namespace_edit: ["namespace", "repos"],

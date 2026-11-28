@@ -117,13 +117,10 @@ test("an empty namespace, revoked agents and archived documents alone refuse not
 });
 
 test("PLANT: a signed policy document needs allow_improve_paths", () => {
-  const p = plan(
-    { policy_paths: ["policy/auto-merge.md"] },
-    { documents_live: 1, policy_documents: 1 },
-  );
+  const p = plan({ policy_paths: ["policy/gates.md"] }, { documents_live: 1, policy_documents: 1 });
   const refusals = deleteRefusals(p, { cascade: true, allowImprovePaths: false });
   assert.equal(refusals.length, 1);
-  assert.match(refusals[0], /policy\/auto-merge\.md/);
+  assert.match(refusals[0], /policy\/gates\.md/);
   assert.deepEqual(deleteRefusals(p, ALL), []);
 });
 

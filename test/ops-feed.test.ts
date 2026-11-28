@@ -12,7 +12,7 @@ import {
   PORTAL_CSRF_COOKIE,
   refreshAllowedAt,
 } from "../src/ops-feed.ts";
-import { awaitingFrom, opsAgentFrom, opsJobFrom, type JobFeedRow } from "../src/ops-live.ts";
+import { opsAgentFrom, opsJobFrom, type JobFeedRow } from "../src/ops-live.ts";
 import { OPS_SNAPSHOT_KEY } from "../src/ops-snapshot.ts";
 import {
   openWatcherFingerprints,
@@ -130,16 +130,6 @@ test("an agent is shown with the record the status computes for it, and without 
     ci_green_rate: null,
     median_duration_minutes: 12,
   });
-});
-
-test("an awaiting-seat value that does not parse is logged, never passed through", async () => {
-  const { errors } = await captureErrors(() => {
-    assert.deepEqual(awaitingFrom("{not json"), []);
-    assert.deepEqual(awaitingFrom(JSON.stringify({ not: "an array" })), []);
-  });
-  assert.equal(errors.length, 2);
-  assert.match(errors[0], /OPS_FEED_AWAITING_UNREADABLE/);
-  assert.deepEqual(awaitingFrom(null), []);
 });
 
 test("refresh_allowed_at is two minutes after the last on-demand pass, and null once that has passed", () => {

@@ -7,7 +7,6 @@ import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
 import { APP_ROSTER } from "../src/roster";
 import { blockJob, claimJob, postJob } from "../src/jobs";
-import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick";
 import {
   PORTAL_CSRF_HEADER,
   PORTAL_PERFORM_PATH,
@@ -16,10 +15,7 @@ import {
 import type { PortalPreview } from "../src/ops-types/portal";
 import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY } from "../src/overnight";
 import { BREAKER_THRESHOLD_KEY, breakerResetKey } from "../src/job-breaker";
-import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy";
-import { policyPin, policyPinKey, signTaskBody } from "../src/signed-docs";
 import { seedCapsidNamespace } from "./jobs-fixture";
-import { policyDocument } from "../test/policy-doc";
 
 export const ORIGIN = "https://capsid.test";
 export const SECRET = "integration-portal-cookie-key";
@@ -46,7 +42,6 @@ export function workerEnv(): Env {
 export const operatorCalls: Array<{ url: string; auth: string | null; body: string }> = [];
 export const githubCalls: string[] = [];
 export const GITHUB_PR = "https://api.github.com/repos/example/capsid/pulls/41";
-export const repo = { policy: "" };
 // The secret value is read here only to check both sides got the same one and that it reached no audit row.
 export const secretPuts: Array<{ script: string; name: string; text: string }> = [];
 export const SECRETS_URL = new RegExp(
@@ -83,15 +78,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       });
     if (url === "https://api.github.com/repos/example/capsid")
       return Response.json({ default_branch: "main" });
-    if (url === "https://api.github.com/repos/example/capsid/contents/docs/policy/auto-merge.md") {
-      return Response.json({
-        type: "file",
-        encoding: "base64",
-        content: btoa(repo.policy),
-        size: repo.policy.length,
-        sha: "f".repeat(40),
-      });
-    }
     if (url.endsWith("/git/refs/heads/feat/sample") && method === "DELETE")
       return new Response(null, { status: 204 });
     return new Response("not stubbed", { status: 404 });
@@ -220,46 +206,10 @@ export async function siteRow(namespace: string) {
     .first<Record<string, unknown>>();
 }
 
-// A signed auto-merge policy at version 7 and its pin, as a Worker that has loaded it before holds them.
-export async function signedPolicy(): Promise<void> {
-  const body = policyDocument("7");
-  const secret = (env as unknown as { IMPROVE_SCORE_SECRET: string }).IMPROVE_SCORE_SECRET;
-  await env.DB.prepare("DELETE FROM documents WHERE namespace = 'capsid' AND path = ?1")
-    .bind(AUTO_MERGE_POLICY_PATH)
-    .run();
-  await env.DB.prepare(
-    "INSERT INTO documents (namespace, path, title, body) VALUES ('capsid', ?1, 'Auto-merge policy', ?2)",
-  )
-    .bind(AUTO_MERGE_POLICY_PATH, await signTaskBody(secret, body))
-    .run();
-  await env.APP_KV.put(policyPinKey(AUTO_MERGE_POLICY_PATH), JSON.stringify(await policyPin(body)));
-}
-
 export type Case = {
   params: () => Promise<Record<string, string>>;
   after: (params: Record<string, string>) => Promise<void>;
 };
-
-export async function seedAwaitingPr(): Promise<void> {
-  await env.DB.prepare("DELETE FROM pr_approvals").run();
-  await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
-  await env.APP_KV.put(
-    AWAITING_SEAT_KEY,
-    JSON.stringify([
-      {
-        namespace: "capsid",
-        repo: "example/capsid",
-        number: 41,
-        failed: "path_class",
-        why: "a src change",
-        at: NOW.toISOString(),
-        class: "approve",
-        path_class: "src-routine",
-        class_reasons: [],
-      },
-    ]),
-  );
-}
 
 export const performToken = (token: string) =>
   call(PORTAL_PERFORM_PATH, { method: "POST", body: { token } });

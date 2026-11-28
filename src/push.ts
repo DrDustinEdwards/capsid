@@ -1,9 +1,7 @@
 import { sendEmail } from "@dustinedwards/site-runtime/email";
 import type { Env } from "./env";
-import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { RETRY_CAP_REASON } from "./jobs-schema";
 import { PORTAL_HOST } from "./portal-host";
-import { readPaused } from "./merge-safety";
 import { auditStatement } from "./store-guards";
 import { digestProblem } from "./digest";
 import { pulseAlerts, readPulse } from "./site-pulse";
@@ -20,7 +18,6 @@ import { HOUR_MS, DAY_MS, utcDay } from "./time";
 
 const STATE_KEY = "push:state";
 const SENT_TTL_MS = 30 * DAY_MS;
-const TYPED_WAIT_MS = 2 * HOUR_MS;
 const QUESTION_AGE_MS = 4 * HOUR_MS;
 const QUESTION_PRIORITY = 70;
 // A rollback or a cap older than this when first seen is history, not an alert.
@@ -30,28 +27,15 @@ export const MAX_DEVICES = 10;
 export const PORTAL_URL = `https://${PORTAL_HOST}/`;
 
 // Where a tap lands: the item itself on the Portal, not its home page (the UX audit's M2).
-// A pull request's row on Needs you carries the anchor the dashboard builds
-// (dashboard/src/lib/pr-actions.ts, prAnchor); a job opens in its drawer on Jobs.
+// A job opens in its drawer on Jobs.
 const portalPath = (path: string) => `https://${PORTAL_HOST}${path}`;
-const prUrl = (repo: string, number: number) =>
-  portalPath(`/#pr-${repo.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${number}`);
 const jobUrl = (id: string) => portalPath(`/queue/job/${encodeURIComponent(id)}`);
 // A site's own page (/sites/<namespace>), at a tab when one is named.
 const siteUrl = (namespace: string, tab?: "deploys") =>
   portalPath(`/sites/${encodeURIComponent(namespace)}${tab ? `?tab=${tab}` : ""}`);
-const AUTO_MERGE_URL = portalPath("/prs#auto-merge");
 const SITES_URL = portalPath("/sites");
 
-type UrgentKind =
-  | "typed-pr"
-  | "rollback"
-  | "correction-cap"
-  | "question"
-  | "automerge-paused"
-  | "visual-pr"
-  | "site"
-  | "tls"
-  | "domain";
+type UrgentKind = "rollback" | "correction-cap" | "question" | "site" | "tls" | "domain";
 
 interface Urgent {
   key: string;
@@ -64,7 +48,6 @@ interface Urgent {
 }
 
 interface PushState {
-  typed_seen: Record<string, string>;
   sent: Record<string, string>;
 }
 
@@ -79,61 +62,17 @@ export interface PushPayload {
 async function readState(env: Env): Promise<PushState> {
   const raw = await env.APP_KV.get(STATE_KEY);
   const parsed = raw ? (JSON.parse(raw) as Partial<PushState>) : {};
-  return { typed_seen: parsed.typed_seen ?? {}, sent: parsed.sent ?? {} };
+  return { sent: parsed.sent ?? {} };
 }
 
 const hours = (ms: number) => `${Math.floor(ms / HOUR_MS)}h`;
 
-// The seven triggers, from what the tick, the watcher and the queue already keep. Reads only;
-// `typedSeen` is updated in place with the typed PRs seen now.
-async function gatherUrgent(
-  env: Env,
-  now: Date,
-  typedSeen: Record<string, string>,
-): Promise<Urgent[]> {
+// The triggers, from what the watcher and the queue already keep. Reads only.
+async function gatherUrgent(env: Env, now: Date): Promise<Urgent[]> {
   const out: Urgent[] = [];
   const t = now.getTime();
 
-  // 1. Typed pull requests, from the awaiting-seat set the auto-merge tick writes.
-  const raw = await env.APP_KV.get(AWAITING_SEAT_KEY);
-  const awaiting = raw ? (JSON.parse(raw) as AwaitingSeat[]) : [];
-  const typedNow = new Set<string>();
-  for (const a of Array.isArray(awaiting) ? awaiting : []) {
-    if (a.class !== "typed") continue;
-    const id = `${a.repo}#${a.number}`;
-    typedNow.add(id);
-    const since = typedSeen[id] ?? now.toISOString();
-    typedSeen[id] = since;
-    const waited = t - Date.parse(since);
-    if (waited > TYPED_WAIT_MS) {
-      out.push({
-        key: `typed:${id}`,
-        kind: "typed-pr",
-        namespace: a.namespace,
-        title: "Typed approval waiting",
-        body: `${id}, class typed (money path), waiting ${hours(waited)}. Approve it by typing its number.`,
-        url: prUrl(a.repo, a.number),
-      });
-    }
-  }
-  for (const id of Object.keys(typedSeen)) if (!typedNow.has(id)) delete typedSeen[id];
-
-  // 6. Visual pull requests, from the same set, sent at once: a look is quick, and the
-  // key carries the head, so each new push asks again.
-  for (const a of Array.isArray(awaiting) ? awaiting : []) {
-    if (!a.visual) continue;
-    const id = `${a.repo}#${a.number}`;
-    out.push({
-      key: `visual:${id}:${a.head_sha ?? a.at}`,
-      kind: "visual-pr",
-      namespace: a.namespace,
-      title: "Visual change to look at",
-      body: `${id} changes what people see. Open it for its preview and screenshots, then approve it there.`,
-      url: prUrl(a.repo, a.number),
-    });
-  }
-
-  // 2. Rollbacks the watcher recorded.
+  // 1. Rollbacks the watcher recorded.
   const since = toSqlTime(t - RECENT_MS);
   const rolled = await env.DB.prepare(
     `SELECT repo, namespace, run_id, head_sha, outcome FROM deploy_outcomes
@@ -153,7 +92,7 @@ async function gatherUrgent(
     });
   }
 
-  // 3 and 4. Blocked jobs: at the correction cap, or a question on a priority job.
+  // 2 and 3. Blocked jobs: at the correction cap, or a question on a priority job.
   const blocked = await env.DB.prepare(
     `SELECT id, namespace, priority, result_summary, updated_at FROM jobs WHERE status = 'blocked' ORDER BY updated_at LIMIT 200`,
   ).all<{
@@ -191,28 +130,11 @@ async function gatherUrgent(
     }
   }
 
-  // 5. Namespaces the safety shutoff paused. An unreadable value alerts nothing: the
-  // tick already holds every namespace then (src/auto-merge-tick.ts) and logs it.
-  try {
-    for (const [namespace, p] of Object.entries(await readPaused(env.APP_KV))) {
-      out.push({
-        key: `paused:${namespace}:${p.since}`,
-        kind: "automerge-paused",
-        namespace,
-        title: "Auto-merge paused",
-        body: `${namespace}: ${p.reason}. Unattended merges stop until you resume it with the automerge_resume control (chat, capsid_admin_run_controls) and a reason.`,
-        url: AUTO_MERGE_URL,
-      });
-    }
-  } catch {
-    // See above.
-  }
-
-  // 7. Sites, from the five-minute pulse.
+  // 4. Sites, from the five-minute pulse.
   for (const a of pulseAlerts(await readPulse(env), now))
     out.push({ ...a, kind: "site", url: siteUrl(a.namespace) });
 
-  // 7, the error rate: the watcher's site-errors findings from its last pass. A snapshot
+  // 4, the error rate: the watcher's site-errors findings from its last pass. A snapshot
   // that cannot be read alerts nothing; the Portal shows that it could not be read.
   const snapshot = await readSnapshot(env).catch(() => null);
   const day = utcDay(now);
@@ -230,7 +152,7 @@ async function gatherUrgent(
     });
   }
 
-  // 8. A TLS certificate 21 or 3 days from expiry (src/tls-expiry.ts), from the watcher's
+  // 5. A TLS certificate 21 or 3 days from expiry (src/tls-expiry.ts), from the watcher's
   // last read, and a domain registration 30 or 7 days out, from the last snapshot. One
   // that cannot be read alerts nothing.
   for (const a of tlsAlerts(await readStoredTls(env).catch(() => null), now))
@@ -254,7 +176,7 @@ export interface PushReport {
 async function dueAlerts(env: Env, now: Date) {
   const state = await readState(env);
   const before = JSON.stringify(state);
-  const urgent = (await gatherUrgent(env, now, state.typed_seen)).filter((u) => !state.sent[u.key]);
+  const urgent = (await gatherUrgent(env, now)).filter((u) => !state.sent[u.key]);
   return { state, before, urgent, due: urgent.slice(0, MAX_PER_TICK) };
 }
 

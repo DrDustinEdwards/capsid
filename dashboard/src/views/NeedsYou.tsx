@@ -1,39 +1,25 @@
 import { Banner } from "capsomer/react/banner";
-import { Suspense, lazy, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { age, agentLabel, ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
-import {
-  approveAllRequest,
-  approveRequest,
-  canApprovePr,
-  closeRequest,
-  prAnchor,
-  prName,
-  seatFor,
-} from "../lib/pr-actions";
-import type { InboxApp, InboxItem, OpsAwaitingSeat, OpsJob, PortalNamespace } from "../types";
+import type { InboxApp, InboxItem, OpsJob, PortalNamespace } from "../types";
 import { Status, type GlyphName, type Tone } from "capsomer/react/status";
 import { Empty } from "capsomer/react/empty";
-import { BulkBar, useBulkSelection, type BulkSelection } from "capsomer/react/bulk-bar";
 import { Group } from "capsomer/react/disclosure";
 import { AwayLink } from "capsomer/react/link";
 import { Panel } from "capsomer/react/panel";
 import { Row, RowList, RowReply, type RowLinkProps } from "capsomer/react/row-list";
 import "capsomer/row-list.css";
-import "capsomer/bulk-bar.css";
 import "capsomer/group.css";
-import "capsomer/check.css";
 import { PageHead } from "./shared";
 import { Problems } from "./Problems";
-import { useWaiting, type AutoMergeAsks, type Entry } from "../lib/waiting";
+import { useWaiting, type Entry } from "../lib/waiting";
 
 const KIND: Record<string, { label: string; tone: Tone; glyph?: GlyphName } | undefined> = {
   "blocked-job": { label: "Blocked job", tone: "warn", glyph: "blocked" },
   question: { label: "Question", tone: "warn", glyph: "question" },
-  pr: { label: "Pull request", tone: "warn", glyph: "pr" },
   report: { label: "Reported", tone: "warn", glyph: "report" },
-  proposal: { label: "Proposal", tone: "warn", glyph: "proposal" },
   ci: { label: "CI failing", tone: "crit", glyph: "crit" },
   "site-down": { label: "Site down", tone: "crit", glyph: "site-down" },
 };
@@ -50,11 +36,9 @@ export function NeedsYou() {
 
 function Waiting() {
   const { feed } = useApp();
-  const { listed, stops, asks, total, error, reread } = useWaiting(feed);
-  const prs = listed.filter((e) => e.item.kind === "pr");
+  const { listed, stops, total, error: failed, reread } = useWaiting(feed);
   const jobs = listed.filter((e) => e.item.kind === "question" || e.item.kind === "blocked-job");
-  const other = listed.filter((e) => !prs.includes(e) && !jobs.includes(e));
-  const failed = error ?? asks.error;
+  const other = listed.filter((e) => !jobs.includes(e));
   return (
     <Panel flush title="Waiting for you" id="waiting" count={total}>
       {failed && <Banner tone="warn">Some of what waits on you could not be read: {failed}</Banner>}
@@ -62,8 +46,6 @@ function Waiting() {
         !failed && <Empty kind="all-clear" title="Nothing needs you." />
       ) : (
         <>
-          {prs.length > 0 && <PrGroup entries={prs} />}
-          {asks.count > 0 && <AutoMergeGroup asks={asks} />}
           {jobs.length > 0 && <JobGroup entries={jobs} />}
           {stops.length > 0 && <StopGroup list={stops} onReset={reread} />}
           {other.length > 0 && <OtherGroup entries={other} />}
@@ -101,162 +83,6 @@ const newTab = ({ children, ...props }: RowLinkProps) => (
     {children}
   </a>
 );
-
-function PrGroup({ entries }: { entries: Entry[] }) {
-  const { feed, confirm } = useApp();
-  const rows = entries.map((e) => ({ ...e, seat: seatFor(feed, e.item.link) }));
-  const approvable = rows.flatMap((r) => (r.seat && canApprovePr(r.seat) ? [r.seat] : []));
-  const batch = approvable.length > 1;
-  const ticks = useBulkSelection(approvable.map((a) => ({ id: prAnchor(a) })));
-  const chosen = approvable.filter((a) => ticks.has(prAnchor(a)));
-  return (
-    <WaitGroup
-      id="w-prs"
-      title="Pull requests"
-      count={entries.length}
-      after={
-        batch && (
-          <BulkBar
-            label="Approve pull requests together"
-            items={chosen.map((a) => ({ id: prAnchor(a), label: prName(a) }))}
-            total={approvable.length}
-            onSelectAll={ticks.toggleAll}
-            onClear={ticks.clear}
-            actions={[
-              {
-                id: "approve",
-                label: "Approve selected",
-                handOff: () => confirm({ ...approveAllRequest(chosen), onDone: ticks.clear }),
-              },
-            ]}
-          />
-        )
-      }
-    >
-      {rows.map(({ app, item, seat }, i) => (
-        <PrRow
-          key={`${item.link ?? item.title}|${i}`}
-          app={app}
-          item={item}
-          seat={seat}
-          ticks={batch ? ticks : null}
-        />
-      ))}
-    </WaitGroup>
-  );
-}
-
-function PrRow({
-  app,
-  item,
-  seat,
-  ticks,
-}: {
-  app: InboxApp;
-  item: InboxItem;
-  seat: OpsAwaitingSeat | undefined;
-  ticks: BulkSelection | null;
-}) {
-  const { now, confirm } = useApp();
-  const name = seat ? prName(seat) : item.title;
-  const ok = seat && canApprovePr(seat) ? seat : null;
-  return (
-    <Row
-      id={seat ? prAnchor(seat) : undefined}
-      title={item.title}
-      href={item.link ?? undefined}
-      renderLink={newTab}
-      media={
-        ticks ? (
-          ok ? (
-            <label className="cap-check">
-              <input
-                type="checkbox"
-                checked={ticks.has(prAnchor(ok))}
-                onChange={() => ticks.toggle(prAnchor(ok))}
-              />
-              <span className="cap-sr-only">Select {name}</span>
-            </label>
-          ) : (
-            <span />
-          )
-        ) : undefined
-      }
-      detail={
-        <>
-          {`${app.name} · waiting ${age(parse(item.since), now)}${seat?.why ? ` · ${seat.why}` : ""}`}
-          {seat?.visual && <VisualLook visual={seat.visual} />}
-        </>
-      }
-      actions={
-        <>
-          {ok && (
-            <button
-              type="button"
-              className="cap-btn"
-              data-variant="primary"
-              aria-label={`Approve ${name}`}
-              onClick={() => confirm(approveRequest(ok))}
-            >
-              Approve
-            </button>
-          )}
-          {seat && (
-            <button
-              type="button"
-              className="cap-btn"
-              aria-label={`Close ${name}`}
-              onClick={() => confirm(closeRequest(seat))}
-            >
-              Close
-            </button>
-          )}
-          {seat && !ok && seat.class === "typed" && (
-            <span className="cap-text" data-tone="dim" data-size="small">
-              Approve in chat
-            </span>
-          )}
-        </>
-      }
-    />
-  );
-}
-
-// Links open in a new tab: the Portal's CSP loads no image from another origin.
-function VisualLook({ visual }: { visual: NonNullable<OpsAwaitingSeat["visual"]> }) {
-  return (
-    <span className="visual-look">
-      <span>{visual.title}</span>
-      {visual.preview && (
-        <AwayLink href={visual.preview} newTab>
-          Open the preview
-        </AwayLink>
-      )}
-      {visual.shots.map((src, i) => (
-        <AwayLink key={src} href={src} newTab>
-          Screenshot {i + 1}
-        </AwayLink>
-      ))}
-      {!visual.preview && !visual.shots.length && (
-        <span className="cap-text" data-tone="dim">
-          No preview.
-        </span>
-      )}
-    </span>
-  );
-}
-
-const AutoMergeRows = lazy(() => import("./automerge").then((m) => ({ default: m.AutoMergeRows })));
-
-function AutoMergeGroup({ asks }: { asks: AutoMergeAsks }) {
-  return (
-    <WaitGroup id="w-automerge" title="Auto-merge" count={asks.count}>
-      <Suspense fallback={null}>
-        <AutoMergeRows asks={asks} />
-      </Suspense>
-    </WaitGroup>
-  );
-}
 
 function JobGroup({ entries }: { entries: Entry[] }) {
   return (

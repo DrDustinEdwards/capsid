@@ -1,5 +1,4 @@
 import type { Env } from "./env";
-import { autoMergeTick } from "./auto-merge-tick";
 import { mergeResumeTick } from "./merge-resume";
 import { returnDueParked } from "./jobs";
 import { sweepIfDue } from "./outcome-prs-sweep";
@@ -15,29 +14,10 @@ import { pushTick } from "./push";
 import { sitePulseTick } from "./site-pulse";
 import { type Fetch, signedInCrawlTick } from "./signed-in-crawl";
 import { digestTick } from "./digest";
-import { unitsTick } from "./merge-units";
-import { mergeSafetyTick } from "./merge-safety";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 
 // The five-minute tick's steps, in order. Each is its own task in the run ledger (src/task-runs.ts): runTask records a run, and records and logs a throw without rethrowing, so one step's throw does not stop the rest. A step not due returns null from its judge and records nothing.
 export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> {
-  // Auto-merge. The policy document decides whether it does anything; it ships
-  // disabled, and a disabled policy is not a run. A policy that cannot be read or is
-  // refused is.
-  await runTask(
-    env,
-    "auto-merge",
-    () => autoMergeTick(env, now),
-    (merged): TaskResult => {
-      if (merged.ran) {
-        logEvent("AUTO_MERGE", { message: `AUTO_MERGE ${merged.note}` });
-        return { outcome: "ok", reason: merged.note };
-      }
-      return merged.policy_version === null ? { outcome: "refused", reason: merged.note } : null;
-    },
-    { tag: "AUTO_MERGE_THREW:", rethrow: false },
-  );
-
   // The watcher, on its own half-hourly stamp. It only posts jobs, so the worst a
   // broken pass can do is add a row to the queue.
   await runTask(
@@ -50,40 +30,6 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       return { outcome: "ok", reason: watched.note };
     },
     { tag: "WATCHER_THREW:", rethrow: false },
-  );
-
-  // Merge units (src/merge-units.ts): after the watcher, which records rollbacks in deploy_outcomes. It proposes promotions and demotions and suspends a unit whose unattended merge was rolled back; the suspension only narrows. Recorded only when something changed.
-  await runTask(
-    env,
-    "merge-units",
-    () => unitsTick(env, now),
-    (report): TaskResult => {
-      if (!report.ran) return null;
-      logEvent(
-        "MERGE_UNITS",
-        { message: `MERGE_UNITS ${report.note}` },
-        { level: report.newly_suspended.length ? "error" : "log" },
-      );
-      return { outcome: "ok", reason: report.note };
-    },
-    { tag: "MERGE_UNITS_THREW:", rethrow: false },
-  );
-
-  // The auto-merge safety meter and shutoff (src/merge-safety.ts): after merge-units. Its revert pass runs at most half-hourly; the counts and shutoff read D1 only, every tick. A namespace it pauses only narrows. Recorded only when something changed.
-  await runTask(
-    env,
-    "merge-safety",
-    () => mergeSafetyTick(env, now),
-    (report): TaskResult => {
-      if (!report.ran) return null;
-      logEvent(
-        "MERGE_SAFETY",
-        { message: `MERGE_SAFETY ${report.note}` },
-        { level: report.newly_paused.length ? "error" : "log" },
-      );
-      return { outcome: "ok", reason: report.note };
-    },
-    { tag: "MERGE_SAFETY_THREW:", rethrow: false },
   );
 
   // Stale jobs: a blocked job whose named pull requests have all merged goes back to its
@@ -260,7 +206,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     );
   }
 
-  // Phone alerts (src/push.ts): after the auto-merge step and the watcher, so a pull request or rollback they just recorded is seen this tick. Spends no model tokens. Recorded only when an alert was due; no key or no device is not a run.
+  // Phone alerts (src/push.ts): after the watcher, so a rollback it just recorded is seen this tick. Spends no model tokens. Recorded only when an alert was due; no key or no device is not a run.
   await runTask(
     env,
     "push",

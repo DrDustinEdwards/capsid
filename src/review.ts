@@ -71,7 +71,7 @@ const MODEL_TIMEOUT_MS = 6 * 60_000;
 // change and never answered. Low still reasons, and answers.
 const REASONING = "low";
 
-type ReviewResult =
+export type ReviewResult =
   | {
       status: "reviewed";
       verdict: Verdict;
@@ -312,6 +312,15 @@ async function record(
   }).run();
 }
 
+/**
+ * Whether a review is kept for the pull request's later pushes. An error and a BLOCK are not kept,
+ * so the next push or a re-run asks again: a BLOCK fails a required check, and a cached one would
+ * hold the pull request after its fix.
+ */
+export function keepReview(r: ReviewResult): boolean {
+  return r.status !== "error" && !(r.status === "reviewed" && r.verdict === "BLOCK");
+}
+
 export async function handleReviewRun(request: Request, env: Env): Promise<Response> {
   const who = await caller(request);
   if (who instanceof Response) return who;
@@ -322,11 +331,10 @@ export async function handleReviewRun(request: Request, env: Env): Promise<Respo
   } catch (err) {
     return textResponse(`could not read ${full}#${who.pr}: ${errorMessage(err)}`, 502);
   }
-  // A review is kept per pull request; an error is not kept, so the next push or a re-run asks again.
   const result = await kvCached(
     env.APP_KV,
     `review:${full.toLowerCase()}:${who.pr}`,
-    { ttl: CACHE_TTL_S, keep: (r) => r.status !== "error" },
+    { ttl: CACHE_TTL_S, keep: keepReview },
     () => reviewPull(env, who, pull, full),
   );
   return Response.json(result);

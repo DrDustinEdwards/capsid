@@ -359,10 +359,8 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
   );
 }
 
-const MERGE_KINDS = ["auto", "approved", "seat", "closed"] as const;
+const MERGE_KINDS = ["seat", "closed"] as const;
 const MERGE_NAME: Record<(typeof MERGE_KINDS)[number], string> = {
-  auto: "Merged by policy",
-  approved: "Merged on approval",
   seat: "Merged by you",
   closed: "Closed unmerged",
 };
@@ -382,7 +380,7 @@ export function MergesChart() {
     })),
   );
   const total = (k: (typeof MERGE_KINDS)[number]) => weeks.reduce((a, w) => a + w[k], 0);
-  const merged = total("auto") + total("approved") + total("seat");
+  const merged = total("seat");
   const opts = {
     data: rows,
     x: "week",
@@ -394,11 +392,9 @@ export function MergesChart() {
     xLabel: `ISO week, ${weeks[0]!.week.slice(0, 4)} on`,
     yLabel: "Pull requests",
     height: 240,
-    title: "How much merges with no human, and is that rising?",
-    subtitle: merged
-      ? `${Math.round((total("auto") / merged) * 100)}% of the ${merged} merged in ${weeks.length} weeks went through on the policy alone.`
-      : `Nothing merged in ${weeks.length} weeks.`,
-    alt: `Pull requests merged or closed per week for ${weeks.length} weeks: ${total("auto")} merged by policy with no human, ${total("approved")} on an approval, ${total("seat")} by you, ${total("closed")} closed unmerged. ${rollbacks.length} ${rollbacks.length === 1 ? "rollback" : "rollbacks"}.`,
+    title: "Merges per week",
+    subtitle: `${merged} merged and ${total("closed")} closed unmerged in ${weeks.length} weeks.`,
+    alt: `Pull requests merged or closed per week for ${weeks.length} weeks: ${merged} merged, ${total("closed")} closed unmerged. ${rollbacks.length} ${rollbacks.length === 1 ? "rollback" : "rollbacks"}.`,
     caption: rollbacks.length
       ? `Rollbacks: ${rollbacks.map((r) => `${r.at.slice(0, 10)} ${r.repo}${r.pr === null ? "" : ` #${r.pr}`}${r.outcome === "rollback_failed" ? " (rollback failed)" : ""}`).join("; ")}.`
       : "No deploy was rolled back in this window.",

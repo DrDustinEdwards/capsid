@@ -25,7 +25,6 @@ test("PLANT: Problems hold nothing Needs you lists with its buttons", () => {
     f.live.jobs.some((j) => j.status === "blocked"),
     "the sample has a blocked job",
   );
-  assert.ok(f.live.awaiting_seat.length > 0, "the sample has a pull request waiting");
   const left = list(f, now).items.map((r) => r.detail?.split(" · ")[0] ?? "");
   assert.deepEqual(
     left.filter((k) => ["Queue", "PR", "Breaker"].includes(k)),

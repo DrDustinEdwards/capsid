@@ -60,7 +60,6 @@ for (const [action, params] of EVERY_ACTION.filter(
     !a.endsWith("_job") &&
     a !== "close_shipped" &&
     a !== "pr_close" &&
-    a !== "approve_pr" &&
     !a.startsWith("site_") &&
     !a.startsWith("package_") &&
     !a.startsWith("namespace_"),

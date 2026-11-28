@@ -117,8 +117,7 @@ test("every job declares timeout-minutes", () => {
   );
 });
 
-// The lints are not in `npm test`; ci.yml runs them before the required Tests step, because the lint step is not on the
-// auto-merge required list and a skipped required step refuses the merge.
+// The lints are not in `npm test`; ci.yml runs them before the required Tests step.
 
 test("the checks job runs npm run lint and npm run lint:repo, before the Tests step", () => {
   const steps = stepsOf(jobNamed("ci.yml", "checks")).map((s) => ({

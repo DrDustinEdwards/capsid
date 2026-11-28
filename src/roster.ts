@@ -1,6 +1,6 @@
 // The namespaces Capsid looks after by name. The five app repos are the ones the watcher
 // and the trends read CI for and whose deploys are compared (APP_ROSTER); carrel and
-// capsomer are for auto-merge and the maintenance pass only.
+// capsomer are for the maintenance pass only.
 export const APP_ROSTER = ["capsid", "dustinedwards", "foxhound", "foxing", "germomics"] as const;
 
 const MERGE_ONLY_ROSTER = ["carrel", "capsomer"] as const;

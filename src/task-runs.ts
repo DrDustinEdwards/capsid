@@ -7,7 +7,6 @@ import { MINUTE_MS, HOUR_MS, DAY_MS } from "./time";
 export type TaskId =
   | "backup"
   | "tick"
-  | "auto-merge"
   | "watcher"
   | "outcome-sweep"
   | "merge-resume"
@@ -20,8 +19,6 @@ export type TaskId =
   | "system-facts"
   | "push"
   | "digest"
-  | "merge-units"
-  | "merge-safety"
   | "offaccount-dispatch"
   | "doc-index"
   | "supersede"
@@ -40,7 +37,6 @@ export const TASKS: ReadonlyArray<{
   { id: "tick", label: "Five-minute tick", period_ms: 5 * MINUTE_MS, timeout_ms: 4 * MINUTE_MS },
   { id: "watcher", label: "Watcher pass", period_ms: null },
   { id: "backup", label: "Backup", period_ms: DAY_MS, timeout_ms: 14 * MINUTE_MS },
-  { id: "auto-merge", label: "Auto-merge step", period_ms: null },
   { id: "outcome-sweep", label: "Merge-state sweep", period_ms: null },
   { id: "merge-resume", label: "Stale-job merge resume", period_ms: null },
   { id: "park-due", label: "Parked jobs coming back", period_ms: null },
@@ -53,8 +49,6 @@ export const TASKS: ReadonlyArray<{
   { id: "push", label: "Phone alerts", period_ms: null },
   // Off until Email Routing is on, so a quiet spell means nothing and only a refusal is flagged.
   { id: "digest", label: "Daily email digest", period_ms: null },
-  { id: "merge-units", label: "Merge unit proposals", period_ms: null },
-  { id: "merge-safety", label: "Auto-merge safety meter", period_ms: null },
   { id: "offaccount-dispatch", label: "Amazon copy start", period_ms: null },
   { id: "doc-index", label: "Search index", period_ms: null },
   { id: "supersede", label: "Supersede pass", period_ms: null },

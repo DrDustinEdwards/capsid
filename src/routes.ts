@@ -84,7 +84,6 @@ import {
   PORTAL_DIGEST_PATH,
   PORTAL_PLAN_PATH,
 } from "./portal-overnight";
-import { handlePortalMergeUnits, PORTAL_MERGE_UNITS_PATH } from "./portal-merge-units";
 import {
   handlePortalBuildLog,
   handlePortalWorkersBuilds,
@@ -419,8 +418,6 @@ function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
     return handlePortalStale(request, env);
   if (url.pathname === PORTAL_PLAN_PATH && request.method === "GET")
     return handlePortalPlan(request, env);
-  if (url.pathname === PORTAL_MERGE_UNITS_PATH && request.method === "GET")
-    return handlePortalMergeUnits(request, env);
   if (url.pathname === PORTAL_SITE_SEARCH_PATH && request.method === "GET")
     return handlePortalSiteSearch(request, env);
   if (url.pathname === PORTAL_SITE_TRAFFIC_PATH && request.method === "GET")

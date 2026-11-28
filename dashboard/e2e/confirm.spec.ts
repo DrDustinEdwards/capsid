@@ -1,5 +1,4 @@
 import { expect, test, type Page } from "@playwright/test";
-import { visit } from "./views.ts";
 
 // The defect these guard: a Pause with a typed reason, then Preview, did nothing and said nothing. Every path must end in something visible.
 
@@ -129,37 +128,4 @@ test.describe("on a phone", () => {
       await expect(dialog.getByRole("button", { name, exact: true })).toBeInViewport({ ratio: 1 });
     }
   });
-});
-
-test("Load from repo and sign previews on press, names the version, then signs with it typed", async ({
-  page,
-}) => {
-  await page.route(PERFORM_URL, async (route) => {
-    const feed = await (await page.request.get("api/ops")).json();
-    await route.fulfill({
-      json: {
-        action: "sign_policy_from_repo",
-        summary: "Signed auto-merge policy version 8 from docs/policy/auto-merge.md.",
-        warning: null,
-        feed,
-      },
-    });
-  });
-  const sent: unknown[] = [];
-  page.on("request", (r) => {
-    if (r.url().endsWith("/api/actions/preview")) sent.push(r.postDataJSON());
-  });
-  await visit(page, "prs");
-  await page.getByRole("button", { name: "Load from repo and sign" }).click();
-  const dialog = page.locator("dialog.confirm");
-  await expect(dialog.getByText("version 7 -> 8", { exact: false })).toBeVisible();
-  expect(sent).toEqual([{ action: "sign_policy_from_repo", params: {} }]);
-  const sign = dialog.getByRole("button", { name: "Load from repo and sign" });
-  await sign.click();
-  await expect(dialog.getByRole("alert")).toContainText("Type the version");
-  await dialog.getByRole("textbox", { name: "Version to sign" }).fill("8");
-  await sign.click();
-  await expect(page.locator("dialog.confirm")).toBeHidden();
-  await expect(page.locator(".cap-message")).toContainText("Signed auto-merge policy version 8");
-  expect(sent.at(-1)).toEqual({ action: "sign_policy_from_repo", params: { confirm: "8" } });
 });

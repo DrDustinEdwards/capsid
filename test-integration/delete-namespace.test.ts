@@ -223,11 +223,11 @@ describe("capsid_admin_manage_namespaces delete_preview refusals", () => {
   it("PLANT: a policy document refuses it without allow_improve_paths", async () => {
     const ns = fresh();
     await register(ns);
-    await doc(ns, "policy/auto-merge.md", "lorem ipsum");
+    await doc(ns, "policy/gates.md", "lorem ipsum");
     const p = await preview(ns, { cascade: true });
     expect(p.verdict).toBe("refused");
     expect(p.refusals.join(" ")).toMatch(/allow_improve_paths/);
-    expect(p.policy_paths).toEqual(["policy/auto-merge.md"]);
+    expect(p.policy_paths).toEqual(["policy/gates.md"]);
     const allowed = await preview(ns, {
       cascade: true,
       allow_improve_paths: true,

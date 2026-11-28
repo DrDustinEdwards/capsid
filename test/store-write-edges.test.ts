@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { signPolicyDocument } from "../src/policy-sign.ts";
-import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy.ts";
+import { GATE_POLICY_PATH } from "../src/gate-policy.ts";
 import { fakeD1, fakeEnv, fakeKv, type DocRow, type FakeD1Options } from "./fakes.ts";
 
 // Built from its code point so this file carries no literal wide dash.
@@ -85,7 +85,7 @@ test("PLANT: sign_policy refuses and writes nothing when the policy changes betw
     documents: [
       {
         namespace: "capsid",
-        path: AUTO_MERGE_POLICY_PATH,
+        path: GATE_POLICY_PATH,
         title: "p",
         body: "# policy\n\n- version: 1\n",
       },
@@ -107,7 +107,7 @@ test("PLANT: sign_policy refuses and writes nothing when the policy changes betw
     env,
     "github:DrDustinEdwards",
     "capsid",
-    AUTO_MERGE_POLICY_PATH,
+    GATE_POLICY_PATH,
   );
   assert.equal(result.ok, false, "the signer overwrote a policy edit with the signed older body");
   assert.match(result.ok ? "" : result.error, /changed or was removed after sign_policy read it/);
@@ -116,7 +116,7 @@ test("PLANT: sign_policy refuses and writes nothing when the policy changes betw
   assert.match(result.ok ? "" : result.error, /anti-rollback record \(policy:signed:/);
   assert.deepEqual(fake.recorded, [], "a refused signing must commit nothing");
   assert.equal(
-    fake.rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)?.body,
+    fake.rows.documents.find((d) => d.path === GATE_POLICY_PATH)?.body,
     "# policy\n\n- version: 2\n",
     "the newer policy must be left in place",
   );

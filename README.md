@@ -63,10 +63,10 @@ Every caller resolves to an agent record with a name, a set of scopes and an aud
 
 Two Cron Triggers are declared, and their expressions are defined once in `src/index.ts`:
 
-| Schedule (UTC) | Task                                                                                                                                                                             |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `*/5 * * * *`  | The tick: site watcher, auto-merge evaluation, merge-state sweep, search indexing, phone alerts, the daily email digest, and the daily build of the public model and statistics. |
-| `0 9 * * *`    | Database backup to R2, followed by pruning of old document versions and audit rows.                                                                                              |
+| Schedule (UTC) | Task                                                                                                                                                      |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `*/5 * * * *`  | The tick: site watcher, merge-state sweep, search indexing, phone alerts, the daily email digest, and the daily build of the public model and statistics. |
+| `0 9 * * *`    | Database backup to R2, followed by pruning of old document versions and audit rows.                                                                       |
 
 ## Components
 

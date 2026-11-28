@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { reviewCaller, reviewScope, REVIEW_OWNER_ID } from "../src/review.ts";
+import { keepReview, reviewCaller, reviewScope, REVIEW_OWNER_ID } from "../src/review.ts";
 import { parseVerdict, toolArguments } from "../src/review-answer.ts";
 
 test("reviewCaller admits devkit's review.yml or pr.yml on a pull request in Dustin's repository and nothing else", () => {
@@ -95,4 +95,27 @@ test("reviewScope skips documents, tests and lockfiles alone and reviews any cod
     true,
   );
   assert.equal(reviewScope([]).review, false);
+});
+
+test("keepReview keeps an approval and a skip, and never an error or a BLOCK, so the next push asks again", () => {
+  const reviewed = (verdict: "APPROVE" | "CHANGES" | "BLOCK") => ({
+    status: "reviewed" as const,
+    verdict,
+    summary: "s",
+    findings: [],
+    model: "m",
+    head_sha: "a".repeat(40),
+  });
+  assert.equal(keepReview(reviewed("APPROVE")), true);
+  assert.equal(keepReview(reviewed("CHANGES")), true);
+  assert.equal(
+    keepReview({ status: "skipped", reasons: ["docs"], head_sha: "a".repeat(40) }),
+    true,
+  );
+  assert.equal(keepReview({ status: "error", error: "no AI", head_sha: "a".repeat(40) }), false);
+  assert.equal(
+    keepReview(reviewed("BLOCK")),
+    false,
+    "a cached BLOCK would hold the pull request after a fix",
+  );
 });

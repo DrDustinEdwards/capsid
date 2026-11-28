@@ -1,7 +1,4 @@
 import { gatherInbox } from "./inbox";
-import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
-import { loadMergePolicy } from "./auto-merge-policy";
-import { readSafetyReport } from "./merge-safety";
 import type { Env } from "./env";
 import { agentSummaries, type AgentSummary } from "./status";
 import { APP_ROSTER } from "./roster";
@@ -10,18 +7,10 @@ import { checkJobText, type SignatureCheck } from "./job-signing";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { readSiteConfig } from "./ops-sites";
 import { readPackageConfig } from "./ops-package-config";
-import type {
-  OpsAgent,
-  OpsAwaitingSeat,
-  OpsJob,
-  OpsJobStatus,
-  OpsLive,
-  OpsPr,
-} from "./ops-types/feed";
+import type { OpsAgent, OpsJob, OpsJobStatus, OpsLive, OpsPr } from "./ops-types/feed";
 import { overnightState } from "./overnight";
 import { openQuietFindings } from "./watcher-digest";
 import { WATCHER_ACTOR } from "./watcher";
-import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { DAY_MS } from "./time";
 import { toSqlTime } from "@dustinedwards/site-runtime/time";
 
@@ -142,27 +131,6 @@ export function opsAgentFrom(agent: AgentSummary): OpsAgent {
   };
 }
 
-// The auto-merge tick's awaiting-seat set. A value that does not parse is logged and shown as
-// empty, because the contract has no field to carry the reason; a KV read that fails throws and
-// fails the feed.
-export function awaitingFrom(raw: string | null): OpsAwaitingSeat[] {
-  if (raw === null) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) throw new Error("not an array");
-    return parsed as OpsAwaitingSeat[];
-  } catch (err) {
-    logEvent(
-      "OPS_FEED_AWAITING_UNREADABLE",
-      {
-        message: `OPS_FEED_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${errorMessage(err)}`,
-      },
-      { level: "error" },
-    );
-    return [];
-  }
-}
-
 // The store's size against D1's cap.
 export const D1_CAP_BYTES = 10 * 1024 ** 3;
 
@@ -234,61 +202,22 @@ async function livePrs(db: D1Database, now: Date): Promise<OpsPr[]> {
   }));
 }
 
-// The policy as the tick loads it. A throw is reported as not loading, not raised: one
-// unreadable policy must not take the whole live feed down.
-async function liveMergePolicy(env: Env): Promise<OpsLive["merge_policy"]> {
-  try {
-    const loaded = await loadMergePolicy(env);
-    return "error" in loaded
-      ? { loads: false, reason: loaded.error }
-      : {
-          loads: true,
-          version: loaded.policy.version,
-          enabled: loaded.policy.enabled,
-          units: [...loaded.policy.units],
-        };
-  } catch (err) {
-    return {
-      loads: false,
-      reason: `the policy could not be read: ${errorMessage(err)}`,
-    };
-  }
-}
-
 export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [
-    jobRead,
-    agents,
-    prs,
-    awaitingRaw,
-    mergeSafety,
-    sites,
-    packages,
-    overnight,
-    inbox,
-    findings,
-    mergePolicy,
-  ] = await Promise.all([
+  const [jobRead, agents, prs, sites, packages, overnight, inbox, findings] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
-    env.APP_KV.get(AWAITING_SEAT_KEY),
-    readSafetyReport(env.APP_KV),
     readSiteConfig(env.DB),
     readPackageConfig(env.DB),
     overnightState(env),
     gatherInbox(env, now, null),
     openQuietFindings(env.DB),
-    liveMergePolicy(env),
   ]);
   return {
     generated: now.toISOString(),
     jobs: jobRead.jobs,
     agents: agents.map(opsAgentFrom),
     prs,
-    awaiting_seat: awaitingFrom(awaitingRaw),
-    merge_safety: mergeSafety,
-    merge_policy: mergePolicy,
     overnight,
     namespaces: APP_ROSTER.map((name) => ({ name })),
     sites,

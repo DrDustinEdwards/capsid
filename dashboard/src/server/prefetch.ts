@@ -65,7 +65,7 @@ function specsFor(
   const out: Spec[] = [];
   switch (view) {
     case "needs":
-      out.push(namespaces, { key: [LIVE, "merge-units"], path: "/merge-units" });
+      out.push(namespaces);
       break;
     case "health":
       out.push(trends, { key: ["maintenance"], path: "/maintenance" });
@@ -100,7 +100,7 @@ function specsFor(
       out.push(namespaces);
       break;
     case "prs":
-      out.push(trends, { key: [LIVE, "merge-units"], path: "/merge-units" });
+      out.push(trends);
       break;
     case "queue":
       if (p.get("tab") === "checks") {

@@ -15,7 +15,6 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "park_job",
   "unpark_job",
   "pr_close",
-  "approve_pr",
   "revoke_agent",
   "activate_agent",
   "site_add",
@@ -28,10 +27,6 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "site_repair",
   "site_backup",
   "run_job",
-  "sign_policy_change",
-  "sign_policy_from_repo",
-  "unit_resume",
-  "automerge_resume",
   "namespace_add",
   "namespace_edit",
   "namespace_remove",
@@ -55,17 +50,15 @@ const UNDO_INFIX = "undo-";
 // the Portal as it always was, control-<action> from chat.
 export type Surface = "portal" | "chat";
 const CHAT_AUDIT_PREFIX = "control-";
-// Every project thread is the admin, so chat could be talked into either by text it read; a click
+// Every project thread is the admin, so chat could be talked into any of these by text it read; a click
 // in a signed-in browser is a person.
 const PORTAL_ONLY: ReadonlySet<PortalAction> = new Set<PortalAction>([
-  "sign_policy_change",
-  "sign_policy_from_repo",
   "site_key_rotate",
   "activate_agent",
 ]);
 export const portalOnlyRefusal = (action: PortalAction, surface: Surface): string | null =>
   surface === "chat" && PORTAL_ONLY.has(action)
-    ? `'${action}' runs only from a click in the Portal (https://portal.dustinedwards.info: the Pull requests page for the auto-merge policy, a site's Setup tab for its key, an agent's drawer to activate it), so text a session read can never sign the policy, set a key or activate one. Nothing was done.`
+    ? `'${action}' runs only from a click in the Portal (https://portal.dustinedwards.info: a site's Setup tab for its key, an agent's drawer to activate it), so text a session read can never set a key or activate one. Nothing was done.`
     : null;
 
 export const auditPrefix = (surface: Surface) =>
@@ -118,10 +111,6 @@ export function deleteOptionsFrom(
   };
 }
 
-export const UNIT_RESUME_REASON =
-  "unit_resume needs a reason: why the rollback that suspended the unit is answered. It is recorded in the audit row.";
-export const AUTOMERGE_RESUME_REASON =
-  "automerge_resume needs a reason: why the rollbacks or reverts that paused the namespace are answered. It is recorded in the audit row.";
 // close_shipped's complete (stale jobs D4: the existing admin_complete path, crediting the
 // holder). The pull requests the job names, from result_ref and the summary, become the evidence
 // the outcome verifies, at most the 10 the capsid_work_jobs tool takes.

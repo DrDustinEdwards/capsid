@@ -35,8 +35,8 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-// D1 statements: one per task, and 15 more, one of them the signed policy's read (liveMergePolicy).
-export const OPS_FEED_READS = { d1: 14 + TASKS.length, kv: 10 } as const;
+// D1 statements: one per task, and 13 more.
+export const OPS_FEED_READS = { d1: 13 + TASKS.length, kv: 6 } as const;
 
 // The uptime target the Portal shows each site against.
 const UPTIME_TARGET = 0.999;

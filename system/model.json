@@ -242,7 +242,7 @@
       "name": "Five-minute tick",
       "kind": "cron",
       "technology": "Workers cron trigger",
-      "description": "Auto-merge, the watcher and the daily passes."
+      "description": "The watcher and the daily passes."
     },
     {
       "id": "capsid-db",
@@ -1650,7 +1650,7 @@
           "kind": "writes",
           "to": "capsid-github",
           "toward": "capsid-github",
-          "text": "Merged: every five minutes, Capsid merges a pull request when CI passed on its latest commit and the signed auto-merge policy allows it. The session that opened it can also merge it once CI passes."
+          "text": "Merged: the session that opened a pull request merges it once CI passes, or GitHub auto-merge does."
         },
         {
           "from": "capsid-github",

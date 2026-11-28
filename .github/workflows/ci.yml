@@ -87,8 +87,7 @@ jobs:
       # without this a test could stop compiling and still pass). check:integration:
       # the workers-types experimental surface and the `cloudflare:test` module.
       # check:scripts: scripts/. check:dashboard: the Watch Floor app against
-      # src/ops-types/. The step's name is on the auto-merge policy's required CI
-      # list, so it keeps its old wording.
+      # src/ops-types/.
       - name: Typecheck src, tests, integration tests and the copied scorer script
         run: |
           status=0
@@ -99,9 +98,8 @@ jobs:
           npm run check:dashboard || status=1
           exit $status
 
-      # THE LINTS. BEFORE Tests on purpose: these steps are not on the auto-merge
-      # policy's required list, so a failure here stops the job, and the skipped required
-      # Tests step refuses the merge. Lint is the network's shared Oxlint config (type-aware,
+      # THE LINTS. BEFORE Tests on purpose: a failure here stops the job, so Tests is
+      # skipped and the job is red. Lint is the network's shared Oxlint config (type-aware,
       # so after the typechecks); the repo's own lints (test/lint/: dead exports, doc drift)
       # are not part of it.
       - name: Lint

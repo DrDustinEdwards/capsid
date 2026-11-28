@@ -75,8 +75,6 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "the Portal's stale jobs, through the reader behind capsid_work_jobs action list stale: true, gated by portalGate",
   "/portal/api/plan":
     "the Portal's Tonight plan, through the reader behind capsid_work_jobs action list view plan, over every namespace, gated by portalGate",
-  "/portal/api/merge-units":
-    "the Portal's Merge units panel: the suspended merge units and the units tick's proposals, read from KV, gated by portalGate",
   "/portal/api/site-search":
     "a site page's search tab: Search Console and Bing Webmaster for one namespace's site, through the readers behind capsid_inspect_repo actions search_console and bing_webmaster, gated by portalGate",
   "/portal/api/site-traffic":

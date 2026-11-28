@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { policyDocument } from "./policy-doc.ts";
 import { test } from "node:test";
 import { capsidStatus } from "../src/status.ts";
 import { GATE_POLICY_PATH } from "../src/gate-policy.ts";
-import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy.ts";
 import { signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, type DocRow } from "./fakes.ts";
 
@@ -29,11 +27,6 @@ const GATES = [
   "- `open_pr` a pull request.",
 ].join("\n");
 
-// Built from the code's own lists rather than retyped: loadMergePolicy refuses a
-// document that describes less than the code enforces, so a short hand-written
-// fixture would only exercise the refusal.
-const AUTO_MERGE = policyDocument(3);
-
 async function envWith(documents: DocRow[], secret: string | undefined = SECRET) {
   const d1 = fakeD1({ documents });
   return fakeEnv({
@@ -55,11 +48,8 @@ async function signedDoc(path: string, body: string): Promise<DocRow> {
   };
 }
 
-test("a driver scoped to ANOTHER namespace is served both policy versions and the enabled flag, and nothing else", async () => {
-  const env = await envWith([
-    await signedDoc(GATE_POLICY_PATH, GATES),
-    await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE),
-  ]);
+test("a driver scoped to ANOTHER namespace is served the gate policy's version and enabled flag, and nothing else", async () => {
+  const env = await envWith([await signedDoc(GATE_POLICY_PATH, GATES)]);
 
   // The claude-skills driver's own scope: its namespace, and not capsid.
   const status = await capsidStatus(env, undefined, {
@@ -73,8 +63,6 @@ test("a driver scoped to ANOTHER namespace is served both policy versions and th
   );
   assert.equal(status.policies.gates.version, "7");
   assert.equal(status.policies.gates.enabled, true);
-  assert.ok("version" in status.policies.auto_merge, JSON.stringify(status.policies.auto_merge));
-  assert.equal(status.policies.auto_merge.version, "3");
 
   assert.deepEqual(Object.keys(status.policies.gates).sort(), ["enabled", "version"]);
   // The whole served object must not carry the document text anywhere.
@@ -97,7 +85,6 @@ test("AN UNSIGNED POLICY REPORTS WHY, rather than a version", async () => {
       type: "procedural",
       body: GATES,
     },
-    await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE),
   ]);
   const status = await capsidStatus(env, undefined, {
     namespaces: ["claude-skills"],
@@ -114,7 +101,6 @@ test("a MISSING policy reports why, and does not fail the whole status call", as
     admin: false,
   });
   assert.ok("reason" in status.policies.gates);
-  assert.ok("reason" in status.policies.auto_merge);
   // Status still answered: a driver asking the version should not lose the rest.
   assert.ok(Array.isArray(status.namespaces) && status.canon_paths !== undefined);
 });

@@ -211,7 +211,7 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
   const refusals: string[] = [];
   if (plan.on_roster) {
     refusals.push(
-      `${ns} is on the roster (ROSTER in src/roster.ts), which the watcher, auto-merge and maintenance iterate by name. Remove it from the roster in code first; this tool will not.`,
+      `${ns} is on the roster (ROSTER in src/roster.ts), which the watcher and maintenance iterate by name. Remove it from the roster in code first; this tool will not.`,
     );
   }
   if (plan.counts.jobs_open > 0) {

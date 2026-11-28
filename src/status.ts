@@ -3,16 +3,12 @@ import type { Env } from "./env";
 import { APP_ROSTER } from "./roster";
 import { servedCanonPaths } from "./canon";
 import { loadGatePolicy } from "./gate-policy";
-import { loadMergePolicy } from "./auto-merge-policy";
 import { breakerState, type BreakerState } from "./job-breaker";
 import { SCOPE_FLAGS, parseScopes } from "./agents-schema";
 import { loadAgentRecords, type AgentRecord } from "./agent-record";
 import { jobsSummary, type JobsSummary } from "./jobs";
 import { integrityOf, REPORTS_PREFIX } from "./truth-report";
-import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { gatherInbox, type InboxApp } from "./inbox";
-import { readSafetyReport } from "./merge-safety";
-import type { OpsMergeSafety } from "./ops-types/feed";
 import { externalFence } from "./provenance";
 import { readMaintenance, type MaintenanceItem } from "./maintenance";
 
@@ -24,8 +20,6 @@ interface NamespaceStatus {
   // null means no report was ever run, which is not an integrity of zero.
   latest_report: { path: string; integrity: number | null; generated: string } | null;
   jobs: JobsSummary;
-  // The tick rewrites the whole list, so it needs no expiry.
-  awaiting_seat: AwaitingSeat[];
   maintenance: MaintenanceItem[];
   // null when the pass did not read them, so an empty list can be told from nothing read.
   maintenance_prs_read: number | null;
@@ -38,7 +32,6 @@ export interface StatusReport {
   // Served here because a namespace-scoped driver cannot read the capsid namespace.
   policies: PolicyVersions;
   overnight: OvernightState;
-  merge_safety: OpsMergeSafety | null;
   // Revoked rows are included so "revoked" and "never existed" differ. Absent, not empty, for a scoped
   // caller: an empty list would read as "no agents exist".
   agents?: AgentSummary[];
@@ -106,7 +99,6 @@ type ServedPolicy = { version: string; enabled: boolean } | { reason: string };
 
 interface PolicyVersions {
   gates: ServedPolicy;
-  auto_merge: ServedPolicy;
 }
 
 async function servedPolicies(env: Env): Promise<PolicyVersions> {
@@ -127,7 +119,6 @@ async function servedPolicies(env: Env): Promise<PolicyVersions> {
   };
   return {
     gates: await one(() => loadGatePolicy(env)),
-    auto_merge: await one(() => loadMergePolicy(env)),
   };
 }
 
@@ -155,17 +146,6 @@ export async function capsidStatus(
   const namespaces = allowed === "*" ? requested : requested.filter((n) => allowed.includes(n));
   const out: NamespaceStatus[] = [];
 
-  let awaitingAll: AwaitingSeat[] = [];
-  try {
-    const raw = await env.APP_KV.get(AWAITING_SEAT_KEY);
-    if (raw) {
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed)) awaitingAll = parsed as AwaitingSeat[];
-    }
-  } catch {
-    awaitingAll = [];
-  }
-  const mergeSafety = await readSafetyReport(env.APP_KV);
   const inboxAll = await gatherInbox(env, new Date(), namespaces);
   const maintenanceList = await readMaintenance(env);
   const maintenanceAll = maintenanceList?.items ?? [];
@@ -191,7 +171,6 @@ export async function capsidStatus(
           }
         : null,
       jobs: await jobsSummary(env.DB, namespace, new Date(), env.IMPROVE_SCORE_SECRET),
-      awaiting_seat: awaitingAll.filter((a) => a.namespace === namespace),
       maintenance: maintenanceAll.filter((m) => m.namespace === namespace),
       maintenance_prs_read: maintenanceList?.prs_read[namespace] ?? null,
       maintenance_branches_read: maintenanceList?.branches_read[namespace] ?? null,
@@ -211,13 +190,6 @@ export async function capsidStatus(
     canon_paths: servedCanonPaths(),
     policies: await servedPolicies(env),
     overnight: await overnightState(env),
-    merge_safety:
-      mergeSafety && allowed !== "*"
-        ? {
-            ...mergeSafety,
-            namespaces: mergeSafety.namespaces.filter((n) => allowed.includes(n.namespace)),
-          }
-        : mergeSafety,
     // Admin only: the inventory is the map an agent looking to widen itself would want.
     ...(scope && !scope.admin ? {} : { agents: await agentSummaries(env.DB) }),
     namespaces: out,
