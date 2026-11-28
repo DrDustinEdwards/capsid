@@ -1,7 +1,7 @@
 import { fail, ok, type ToolCtx } from "./docs";
 import { repoWriteFlags } from "../scope";
 import { toolSurfaceOf } from "./surface";
-import { resolveRepo } from "../github/client";
+import { resolveRepo, type RepoRef } from "../github/client";
 import { auditStatement } from "../store-guards";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
@@ -12,24 +12,21 @@ export function repoGuards(ctx: ToolCtx) {
   // The registrar can only compare a fully qualified owner/name, so the selector is resolved
   // against the namespace mapping here: without it, an admin remap of a primary would silently
   // redirect every driver scoped to the old repo. One D1 read per repo call.
-  const scopedRepo = async (op: string, namespace: string, selector: string | undefined) => {
-    const resolved = await resolveRepo(env, namespace, selector);
-    return {
-      resolved,
-      refusal: ctx.scope({ ...toolSurfaceOf(op), namespace, repo: resolved.full }),
-    };
-  };
-
   const guardedRead = async (
     op: string,
     namespace: string,
     selector: string | undefined,
-    fn: () => Promise<unknown>,
+    fn: (resolved: RepoRef) => Promise<unknown>,
   ) => {
     try {
-      const { refusal } = await scopedRepo(op, namespace, selector);
+      const resolved = await resolveRepo(env, namespace, selector);
+      const refusal = ctx.scope({
+        ...toolSurfaceOf(op),
+        namespace: resolved.namespace,
+        repo: resolved.full,
+      });
       if (refusal) return fail(refusal);
-      return ok(await fn());
+      return ok(await fn(resolved));
     } catch (err) {
       return fail(errorMessage(err));
     }
@@ -53,9 +50,9 @@ export function repoGuards(ctx: ToolCtx) {
   ) => {
     // Resolved first, so the repos axis is asked about the repo this write reaches; an unresolvable
     // namespace fails before anything is written.
-    let resolvedRepo: string;
+    let resolved: RepoRef;
     try {
-      resolvedRepo = (await resolveRepo(env, namespace, intent.repo)).full;
+      resolved = await resolveRepo(env, namespace, intent.repo);
     } catch (err) {
       return fail(errorMessage(err));
     }
@@ -64,8 +61,8 @@ export function repoGuards(ctx: ToolCtx) {
     const served = intent.surface ?? toolSurfaceOf(action, intent.action);
     const refusal = ctx.scope({
       tool: served.tool,
-      namespace,
-      repo: resolvedRepo,
+      namespace: resolved.namespace,
+      repo: resolved.full,
       action: served.action,
       grant: "write",
       flags: repoWriteFlags(served.tool, served.action, intent),
@@ -80,12 +77,12 @@ export function repoGuards(ctx: ToolCtx) {
     // The mutation already landed and GitHub cannot join a D1 transaction, so a failed audit INSERT
     // is a warning on a success: reporting failure would invite a retry into a second commit.
     try {
-      await auditStatement(db, actor, action, namespace, path, result, ctx.client).run();
+      await auditStatement(db, actor, action, resolved.namespace, path, result, ctx.client).run();
     } catch (err) {
       logEvent(
         "AUDIT_INSERT_FAILED",
         {
-          message: `AUDIT_INSERT_FAILED ${action} ${namespace}/${path ?? ""}: ${errorMessage(err)}`,
+          message: `AUDIT_INSERT_FAILED ${action} ${resolved.namespace}/${path ?? ""}: ${errorMessage(err)}`,
         },
         { level: "error" },
       );

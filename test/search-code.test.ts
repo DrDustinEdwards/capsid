@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { searchCode } from "../src/github.ts";
+import { searchAllRepos, searchCode } from "../src/github.ts";
 import { fakeEnv, fakeKv, withFetch, type FetchCall, type Route } from "./fakes.ts";
 
 // search_code greps every blob, one request each, so it most often runs out of quota mid-scan. A skipped blob must not
@@ -191,5 +191,53 @@ test("an uncapped scan of the same tree reads everything, so the caps are what s
     assert.equal(result.truncated, false);
     // A clean scan carries no unreadable_files, so the field above proves something.
     assert.equal("unreadable_files" in result, false);
+  });
+});
+
+test("all_repos searches every readable mapped repo against one file budget and names the rest", async () => {
+  const mapped: Record<string, string> = {
+    a: "owner/one",
+    b: "owner/two",
+    c: "owner/hidden",
+  };
+  const env = fakeEnv({
+    DB: {
+      prepare: () => ({
+        bind: (ns: string) => ({
+          first: async () => ({
+            repos: JSON.stringify([{ repo: mapped[ns], label: "primary" }]),
+          }),
+        }),
+        all: async () => ({
+          results: Object.entries(mapped).map(([namespace, repo]) => ({
+            namespace,
+            repos: JSON.stringify([{ repo, label: "primary" }]),
+          })),
+        }),
+      }),
+    },
+    APP_KV: fakeKv({ seedToken: true }).kv,
+  });
+  const routes: Record<string, Route> = {};
+  for (const name of ["one", "two"]) {
+    routes[`GET /repos/owner/${name}`] = { body: { default_branch: "main" } };
+    routes[`GET /repos/owner/${name}/git/trees/main`] = {
+      body: tree(["package.json"]),
+    };
+    routes[`GET /repos/owner/${name}/git/blobs/sha0`] = {
+      body: blob('"left-pad": "1"'),
+    };
+  }
+  await withFetch(routes, async () => {
+    const r = await searchAllRepos(env, "left-pad", {
+      maxFiles: 1,
+      readable: (m) => m.namespace !== "c",
+    });
+    assert.deepEqual(
+      r.items.map((i) => i.repo),
+      ["owner/one"],
+    );
+    assert.equal(r.truncated, true);
+    assert.deepEqual(r.not_searched, ["owner/two"]);
   });
 });

@@ -14,7 +14,7 @@ export {
   readRepoFiles,
   repoBlobPaths,
 } from "./github/contents";
-export { searchCode } from "./github/search";
+export { searchAllRepos, searchCode } from "./github/search";
 export {
   REPO_HISTORY_DEFAULT_LIMIT,
   REPO_HISTORY_MAX_LIMIT,

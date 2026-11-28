@@ -29,6 +29,8 @@ export interface RepoRef {
   owner: string;
   repo: string;
   full: string;
+  // The namespace that maps the repo, which the caller's scope is checked against.
+  namespace: string;
 }
 
 async function createAppJwt(env: Env): Promise<string> {
@@ -310,8 +312,28 @@ export function requireSinglePrimary(list: RepoEntry[]): string | null {
     : `repos must have exactly one entry labeled "primary" (found ${primaries})`;
 }
 
+// Every repo any namespace maps, in namespace order, the primary mapping first for a repo mapped twice.
+export async function mappedRepos(env: Env): Promise<Array<{ namespace: string; repo: string }>> {
+  const { results } = await env.DB.prepare(
+    "SELECT namespace, repos FROM namespaces ORDER BY namespace",
+  ).all<{ namespace: string; repos: string }>();
+  const out: Array<{ namespace: string; repo: string; primary: boolean }> = [];
+  for (const row of results) {
+    const parsed = parseMappedRepos(row.repos);
+    if ("error" in parsed) continue;
+    for (const r of parsed.list)
+      out.push({ namespace: row.namespace, repo: r.repo, primary: r.label === "primary" });
+  }
+  out.sort((a, b) => Number(b.primary) - Number(a.primary));
+  const seen = new Set<string>();
+  return out
+    .filter((m) => !seen.has(m.repo.toLowerCase()) && seen.add(m.repo.toLowerCase()))
+    .map(({ namespace, repo }) => ({ namespace, repo }));
+}
+
 // The mapping is the authorization boundary: an unknown selector is rejected, never falls through
-// to an arbitrary repo.
+// to an arbitrary repo. A repo another namespace maps resolves to that namespace, and repoGuards
+// checks the caller against it, so naming the repo grants nothing naming its namespace would not.
 export async function resolveRepo(
   env: Env,
   namespace: string,
@@ -336,27 +358,30 @@ export async function resolveRepo(
       `namespace ${namespace} has a CORRUPT repos mapping: expected a JSON array, got ${typeof list}.`,
     );
   }
-  if (list.length === 0) throw new Error(`namespace ${namespace} has no repo mapping`);
+  if (list.length === 0 && !selector) throw new Error(`namespace ${namespace} has no repo mapping`);
   let chosen: { repo: string; label?: string } | undefined;
+  let owning = namespace;
   if (selector) {
-    chosen = list.find((r) => r.label === selector) ?? list.find((r) => r.repo === selector);
+    const want = selector.toLowerCase();
+    chosen =
+      list.find((r) => r.label === selector) ?? list.find((r) => r.repo.toLowerCase() === want);
     if (!chosen) {
-      const labels =
-        list
-          .map((r) => r.label)
-          .filter(Boolean)
-          .join(", ") || "(none)";
-      const repos = list.map((r) => r.repo).join(", ");
-      throw new Error(
-        `repo '${selector}' is not mapped to namespace ${namespace}. Valid labels: ${labels}. Valid repos: ${repos}.`,
+      const other = (await mappedRepos(env)).find(
+        (m) => m.repo.toLowerCase() === want || m.repo.toLowerCase().split("/")[1] === want,
       );
+      if (!other)
+        throw new Error(
+          `repo '${selector}' is not mapped to namespace ${namespace} or to any other namespace. Valid here: ${list.map((r) => `${r.label ?? "primary"} (${r.repo})`).join(", ") || "(none)"}. A repo the GitHub App sees but no namespace maps is mapped by the admin with capsid_admin_manage_namespaces action update.`,
+        );
+      chosen = { repo: other.repo };
+      owning = other.namespace;
     }
   } else {
     chosen = list.find((r) => r.label === "primary") ?? list[0];
   }
   const [owner, repo] = chosen.repo.split("/");
   if (!owner || !repo) throw new Error(`invalid repo entry for ${namespace}: ${chosen.repo}`);
-  return { owner, repo, full: chosen.repo };
+  return { owner, repo, full: chosen.repo, namespace: owning };
 }
 
 // encodePath keeps "/", so it cannot stop traversal alone: this inner guard refuses "." and ".."
