@@ -43,7 +43,6 @@ export async function readFactsDrift(
         {
           rule: "model-not-checked",
           namespace: "capsid",
-          job: null,
           line: "The nightly versions and secrets build has not run yet, so neither model was checked.",
         },
       ],
@@ -54,7 +53,6 @@ export async function readFactsDrift(
     items.unshift({
       rule: "model-not-checked",
       namespace: "capsid",
-      job: null,
       line: `The nightly versions and secrets build last ran ${stored.built_at.slice(0, 10)}: its lines below are that night's (the run ledger's system-facts task says why).`,
     });
   return { items, read: stored.read };

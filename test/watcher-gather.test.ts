@@ -6,14 +6,14 @@ import { type WatcherCheck } from "../src/watcher-checks.ts";
 import { type Finding } from "../src/watcher-detect.ts";
 
 // healthFindings is pure elsewhere; here a gathering error swallowed by attempt() would hand it null and report
-// nothing. The property: the finding reaches the queue.
+// nothing. The property: the finding is returned.
 
 const OWNER = "DrDustinEdwards";
 const REPO = "capsid";
 const MASTER = "a".repeat(40);
 const DEPLOYED = "b".repeat(40);
-const LIVE_SCHEMA = "0015_outcome_prs.sql";
-const NEWER = "0016_jobs_retry_cap.sql";
+const LIVE_SCHEMA = "0015_sample_table.sql";
+const NEWER = "0016_sample_index.sql";
 
 // Answers exactly the queries /health and resolveRepo make and throws on anything else; capsidStatus and the rest fail into attempt() as in a real outage, so those checks are absent, not faked.
 function healthDb(schema: string, repos = [{ repo: `${OWNER}/${REPO}`, label: "primary" }]) {
@@ -145,15 +145,15 @@ test("a deploy-drift finding waits while master head's CI run is in progress, an
   assert.ok(!ran.has("master head"), "a deploy in flight must not clear an open drift finding");
 });
 
-test("a deploy-drift finding reaches the queue when master head's CI run failed", async () => {
+test("a deploy-drift finding is found when master head's CI run failed", async () => {
   const { found, ran } = await gather(NEWER, undefined, headRuns("completed", "failure"));
   const drift = found.find((f) => f.fingerprint === `deploy-drift-${MASTER.slice(0, 7)}`);
   assert.ok(drift, JSON.stringify(fingerprints(found)));
-  assert.match(drift.body, /CI run ended failure/);
+  assert.match((drift.evidence ?? []).join("\n"), /CI run ended failure/);
   assert.ok(ran.has("master head"));
 });
 
-test("A LIVE SCHEMA BEHIND THE NEWEST MIGRATION REACHES THE QUEUE through gatherFindings", async () => {
+test("A LIVE SCHEMA BEHIND THE NEWEST MIGRATION IS FOUND through gatherFindings", async () => {
   const { found, failures } = await gather(LIVE_SCHEMA);
   assert.ok(
     fingerprints(found).includes(`schema-behind-${NEWER}`),
@@ -177,19 +177,15 @@ test("a live schema AT the newest migration is not a finding, so the check is no
   );
 });
 
-// A check whose read failed is not reported as run, so runPass does not clear the jobs it owns; here the status read and every roster CI read fail while the rest succeed.
+// A check whose read failed is not reported as run, so runPass does not clear the findings it owns; here every roster CI read fails while the rest succeed.
 test("gatherFindings reports only the checks whose reads succeeded", async () => {
   const { ran, failures } = await gather(NEWER);
-  assert.ok(
-    failures.some((f) => f.includes("status")),
-    "the status read did not fail, so this proves nothing",
-  );
   assert.ok(
     failures.some((f) => f.includes("ci ")),
     "no ci read failed, so this proves nothing",
   );
   for (const check of ["health", "master head", "migrations"] as const)
     assert.ok(ran.has(check), `${check} ran and was not reported`);
-  for (const check of ["status", "ci"] as const)
+  for (const check of ["ci"] as const)
     assert.ok(!ran.has(check), `${check} failed and was reported as run`);
 });

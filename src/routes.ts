@@ -9,17 +9,6 @@ import {
   handlePublicDocument,
 } from "./public-data";
 import { REVIEW_RUN_PATH, handleReviewRun } from "./review";
-import {
-  BENCH_DRAW_PATH,
-  BENCH_REPRO_PATH,
-  BENCH_SCORE_PATH,
-  BENCH_START_PATH,
-  BENCH_TASKS_PATH,
-  handleBenchDraw,
-  handleBenchStart,
-  handleBenchTasks,
-} from "./bench";
-import { handleBenchRepro, handleBenchScore } from "./bench-score";
 import { resolveAgent } from "./agents";
 import { checkScope } from "./scope";
 import { gatherInbox, restrictInbox } from "./inbox";
@@ -76,14 +65,6 @@ import {
   PORTAL_PREFIX,
   withPortalIdle,
 } from "./portal-auth";
-import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "./portal-claims";
-import { handlePortalStale, PORTAL_STALE_PATH } from "./portal-stale";
-import {
-  handlePortalDigest,
-  handlePortalPlan,
-  PORTAL_DIGEST_PATH,
-  PORTAL_PLAN_PATH,
-} from "./portal-overnight";
 import {
   handlePortalBuildLog,
   handlePortalWorkersBuilds,
@@ -125,7 +106,7 @@ const login = loginHandler<Env>({
   scopes: SCOPES,
   about:
     "<p>Capsid serves the portfolio's knowledge base and reaches its GitHub repos. It will always be able to read. " +
-    "Writing documents, changing repos, working jobs and Capsid Admin's controls need the box below.</p>",
+    "Writing documents, changing repos and Capsid Admin's controls need the box below.</p>",
   admit: async (env, user) =>
     isAdminEmail(env, user.email) ? { signed_in_at: Date.now() } : false,
   admits: {
@@ -284,7 +265,6 @@ async function handleCspReport(request: Request, env: Env): Promise<Response> {
 
 // Both backup endpoints read the X-Backup-* pair and verify against the backup key.
 const backupFront = (env: Env) => ({
-  headers: "Backup" as const,
   verify: (signed: { timestamp: string; signature: string; body: string }, now: Date) =>
     verifyBackupCredentialRequest(env, signed, now),
   db: env.DB,
@@ -368,16 +348,6 @@ export const defaultHandler = {
       return handleBackupCredential(request, env);
     if (url.pathname === OFFACCOUNT_REPORT_PATH && request.method === "POST")
       return handleOffaccountReport(request, env);
-    if (url.pathname === BENCH_TASKS_PATH && request.method === "POST")
-      return handleBenchTasks(request, env);
-    if (url.pathname === BENCH_DRAW_PATH && request.method === "POST")
-      return handleBenchDraw(request, env);
-    if (url.pathname === BENCH_START_PATH && request.method === "POST")
-      return handleBenchStart(request, env);
-    if (url.pathname === BENCH_REPRO_PATH && request.method === "POST")
-      return handleBenchRepro(request, env);
-    if (url.pathname === BENCH_SCORE_PATH && request.method === "POST")
-      return handleBenchScore(request, env);
     if (url.pathname === REVIEW_RUN_PATH && request.method === "POST")
       return handleReviewRun(request, env);
     if (url.pathname === "/authorize") return handleLogin(request, env);
@@ -412,12 +382,6 @@ function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
     return handlePortalNamespaces(request, env);
   if (url.pathname === PORTAL_ACTIVITY_PATH && request.method === "GET")
     return handlePortalActivity(request, env);
-  if (url.pathname === PORTAL_CLAIMS_PATH && request.method === "GET")
-    return handlePortalClaims(request, env);
-  if (url.pathname === PORTAL_STALE_PATH && request.method === "GET")
-    return handlePortalStale(request, env);
-  if (url.pathname === PORTAL_PLAN_PATH && request.method === "GET")
-    return handlePortalPlan(request, env);
   if (url.pathname === PORTAL_SITE_SEARCH_PATH && request.method === "GET")
     return handlePortalSiteSearch(request, env);
   if (url.pathname === PORTAL_SITE_TRAFFIC_PATH && request.method === "GET")
@@ -426,8 +390,6 @@ function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
     return handlePortalWorkersBuilds(request, env);
   if (url.pathname === PORTAL_BUILD_LOG_PATH && request.method === "GET")
     return handlePortalBuildLog(request, env);
-  if (url.pathname === PORTAL_DIGEST_PATH && request.method === "GET")
-    return handlePortalDigest(request, env);
   if (url.pathname === PORTAL_MAINTENANCE_PATH && request.method === "GET")
     return handlePortalMaintenance(request, env);
   if (url.pathname === PORTAL_CONVERGENCE_PATH && request.method === "GET")

@@ -6,15 +6,15 @@ import { auditDetail } from "../src/audit-detail.ts";
 
 const MARKER = "PLANTED-SECRET-5b1e";
 
-test("a switch's click row reads as its reason and its named fields", () => {
+test("a click row reads as its reason and its named fields", () => {
   const d = auditDetail(
-    JSON.stringify({ mode: "off", reason: "Budget resets Friday.", undo: true }),
+    JSON.stringify({ name: "sample-driver", reason: "The key leaked.", enabled: true }),
   );
-  assert.equal(d.reason, "Budget resets Friday.");
+  assert.equal(d.reason, "The key leaked.");
   assert.equal(d.changes, null);
   assert.deepEqual(d.fields, [
-    { name: "Mode", value: "off" },
-    { name: "Undo of a change just made", value: "yes" },
+    { name: "Name", value: "sample-driver" },
+    { name: "On", value: "yes" },
   ]);
   assert.equal(d.withheld, 0);
 });

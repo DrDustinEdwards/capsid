@@ -52,40 +52,30 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // publishes; a repeat release or tag is refused by GitHub, but a repeat close of a
   // reopened pull request is not a no-op.
   capsid_close_pr: destructive({ idempotent: false, openWorld: true }),
-  // complete, fail and block overwrite result_summary and move a job out of claimed;
-  // post and record create a job each call; evidence is checked against GitHub.
-  capsid_work_jobs: destructive({ idempotent: false, openWorld: true }),
   // Status only: Capsid's state from this Worker's own stores.
   capsid_read_status: read({ idempotent: true, openWorld: false }),
 
-  // Reads the queue, the Portal's stored state and GitHub's open pull requests.
+  // Reads the Portal's stored state and GitHub's open pull requests.
   capsid_admin_whats_next: read({ idempotent: true, openWorld: true }),
   // update replaces the mapping, delete removes the namespace and, with cascade, its
   // documents; register creates one each call.
   capsid_admin_manage_namespaces: destructive({ idempotent: false, openWorld: false }),
   // revoke and update_scopes overwrite existing state; mint issues a new credential.
   capsid_admin_manage_agents: destructive({ idempotent: false, openWorld: false }),
-  // Reads claims and their checks, never writes.
-  capsid_admin_read_claims: read({ idempotent: true, openWorld: false }),
   // The watcher's pass from KV, and Cloudflare's API for Access, Email Routing and
   // Workers Builds.
   capsid_admin_read_ops: read({ idempotent: true, openWorld: true }),
-  // perform can revoke an agent, fail a job or remove a site, and a confirmed token is
+  // perform can revoke an agent or remove a site, and a confirmed token is
   // spent, so a repeat is refused rather than repeated. Closing a pull request calls
   // GitHub, and a site repair calls the site's operator API.
   capsid_admin_run_controls: destructive({ idempotent: false, openWorld: true }),
-  // sign_policy overwrites a policy document (snapshotted and audit-logged each call), and
-  // breaker_reset and overnight overwrite their switches. Only this Worker's own stores.
-  capsid_admin_manage_switches: destructive({ idempotent: false, openWorld: false }),
   // Replaces a site's key on the site Worker and on Carrel through the Cloudflare API.
 };
 
-// A tool whose action decides its grant (capsid_work_jobs, capsid_lint_namespace) is served to a
+// A tool whose action decides its grant (capsid_lint_namespace) is served to a
 // caller holding only the read grant with its read actions alone (src/tools/surface-composite.ts
 // READ_VIEWS), so for that caller it is read-only in fact and says so (area 11, T7).
 export const READ_VIEW_HINTS: Record<string, ToolHints> = {
-  // list, with its plan, digest, models and stale views: the queue and the stored plan.
-  capsid_work_jobs: read({ idempotent: true, openWorld: false }),
   // gather: core.md, the wiki, the unconsolidated documents and their edges.
   capsid_lint_namespace: read({ idempotent: true, openWorld: false }),
 };

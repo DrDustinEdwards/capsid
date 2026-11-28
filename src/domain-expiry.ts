@@ -85,13 +85,6 @@ export function expiryFindings(
       fingerprint,
       namespace: "capsid",
       title: `Watcher: ${headline} [${fingerprint}]`,
-      body: [
-        `The registry's RDAP record says ${domain} expires at ${expires}. Renew it, or confirm auto-renew has run, then fail this job saying so; the finding clears once RDAP shows the new date.`,
-        "",
-        "## Evidence",
-        "",
-        ...evidence.map((line) => `- ${line}`),
-      ].join("\n"),
       evidence,
     });
   }

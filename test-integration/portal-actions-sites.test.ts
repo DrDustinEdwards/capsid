@@ -164,8 +164,7 @@ describe("the Portal's reads", () => {
     const status = await capsidStatus(workerEnv());
     for (const ns of status.namespaces) {
       const served = body.namespaces.find((n) => n.namespace === ns.namespace)!;
-      expect(served.breaker.open).toBe(ns.breaker?.open ?? false);
-      expect(served.jobs.queued).toBe(ns.jobs.queued);
+      expect(served.latest_report?.integrity ?? null).toBe(ns.latest_report?.integrity ?? null);
     }
   });
 

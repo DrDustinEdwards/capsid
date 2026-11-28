@@ -18,16 +18,8 @@ import {
   PORTAL_PREVIEW_PATH,
   PORTAL_SIGN_OUT_PATH,
 } from "../src/portal-actions.ts";
-import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
-import { handlePortalStale, PORTAL_STALE_PATH } from "../src/portal-stale.ts";
 import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
 import { handlePortalTrends, PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
-import {
-  handlePortalDigest,
-  handlePortalPlan,
-  PORTAL_DIGEST_PATH,
-  PORTAL_PLAN_PATH,
-} from "../src/portal-overnight.ts";
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
 import {} from "node:path";
@@ -37,7 +29,6 @@ import {
   CSRF,
   NOW,
   EMAIL,
-  ACTOR,
   LATER,
   world,
   post,
@@ -57,8 +48,7 @@ import {
 // the rest run against real D1 in test-integration/portal-actions.test.ts.
 for (const [action, params] of EVERY_ACTION.filter(
   ([a]) =>
-    !a.endsWith("_job") &&
-    a !== "close_shipped" &&
+    a !== "run_job" &&
     a !== "pr_close" &&
     !a.startsWith("site_") &&
     !a.startsWith("package_") &&
@@ -89,10 +79,7 @@ test("a co-owner's click is audited under her own verified email, never ADMIN_EM
   const w = world({ coOwners: " other@example.com , co@example.com " });
   const co = { session: "co@example.com" };
   const prev = await handlePortalPreview(
-    await preview(
-      { action: "overnight", params: { value: "api", reason: "first supervised night" } },
-      co,
-    ),
+    await preview({ action: "revoke_agent", params: { name: "capsid-driver" } }, co),
     w.env,
     NOW,
   );
@@ -106,7 +93,7 @@ test("a co-owner's click is audited under her own verified email, never ADMIN_EM
     assert.match(row, / by access:co@example\.com$/, row);
     assert.doesNotMatch(row, /admin@example\.com/, row);
   }
-  const click = w.d1.recorded.find((r) => r.params[1] === "portal-overnight");
+  const click = w.d1.recorded.find((r) => r.params[1] === "portal-revoke_agent");
   assert.equal(click?.params[0], "access:co@example.com");
 });
 
@@ -114,7 +101,7 @@ test("a co-owner's session is refused when CO_OWNER_EMAILS is unset", async () =
   const none = world();
   const refused = await handlePortalPreview(
     await preview(
-      { action: "overnight", params: { value: "api", reason: "r" } },
+      { action: "revoke_agent", params: { name: "capsid-driver" } },
       { session: "co@example.com" },
     ),
     none.env,
@@ -135,7 +122,7 @@ test("PLANT: a confirmation is spent by its first perform, and a replay is refus
   assert.equal(second.status, 409);
   assert.match(await second.text(), /already used/);
   assert.equal(w.d1.recorded.length, before, "a replayed confirmation wrote a row");
-  assert.equal(auditRows(w.d1).filter((r) => r.startsWith("portal-overnight")).length, 1);
+  assert.equal(auditRows(w.d1).filter((r) => r.startsWith("portal-revoke_agent")).length, 1);
 });
 
 test("PLANT: an expired token is refused with 410 and nothing is performed", async () => {
@@ -152,7 +139,7 @@ test("PLANT: a token whose params were edited is refused with 403", async () => 
   const { token } = await issue(w);
   const edited = tamper(
     token,
-    (c) => ((c.params as Record<string, string>).value = "subscription"),
+    (c) => ((c.params as Record<string, string>).name = "capsid-new-driver"),
   );
   const res = await handlePortalPerform(await perform({ token: edited }), w.env, NOW, deps);
   assert.equal(res.status, 403);
@@ -165,13 +152,13 @@ test("PLANT: a token for one action cannot perform another", async () => {
   const { token } = await issue(w);
   // Named in the body beside the token: refused, and the token's action does not run.
   const named = await handlePortalPerform(
-    await perform({ token, action: "reset_breaker" }),
+    await perform({ token, action: "activate_agent" }),
     w.env,
     NOW,
     deps,
   );
   assert.equal(named.status, 400);
-  const edited = tamper(token, (c) => (c.action = "reset_breaker"));
+  const edited = tamper(token, (c) => (c.action = "activate_agent"));
   const signed = await handlePortalPerform(await perform({ token: edited }), w.env, NOW, deps);
   assert.equal(signed.status, 403);
   wroteNothing(w, "a cross-action perform");
@@ -181,7 +168,7 @@ test("PLANT: a perform body carrying params is refused, whatever the token", asy
   const w = world();
   const { token } = await issue(w);
   const res = await handlePortalPerform(
-    await perform({ token, params: { value: "subscription", reason: "not what was previewed" } }),
+    await perform({ token, params: { name: "capsid-new-driver" } }),
     w.env,
     NOW,
     deps,
@@ -235,7 +222,7 @@ test("an action that happened but whose click row failed returns 200 with the wa
   };
   const batch = db.batch.bind(db);
   db.batch = async (statements) => {
-    if (statements.some((s) => s.params?.[1] === "portal-overnight"))
+    if (statements.some((s) => s.params?.[1] === "portal-revoke_agent"))
       throw new Error("D1_ERROR: database is locked");
     return batch(statements);
   };
@@ -244,23 +231,20 @@ test("an action that happened but whose click row failed returns 200 with the wa
   const body = (await res.json()) as PortalPerformed;
   assert.match(
     body.warning ?? "",
-    /overnight completed, but the Portal audit row naming access:admin@example.com was not written/,
+    /revoke_agent completed, but the Portal audit row naming access:admin@example.com was not written/,
   );
-  assert.match(res.headers.get("X-Capsid-Warning") ?? "", /overnight completed/);
-  assert.equal(w.kv.store.get("overnight:mode"), "api", "the action itself did not happen");
+  assert.match(res.headers.get("X-Capsid-Warning") ?? "", /revoke_agent completed/);
+  assert.ok(w.d1.rows.agents[0].revoked_at, "the action itself did not happen");
   assert.equal(errors.length, 1);
 });
 
-const overnightPreview = (site: string | null) =>
-  preview(
-    { action: "overnight", params: { value: "api", reason: "first supervised night" } },
-    { site },
-  );
+const revokePreview = (site: string | null) =>
+  preview({ action: "revoke_agent", params: { name: "capsid-driver" } }, { site });
 
 test("PLANT: Sec-Fetch-Site cross-site and same-site are refused on both POSTs; same-origin, none and absent pass", async () => {
   for (const site of ["cross-site", "same-site"]) {
     const w = world();
-    const res = await handlePortalPreview(await overnightPreview(site), w.env, NOW);
+    const res = await handlePortalPreview(await revokePreview(site), w.env, NOW);
     assert.equal(res.status, 403, `preview served Sec-Fetch-Site: ${site}`);
     const { token } = await issue(w);
     const performed = await handlePortalPerform(
@@ -275,7 +259,7 @@ test("PLANT: Sec-Fetch-Site cross-site and same-site are refused on both POSTs; 
   // "none" is a request the user started (site-runtime refuseCrossSite), which no other site can forge.
   for (const site of ["same-origin", "none", null]) {
     const w = world();
-    const res = await handlePortalPreview(await overnightPreview(site), w.env, NOW);
+    const res = await handlePortalPreview(await revokePreview(site), w.env, NOW);
     assert.equal(res.status, 200, `preview refused Sec-Fetch-Site: ${site}`);
   }
 });
@@ -284,7 +268,7 @@ test("a body over 64KB is refused with 413 before it is parsed", async () => {
   const w = world();
   const res = await handlePortalPreview(
     await preview(null, {
-      raw: JSON.stringify({ action: "overnight", params: { value: "x".repeat(70_000) } }),
+      raw: JSON.stringify({ action: "revoke_agent", params: { name: "x".repeat(70_000) } }),
     }),
     w.env,
     NOW,
@@ -304,12 +288,8 @@ const ROUTES = [
   [PORTAL_PERFORM_PATH, "POST", (r: Request, e: never) => handlePortalPerform(r, e, NOW, deps)],
   [PORTAL_NAMESPACES_PATH, "GET", (r: Request, e: never) => handlePortalNamespaces(r, e, NOW)],
   [PORTAL_ACTIVITY_PATH, "GET", (r: Request, e: never) => handlePortalActivity(r, e, NOW)],
-  [PORTAL_CLAIMS_PATH, "GET", (r: Request, e: never) => handlePortalClaims(r, e, NOW)],
-  [PORTAL_STALE_PATH, "GET", (r: Request, e: never) => handlePortalStale(r, e, NOW)],
   [PORTAL_LIBRARY_PATH, "GET", (r: Request, e: never) => handlePortalLibrary(r, e, NOW)],
   [PORTAL_TRENDS_PATH, "GET", (r: Request, e: never) => handlePortalTrends(r, e, NOW)],
-  [PORTAL_PLAN_PATH, "GET", (r: Request, e: never) => handlePortalPlan(r, e, NOW)],
-  [PORTAL_DIGEST_PATH, "GET", (r: Request, e: never) => handlePortalDigest(r, e, NOW)],
   [PORTAL_MAINTENANCE_PATH, "GET", (r: Request, e: never) => handlePortalMaintenance(r, e, NOW)],
   [PORTAL_CONVERGENCE_PATH, "GET", (r: Request, e: never) => handlePortalConvergence(r, e, NOW)],
   [PORTAL_SIGN_OUT_PATH, "POST", (r: Request, e: never) => handlePortalSignOut(r, e, NOW)],
@@ -326,10 +306,7 @@ test("every route refuses a bearer with 403 and sends an anonymous caller to sig
     };
     const body =
       method === "POST"
-        ? JSON.stringify({
-            action: "overnight",
-            params: { value: "api", reason: "first supervised night" },
-          })
+        ? JSON.stringify({ action: "revoke_agent", params: { name: "capsid-driver" } })
         : undefined;
     // A bearer beside a valid session and CSRF pair is still refused: the gate reads it first.
     const bearer = await handler(
@@ -408,28 +385,3 @@ for (const [label, opts] of [
     wroteNothing(w, `sign out ${label}`);
   });
 }
-
-test("PLANT: performing the subscription choice stores the mode and the decision record with the date, who set it and why; leaving it deletes the record", async () => {
-  const w = world();
-  const { token } = await previewOk(w, "overnight", {
-    value: "subscription",
-    reason: "first supervised night",
-  });
-  const done = await doPerform(w, token);
-  assert.equal(done.status, 200, await done.clone().text());
-  assert.equal(await w.kv.kv.get("overnight:mode"), "subscription");
-  const decision = JSON.parse((await w.kv.kv.get("overnight:decision")) ?? "null");
-  assert.equal(decision.decided_by, "Dustin Edwards");
-  assert.equal(decision.decided_on, "2026-10-04");
-  assert.equal(decision.set_by, ACTOR);
-  assert.equal(decision.reason, "first supervised night");
-  const mutator = w.d1.recorded.find((r) => r.params[1] === "overnight-set");
-  assert.ok(mutator, "no overnight-set audit row");
-  assert.match(String(mutator.params[4]), /Dustin Edwards/);
-
-  const off = await previewOk(w, "overnight", { value: "off", reason: "done for now" });
-  const turned = await handlePortalPerform(await perform({ token: off.token }), w.env, NOW, deps);
-  assert.equal(turned.status, 200, await turned.clone().text());
-  assert.equal(await w.kv.kv.get("overnight:mode"), "off");
-  assert.equal(await w.kv.kv.get("overnight:decision"), null);
-});

@@ -60,22 +60,6 @@ async function getJson(
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-// The versions npm has published for `name`, or null when npm has no such package. A failed read
-// throws, so a caller cannot read it as "not published". For a blocked job's "check: npm
-// <name>@<version>" line (src/manual-steps.ts) and the job body fact check (src/job-fact-check.ts).
-export async function npmVersions(fetchImpl: FetchLike, name: string): Promise<string[] | null> {
-  const got = await getJson(
-    fetchImpl,
-    `https://registry.npmjs.org/${pathName(name)}`,
-    "application/vnd.npm.install-v1+json",
-  );
-  if (!got.ok) {
-    if (got.status === 404) return null;
-    throw new Error(got.reason);
-  }
-  return Object.keys((got.json as { versions?: Record<string, unknown> }).versions ?? {});
-}
-
 // Also read by the Shared code view (src/shared-code.ts), for each shared package that is
 // not private, so it can say whether the version in the repo has reached npm.
 export async function readNpm(fetchImpl: FetchLike, name: string): Promise<PackageSnapshot["npm"]> {

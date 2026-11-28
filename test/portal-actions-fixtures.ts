@@ -133,16 +133,6 @@ export const agent = (id: string, name: string, hash: string, createdBy: string,
   revoked_at: null,
   last_seen: null,
 });
-export const job = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
-  id,
-  namespace: "capsid",
-  title: `a ${status} job`,
-  body: "lorem",
-  status,
-  posted_by: "github:sample",
-  ...extra,
-});
-
 export function world(opts: { adminEmail?: string; coOwners?: string } = {}): {
   d1: FakeD1;
   kv: FakeKv;
@@ -165,12 +155,6 @@ export function world(opts: { adminEmail?: string; coOwners?: string } = {}): {
         ),
         pending: 1,
       },
-    ],
-    jobs: [
-      job("job_blocked00001", "blocked", { claimed_by: "agent:capsid-driver" }),
-      job("job_claimed00001", "claimed", { claimed_by: "agent:capsid-other" }),
-      job("job_queued000001", "queued"),
-      job("job_parked000001", "parked", { result_summary: "comes back when the design is ruled" }),
     ],
   });
   const kv = fakeKv({
@@ -259,8 +243,7 @@ export async function previewOk(
   return (await res.json()) as PortalPreview;
 }
 
-export const issue = (w: { env: never }) =>
-  previewOk(w, "overnight", { value: "api", reason: "first supervised night" });
+export const issue = (w: { env: never }) => previewOk(w, "revoke_agent", { name: "capsid-driver" });
 
 export const doPerform = async (w: { env: never }, token: string, opts?: Opts, now = NOW) =>
   handlePortalPerform(await perform({ token }, opts), w.env, now, deps);
@@ -280,14 +263,6 @@ export async function forge(claims: Record<string, unknown>): Promise<string> {
 }
 
 export const EVERY_ACTION = [
-  ["overnight", { value: "api", reason: "first supervised night" }],
-  ["resume_job", { id: "job_blocked00001", reason: "ran the push" }],
-  ["release_job", { id: "job_claimed00001", reason: "the holder is gone" }],
-  ["fail_job", { id: "job_queued000001", reason: "superseded" }],
-  ["close_shipped", { id: "job_blocked00001", reason: "merged and live" }],
-  ["supersede_job", { id: "job_queued000001", reason: "a duplicate of job_claimed00001" }],
-  ["park_job", { id: "job_queued000001", reason: "comes back when the design is ruled" }],
-  ["unpark_job", { id: "job_parked000001" }],
   ["pr_close", { namespace: "capsid", number: "41", reason: "replaced by #42" }],
   ["revoke_agent", { name: "capsid-driver" }],
   ["activate_agent", { name: "capsid-new-driver" }],
@@ -308,7 +283,6 @@ export const EVERY_ACTION = [
     },
   ],
   ["site_remove", { namespace: "capsid", revision: "3" }],
-  ["reset_breaker", { namespace: "capsid" }],
   ["package_add", { name: "sample-new", repo: "example-org/sample-new" }],
   [
     "package_edit",

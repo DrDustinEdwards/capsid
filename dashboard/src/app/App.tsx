@@ -24,14 +24,7 @@ import "capsomer/mode-banner.css";
 import { useScrollToHash } from "capsomer/react/route-hooks";
 import { Outlet } from "react-router";
 import { Link, useDemo, useLocation, useSearchString } from "../lib/router";
-import {
-  APP_URL,
-  POLL_MS,
-  requestRefresh,
-  runAction,
-  signOutRequest,
-  useOpsFeed,
-} from "../lib/api";
+import { APP_URL, POLL_MS, requestRefresh, signOutRequest, useOpsFeed } from "../lib/api";
 import { attentionItems, hasSites, passStale } from "../lib/derive";
 import { ago } from "../lib/format";
 import { useWaiting } from "../lib/waiting";
@@ -44,13 +37,11 @@ import {
   AppCtx,
   VIEWS,
   parseRoute,
-  placePath,
   routePath,
   refPath,
   type ConfirmRequest,
   type Ctx,
   type Filters,
-  type UndoRequest,
   type ViewId,
 } from "./ctx";
 import type { OpsFeed, PortalPerformed } from "../types";
@@ -74,7 +65,7 @@ const GROUPS: Array<{ label?: string; views: ViewId[] }> = [
   { label: "Now", views: ["needs", "health"] },
   { label: "Sites", views: ["sites"] },
   { label: "Work", views: ["prs", "projects"] },
-  { label: "Records", views: ["activity", "queue", "agents", "packages", "library"] },
+  { label: "Records", views: ["activity", "agents", "packages", "library"] },
   { views: ["settings"] },
 ];
 
@@ -109,8 +100,6 @@ function FeedFreshness({
     />
   );
 }
-
-let latestCsrf = "";
 
 export function App() {
   const singleKeys = useSingleKeys();
@@ -155,41 +144,12 @@ function PortalApp() {
 
   const confirm = useCallback((r: ConfirmRequest) => setConfirmReq(r), [setConfirmReq]);
 
-  // Undo is the reverse change as its own action (params.undo "true", recorded as portal-undo-<action>); a refusal throws so the message keeps its Undo.
-  useEffect(() => {
-    latestCsrf = feed?.csrf ?? "";
-  }, [feed]);
-  const undoAction = useCallback(
-    async (u: UndoRequest) => {
-      const r = await runAction(latestCsrf, {
-        action: u.action,
-        params: u.params,
-      });
-      if (r.kind === "signed-out") {
-        signOut();
-        throw new Error("the session ended. Sign in again.");
-      }
-      if (r.kind !== "ok")
-        throw new Error(
-          r.kind === "error"
-            ? `Undo could not reach the server: ${r.message}`
-            : `Undo was refused: ${r.message}`,
-        );
-      accept(r.value.feed);
-      if (r.value.warning) say(`Undone. ${r.value.summary}`, { warning: r.value.warning });
-    },
-    [accept, say, signOut],
-  );
   const performed = useCallback(
-    (p: PortalPerformed, u?: UndoRequest) => {
+    (p: PortalPerformed) => {
       accept(p.feed);
-      say(p.summary, {
-        warning: p.warning ?? undefined,
-        undo: u ? () => undoAction(u) : undefined,
-        returnFocus: u?.focus ? () => document.getElementById(u.focus!) : undefined,
-      });
+      say(p.summary, { warning: p.warning ?? undefined });
     },
-    [accept, say, undoAction],
+    [accept, say],
   );
 
   const go = useCallback(
@@ -380,22 +340,6 @@ function PortalApp() {
     };
   }, [views]);
 
-  const flip = useCallback(
-    (id: string) => {
-      navigate(placePath("settings#automation"));
-      const until = Date.now() + 3000;
-      const press = () => {
-        const el = document.getElementById(id);
-        if (el instanceof HTMLInputElement && !el.disabled) {
-          el.focus();
-          el.click();
-        } else if (Date.now() < until) setTimeout(press, 50);
-        else say("That switch did not load in Settings, under Automation. Try it there.");
-      };
-      setTimeout(press, 0);
-    },
-    [navigate, say],
-  );
   const paletteActions = useMemo(
     () => ({
       go,
@@ -405,9 +349,8 @@ function PortalApp() {
       help: () => setHelp(true),
       copy,
       confirm,
-      flip,
     }),
-    [go, open, refresh, theme, copy, confirm, flip, setHelp],
+    [go, open, refresh, theme, copy, confirm, setHelp],
   );
   const [paletteUsed, setPaletteUsed] = useState(false);
   if (palette && !paletteUsed) setPaletteUsed(true);
@@ -431,11 +374,7 @@ function PortalApp() {
   const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit").length : 0;
 
   const d = route.drawer;
-  const subject = !d
-    ? ""
-    : d.type === "job"
-      ? (feed?.live.jobs.find((j) => j.id === d.id)?.title ?? `Job ${d.id}`)
-      : d.id;
+  const subject = d ? d.id : "";
   const siteName = route.site
     ? (feed?.live.sites.find((s) => s.namespace === route.site)?.name ?? route.site)
     : "";
@@ -634,7 +573,7 @@ function PortalApp() {
             onClose={(p) => {
               setConfirmReq(null);
               if (!p) return;
-              performed(p, confirmReq.undo);
+              performed(p);
               confirmReq.onDone?.(p);
             }}
           />

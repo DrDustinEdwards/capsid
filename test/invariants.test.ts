@@ -31,7 +31,7 @@ test("the block scan found the whole tool surface", () => {
   // Vacuity guard: if this parse broke, every assertion below would pass over an
   // empty list.
   assert.ok(
-    REGISTRATIONS.length >= 17,
+    REGISTRATIONS.length >= 15,
     `expected the full tool surface, parsed ${REGISTRATIONS.length} registrations`,
   );
   assert.ok(BLOCKS.length >= 37, `expected every operation, parsed ${BLOCKS.length} blocks`);

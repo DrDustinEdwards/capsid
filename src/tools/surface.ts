@@ -115,7 +115,7 @@ const READ_STATUS: CompositeSpec = {
   name: "capsid_read_status",
   title: "Read Capsid's status",
   summary:
-    "Capsid's state as a driver reads it: per namespace the job queue, the breaker, the maintenance list and what needs Dustin, plus the signed policies and canon paths; and the versions model, which package versions every system installs. Needs the read grant.",
+    "Capsid's state as a driver reads it: per namespace the maintenance list and what needs Dustin, plus the canon paths; and the versions model, which package versions every system installs. Needs the read grant.",
   actions: {
     status: { op: "status", fields: ["namespace"], summary: "Capsid's status." },
     versions: {
@@ -184,29 +184,12 @@ const READ_OPS: CompositeSpec = {
   },
 };
 
-const ADMIN_CONTROL_ACTIONS = ["sign_policy", "breaker_reset", "overnight"] as const;
-
-const MANAGE_SWITCHES: CompositeSpec = {
-  name: "capsid_admin_manage_switches",
-  title: "Administrator switches",
-  summary:
-    "The administrator's switches: the signed policies, the job breaker and the overnight run. Admin only, and every action needs a recent sign-in from a signed-in session.",
-  actions: Object.fromEntries(
-    ADMIN_CONTROL_ACTIONS.map((a) => [
-      a,
-      { op: "admin_control", inject: { action: a }, summary: "" },
-    ]),
-  ),
-};
-
 export const SINGLE_TOOLS: Record<string, { op: string; title: string }> = {
   capsid_start_session: { op: "brief", title: "Start a session" },
   capsid_delete_doc: { op: "delete", title: "Delete a document" },
   capsid_lint_namespace: { op: "lint", title: "Lint a namespace" },
-  capsid_work_jobs: { op: "jobs", title: "Work the job queue" },
   capsid_admin_whats_next: { op: "whats_next", title: "What needs me" },
   capsid_admin_manage_agents: { op: "agents", title: "Manage agents" },
-  capsid_admin_read_claims: { op: "claims", title: "Read claims" },
   capsid_admin_run_controls: { op: "controls", title: "Run a control" },
 };
 
@@ -220,7 +203,6 @@ export const COMPOSITES: readonly CompositeSpec[] = [
   READ_STATUS,
   MANAGE_NAMESPACES,
   READ_OPS,
-  MANAGE_SWITCHES,
 ];
 
 // The one inverse of the tables above, so a handler cannot name a tool the surface does not serve.
@@ -256,7 +238,6 @@ export const CAPSID_TOOLS = [
   "capsid_read_repo",
   "capsid_inspect_repo",
   "capsid_close_pr",
-  "capsid_work_jobs",
   "capsid_read_status",
 ] as const;
 
@@ -264,10 +245,8 @@ export const CAPSID_ADMIN_TOOLS = [
   "capsid_admin_whats_next",
   "capsid_admin_manage_namespaces",
   "capsid_admin_manage_agents",
-  "capsid_admin_read_claims",
   "capsid_admin_read_ops",
   "capsid_admin_run_controls",
-  "capsid_admin_manage_switches",
 ] as const;
 
 export function registerCapsidTools(server: McpServer, ops: Operations, readOnly: boolean): void {
@@ -325,13 +304,6 @@ export function registerCapsidTools(server: McpServer, ops: Operations, readOnly
     compositeHandler(ops, CLOSE_PR),
   );
   server.registerTool(
-    "capsid_work_jobs",
-    readOnly
-      ? readViewConfig(ops, "capsid_work_jobs", "Work the job queue", "jobs")
-      : singleConfig(ops, "capsid_work_jobs", "Work the job queue", "jobs"),
-    singleHandler(ops, "capsid_work_jobs", "jobs"),
-  );
-  server.registerTool(
     "capsid_read_status",
     compositeConfig(ops, READ_STATUS),
     compositeHandler(ops, READ_STATUS),
@@ -367,17 +339,6 @@ export function registerCapsidAdminTools(server: McpServer, ops: Operations): vo
     singleHandler(ops, "capsid_admin_manage_agents", "agents"),
   );
   server.registerTool(
-    "capsid_admin_read_claims",
-    singleConfig(
-      ops,
-      "capsid_admin_read_claims",
-      "Read claims",
-      "claims",
-      "What agents said they did, beside what the Worker verified. Read-only, and admin only.",
-    ),
-    singleHandler(ops, "capsid_admin_read_claims", "claims"),
-  );
-  server.registerTool(
     "capsid_admin_read_ops",
     compositeConfig(ops, READ_OPS),
     compositeHandler(ops, READ_OPS),
@@ -392,10 +353,5 @@ export function registerCapsidAdminTools(server: McpServer, ops: Operations): vo
       "The administrator's controls: list them, preview one, perform it with the preview's token. Admin only; perform needs a recent sign-in from a signed-in session.",
     ),
     singleHandler(ops, "capsid_admin_run_controls", "controls"),
-  );
-  server.registerTool(
-    "capsid_admin_manage_switches",
-    compositeConfig(ops, MANAGE_SWITCHES),
-    compositeHandler(ops, MANAGE_SWITCHES),
   );
 }

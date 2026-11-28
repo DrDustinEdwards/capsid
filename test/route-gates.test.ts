@@ -14,9 +14,6 @@ import {
   PORTAL_PREVIEW_PATH,
   PORTAL_SIGN_OUT_PATH,
 } from "../src/portal-actions.ts";
-import { PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
-import { PORTAL_STALE_PATH } from "../src/portal-stale.ts";
-import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight.ts";
 import { PORTAL_BUILD_LOG_PATH, PORTAL_WORKERS_BUILDS_PATH } from "../src/portal-builds.ts";
 import { PORTAL_SITE_SEARCH_PATH, PORTAL_SITE_TRAFFIC_PATH } from "../src/portal-site.ts";
 import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
@@ -36,13 +33,6 @@ import { REPORT_PATH } from "../src/security-headers.ts";
 import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
 import { BACKUP_CREDENTIAL_PATH } from "../src/signed-requests.ts";
 import { OFFACCOUNT_REPORT_PATH } from "../src/offaccount.ts";
-import {
-  BENCH_DRAW_PATH,
-  BENCH_REPRO_PATH,
-  BENCH_SCORE_PATH,
-  BENCH_START_PATH,
-  BENCH_TASKS_PATH,
-} from "../src/bench.ts";
 import { REVIEW_RUN_PATH } from "../src/review.ts";
 import {
   PUBLIC_CODE_PATH,
@@ -54,7 +44,7 @@ import { SIGNED_IN_REPORT_PATH } from "@dustinedwards/site-runtime/signed-in-cra
 import { requiredForAction } from "../src/scope.ts";
 import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope-routes.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
-import { buildAdminServer, buildServer } from "../src/server.ts";
+import { buildServer } from "../src/server.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
 // A route that checks only the write grant lets a driver minted for one namespace act across all of them. Routes
@@ -67,11 +57,6 @@ const PATH_CONSTANTS: Record<string, string> = {
   VERIFY_LIVE_CLIENT_PATH,
   BACKUP_CREDENTIAL_PATH,
   OFFACCOUNT_REPORT_PATH,
-  BENCH_TASKS_PATH,
-  BENCH_DRAW_PATH,
-  BENCH_START_PATH,
-  BENCH_REPRO_PATH,
-  BENCH_SCORE_PATH,
   REVIEW_RUN_PATH,
   PORTAL_CALLBACK_PATH,
   OPS_FEED_PATH,
@@ -80,14 +65,10 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_PERFORM_PATH,
   PORTAL_NAMESPACES_PATH,
   PORTAL_ACTIVITY_PATH,
-  PORTAL_CLAIMS_PATH,
-  PORTAL_STALE_PATH,
-  PORTAL_PLAN_PATH,
   PORTAL_SITE_SEARCH_PATH,
   PORTAL_SITE_TRAFFIC_PATH,
   PORTAL_WORKERS_BUILDS_PATH,
   PORTAL_BUILD_LOG_PATH,
-  PORTAL_DIGEST_PATH,
   PORTAL_MAINTENANCE_PATH,
   PORTAL_CONVERGENCE_PATH,
   PORTAL_BACKUPS_PATH,
@@ -179,7 +160,7 @@ async function servedActions(build: typeof buildServer, name: string): Promise<s
   return served?.enum ?? [];
 }
 
-test("capsid_read_status serves status and the versions model, as reads, and the admin's switches are admin", async () => {
+test("capsid_read_status serves status and the versions model, as reads", async () => {
   // The actions come from the schemas the servers serve, so an action added to either
   // tool without a decision here fails.
   const driver = await servedActions(buildServer, "capsid_read_status");
@@ -190,18 +171,4 @@ test("capsid_read_status serves status and the versions model, as reads, and the
   );
   assert.equal(requiredForAction("capsid_read_status", "status"), "read");
   assert.equal(requiredForAction("capsid_read_status", "versions"), "read");
-
-  const admin = await servedActions(buildAdminServer, "capsid_admin_manage_switches");
-  assert.deepEqual(
-    [...admin].sort(),
-    ["breaker_reset", "overnight", "sign_policy"],
-    "capsid_admin_manage_switches's action list changed",
-  );
-  for (const action of admin)
-    assert.equal(
-      requiredForAction("capsid_admin_manage_switches", action),
-      "admin",
-      `capsid_admin_manage_switches.${action}`,
-    );
-  for (const action of admin) assert.ok(!driver.includes(action), `${action} is served to drivers`);
 });

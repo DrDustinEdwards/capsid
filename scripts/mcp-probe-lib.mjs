@@ -8,7 +8,7 @@ export const ERAS = ["2025-11-25", "2026-07-28"];
 
 // What tools/list must return on /mcp to the live-probe agent: Capsid's read-grant tools (write tools are not listed for a read grant, src/scope.ts toolListed).
 // test/live-gate-mcp.test.ts holds it to CAPSID_TOOLS and TOOL_GRANTS, so a surface change changes this in the same commit.
-export const EXPECTED_TOOLS = 8;
+export const EXPECTED_TOOLS = 7;
 
 export const READ_TOOL = "capsid_read_doc";
 

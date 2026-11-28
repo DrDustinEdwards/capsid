@@ -20,36 +20,6 @@ export function requireExists(
     .bind(namespace, path);
 }
 
-// The same abort for a job transition, as the first statement of the batch that carries the UPDATE
-// and every record of it.
-export function requireJobUnchanged(
-  db: D1Database,
-  id: string,
-  status: string,
-  claimedBy: string | null,
-  updatedAt: string,
-): D1PreparedStatement {
-  return db
-    .prepare(
-      `INSERT INTO document_versions (document_id, namespace, path)
-       SELECT NULL, 'jobs', ?1
-       WHERE NOT EXISTS (SELECT 1 FROM jobs WHERE id = ?1 AND status = ?2 AND claimed_by IS ?3 AND updated_at = ?4)`,
-    )
-    .bind(id, status, claimedBy, updatedAt);
-}
-
-// The same abort for a bench run (src/bench-score.ts finishBenchRun): fires unless the run is still
-// running, so a run's close and its job's close commit together or not at all.
-export function requireBenchRunRunning(db: D1Database, runId: string): D1PreparedStatement {
-  return db
-    .prepare(
-      `INSERT INTO document_versions (document_id, namespace, path)
-       SELECT NULL, 'bench', ?1
-       WHERE NOT EXISTS (SELECT 1 FROM bench_runs WHERE id = ?1 AND status = 'running')`,
-    )
-    .bind(runId);
-}
-
 export function isMissingRowAbort(err: unknown): boolean {
   return errorMessage(err).includes(GUARD_VIOLATION);
 }
@@ -190,8 +160,7 @@ export function documentUpsert(
 }
 
 // Who made a write when no MCP client did: the Worker's own passes ("system:maintenance",
-// "capsid:push", the improve loop) are "system", and an agent key running a job names the job
-// ("job:<id>").
+// "capsid:push", the improve loop) are "system".
 export function clientOf(
   actor: string,
   params: unknown,
@@ -199,9 +168,6 @@ export function clientOf(
 ): string | null {
   if (client) return client;
   if (/^(system|capsid):/.test(actor) || actor === "improve-loop") return "system";
-  const job = (params as { job_id?: unknown } | null)?.job_id;
-  if (actor.startsWith("agent:") && (typeof job === "string" || typeof job === "number"))
-    return `job:${job}`;
   return null;
 }
 

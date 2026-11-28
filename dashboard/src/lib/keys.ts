@@ -1,5 +1,3 @@
-export const FILTER_KEYS = ["namespace", "agent", "since", "until"] as const;
-
 export const PUSH_KEY = ["push"];
 
 export function parseDocParam(value: string | null): { ns: string; path: string } | null {

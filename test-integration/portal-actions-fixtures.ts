@@ -5,17 +5,12 @@ import worker from "../src/index";
 import { grantAgent } from "../src/agents";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
-import { APP_ROSTER } from "../src/roster";
-import { blockJob, claimJob, postJob } from "../src/jobs";
 import {
   PORTAL_CSRF_HEADER,
   PORTAL_PERFORM_PATH,
   PORTAL_PREVIEW_PATH,
 } from "../src/portal-actions";
 import type { PortalPreview } from "../src/ops-types/portal";
-import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY } from "../src/overnight";
-import { BREAKER_THRESHOLD_KEY, breakerResetKey } from "../src/job-breaker";
-import { seedCapsidNamespace } from "./jobs-fixture";
 
 export const ORIGIN = "https://capsid.test";
 export const SECRET = "integration-portal-cookie-key";
@@ -126,48 +121,6 @@ export async function call(
   return response as unknown as Response;
 }
 
-export async function jobsEnv() {
-  return workerEnv() as unknown as Parameters<typeof postJob>[0];
-}
-
-export async function postedJob(title: string): Promise<string> {
-  const posted = await postJob(
-    await jobsEnv(),
-    grantAgent("write", "github:DrDustinEdwards"),
-    NOW,
-    { namespace: "capsid", title, body: "do the thing", gate_required: true },
-  );
-  expect(posted.ok, posted.refusal).toBe(true);
-  return posted.job!.id;
-}
-
-export async function claimedJob(title: string, by = DRIVER): Promise<string> {
-  const id = await postedJob(title);
-  const claimed = await claimJob(await jobsEnv(), by, NOW, { id });
-  expect(claimed.ok, claimed.refusal).toBe(true);
-  return id;
-}
-
-export async function blockedJob(title: string, by = DRIVER): Promise<string> {
-  const id = await claimedJob(title, by);
-  const blocked = await blockJob(await jobsEnv(), by, NOW, id, {
-    reason: "waiting on the push",
-    command: "git push -u origin feat/x",
-  });
-  expect(blocked.ok, blocked.refusal).toBe(true);
-  return id;
-}
-
-export async function parkedJob(title: string): Promise<string> {
-  const id = await postedJob(title);
-  await env.DB.prepare(
-    "UPDATE jobs SET status = 'parked', result_summary = 'comes back when the design is ruled' WHERE id = ?1",
-  )
-    .bind(id)
-    .run();
-  return id;
-}
-
 export async function auditRows(): Promise<
   Array<{ id: number; actor: string; action: string; params: string }>
 > {
@@ -177,21 +130,15 @@ export async function auditRows(): Promise<
   return results ?? [];
 }
 
-export const KEYS = [
-  OVERNIGHT_MODE_KEY,
-  OVERNIGHT_DECISION_KEY,
-  BREAKER_THRESHOLD_KEY,
-  ...APP_ROSTER.map(breakerResetKey),
-];
-
 export async function resetPortal() {
   await resetCapsidDb();
-  await seedCapsidNamespace();
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+    .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
+    .run();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind("sample", JSON.stringify([{ repo: "example/sample", label: "primary" }]))
     .run();
   await env.DB.prepare("DELETE FROM ops_sites WHERE namespace = 'sample'").run();
-  for (const key of KEYS) await env.APP_KV.delete(key);
 }
 
 export async function packageRow(name: string) {

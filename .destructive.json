@@ -10,6 +10,6 @@
     }
   ],
   "sources": ["src"],
-  "min_sources": 200,
+  "min_sources": 196,
   "minimum_checks": 8
 }

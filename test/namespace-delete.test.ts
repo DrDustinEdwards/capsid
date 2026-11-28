@@ -23,11 +23,6 @@ function zeroCounts(): PlanCounts {
     document_versions: 0,
     audit_log: 0,
     document_links_removed: 0,
-    jobs_open: 0,
-    jobs_finished: 0,
-    job_outcomes: 0,
-    job_claims: 0,
-    job_touches: 0,
     agents_live: 0,
     agents_revoked: 0,
     policy_documents: 0,
@@ -40,10 +35,8 @@ function plan(over: Partial<DeletePlan> = {}, counts: Partial<PlanCounts> = {}):
     registered: true,
     on_roster: false,
     counts: { ...zeroCounts(), ...counts },
-    jobs_by_status: {},
     ops_site: null,
     ops_site_revision: null,
-    open_jobs: [],
     live_agents: [],
     policy_paths: [],
     live_paths: [],
@@ -73,23 +66,11 @@ test("the action argument is required with no default, so an omitted one never m
 
 test("an unregistered namespace is the only refusal", () => {
   const refusals = deleteRefusals(
-    plan({ registered: false, on_roster: true }, { jobs_open: 3 }),
+    plan({ registered: false, on_roster: true }, { agents_live: 3 }),
     ALL,
   );
   assert.equal(refusals.length, 1);
   assert.match(refusals[0], /namespace not found: sample/);
-});
-
-test("PLANT: an open job refuses whatever cascade and allow_improve_paths say, and names the job", () => {
-  const p = plan(
-    { open_jobs: [{ id: "job_000000000001", status: "blocked", title: "t" }] },
-    { jobs_open: 1 },
-  );
-  const refusals = deleteRefusals(p, ALL);
-  assert.equal(refusals.length, 1);
-  assert.match(refusals[0], /job_000000000001 \(blocked, 't'\)/);
-  assert.match(refusals[0], /supersede/);
-  assert.match(refusals[0], /cascade never reaches jobs/);
 });
 
 test("PLANT: a live agent refuses whatever cascade says, and names the agent", () => {
@@ -131,18 +112,14 @@ test("PLANT: a roster namespace is refused whatever the arguments", () => {
 });
 
 test("a refusal names at most twenty and counts the rest", () => {
-  const ids = Array.from({ length: 20 }, (_, i) => ({
-    id: `job_${String(i).padStart(12, "0")}`,
-    status: "queued",
-    title: "t",
-  }));
-  const refusal = deleteRefusals(plan({ open_jobs: ids }, { jobs_open: 25 }), NONE)[0];
+  const names = Array.from({ length: 20 }, (_, i) => `sample-driver-${i}`);
+  const refusal = deleteRefusals(plan({ live_agents: names }, { agents_live: 25 }), NONE)[0];
   assert.match(refusal, /and 5 more/);
 });
 
 test("the fingerprint ignores key order and moves with every count", () => {
-  const a = plan({ jobs_by_status: { done: 1, failed: 2 } });
-  const b = plan({ jobs_by_status: { failed: 2, done: 1 } });
+  const a = plan({}, { documents_live: 1, audit_log: 2 });
+  const b = plan({ counts: { ...zeroCounts(), audit_log: 2, documents_live: 1 } });
   assert.equal(planFingerprint(a), planFingerprint(b));
   for (const key of Object.keys(zeroCounts()) as Array<keyof PlanCounts>) {
     const moved = plan({}, { [key]: 1 });

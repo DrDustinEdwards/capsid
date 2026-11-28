@@ -13,15 +13,6 @@ import { readTrends } from "../src/trends";
 const NOW = new Date("2030-01-16T12:00:00.000Z"); // a Wednesday; its week starts 2030-01-14
 const SECRET = "integration-portal-trends-key";
 
-async function job(id: string, status: string, created: string, updated: string): Promise<void> {
-  await env.DB.prepare(
-    `INSERT INTO jobs (id, namespace, title, body, status, priority, gate_required, posted_by, created_at, updated_at)
-     VALUES (?1, 'sample', ?2, 'do the thing', ?3, 0, 0, 'github:sample', ?4, ?5)`,
-  )
-    .bind(id, `trends ${id}`, status, created, updated)
-    .run();
-}
-
 async function audit(
   actor: string,
   action: string,
@@ -35,31 +26,11 @@ async function audit(
     .run();
 }
 
-async function touch(kind: string, actorKind: string, at: string): Promise<void> {
-  await env.DB.prepare(
-    "INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, at) VALUES ('job_000000000001', 'sample', ?1, 'access:admin@example.com', ?2, ?3)",
-  )
-    .bind(kind, actorKind, at)
-    .run();
-}
-
 describe("the trends series", () => {
-  it("PLANT: minutes, the queue and merges are counted from the rows that happened", async () => {
-    await audit("access:admin@example.com", "job-resumed", "2030-01-15 09:00:00");
-    await audit("access:admin@example.com", "job-superseded", "2030-01-15 09:04:00");
-    await touch("resume", "human", "2030-01-15T09:04:30.000Z");
-    await touch("note", "human", "2030-01-15T09:04:40.000Z");
-    await audit("agent:sample-driver", "job-claimed", "2030-01-15 15:00:00");
-
-    await job(
-      "job_00000000000a",
-      "blocked",
-      "2029-12-01T00:00:00.000Z",
-      "2030-01-10T00:00:00.000Z",
-    );
-    await job("job_00000000000b", "done", "2030-01-12T08:00:00.000Z", "2030-01-14T08:00:00.000Z");
-    await job("job_00000000000c", "queued", "2030-01-15T08:00:00.000Z", "2030-01-15T08:00:00.000Z");
-    await job("job_00000000000d", "failed", "2029-12-01T00:00:00.000Z", "2029-12-20T00:00:00.000Z");
+  it("PLANT: minutes and merges are counted from the rows that happened", async () => {
+    await audit("access:admin@example.com", "write", "2030-01-15 09:00:00");
+    await audit("access:admin@example.com", "agent-revoked", "2030-01-15 09:04:00");
+    await audit("agent:sample-driver", "write", "2030-01-15 15:00:00");
 
     // Rows the retired auto-merge loop wrote are history the series no longer counts.
     await audit("system:auto-merge", "auto-merged", "2030-01-14 10:00:00");
@@ -99,16 +70,9 @@ describe("the trends series", () => {
 
     expect(t.minutes.weeks.map((w) => w.week)).toEqual(["2030-W02", "2030-W03"]);
     const thisWeek = t.minutes.weeks[1]!;
-    // 09:00 to 09:04:40 plus a minute rounds to 6; the administrator's own merge, two closes and comment on Monday are four more
+    // 09:00 to 09:04 plus a minute is 5; the administrator's own merge, two closes and comment on Monday are four more
     // one-minute sessions an hour apart. The driver's write is none of them.
-    expect(thisWeek).toMatchObject({ start: "2030-01-14", sessions: 5, minutes: 10, decisions: 1 });
-
-    const day = (d: string) => t.queue.find((q) => q.day === d)!;
-    expect(t.queue).toHaveLength(14);
-    expect(day("2030-01-03")).toMatchObject({ posted: 0, ended: 0, open: 1 });
-    expect(day("2030-01-12")).toMatchObject({ posted: 1, ended: 0, open: 2 });
-    expect(day("2030-01-14")).toMatchObject({ posted: 0, ended: 1, open: 1 });
-    expect(day("2030-01-15")).toMatchObject({ posted: 1, ended: 0, open: 2 });
+    expect(thisWeek).toMatchObject({ start: "2030-01-14", sessions: 5, minutes: 9 });
 
     expect(t.merges.weeks[1]).toEqual({
       week: t.merges.weeks[1]!.week,

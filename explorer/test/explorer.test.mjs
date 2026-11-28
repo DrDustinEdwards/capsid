@@ -296,11 +296,9 @@ test("every link inside the explorer reaches a page or an asset it built, and th
 
 test("a rate with too few cases is said so, and has no picture", () => {
   const thin = structuredClone(stats);
-  thin.verification.agreement_rate_90d = null;
   thin.sites.uptime_7d = null;
   const section = numbersHtml(thin);
-  assert.doesNotMatch(section, /id="agreement-title"|id="uptime-title"/);
-  assert.match(section, /Checked jobs with passing CI, last 90 days<\/th><td>not enough data yet/);
+  assert.doesNotMatch(section, /id="uptime-title"/);
 });
 
 test("the map's script is under 25 KB gzip and all the explorer's script under 105 KB", () => {
@@ -327,7 +325,7 @@ test("build.json's hash is the same for the same input and changes with what a r
   assert.equal(again.content, built.content);
   assert.equal(JSON.parse(readFileSync(join(out, "build.json"), "utf8")).content, built.content);
   const later = structuredClone(stats);
-  later.jobs.completed_7d += 1;
+  later.store.documents += 1;
   const file = join(mkdtempSync(join(tmpdir(), "explorer-later-")), "stats.json");
   writeFileSync(file, JSON.stringify(later));
   const changed = await build({
@@ -356,14 +354,6 @@ test("every system's page shows it in the network: what uses it, its parts and w
     page,
     /data-column="used-by".*data-column="inside".*Kit library.*data-column="uses"/s,
   );
-});
-
-test("each week is labeled by its last whole day, the day before as_of for the newest", () => {
-  const section = numbersHtml(stats);
-  assert.equal(stats.as_of, "2026-01-15");
-  assert.match(section, /Jan 14/);
-  assert.match(section, /Nov 26/);
-  assert.doesNotMatch(section, /15 Jan/);
 });
 
 test("an external container is listed outside the system, never as one of its parts", () => {

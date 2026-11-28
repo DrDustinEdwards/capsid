@@ -1,12 +1,7 @@
 import type { Env } from "./env";
 import { runPass } from "./watcher-pass";
-import type { Agent } from "./agents";
-import { noFlags } from "./agents-schema";
 import { type HealthReport } from "./health";
-import { postJob } from "./jobs";
-import { OPEN_JOB_STATUSES } from "./jobs-schema";
-import { markJobFailed, readJob } from "./jobs-transition";
-import { CLEARED_SUMMARY, d1FindingMemory } from "./watcher-findings";
+import { d1FindingMemory } from "./watcher-findings";
 import { type SiteMapDrift } from "./ops-sites";
 import { weekStatement } from "./ops-packages";
 import type { ExpirySnapshot, PackageSnapshot, SiteCloudflare } from "./ops-types/sites";
@@ -25,8 +20,8 @@ import type { Finding } from "./watcher-detect";
 import { type WatcherCheck, WATCHER_CHECKS, owningCheck } from "./watcher-checks";
 import { MINUTE_MS } from "./time";
 
-// The watcher looks at the surface every half hour and, when something is wrong, posts a job. It
-// holds no blast-radius flag, cannot claim a job and cannot fix anything.
+// The watcher looks at the surface every half hour and records what is wrong in watcher_findings,
+// which the board shows. It holds no blast-radius flag and cannot fix anything.
 
 const WATCHER_NAME = "watcher";
 export const WATCHER_ACTOR = `agent:${WATCHER_NAME}`;
@@ -42,27 +37,6 @@ export const DEFAULT_CADENCE_MINUTES = 30;
 // turns a bounded cost into an unbounded one, so an unusable value falls back rather
 // than being obeyed.
 const MIN_CADENCE_MINUTES = 5;
-
-// The watcher's identity inside the Worker, matching the minted `watcher` role in scripts/roles.ts
-// (every namespace, write, `capsid_work_jobs.post`, no flags), so the credential a person can mint
-// and the identity the tick uses are the same authority.
-export function watcherAgent(): Agent {
-  return {
-    id: WATCHER_ACTOR,
-    name: WATCHER_NAME,
-    kind: "cron",
-    actor: WATCHER_ACTOR,
-    scopes: {
-      namespaces: "*",
-      repos: [],
-      tools: ["capsid_work_jobs", "capsid_work_jobs.post"],
-      grants: ["write"],
-      flags: noFlags(),
-    },
-    admin: false,
-    row: null,
-  };
-}
 
 export async function cadenceMinutes(env: Env): Promise<number> {
   try {
@@ -104,53 +78,8 @@ export function passDue(lastIso: string | null, minutes: number, now: Date): Due
 export interface WatcherReport {
   ran: boolean;
   note: string;
-  posted: string[];
+  recorded: string[];
   cleared: string[];
-}
-
-// The fingerprints of every open watcher job, over every open status rather than queued alone. The
-// map decides what the pass skips posting, and a queued-only read would miss a claimed or blocked
-// copy and post a duplicate.
-export async function openWatcherFingerprints(env: Env): Promise<Map<string, string>> {
-  const placeholders = OPEN_JOB_STATUSES.map((_, i) => `?${i + 2}`).join(", ");
-  const { results } = await env.DB.prepare(
-    `SELECT id, title FROM jobs WHERE posted_by = ?1 AND status IN (${placeholders})`,
-  )
-    .bind(WATCHER_ACTOR, ...OPEN_JOB_STATUSES)
-    .all<{ id: string; title: string }>();
-  const open = new Map<string, string>();
-  for (const row of results ?? []) {
-    const match = /\[([^\]]+)\]\s*$/.exec(row.title);
-    if (match) open.set(match[1], row.id);
-  }
-  return open;
-}
-
-// A finding that is no longer found: the job is marked failed with "cleared", since nobody did the
-// work. Keyed on queued, so a job claimed between the read and the write is not closed underneath
-// its driver; RETURNING, not meta.changes.
-export async function clearFinding(
-  env: Env,
-  id: string,
-  now: Date,
-  summary: string = CLEARED_SUMMARY,
-): Promise<boolean> {
-  const job = await readJob(env.DB, id);
-  if (!job || job.status !== "queued" || job.posted_by !== WATCHER_ACTOR) return false;
-  // The mirror document closes in the same batch as the row (snapshot invariant, test/write-invariants.test.ts),
-  // and the batch is guarded on the status read above, so a job claimed in between is
-  // left alone.
-  const result = await markJobFailed(
-    env,
-    job,
-    "queued",
-    summary,
-    "job-cleared",
-    WATCHER_ACTOR,
-    {},
-    now,
-  );
-  return result.failed;
 }
 
 // What a pass saw, kept for the operations dashboard (src/ops-snapshot.ts). Null
@@ -205,32 +134,12 @@ export async function watcherTick(
   const due: DueVerdict = opts.force
     ? { due: true, reason: "an on-demand pass." }
     : passDue(last, minutes, now);
-  if (!due.due) return { ran: false, note: due.reason, posted: [], cleared: [] };
+  if (!due.due) return { ran: false, note: due.reason, recorded: [], cleared: [] };
 
-  const agent = watcherAgent();
   const started = Date.now();
   const gathered = await gather();
-  const { posted, cleared, held, routed } = await runPass(
-    {
-      findings: async () => gathered,
-      open: () => openWatcherFingerprints(env),
-      clear: (id, summary) => clearFinding(env, id, now, summary),
-      post: async (f) => {
-        const result = await postJob(env, agent, now, {
-          namespace: f.namespace,
-          title: f.title,
-          body: f.body,
-          priority: 9,
-          // A finding is not a gate. The work it leads to may hit one and block then;
-          // marking it here would demand a human confirmation before anyone read it.
-          gate_required: false,
-        });
-        return result.ok && result.job
-          ? { ok: true as const, jobId: result.job.id }
-          : { ok: false as const, refusal: result.refusal };
-      },
-      memory: d1FindingMemory(env),
-    },
+  const { recorded, cleared, held } = await runPass(
+    { findings: async () => gathered, memory: d1FindingMemory(env) },
     now,
   );
 
@@ -298,8 +207,8 @@ export async function watcherTick(
   await env.APP_KV.put(WATCHER_LAST_KEY, now.toISOString());
   return {
     ran: true,
-    note: `${due.reason} posted ${posted.length}, cleared ${cleared.length}, held ${held.length}, routed ${routed.length} to the digest or attention list.`,
-    posted,
+    note: `${due.reason} recorded ${recorded.length}, cleared ${cleared.length}, held ${held.length}.`,
+    recorded,
     cleared,
   };
 }

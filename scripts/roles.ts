@@ -1,5 +1,5 @@
 // Named roles: credentials asked for by name rather than one per namespace. The admin mints one with capsid_admin_manage_agents action mint, passing the fields as written here (docs/auth.md, "Roles").
-// Tests hold the Worker's own identities (test/watcher.test.ts, test/live-gate-mcp.test.ts) and each role to one capability (test/roles.test.ts).
+// Tests hold the Worker's own identities (test/live-gate-mcp.test.ts) and each role to one capability (test/roles.test.ts).
 
 export interface Role {
   name: string;
@@ -23,17 +23,6 @@ export const ROLES: Role[] = [
     repos: ["*"],
     grants: ["read"],
     what: "reads every namespace and every repo, writes nothing anywhere. Intended for an outside model doing a cold audit.",
-  },
-  {
-    name: "watcher",
-    kind: "cron",
-    namespaces: ["*"],
-    grants: ["read", "write"],
-    // Same shape: posting a job is a write, and `capsid_work_jobs.post` stops it also being claim, complete, fail, block and resume.
-    tools: ["capsid_work_jobs", "capsid_work_jobs.post"],
-    // No repos, matching watcherAgent() in src/watcher.ts, so the minted credential and the Worker's identity are the same authority.
-    repos: [],
-    what: "reads health, status and CI, and posts a job when it finds something wrong. It cannot claim or finish one, and it cannot fix anything.",
   },
   {
     name: "site-seat",
@@ -72,6 +61,6 @@ export const ROLES: Role[] = [
     namespaces: ["dustinedwards"],
     grants: ["read", "write"],
     // No flags and no repos: the mint derives the repos axis from the live namespace mapping (src/agents-admin.ts).
-    what: "Grok Build's driver for dustinedwards: claims and works jobs there, the same scopes as dustinedwards-driver, and never merges.",
+    what: "Grok Build's driver for dustinedwards: reads and writes there, and never merges.",
   },
 ];

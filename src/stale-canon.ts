@@ -3,7 +3,6 @@ import { isCanonPath } from "./canon";
 import { ghFetch, resolveRepo } from "./github/client";
 import { readPrFiles, type PrFileRow } from "./github/pr-files";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
-import { externalFence } from "./provenance";
 import type { Finding } from "./watcher-detect";
 import { DAY_MS, timeMs } from "./time";
 import { mapLimit } from "./map-limit";
@@ -221,17 +220,6 @@ export function staleCanonFindings(flags: readonly StaleFlag[]): Finding[] {
       fingerprint,
       namespace: f.namespace,
       title: `Watcher: ${headline} [${fingerprint}]`,
-      body: [
-        "A canon document cites a file a merged pull request removed, renamed or changed (src/stale-canon.ts).",
-        "",
-        "## Evidence",
-        "",
-        externalFence(
-          "watcher-evidence",
-          fingerprint,
-          evidence.map((line) => `- ${line}`).join("\n"),
-        ),
-      ].join("\n"),
       evidence,
     };
   });

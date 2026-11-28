@@ -20,7 +20,7 @@ const HASHED_ASSET_PREFIX = "/assets/";
 const NOT_DEPLOYED =
   "Capsid Portal is not deployed: this Worker has no ASSETS binding. The built app (dashboard/build/client) is served only when the deploy config declares it.";
 
-// A file's path ends in an extension; a page's does not (/health, /queue/job/abc). React Router's
+// A file's path ends in an extension; a page's does not (/health, /agents). React Router's
 // own data requests (/health.data) and its route manifest are pages' answers.
 function isFile(path: string): boolean {
   return /\.[a-z0-9]+$/i.test(path) && !path.endsWith(".data");

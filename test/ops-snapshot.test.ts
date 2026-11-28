@@ -262,7 +262,6 @@ test("each check is clear, a finding, or could not run, and only a check that ra
       fingerprint: "ci-red-abc1234",
       namespace: "foxhound",
       title: "t",
-      body: "b",
     },
   ];
   const states = checkStates({

@@ -17,12 +17,12 @@ bindings. Only `wrangler dev` and `wrangler deploy` need the real file.
 
 ## 2. Bindings
 
-| binding    | kind | why it is separate                                  |
-| ---------- | ---- | --------------------------------------------------- |
-| `DB`       | D1   | documents, versions, links, audit log, jobs, agents |
-| `APP_KV`   | KV   | the Worker's own bookkeeping: caches, counters      |
-| `OAUTH_KV` | KV   | the OAuth provider's clients, grants and tokens     |
-| `MEDIA`    | R2   | backups, the markdown mirror, the report sink       |
+| binding    | kind | why it is separate                              |
+| ---------- | ---- | ----------------------------------------------- |
+| `DB`       | D1   | documents, versions, links, audit log, agents   |
+| `APP_KV`   | KV   | the Worker's own bookkeeping: caches, counters  |
+| `OAUTH_KV` | KV   | the OAuth provider's clients, grants and tokens |
+| `MEDIA`    | R2   | backups, the markdown mirror, the report sink   |
 
 The two KV namespaces are separate. They shared one for a while,
 which meant the Worker's caches lived in the same keyspace as the provider's
@@ -44,7 +44,7 @@ npx wrangler secret put ACCESS_SAAS_CLIENT_SECRET
 npx wrangler secret put ADMIN_EMAIL              # the primary owner's email, admitted by both logins, exactly
 npx wrangler secret put CO_OWNER_EMAILS          # optional: co-owners, comma separated, admitted like ADMIN_EMAIL (docs/auth.md, "Co-owner")
 npx wrangler secret put COOKIE_ENCRYPTION_KEY    # openssl rand -hex 32; the root of the keys that sign the login state, the Portal cookie and confirm tokens
-npx wrangler secret put IMPROVE_SCORE_SECRET     # root of the job, policy and backup credential HMAC keys
+npx wrangler secret put IMPROVE_SCORE_SECRET     # root of the backup credential HMAC key
 ```
 
 Never commit one, and never read, display or log the contents of an env file.
@@ -196,8 +196,7 @@ The seat granted them on 2026-09-11. Every other driver holds none. `capsid_read
 inventory settles it and this table describes the rule.
 
 A driver opens pull requests with its own GitHub access. A pull request merges on green, by
-the session that opened it or by GitHub auto-merge; Capsid runs no merge loop of its own, and
-the gates policy cannot approve a merge.
+the session that opened it or by GitHub auto-merge; Capsid runs no merge loop of its own.
 
 Widen one later with `capsid_admin_manage_agents(action: "update_scopes", ...)`, which names the axes it
 changes and leaves the rest. Revoke with `capsid_admin_manage_agents(action: "revoke", name: ...)`: the
@@ -223,19 +222,10 @@ flags: no merge. One seat across every namespace that may merge.
 Nothing else is granted. `can_touch_protected` stays off for all six until something concrete needs one, at which point
 `update_scopes` grants it and the audit row records who widened what, and from what.
 
-### Jobs can say what they need
-
-`capsid_work_jobs(action: "post", ..., required_flags: ["can_merge"])` records the blast radius
-the work needs. The claim refuses a driver that does not hold those flags and
-leaves the job queued for one that does, so the mismatch surfaces at the claim
-rather than after a driver has already taken it.
-
 ## 8. Names kept from the removed improve loop
 
-`capsid_read_status` serves only action `status`, a read-grant read of Capsid's state,
-and `capsid_admin_manage_switches` holds the admin's switches (`sign_policy`,
-`breaker_reset` and `overnight`). `IMPROVE_SCORE_SECRET` is the root the
-job, policy and backup credential keys are derived from.
+`capsid_read_status` serves only action `status`, a read-grant read of Capsid's state.
+`IMPROVE_SCORE_SECRET` is the root the backup credential key is derived from.
 
 ## 9. A fresh install, step by step
 
@@ -258,7 +248,7 @@ The sections above explain each part. This is the order to do them in. The host 
    - Scopes openid, email and profile, PKCE on, and a policy that allows your email only (and any co-owner's).
    - Then set the secrets `ACCESS_TEAM_DOMAIN`, `ACCESS_SAAS_CLIENT_ID`, `ACCESS_SAAS_CLIENT_SECRET`, `ADMIN_EMAIL` and `COOKIE_ENCRYPTION_KEY` (section 3).
 6. Create the GitHub App (section 4), install it on the repositories you want reachable, note its Client ID, generate a private key (`.pem`), put the Client ID in `wrangler.jsonc` vars as `GITHUB_APP_CLIENT_ID` and set `GITHUB_APP_PRIVATE_KEY`. Only the private key mints installation tokens; the App client secret is not needed. The installation id is not configured: it resolves from GitHub per owner and repo and is cached for a day, because one pinned id cannot be correct for two owners.
-7. `IMPROVE_SCORE_SECRET`, the root the job-signing, policy-signing and backup credential keys are derived from. Without it the work queue refuses to post a job and no signed policy loads.
+7. `IMPROVE_SCORE_SECRET`, the root the backup credential key is derived from. Without it the backup credential endpoint refuses.
 8. Optional secrets and vars, each inert until set: `CO_OWNER_EMAILS` (docs/auth.md, "Co-owner"); `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read); `CF_SECRETS_TOKEN` (Workers Scripts Edit, for the Portal's `site_key_rotate` control; docs/portal.md, "Site keys"); `ACCESS_DRIFT_AUD` (the drift check's admin list, docs/auth.md, "Access drift check"); `VAPID_PRIVATE_KEY` (phone alerts, docs/portal.md); `DCR_REDIRECT_URIS` (docs/auth.md); and the `R2_*` credential-minting secrets for the Amazon backup copy.
 9. Type check and deploy with `npm run check` and `npm run deploy`. Deploy builds the Portal first and stops if the build or its size budget fails.
 10. Connect claude.ai: Settings, Connectors, Add custom connector, URL `https://<your MCP host>/mcp`. The connector registers itself and walks you through the Cloudflare Access sign-in. Only the `ADMIN_EMAIL` identity and any `CO_OWNER_EMAILS` identity get in (docs/auth.md). Add Capsid Admin the same way at `https://<your MCP host>/mcp/admin`, then mint the first agents (section 7). To test the flow first, run `npx @modelcontextprotocol/inspector`, set the transport to Streamable HTTP, set the URL to the same address, open the Auth tab and run Quick OAuth Flow.
@@ -269,16 +259,7 @@ Optional parts stay hidden or inert until configured:
 
 - With no row in `ops_sites` that has an origin, nothing is probed and Health shows no Sites section.
 - Without `CF_OPS_TOKEN`, deploy and error columns say the Cloudflare read is not configured.
-- Pre-approved gates are off by default (section 10).
 
-## 10. Switches
-
-One switch, off by default.
-
-- **Pre-approved gates** run only when the policy document's `enabled` field is `true` and the document has been signed again afterwards with `capsid_admin_manage_switches` action `sign_policy`, which is admin only. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
-
-Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13.
-
-## 11. Checks before a push
+## 10. Checks before a push
 
 Run `npm ci --prefix dashboard` once, then `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run check:dashboard`, `npm run lint`, `npm run lint:repo`, `npm test`, `npm run build:dashboard` and `npm run test:browser`. `npm run test:integration` runs the Worker in workerd. `EXPECT_SHA=<sha> npm run verify:live` checks the live Worker. `npm --prefix dashboard run dev` serves the Portal with fake sample data.

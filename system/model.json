@@ -8,7 +8,7 @@
       "short": "Capsid",
       "family": "system",
       "ring": "core",
-      "description": "Shared memory, the job queue and the GitHub access that every other project's agents work through.",
+      "description": "Shared memory and the GitHub access that every other project's agents work through.",
       "domain": "mcp.dustinedwards.info",
       "repos": ["DrDustinEdwards/capsid"],
       "workers": ["capsid-mcp", "capsid"]
@@ -250,7 +250,7 @@
       "name": "capsid",
       "kind": "database",
       "technology": "D1 with FTS5",
-      "description": "Documents, jobs, agents and the audit log."
+      "description": "Documents, agents and the audit log."
     },
     {
       "id": "capsid-search",
@@ -298,7 +298,7 @@
       "name": "Agents",
       "kind": "external",
       "technology": "Coding sessions over MCP",
-      "description": "The sessions that post, claim and work jobs."
+      "description": "The coding sessions that read and write through Capsid."
     },
     {
       "id": "capsid-github",
@@ -1528,7 +1528,6 @@
     { "from": "julie-cron", "to": "julie-backups", "kind": "writes" },
     { "from": "capsid-backups-mirror", "to": "capsid-media", "kind": "reads" },
     { "from": "capsid-backups-mirror", "to": "capsid-backups-store", "kind": "writes" },
-    { "from": "bench-run", "to": "capsid-worker", "kind": "writes" },
     { "from": "bench-run", "to": "bench-claude", "kind": "reads" },
     { "from": "bench-walk", "to": "bench-drand", "kind": "reads" },
     { "from": "bench-run", "to": "bench-drand", "kind": "writes" },
@@ -1541,7 +1540,6 @@
     { "from": "carrel", "to": "foxing", "kind": "publishes-to" },
     { "from": "capsid", "to": "txasm", "kind": "coordinates" },
     { "from": "capsid", "to": "julieedwards-info", "kind": "coordinates" },
-    { "from": "capsid", "to": "capsid-bench", "kind": "coordinates" },
     { "from": "capsid", "to": "skills", "kind": "coordinates" },
     { "from": "capsid", "to": "devkit", "kind": "installs" },
     { "from": "capsid", "to": "enarratio", "kind": "installs" },
@@ -1601,81 +1599,6 @@
     { "from": "capsid-backups", "to": "d1-dump", "kind": "installs" }
   ],
   "flows": [
-    {
-      "id": "job-life",
-      "name": "A job's life",
-      "description": "One job, from the moment a session posts it to the moment Capsid checks the agent's claims against GitHub.",
-      "steps": [
-        {
-          "from": "capsid-worker",
-          "kind": "serves",
-          "to": "capsid-agents",
-          "toward": "capsid-worker",
-          "lights": ["capsid-db"],
-          "text": "Posted: a session posts a job over MCP. The Worker checks that the caller may post, picks a model, signs the job and stores it."
-        },
-        {
-          "from": "capsid-worker",
-          "kind": "serves",
-          "to": "capsid-agents",
-          "toward": "capsid-worker",
-          "lights": ["capsid-db"],
-          "text": "Claimed: an agent claims the job. The Worker checks the signature first, then records which agent holds it."
-        },
-        {
-          "from": "capsid-worker",
-          "kind": "serves",
-          "to": "capsid-agents",
-          "toward": "capsid-worker",
-          "lights": ["capsid-db"],
-          "text": "Worked: the agent works on one branch of one repo."
-        },
-        {
-          "from": "capsid-worker",
-          "kind": "serves",
-          "to": "capsid-agents",
-          "toward": "capsid-agents",
-          "lights": ["capsid-db"],
-          "text": "Blocked: before a push, a deploy, a secret or a merge, the agent stops. The job waits with the exact command until a person or the signed policy approves it, and resume hands it back."
-        },
-        {
-          "from": "capsid-worker",
-          "kind": "writes",
-          "to": "capsid-github",
-          "toward": "capsid-github",
-          "text": "Pull request: the agent opens a pull request through Capsid's GitHub App, and CI runs on it."
-        },
-        {
-          "from": "capsid-tick",
-          "kind": "writes",
-          "to": "capsid-github",
-          "toward": "capsid-github",
-          "text": "Merged: the session that opened a pull request merges it once CI passes, or GitHub auto-merge does."
-        },
-        {
-          "from": "capsid-github",
-          "kind": "deploys",
-          "to": "capsid-worker",
-          "toward": "capsid-worker",
-          "text": "Deployed: the merge to master starts CI on GitHub Actions, which deploys the Worker."
-        },
-        {
-          "from": "capsid-github",
-          "kind": "watches",
-          "to": "capsid-worker",
-          "toward": "capsid-github",
-          "text": "Verified: CI reads the Worker's /health page and checks that it reports the merged commit."
-        },
-        {
-          "from": "capsid-worker",
-          "kind": "reads",
-          "to": "capsid-github",
-          "toward": "capsid-worker",
-          "lights": ["capsid-db"],
-          "text": "Claims checked: when the job finishes, the Worker reads the pull request, its commits and CI from GitHub, and saves each claim next to what GitHub says."
-        }
-      ]
-    },
     {
       "id": "doc-search",
       "name": "A search",

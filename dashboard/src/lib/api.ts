@@ -11,26 +11,20 @@ import {
 } from "capsomer/react/data";
 import { useCallback, useEffect } from "react";
 import { BASE } from "./base";
-import { DAY } from "./format";
 import type {
   OpsFeed,
   PortalActionRequest,
   PortalActivity,
-  PortalClaimsAggregate,
-  PortalClaimsJob,
   PortalNamespaces,
   PortalNotFound,
   PortalPackageHistory,
   PortalPerformed,
   PortalPreview,
-  PortalStale,
   PortalSiteSearch,
   PortalSiteTraffic,
   PortalWorkersBuilds,
   PortalBuildLog,
   PortalPush,
-  PortalPlan,
-  PortalDigest,
   PortalMaintenance,
   PortalConvergence,
   PortalBackups,
@@ -47,7 +41,6 @@ const PREVIEW_URL = `${BASE}/api/actions/preview`;
 const PERFORM_URL = `${BASE}/api/actions/perform`;
 const NAMESPACES_URL = `${BASE}/api/namespaces`;
 const ACTIVITY_URL = `${BASE}/api/activity`;
-const CLAIMS_URL = `${BASE}/api/claims`;
 const PACKAGE_HISTORY_URL = `${BASE}/api/packages/history`;
 const SHARED_CODE_URL = `${BASE}/api/shared-code`;
 const NOT_FOUND_URL = `${BASE}/api/not-found`;
@@ -55,13 +48,10 @@ const COMPLETENESS_URL = `${BASE}/api/completeness`;
 const RESOURCES_URL = `${BASE}/api/resources`;
 const LIBRARY_URL = `${BASE}/api/library`;
 const TRENDS_URL = `${BASE}/api/trends`;
-const STALE_URL = `${BASE}/api/stale`;
 const SITE_SEARCH_URL = `${BASE}/api/site-search`;
 const SITE_TRAFFIC_URL = `${BASE}/api/site-traffic`;
 const WORKERS_BUILDS_URL = `${BASE}/api/workers-builds`;
 const BUILD_LOG_URL = `${BASE}/api/build-log`;
-const PLAN_URL = `${BASE}/api/plan`;
-const DIGEST_URL = `${BASE}/api/digest`;
 const MAINTENANCE_URL = `${BASE}/api/maintenance`;
 const CONVERGENCE_URL = `${BASE}/api/convergence`;
 const BACKUPS_URL = `${BASE}/api/backups`;
@@ -206,15 +196,6 @@ export function performAction(csrf: string, token: string): Promise<Answer<Porta
   return post<PortalPerformed>(PERFORM_URL, csrf, { token });
 }
 
-export async function runAction(
-  csrf: string,
-  req: PortalActionRequest,
-): Promise<Answer<PortalPerformed>> {
-  const preview = await previewAction(csrf, req);
-  if (preview.kind !== "ok") return preview;
-  return performAction(csrf, preview.value.token);
-}
-
 export function fetchNamespaces(): Promise<Answer<PortalNamespaces>> {
   return getAnswer<PortalNamespaces>(NAMESPACES_URL);
 }
@@ -230,21 +211,6 @@ export function fetchActivity(filter: {
   if (filter.actor) qs.set("actor", filter.actor);
   const s = qs.toString();
   return getAnswer<PortalActivity>(s ? `${ACTIVITY_URL}?${s}` : ACTIVITY_URL);
-}
-
-export interface ClaimsQuery {
-  namespace: string;
-  agent: string;
-  since: string;
-  until: string;
-}
-
-export function fetchClaimsAggregate(filter: ClaimsQuery): Promise<Answer<PortalClaimsAggregate>> {
-  const qs = new URLSearchParams();
-  for (const key of ["namespace", "agent", "since", "until"] as const)
-    if (filter[key]) qs.set(key, filter[key]);
-  const s = qs.toString();
-  return getAnswer<PortalClaimsAggregate>(s ? `${CLAIMS_URL}?${s}` : CLAIMS_URL);
 }
 
 export function fetchPackageHistory(name: string): Promise<Answer<PortalPackageHistory>> {
@@ -289,10 +255,6 @@ export function fetchLibrary(
   return getAnswer<PortalLibrary>(`${LIBRARY_URL}${qs}`);
 }
 
-export function fetchStale(): Promise<Answer<PortalStale>> {
-  return getAnswer<PortalStale>(STALE_URL);
-}
-
 export function fetchSiteSearch(namespace: string): Promise<Answer<PortalSiteSearch>> {
   return getAnswer<PortalSiteSearch>(
     `${SITE_SEARCH_URL}?${new URLSearchParams({ namespace }).toString()}`,
@@ -329,19 +291,6 @@ export function fetchTrends(): Promise<Answer<PortalTrends>> {
   return getAnswer<PortalTrends>(TRENDS_URL);
 }
 
-export function fetchPlan(): Promise<Answer<PortalPlan>> {
-  return getAnswer<PortalPlan>(PLAN_URL);
-}
-
-/** Here, not in views/Overnight, so the server prefetch does not pull the Overnight views into the first load. */
-export function digestSince(now: number): string {
-  return new Date(now - DAY).toISOString();
-}
-
-export function fetchDigest(since: string): Promise<Answer<PortalDigest>> {
-  return getAnswer<PortalDigest>(`${DIGEST_URL}?since=${encodeURIComponent(since)}`);
-}
-
 export function fetchMaintenance(): Promise<Answer<PortalMaintenance>> {
   return getAnswer<PortalMaintenance>(MAINTENANCE_URL);
 }
@@ -352,10 +301,6 @@ export function fetchConvergence(): Promise<Answer<PortalConvergence>> {
 
 export function fetchBackups(): Promise<Answer<PortalBackups>> {
   return getAnswer<PortalBackups>(BACKUPS_URL);
-}
-
-export function fetchClaimsJob(id: string): Promise<Answer<PortalClaimsJob>> {
-  return getAnswer<PortalClaimsJob>(`${CLAIMS_URL}?${new URLSearchParams({ job: id }).toString()}`);
 }
 
 // A session that already ended counts as signed out; anything else is said, because a silent failure leaves the session open on a shared screen.

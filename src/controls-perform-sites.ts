@@ -12,7 +12,7 @@ import {
 import { removeSite, validateSite, addSite, editSite, describeSite } from "./ops-sites";
 import { runSiteRepair } from "./site-repair";
 import { CAPSID_DUMP, runSiteBackups } from "./site-backup";
-import { queueCapsidJob } from "./site-jobs";
+import { queueCapsidJob, runSiteJob } from "./site-jobs";
 
 export async function performSiteAction(
   c: PerformContext,
@@ -25,7 +25,8 @@ export async function performSiteAction(
     | "package_edit"
     | "package_remove"
     | "site_repair"
-    | "site_backup",
+    | "site_backup"
+    | "run_job",
 ): Promise<ActionResult | null> {
   const { env, actor, now, params, surface, state, auditClick } = c;
   switch (action) {
@@ -181,6 +182,23 @@ export async function performSiteAction(
           ran: r.ran,
           ok: r.ran ? r.call.ok : false,
         })),
+      });
+      return null;
+    }
+    case "run_job": {
+      // Every check runs again inside runSiteJob: the configuration, token and rate limit can change
+      // before the click.
+      const namespace = required(params, "namespace");
+      const name = required(params, "name");
+      if (!namespace || !name)
+        return { ok: false, refusal: "run_job needs a namespace and a job name." };
+      const outcome = await runSiteJob(env, { namespace, name, actor, via: surface }, now);
+      if (!outcome.ran) return { ok: false, refusal: outcome.refusal };
+      state.committed = true;
+      state.summary = `${namespace}: ${outcome.line}.${outcome.recorded ? "" : " The call's audit row was not written (SITE_JOB_NOT_RECORDED in the log)."}`;
+      await auditClick(namespace, {
+        job: name,
+        ok: outcome.ok,
       });
       return null;
     }

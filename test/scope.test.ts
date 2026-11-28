@@ -290,8 +290,6 @@ function argsFor(tool: ServedTool, action?: string): Record<string, unknown> {
 
 // Arguments an action needs that no schema marks required, because its handler checks them; without one the handler answers before the store and the read half asserts nothing.
 const ACTION_ARGS: Record<string, Record<string, unknown>> = {
-  "capsid_admin_read_claims.job": { id: "x" },
-  "capsid_admin_read_claims.export": { table: "job_claims" },
   "capsid_admin_read_ops.build_logs": { build_uuid: "00000000-0000-4000-8000-000000000000" },
 };
 
@@ -487,10 +485,9 @@ test("SWEEP: every served tool on both servers refuses a caller whose tools axis
   );
 });
 
-// The read actions of the two tools whose handler decides the grant per action (TOOL_GRANTS "action"). Every other
+// The read actions of the tool whose handler decides the grant per action (TOOL_GRANTS "action"). Every other
 // action must refuse a read-only caller until it is listed here.
 const READ_ACTIONS: Record<string, string[]> = {
-  capsid_work_jobs: ["list"],
   capsid_lint_namespace: ["gather"],
 };
 

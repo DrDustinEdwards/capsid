@@ -3,7 +3,6 @@ import { outcomeStatus, type GlyphName, type Tone } from "capsomer/behavior/stat
 import type {
   CiObservation,
   OpsFeed,
-  OpsJob,
   OpsSnapshot,
   OpsTaskRun,
   ProbeState,
@@ -14,18 +13,9 @@ import { DAY, HOUR, SLOT_MS, age, ago, hostOf } from "./format";
 import { parse } from "capsomer/behavior/time";
 import { storeAttention } from "./store";
 
-export type Kind =
-  | "ok"
-  | "warn"
-  | "crit"
-  | "nodata"
-  | "unknown"
-  | "run"
-  | "queued"
-  | "blocked"
-  | "done";
+export type Kind = "ok" | "warn" | "crit" | "nodata" | "unknown" | "run" | "queued" | "done";
 
-// Draws as Capsomer's Status or Pill (status.md): done ok, run info and running, queued and unknown muted, blocked warning with a pause mark.
+// Draws as Capsomer's Status or Pill (status.md): done ok, run info and running, queued and unknown muted.
 export const KIND_STATUS: Record<Kind, { tone: Tone; running?: boolean; glyph?: GlyphName }> = {
   ok: { tone: "ok" },
   warn: { tone: "warn" },
@@ -34,7 +24,6 @@ export const KIND_STATUS: Record<Kind, { tone: Tone; running?: boolean; glyph?: 
   unknown: { tone: "muted", glyph: "unknown" },
   run: { tone: "info", running: true },
   queued: { tone: "muted", glyph: "queued" },
-  blocked: { tone: "warn", glyph: "blocked" },
   done: { tone: "ok" },
 };
 
@@ -99,30 +88,6 @@ export function slotStart(s: SiteSnapshot, i: number): number {
   return (s.ring_slot - (RING_SLOTS - 1 - i)) * SLOT_MS;
 }
 
-export const JOB: Record<OpsJob["status"], { kind: Kind; label: string }> = {
-  queued: { kind: "queued", label: "Queued" },
-  claimed: { kind: "run", label: "Running" },
-  blocked: { kind: "blocked", label: "Blocked" },
-  done: { kind: "done", label: "Done" },
-  failed: { kind: "crit", label: "Failed" },
-  superseded: { kind: "nodata", label: "Superseded" },
-  parked: { kind: "nodata", label: "Parked" },
-};
-
-// A claim never expires, so a claimed job untouched for the stale window (src/stale-jobs.ts, 3 days) shows as Stalled, not Running.
-const STALE_CLAIM_MS = 3 * DAY;
-export function jobBadge(j: OpsJob, now: number): { kind: Kind; label: string } {
-  if (j.status === "claimed" && now - parse(j.updated_at) > STALE_CLAIM_MS)
-    return { kind: "warn", label: "Stalled" };
-  return JOB[j.status];
-}
-
-const OPEN_STATUSES: ReadonlyArray<OpsJob["status"]> = ["queued", "claimed", "blocked"];
-
-export function isOpen(j: OpsJob): boolean {
-  return OPEN_STATUSES.includes(j.status);
-}
-
 export function ciState(c: CiObservation): { kind: Kind; label: string; red: boolean } {
   const l = c.latest;
   if (!l) return { kind: "nodata", label: "Could not read", red: false };
@@ -146,7 +111,7 @@ export function passStale(snap: OpsSnapshot | null, now: number): boolean {
 }
 
 type Sev = "crit" | "warn" | "nodata";
-export type OpenRef = string; // "site:<key>" | "job:<id>" | "agent:<name>" | "view:<id>"
+export type OpenRef = string; // "site:<key>" | "agent:<name>" | "view:<id>"
 
 export interface Attention {
   sev: Sev;
@@ -362,7 +327,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       open: "view:health#backups",
     });
   // Watcher findings about an agent acting out of pattern (src/anomaly.ts, OWASP item 6; D4, 2026-10-03: a finding plus an attention item, nothing
-  // more). Warnings only. The queue breaker, blocked jobs and waiting PRs live on Needs you (UX audit m2: one count, one place).
+  // more). Warnings only. Waiting PRs live on Needs you (UX audit m2: one count, one place).
   for (const f of live.findings) {
     if (f.class !== "attention" || !f.fingerprint.startsWith("anomaly-")) continue;
     out.push({
@@ -441,23 +406,7 @@ export function attentionList(
   return { items, groups };
 }
 
-// Priority first, then newest update; a job blocked over 7 days goes after the rest.
-
-const STALE_BLOCKED_MS = 7 * DAY;
-
-export function blockedOrder(
-  jobs: OpsJob[],
-  now: number,
-): { blocked: OpsJob[]; stale: OpsJob[]; all: OpsJob[] } {
-  const list = jobs
-    .filter((j) => j.status === "blocked")
-    .sort((a, b) => b.priority - a.priority || parse(b.updated_at) - parse(a.updated_at));
-  const blocked = list.filter((j) => now - parse(j.updated_at) <= STALE_BLOCKED_MS);
-  const stale = list.filter((j) => now - parse(j.updated_at) > STALE_BLOCKED_MS);
-  return { blocked, stale, all: [...blocked, ...stale] };
-}
-
-// Windows match src/watcher-detect.ts (warning at 30 hours, job at 36 for a copy; 13 hours report; 35 days restore drill). worst is the oldest of the sites' newest copies.
+// Windows match src/watcher-detect.ts (warning at 30 hours, alert at 36 for a copy; 13 hours report; 35 days restore drill). worst is the oldest of the sites' newest copies.
 export const OFFACCOUNT_LATE = 30 * HOUR;
 export const OFFACCOUNT_STALE = 36 * HOUR;
 const OFFACCOUNT_REPORT_STALE = 13 * HOUR;

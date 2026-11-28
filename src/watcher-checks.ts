@@ -1,14 +1,13 @@
 // The watcher's checks (src/watcher.ts runs the pass): which check owns each
 // fingerprint, and which class of finding it is.
 
-// Which check produces each fingerprint. An open job is cleared only when the check
+// Which check produces each fingerprint. An open finding is cleared only when the check
 // that would find it again actually ran: a failed read is not evidence the problem
 // went away. A fingerprint no check owns is cleared.
 export const WATCHER_CHECKS = [
   "health",
   "master head",
   "migrations",
-  "status",
   "offaccount",
   "offaccount drill",
   "offaccount coverage",
@@ -31,7 +30,6 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^deploy-drift-/, "master head"],
   [/^schema-behind-/, "migrations"],
   [/^schema-ahead-/, "migrations"],
-  [/^breaker-open-/, "status"],
   [/^offaccount-drill-/, "offaccount drill"],
   [/^offaccount-uncovered-/, "offaccount coverage"],
   [/^offaccount-late-/, "offaccount"],
@@ -56,34 +54,33 @@ export function owningCheck(fingerprint: string): WatcherCheck | null {
 }
 
 // WHAT A FINDING IS FOR (every alert actionable, the rest to a digest).
-export type FindingClass = "job" | "digest" | "attention";
+export type FindingClass = "alert" | "digest" | "attention";
 const CLASSES: ReadonlyArray<readonly [RegExp, FindingClass]> = [
-  [/^(health-degraded|backup-stale|backup-never)$/, "job"],
-  [/^deploy-drift-/, "job"],
-  [/^schema-behind-/, "job"],
+  [/^(health-degraded|backup-stale|backup-never)$/, "alert"],
+  [/^deploy-drift-/, "alert"],
+  [/^schema-behind-/, "alert"],
   [/^schema-ahead-/, "digest"],
-  [/^breaker-open-/, "attention"],
-  [/^offaccount-drill-/, "job"],
-  [/^offaccount-uncovered-/, "job"],
+  [/^offaccount-drill-/, "alert"],
+  [/^offaccount-uncovered-/, "alert"],
   [/^offaccount-late-/, "attention"],
-  [/^offaccount-/, "job"],
-  [/^ci-red-/, "job"],
-  [/^site-map-drift-/, "job"],
-  [/^unmapped-repo/, "job"],
-  [/^site-down-/, "job"],
-  [/^site-(errors|cpu)-/, "job"],
-  [/^live-config-/, "job"],
+  [/^offaccount-/, "alert"],
+  [/^ci-red-/, "alert"],
+  [/^site-map-drift-/, "alert"],
+  [/^unmapped-repo/, "alert"],
+  [/^site-down-/, "alert"],
+  [/^site-(errors|cpu)-/, "alert"],
+  [/^live-config-/, "alert"],
   [/^live-/, "digest"],
-  [/^site-health-/, "job"],
+  [/^site-health-/, "alert"],
   [/^site-weekly-/, "digest"],
   [/^anomaly-/, "attention"],
-  [/^domain-expiry-/, "job"],
-  [/^deploy-(rolled-back|rollback-failed)-/, "job"],
+  [/^domain-expiry-/, "alert"],
+  [/^deploy-(rolled-back|rollback-failed)-/, "alert"],
   [/^stale-canon-/, "digest"],
 ];
 
 export function findingClass(fingerprint: string): FindingClass {
-  return CLASSES.find(([pattern]) => pattern.test(fingerprint))?.[1] ?? "job";
+  return CLASSES.find(([pattern]) => pattern.test(fingerprint))?.[1] ?? "alert";
 }
 
 /** The patterns each table names, for the coverage test. */

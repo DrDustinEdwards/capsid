@@ -5,7 +5,6 @@ import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { CONTROLS, performControl, previewControl } from "../src/controls.ts";
 import { PORTAL_ACTIONS } from "../src/controls-base.ts";
-import { OVERNIGHT_MODE_KEY } from "../src/overnight.ts";
 import { buildAdminServer } from "../src/server.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
@@ -18,7 +17,27 @@ interface ToolResult {
 }
 
 function world() {
-  const d1 = fakeD1({});
+  const d1 = fakeD1({
+    agents: [
+      {
+        id: "agent_driver000001",
+        name: "sample-driver",
+        kind: "driver",
+        key_hash: "f".repeat(64),
+        scopes: JSON.stringify({
+          namespaces: ["sample"],
+          repos: "*",
+          tools: "*",
+          grants: ["read"],
+          flags: {},
+        }),
+        created_by: "github:sample",
+        created_at: "2026-09-01 00:00:00",
+        revoked_at: null,
+        last_seen: null,
+      },
+    ],
+  });
   const kv = fakeKv({});
   const env = fakeEnv({
     DB: d1.db,
@@ -58,10 +77,7 @@ const auditRows = (d1: ReturnType<typeof fakeD1>) =>
       params: JSON.parse(String(r.params[4])) as Record<string, unknown>,
     }));
 
-const MODE = {
-  control: "overnight",
-  params: { value: "api", reason: "run it on the API key tonight" },
-};
+const REVOKE = { control: "revoke_agent", params: { name: "sample-driver" } };
 
 test("the registry, the Portal's action list and the tool's list name the same controls, in both directions", async () => {
   const { env } = world();
@@ -70,17 +86,19 @@ test("the registry, the Portal's action list and the tool's list name the same c
     const listed = parse(await call({ action: "list" })).controls as Array<{
       control: string;
       params: string[];
-      reason_required: boolean;
     }>;
     assert.ok(
-      listed.length >= 16,
+      listed.length >= 15,
       `the list held ${listed.length} controls, so this compared nothing`,
     );
     assert.deepEqual(listed.map((c) => c.control).sort(), [...PORTAL_ACTIONS].sort());
     assert.deepEqual(CONTROLS.map((c) => c.name).sort(), [...PORTAL_ACTIONS].sort());
-    const mode = listed.find((c) => c.control === "overnight");
-    assert.deepEqual([mode?.params, mode?.reason_required], [["value", "reason", "undo"], true]);
-    assert.equal(listed.find((c) => c.control === "revoke_agent")?.reason_required, false);
+    assert.deepEqual(listed.find((c) => c.control === "pr_close")?.params, [
+      "namespace",
+      "repo",
+      "number",
+      "reason",
+    ]);
   } finally {
     await close();
   }
@@ -104,7 +122,7 @@ test("preview writes nothing and describes the change; perform runs exactly it, 
   const { env, d1, kv } = world();
   const { call, close } = await connect(env, admin());
   try {
-    const previewed = await call({ action: "preview", ...MODE });
+    const previewed = await call({ action: "preview", ...REVOKE });
     assert.equal(previewed.isError, undefined, previewed.content[0].text);
     const plan = parse(previewed) as {
       token: string;
@@ -114,7 +132,7 @@ test("preview writes nothing and describes the change; perform runs exactly it, 
     };
     assert.ok(plan.token.length > 40 && plan.changes.length > 0);
     assert.ok(
-      plan.audit.some((line) => line.startsWith("control-overnight by ")),
+      plan.audit.some((line) => line.startsWith("control-revoke_agent by ")),
       `the plan names ${plan.audit.join(" | ")}, not the chat row`,
     );
     assert.deepEqual(d1.recorded, [], "a preview wrote to D1");
@@ -122,15 +140,15 @@ test("preview writes nothing and describes the change; perform runs exactly it, 
 
     const done = await call({ action: "perform", token: plan.token });
     assert.equal(done.isError, undefined, done.content[0].text);
-    assert.equal(parse(done).action, "overnight");
-    assert.equal(kv.store.get(OVERNIGHT_MODE_KEY), "api");
+    assert.equal(parse(done).action, "revoke_agent");
+    assert.ok(d1.rows.agents[0].revoked_at, "the agent was not revoked");
 
     const rows = auditRows(d1);
     assert.ok(
-      rows.some((r) => r.action === "overnight-set" && r.actor === ACTOR),
+      rows.some((r) => r.action === "agent-revoked" && r.actor === ACTOR),
       JSON.stringify(rows.map((r) => [r.action, r.actor])),
     );
-    const click = rows.find((r) => r.action === "control-overnight");
+    const click = rows.find((r) => r.action === "control-revoke_agent");
     assert.equal(click?.actor, ACTOR);
     assert.equal(click?.params.surface, "chat");
   } finally {
@@ -142,7 +160,7 @@ test("PLANT: a confirmation is spent by its first perform, whichever surface run
   const { env, d1, kv } = world();
   const { call, close } = await connect(env, admin());
   try {
-    const { token } = parse(await call({ action: "preview", ...MODE })) as { token: string };
+    const { token } = parse(await call({ action: "preview", ...REVOKE })) as { token: string };
     assert.equal((await call({ action: "perform", token })).isError, undefined);
     const rowsAfterFirst = d1.recorded.length;
     const again = await call({ action: "perform", token });
@@ -150,7 +168,16 @@ test("PLANT: a confirmation is spent by its first perform, whichever surface run
     assert.match(again.content[0].text, /already used/);
     assert.equal(d1.recorded.length, rowsAfterFirst, "a replayed confirmation wrote a row");
 
-    const portal = await previewControl(env, EMAIL, "overnight", MODE.params, new Date(), "portal");
+    // A fresh agent to revoke, so the second preview has something to do.
+    d1.rows.agents[0].revoked_at = null;
+    const portal = await previewControl(
+      env,
+      EMAIL,
+      "revoke_agent",
+      REVOKE.params,
+      new Date(),
+      "portal",
+    );
     assert.equal(portal.ok, true);
     if (!portal.ok) return;
     const viaChat = await call({ action: "perform", token: portal.preview.token });
@@ -178,7 +205,7 @@ test("a token is for the administrator it was issued to, and expires", async () 
   const a = await connect(env, admin(EMAIL));
   const b = await connect(env, admin("other-admin@example.com"));
   try {
-    const { token } = parse(await a.call({ action: "preview", ...MODE })) as { token: string };
+    const { token } = parse(await a.call({ action: "preview", ...REVOKE })) as { token: string };
     const other = await b.call({ action: "perform", token });
     assert.equal(other.isError, true);
     assert.match(other.content[0].text, /issued for another email/);
@@ -198,18 +225,22 @@ test("a token is for the administrator it was issued to, and expires", async () 
   }
 });
 
-test("a switch without a reason, or a Portal-only control from chat, is refused at preview, with the reason", async () => {
+test("a close without a reason, or a Portal-only control from chat, is refused at preview, with the reason", async () => {
   const { env, d1, kv } = world();
   const { call, close } = await connect(env, admin());
   try {
-    const res = await call({ action: "preview", control: "overnight", params: { value: "off" } });
+    const res = await call({
+      action: "preview",
+      control: "pr_close",
+      params: { namespace: "sample", number: "41" },
+    });
     assert.equal(res.isError, true);
     assert.match(res.content[0].text, /needs a reason/);
     assert.deepEqual([d1.recorded, kv.puts], [[], []]);
     const stray = await call({
       action: "preview",
-      control: "overnight",
-      params: { value: "off", reason: "x", site: "y" },
+      control: "revoke_agent",
+      params: { name: "sample-driver", site: "y" },
     });
     assert.equal(stray.isError, true, "a param the control does not take was carried");
     // Chat cannot set a site key or activate an agent: both take a Portal click.
@@ -249,7 +280,7 @@ test("PLANT: only the administrator signed in through Access holds a control: a 
     try {
       for (const args of [
         { action: "list" },
-        { action: "preview", ...MODE },
+        { action: "preview", ...REVOKE },
         { action: "perform", token: "x.y" },
       ]) {
         const res = await call(args);

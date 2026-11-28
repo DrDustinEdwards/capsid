@@ -1,8 +1,7 @@
 import { findingClass, type FindingClass } from "./watcher-checks";
 import type { OpsFinding } from "./ops-types/feed";
 
-// The findings that post no job (digest and attention class, src/watcher-checks.ts), read from the
-// watcher's memory: the open rows with no job.
+// The open findings with their class (src/watcher-checks.ts), read from the watcher's memory.
 
 const HEADLINE = /^Watcher: (.*?)\s*\[[^\]]+\]$/;
 const LINES_SHOWN = 3;
@@ -33,17 +32,16 @@ function lastEvidence(raw: string): string[] {
   }
 }
 
-export async function openQuietFindings(db: D1Database): Promise<OpsFinding[]> {
+export async function openFindings(db: D1Database): Promise<OpsFinding[]> {
   const { results } = await db
     .prepare(
       `SELECT fingerprint, namespace, title, first_seen_at, last_seen_at, seen_count, evidence
-       FROM watcher_findings WHERE state = 'open' AND job_id IS NULL ORDER BY namespace, first_seen_at`,
+       FROM watcher_findings WHERE state = 'open' ORDER BY namespace, first_seen_at`,
     )
     .all<Row>();
   const out: OpsFinding[] = [];
   for (const r of results ?? []) {
     const klass: FindingClass = findingClass(r.fingerprint);
-    if (klass === "job") continue;
     out.push({
       fingerprint: r.fingerprint,
       namespace: r.namespace,
@@ -62,11 +60,11 @@ export async function openQuietFindings(db: D1Database): Promise<OpsFinding[]> {
 // and empty when none are open.
 export async function weeklyDigestLines(db: D1Database, now: Date): Promise<string[]> {
   if (now.getUTCDay() !== 1) return [];
-  const digest = (await openQuietFindings(db)).filter((f) => f.class === "digest");
+  const digest = (await openFindings(db)).filter((f) => f.class === "digest");
   if (digest.length === 0) return [];
   const bySite = new Map<string, OpsFinding[]>();
   for (const f of digest) bySite.set(f.namespace, [...(bySite.get(f.namespace) ?? []), f]);
-  const lines: string[] = [`Weekly digest (${digest.length} open, nothing here posts a job)`];
+  const lines: string[] = [`Weekly digest (${digest.length} open)`];
   for (const [site, list] of bySite) {
     lines.push(`${site}`);
     for (const f of list) lines.push(`- ${f.headline} (since ${f.first_seen.slice(0, 10)})`);

@@ -32,7 +32,7 @@ export function modelDrift(
   const known = (repo: string) =>
     modelRepos.has(repo.toLowerCase()) || leftOff.has(repo.toLowerCase());
   const add = (namespace: string, line: string) => {
-    if (items.length < MAX_ITEMS) items.push({ rule: "model-drift", namespace, job: null, line });
+    if (items.length < MAX_ITEMS) items.push({ rule: "model-drift", namespace, line });
   };
 
   const flagged = new Set<string>();
@@ -46,7 +46,6 @@ export function modelDrift(
     items.push({
       rule: "model-not-checked",
       namespace: "capsid",
-      job: null,
       line: "The App's repo list could not be read, so the model was not compared with GitHub today.",
     });
   } else {
@@ -106,7 +105,6 @@ export async function gatherModelDriftItems(
       unreadable.push({
         rule: "model-not-checked",
         namespace: row.namespace,
-        job: null,
         line: `${row.namespace}'s repo mapping could not be read (${parsed.error}), so its repos were not compared with the model.`,
       });
   }

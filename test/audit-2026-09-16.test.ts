@@ -136,7 +136,7 @@ test("DERIVED: every action tool whose action argument is optional has a table d
     await close();
   }
   assert.ok(
-    tools.some((t) => t.name === "capsid_admin_read_claims"),
+    tools.some((t) => t.name === "capsid_admin_read_ops"),
     "the Capsid Admin tools were not listed, so half the surface went unread",
   );
   const wired = tools.filter((t) => actionArgFor(t.name) !== undefined);

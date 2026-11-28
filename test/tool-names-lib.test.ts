@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  RENAMED_ACTIONS,
-  RENAMED,
-  rewriteProse,
-  SIMPLE,
-  SPLIT,
-} from "../scripts/tool-names-lib.ts";
+import { RENAMED, rewriteProse, SIMPLE, SPLIT } from "../scripts/tool-names-lib.ts";
 import { COMPOSITES, SINGLE_TOOLS } from "../src/tools/surface.ts";
 
 const served = new Map<string, Set<string> | null>();
@@ -15,17 +9,16 @@ for (const name of Object.keys(SINGLE_TOOLS)) served.set(name, null);
 
 // Targets whose actions were removed after the regroup; the map keeps them so prose
 // naming the old tool still reads as stale.
-const RETIRED = new Set([
-  "capsid_read_status.run",
-  "capsid_read_status.claim",
-  "capsid_admin_manage_switches.mode",
-  "capsid_admin_manage_switches.pause",
-  "capsid_admin_manage_switches.unpause",
-  "capsid_admin_manage_switches.budget",
-  "capsid_admin_manage_switches.register_skill",
-]);
+const RETIRED = new Set(["capsid_read_status.run", "capsid_read_status.claim"]);
 // Whole tools removed after the regroup, kept for the same reason.
-const RETIRED_TOOLS = new Set(["capsid_change_repo", "capsid_open_pr", "capsid_run_ci"]);
+const RETIRED_TOOLS = new Set([
+  "capsid_change_repo",
+  "capsid_open_pr",
+  "capsid_run_ci",
+  "capsid_work_jobs",
+  "capsid_admin_read_claims",
+  "capsid_admin_manage_switches",
+]);
 
 test("every mapping target is a served tool and action, so no migrated entry names nothing", () => {
   const targets: Array<[string, string | null]> = [
@@ -132,11 +125,6 @@ test("PLANT: a column is not an action, and a split tool named bare is all of it
     assert.equal(r.text, text);
     assert.equal(r.unmapped.length, 1, text);
   }
-});
-
-test("the renamed tools' action lists are the ones src serves", async () => {
-  const { JOB_ACTIONS } = await import("../src/jobs-schema.ts");
-  assert.deepEqual([...RENAMED_ACTIONS.jobs].sort(), [...JOB_ACTIONS].sort());
 });
 
 test("PLANT: rewriting is idempotent: a second run over rewritten text changes nothing", () => {

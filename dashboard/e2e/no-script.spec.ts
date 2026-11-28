@@ -4,10 +4,9 @@ import { expect, test } from "@playwright/test";
 test.use({ javaScriptEnabled: false });
 
 for (const [path, charts] of [
-  ["demos/activity", 2],
+  ["demos/activity", 1],
   ["demos/sites?tab=deploys", 1],
   ["demos/sites/sample", 2],
-  ["demos/queue", 3],
   ["demos/packages", 1],
 ] as const) {
   test(`PLANT: with scripts off, ${path} has its ${charts} charts, each drawn with its table`, async ({

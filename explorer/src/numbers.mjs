@@ -1,13 +1,10 @@
-// Enarratio draws each figure on the server; chart-enhance (src/explorer.js) redraws bar, line and area charts at
-// their column's width from the spec frameHtml writes beside each, so a phone keeps 12 px text. No chart takes a
-// color of its own: that needs a style attribute the policy refuses. Pure.
+// Enarratio draws each figure on the server. No chart takes a color of its own: that needs a style attribute the
+// policy refuses. Pure.
 import { frameHtml } from "capsomer/behavior/chart-frame";
 import { progressRing } from "enarratio";
-import { areaChart, barChart, lineChart } from "enarratio/lite";
 
-import { weekEnds, weekLabels } from "./home.mjs";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
-import { layout, minutes, pageHead, percent, readingBox, scroller } from "./pages.mjs";
+import { layout, pageHead, percent, scroller } from "./pages.mjs";
 
 const source = {
   name: "Capsid's public stats",
@@ -37,154 +34,6 @@ const ring = (
 
 /** @param {any} stats */
 export function numbersHtml(stats) {
-  const j = stats.jobs;
-  const v = stats.verification;
-  const g = stats.gates;
-  const weeks = weekLabels(stats);
-  const ends = weekEnds(stats).map((d) => d.toISOString().slice(0, 10));
-  // Each week is named by its day, with its month at the first, the newest and wherever the month changes.
-  const days = weeks.map((/** @type {string} */ w, /** @type {number} */ i) =>
-    i && i < weeks.length - 1 && w.split(" ")[1] === weeks[i - 1].split(" ")[1]
-      ? w.split(" ")[0]
-      : w,
-  );
-  const total = j.completed_by_week.reduce(
-    (/** @type {number} */ a, /** @type {number} */ b) => a + b,
-    0,
-  );
-  // Under Enarratio's 480 the server's drawing scales to a phone's width instead of scrolling inside a frame no
-  // keyboard can reach (axe, scrollable-region-focusable); chart-enhance redraws it at the column's width.
-  const width = 440;
-  // The redraw spec has the same options, less the functions JSON drops.
-  const drawn = (/** @type {"bar" | "line" | "area"} */ chart, /** @type {any} */ options) => {
-    const draw = { bar: barChart, line: lineChart, area: areaChart }[chart];
-    return frameHtml(draw(options), {
-      redraw: { chart, options: JSON.parse(JSON.stringify(options)) },
-    });
-  };
-  const jobsChart = j.failed_by_week
-    ? drawn("bar", {
-        id: "jobs-per-week",
-        data: days.flatMap((/** @type {string} */ week, /** @type {number} */ i) => [
-          { week, outcome: "Completed", jobs: j.completed_by_week[i] },
-          { week, outcome: "Failed", jobs: j.failed_by_week[i] },
-          ...(j.cleared_by_week
-            ? [{ week, outcome: "Finding cleared", jobs: j.cleared_by_week[i] }]
-            : []),
-        ]),
-        x: "week",
-        y: "jobs",
-        series: "outcome",
-        layout: "stacked",
-        title: "Jobs finished per week",
-        xLabel: "week ending",
-        yLabel: "jobs",
-        caption:
-          "A job counts in the week it finished. Finding cleared is a watcher alert that closed itself when the problem went away; it is not a failed job.",
-        source,
-        width,
-        alt: `Jobs finished in each of the last eight whole weeks, oldest first. Completed: ${j.completed_by_week.join(", ")}. Failed: ${j.failed_by_week.join(", ")}.${j.cleared_by_week ? ` Watcher findings that cleared themselves: ${j.cleared_by_week.join(", ")}.` : ""}`,
-      })
-    : drawn("bar", {
-        id: "jobs-per-week",
-        data: days.map((/** @type {string} */ week, /** @type {number} */ i) => ({
-          week,
-          jobs: j.completed_by_week[i],
-        })),
-        x: "week",
-        y: "jobs",
-        title: "Jobs completed per week",
-        xLabel: "week ending",
-        yLabel: "jobs",
-        caption: "A job counts in the week it completed.",
-        source,
-        width,
-        alt: `Jobs completed in each of the last eight whole weeks, oldest first: ${j.completed_by_week.join(", ")}; ${total} in all.`,
-      });
-  const waitsChart = g.waits_by_week
-    ? drawn("area", {
-        id: "waits-per-week",
-        data: ends.map((week, i) => ({ week, waits: g.waits_by_week[i] })),
-        x: "week",
-        y: "waits",
-        title: "Approval waits per week",
-        xLabel: "week ending",
-        yLabel: "waits",
-        caption: "A wait counts in the week a person or the signed policy ended it.",
-        source,
-        width,
-        alt: `Approval waits that ended in each of the last eight whole weeks, oldest first: ${g.waits_by_week.join(", ")}.`,
-      })
-    : "";
-  const measuredWeeks = (v.agreement_by_week ?? []).filter(
-    (/** @type {number | null} */ x) => x !== null,
-  ).length;
-  const agreementChart =
-    measuredWeeks >= 2
-      ? drawn("line", {
-          id: "agreement-per-week",
-          data: ends.map((week, i) => ({
-            week,
-            agreement:
-              v.agreement_by_week[i] === null
-                ? null
-                : Math.round(v.agreement_by_week[i] * 1000) / 10,
-          })),
-          x: "week",
-          y: "agreement",
-          title: "Claims matching GitHub, per week",
-          xLabel: "week ending",
-          yLabel: "percent",
-          caption: "A week with too few checked claims to say is a gap.",
-          source,
-          points: true,
-          width,
-          formatValue: (/** @type {number} */ n) => `${n}%`,
-          alt: `The share of checked claims that agreed with GitHub in each of the last eight whole weeks, oldest first: ${v.agreement_by_week.map((/** @type {number | null} */ x) => (x === null ? "too few to say" : percent(x))).join(", ")}.`,
-        })
-      : "";
-  const rings = [];
-  if (v.agreement_rate_90d !== null)
-    rings.push(
-      ring(
-        "agreement",
-        "Claims matching",
-        v.agreement_rate_90d,
-        `In the last 90 days, ${percent(v.agreement_rate_90d)} of ${v.evaluations_90d.toLocaleString("en-US")} checked claims matched what GitHub shows.`,
-        "Checked claims, last 90 days; only the fields the Worker checked count.",
-      ),
-    );
-  if (v.pr_merge_rate_90d !== null)
-    rings.push(
-      ring(
-        "merged",
-        "Pull requests merged",
-        v.pr_merge_rate_90d,
-        `GitHub shows that ${percent(v.pr_merge_rate_90d)} of the pull requests agents opened were merged.`,
-        "Agents' pull requests, last 90 days.",
-      ),
-    );
-  if (v.ci_green_rate_90d !== null)
-    rings.push(
-      ring(
-        "green",
-        "CI passing",
-        v.ci_green_rate_90d,
-        `${percent(v.ci_green_rate_90d)} of the jobs whose CI the Worker checked had passing CI on their latest commit.`,
-        "Jobs whose CI the Worker checked, last 90 days.",
-      ),
-    );
-  const gateRings = [];
-  if (g.share_ended_by_policy_30d !== null)
-    gateRings.push(
-      ring(
-        "policy",
-        "Ended by policy",
-        g.share_ended_by_policy_30d,
-        `The signed gate policy, not a person, ended ${percent(g.share_ended_by_policy_30d)} of the approval waits in the last 30 days.`,
-        "Approval waits that ended, last 30 days.",
-      ),
-    );
   const siteRings = [];
   if (stats.sites.uptime_7d !== null)
     siteRings.push(
@@ -197,22 +46,6 @@ export function numbersHtml(stats) {
       ),
     );
   const rows = [
-    ["Jobs completed, last 7 days", j.completed_7d],
-    ["Jobs completed, last 30 days", j.completed_30d],
-    ["Jobs failed, last 30 days", j.failed_30d],
-    ...(j.cleared_30d === undefined
-      ? []
-      : [["Watcher findings that cleared themselves, last 30 days", j.cleared_30d]]),
-    ["Jobs open today", j.open],
-    ["Jobs waiting on a person today", j.blocked],
-    ["Median time a job takes, last 30 days", minutes(j.median_duration_minutes_30d)],
-    ["Claims checked, last 90 days", v.evaluations_90d],
-    ["Claims matching GitHub, last 90 days", percent(v.agreement_rate_90d)],
-    ["Agents' pull requests merged, last 90 days", percent(v.pr_merge_rate_90d)],
-    ["Checked jobs with passing CI, last 90 days", percent(v.ci_green_rate_90d)],
-    ["Approval waits, last 30 days", g.waits_30d],
-    ["Median approval wait, last 30 days", minutes(g.median_wait_minutes_30d)],
-    ["Waits the signed policy cleared, last 30 days", percent(g.share_ended_by_policy_30d)],
     ["Sites watched", stats.sites.watched],
     ["Half-hours measured, last 7 days", stats.sites.slots_measured_7d],
     ["Documents in the store", stats.store.documents],
@@ -223,16 +56,6 @@ export function numbersHtml(stats) {
     ["Capsid's commit", stats.capsid.sha7],
   ];
   return `<section class="numbers">
-<dl class="cap-form-boxes readings-row" data-variant="tones">${readingBox(String(j.completed_30d), "jobs completed, 30 days", "#jobs")}${readingBox(percent(v.agreement_rate_90d), "checked claims matching GitHub, 90 days", "#verification")}${readingBox(minutes(g.median_wait_minutes_30d), "median approval wait", "#gates")}${readingBox(percent(stats.sites.uptime_7d), "uptime, 7 days", "#sites")}</dl>
-<section class="numbers-part" id="jobs" aria-labelledby="jobs-title"><h2 id="jobs-title">Jobs</h2>
-<p class="measure">In the last 30 days, ${j.completed_30d} jobs completed and ${j.failed_30d} failed. ${j.cleared_30d === undefined ? "" : `The watcher also opened and closed ${j.cleared_30d} findings of its own as the problems they named went away; those are alerts that cleared, not failed jobs. `}${j.open} are open today, and ${j.blocked} of those are waiting on a person. The median job took ${minutes(j.median_duration_minutes_30d)} from first claim to done.</p>
-<div class="charts">${jobsChart}</div></section>
-<section class="numbers-part" id="verification" aria-labelledby="verification-title"><h2 id="verification-title">Claims checked against GitHub</h2>
-<p class="measure">When a job finishes, the Worker reads its pull requests, commits and CI from GitHub and saves each claim next to what GitHub says. A rate counts only the fields the Worker checked.</p>
-<div class="charts">${agreementChart}${rings.join("")}</div></section>
-<section class="numbers-part" id="gates" aria-labelledby="gates-title"><h2 id="gates-title">Approval gates</h2>
-<p class="measure">Before a push, a deploy, a secret or a merge, the agent stops. The job waits with the exact command until a person or the signed policy answers. ${g.waits_30d} waits ended in the last 30 days, and half ended within ${minutes(g.median_wait_minutes_30d)}.</p>
-<div class="charts">${waitsChart}${gateRings.join("")}</div></section>
 <section class="numbers-part" id="sites" aria-labelledby="sites-title"><h2 id="sites-title">Sites</h2>
 <p class="measure">Every five minutes, the watcher checks each registered site and keeps a ring of half-hour slots for it. When it can't measure a slot, it leaves the slot out instead of counting it as up.</p>
 <div class="charts">${siteRings.join("")}</div></section>
@@ -247,9 +70,9 @@ ${rows.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td
 </section>
 <section class="numbers-part" id="how" aria-labelledby="how-title"><h2 id="how-title">How Capsid counts</h2>
 <ul class="measure">
-<li>Every count and rate covers all namespaces, agents and sites together, so nothing here names a project, a job or a person.</li>
+<li>Every count and rate covers all namespaces, agents and sites together, so nothing here names a project or a person.</li>
 <li>Each window counts whole UTC days to midnight, so a day's work shows up the next day and no number says when anything happened.</li>
-<li>The page leaves out any rate or median based on fewer than ten cases, so nobody can work out a single job from it.</li>
+<li>The page leaves out any rate or median based on fewer than ten cases, so nobody can work out a single case from it.</li>
 <li>The Worker builds the data once a day and serves it at <a href="https://mcp.dustinedwards.info/public/stats/v1.json">/public/stats/v1.json</a>. <a href="https://github.com/DrDustinEdwards/capsid/blob/master/docs/public-data.md">docs/public-data.md</a> says where each field comes from.</li>
 </ul></section>
 </section>`;
@@ -261,7 +84,7 @@ export function numbersPage(stats) {
 ${numbersHtml(stats)}`;
   return layout({
     title: "Numbers",
-    description: "Capsid's daily numbers: jobs, verified claims, approval waits and uptime.",
+    description: "Capsid's daily numbers: uptime and the store.",
     path: "/numbers/",
     body,
     asOf: stats.as_of,

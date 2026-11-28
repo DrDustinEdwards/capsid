@@ -1,7 +1,6 @@
 import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { APP_ROSTER } from "./roster";
-import { externalFence } from "./provenance";
 import type { Finding } from "./watcher-detect";
 
 // GitHub serves no step summary through its API, so the outcome is read from the job's conclusion,
@@ -163,14 +162,6 @@ const mk = (
   fingerprint,
   namespace,
   title: `Watcher: ${headline} [${fingerprint}]`,
-  body: [
-    'The live gate refused a deploy (docs/autonomy.md, "Deploys"). Read',
-    "the run, then land a fix or revert the commit; master still points at it.",
-    "",
-    "## Evidence",
-    "",
-    externalFence("watcher-evidence", fingerprint, evidence.map((line) => `- ${line}`).join("\n")),
-  ].join("\n"),
   evidence,
 });
 

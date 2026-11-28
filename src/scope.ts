@@ -17,7 +17,7 @@ import {
 import { MINUTE_MS, HOUR_MS } from "./time";
 
 // The one enforcement point: every tool call and repo mutation is checked here. A per-tool gate can
-// be omitted by a new tool and cannot see writes a module away (the queue, the tick).
+// be omitted by a new tool and cannot see writes a module away (the tick).
 
 // What each tool requires. The registrar enforces it and tool-annotations.ts derives readOnlyHint
 // from it. "action" means the requirement depends on the action argument.
@@ -33,7 +33,6 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   capsid_read_repo: "read",
   capsid_inspect_repo: "read",
   capsid_close_pr: "write",
-  capsid_work_jobs: "action",
   capsid_read_status: "read",
 
   capsid_admin_whats_next: "admin_read",
@@ -43,12 +42,9 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   // The credential control plane. An agent that could mint, revoke or re-scope another
   // An agent that could mint or re-scope another could widen itself.
   capsid_admin_manage_agents: "admin",
-  capsid_admin_read_claims: "admin_read",
   capsid_admin_read_ops: "admin_read",
-  // A control revokes an agent, resumes a job or edits a site, so a caller using one could widen itself.
+  // A control revokes an agent or edits a site, so a caller using one could widen itself.
   capsid_admin_run_controls: "admin",
-  // None of sign_policy, breaker_reset or overnight is a driver's work.
-  capsid_admin_manage_switches: "admin",
 };
 
 // Fail closed: a tool with no entry requires write. test/invariants.test.ts keeps the table and
@@ -73,7 +69,6 @@ export function requiredForAction(tool: string, action: string | undefined): Too
 export const SCOPES = mcpScopes("capsid");
 
 export const READ_ACTIONS: Record<string, readonly [string, ...string[]]> = {
-  capsid_work_jobs: ["list"],
   capsid_lint_namespace: ["gather"],
 };
 
@@ -117,8 +112,6 @@ export function needFor(requirement: ToolRequirement): Pick<ScopeNeed, "grant" |
 
 export interface ScopeNeed {
   tool: string;
-  // As the registrar saw it; a bench run key is bound by it (benchRunRefusal).
-  call?: { jobId?: string; filtered: boolean };
   action?: string;
   // `undefined` means the call names none, which is not "allowed" (see namespaceRefusal).
   namespace?: string;
@@ -133,8 +126,6 @@ export interface ScopeNeed {
   flags?: readonly ScopeFlag[];
 }
 
-export const JOBS_TOOL = "capsid_work_jobs";
-
 const FLAG_REASON: Record<ScopeFlag, string> = {
   can_merge: "merging a pull request can trigger a deploy on a repo that deploys on push",
   can_touch_protected:
@@ -144,10 +135,6 @@ const FLAG_REASON: Record<ScopeFlag, string> = {
 // Order is deliberate: a caller that cannot use the tool is told that, not that its namespace is
 // out of scope, which would leak which namespaces exist.
 export function checkScope(agent: Agent, need: ScopeNeed): string | null {
-  if (agent.benchRun) {
-    const bound = benchRunRefusal(agent.benchRun, agent.actor, need);
-    if (bound) return bound;
-  }
   const scopes = agent.scopes;
   if (!allowsToolAction(scopes.tools, need.tool, need.action)) {
     // Name the qualified tool.action so the caller does not look for the wrong bug.
@@ -192,26 +179,6 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
   return null;
 }
 
-const BENCH_RUN_ACTIONS: readonly string[] = ["claim", "list", "complete", "fail"];
-
-function benchRunRefusal(
-  run: { run: string; job: string | null },
-  actor: string,
-  need: ScopeNeed,
-): string | null {
-  const refusal = `unauthorized: ${actor} is the run key of bench run ${run.run} and may only claim, read, complete or fail its own job`;
-  if (need.tool !== JOBS_TOOL) return `${refusal}; it cannot use ${need.tool}.`;
-  if (!need.call) return null;
-  if (!need.action || !BENCH_RUN_ACTIONS.includes(need.action))
-    return `${refusal}; it cannot ${need.action ?? "call the tool with no action"}.`;
-  if (run.job === null) return `${refusal}, and no single job carries this run's title yet.`;
-  if (need.call.jobId !== run.job)
-    return `${refusal} (${run.job}); this call names ${need.call.jobId ?? "no job"}.`;
-  if (need.call.filtered)
-    return `${refusal}; a list may not take a view, the stale view or a status filter.`;
-  return null;
-}
-
 // The one exception to the namespace axis: every driver is told to follow the portfolio documents.
 function portfolioReadAdmits(need: ScopeNeed): boolean {
   if (need.namespace !== PORTFOLIO_DOCS.namespace) return false;
@@ -235,7 +202,6 @@ export const STEP_UP: Record<string, readonly string[] | "*"> = {
   capsid_admin_manage_namespaces: ["register", "update", "delete_perform"],
   capsid_admin_manage_agents: ["mint", "revoke", "update_scopes"],
   capsid_admin_run_controls: ["perform"],
-  capsid_admin_manage_switches: "*",
 };
 
 export function needsStepUp(tool: string, action: string | undefined): boolean {
@@ -315,19 +281,15 @@ function stepUpRefusal(agent: Agent, need: ScopeNeed, now: number): string | nul
 
 const ADMIN_REASON: Record<string, string> = {
   capsid_admin_whats_next:
-    "It reads what waits on the seat across every namespace and every mapped repo (blocked jobs, questions, open pull requests and their CI, stale work, failed checks), which is wider than any one caller's scope.",
+    "It reads what waits on the seat across every namespace and every mapped repo (open handoffs, open pull requests and their CI, the watcher's findings and failed checks), which is wider than any one caller's scope.",
   capsid_admin_manage_namespaces:
     "It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, and its delete removes every live document of a namespace, so a scoped caller that could use it could widen itself or delete the boundary it sits behind.",
   capsid_admin_manage_agents:
     "It mints, re-scopes and revokes agents, so a scoped caller that could use it could widen itself.",
-  capsid_admin_read_claims:
-    "It reads every agent's claims, the Worker's checks of them and every human touch, across every namespace, which is wider than any one caller's scope.",
   capsid_admin_read_ops:
     "It reads the watcher's last pass, the Cloudflare account's Access and Email Routing configuration, and every Workers Build, across every namespace, which is wider than any one caller's scope.",
   capsid_admin_run_controls:
-    "It runs the administrator's controls (revoke an agent, resume or fail a job, edit the sites and packages the Portal watches), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
-  capsid_admin_manage_switches:
-    "It holds the administrator's switches: sign_policy decides which gates a driver may clear without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_read_status.",
+    "It runs the administrator's controls (revoke an agent, edit the sites and packages the Portal watches), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
 };
 
 function adminReason(tool: string): string {

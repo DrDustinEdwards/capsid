@@ -55,7 +55,7 @@ async function actionsOf(name: string): Promise<string[] | null> {
 }
 
 test("every STEP_UP entry is a served admin tool, and every action it lists is one that tool serves", async () => {
-  assert.ok(Object.keys(STEP_UP).length >= 4, "STEP_UP shrank; check it before trusting this test");
+  assert.ok(Object.keys(STEP_UP).length >= 3, "STEP_UP shrank; check it before trusting this test");
   for (const [tool, actions] of Object.entries(STEP_UP)) {
     assert.equal(TOOL_GRANTS[tool], "admin", `${tool} is stepped up and is not an admin tool`);
     const served = await actionsOf(tool);
@@ -81,9 +81,12 @@ test("PLANT: a stale sign-in is refused a risky admin action, naming the reconne
 });
 
 test("PLANT: a session with no recorded sign-in time is refused, never treated as fresh", async () => {
-  const r = await call(signedIn(null), "capsid_admin_manage_switches", { action: "overnight" });
+  const r = await call(signedIn(null), "capsid_admin_run_controls", {
+    action: "perform",
+    token: "x.y",
+  });
   assert.equal(r.isError, true);
-  assert.match(r.text, /step-up required: 'capsid_admin_manage_switches/);
+  assert.match(r.text, /step-up required: 'capsid_admin_run_controls\.perform'/);
   assert.match(r.text, /before sign-in times were recorded/);
 });
 
@@ -92,7 +95,7 @@ test("THE INNOCENT DIRECTION: a stale sign-in still reads; only the risky action
   const r = await call(stale, "capsid_admin_manage_agents", { action: "list" });
   assert.doesNotMatch(r.text, /step-up required/);
   assert.equal(needsStepUp("capsid_admin_manage_agents", "list"), false);
-  assert.equal(needsStepUp("capsid_admin_read_claims", undefined), false);
+  assert.equal(needsStepUp("capsid_admin_read_ops", undefined), false);
   assert.equal(needsStepUp("capsid_admin_whats_next", undefined), false);
 });
 
@@ -101,7 +104,8 @@ test("a key holder (no session) is not stepped up: its key is the credential", (
   assert.equal(keyHolder.signedInAt, undefined);
   assert.equal(
     checkScope(keyHolder, {
-      tool: "capsid_admin_manage_switches",
+      tool: "capsid_admin_run_controls",
+      action: "perform",
       grant: "write",
       admin: true,
       stepUp: true,
@@ -111,7 +115,8 @@ test("a key holder (no session) is not stepped up: its key is the credential", (
   // The same need from a stale session is refused, so the exemption is the key, not the need.
   assert.match(
     checkScope(signedIn(STALE), {
-      tool: "capsid_admin_manage_switches",
+      tool: "capsid_admin_run_controls",
+      action: "perform",
       grant: "write",
       admin: true,
       stepUp: true,
@@ -236,7 +241,8 @@ test("PLANT: an unreadable or future last step-up time is treated as absent, nev
 
 test("a co-owner is stepped up exactly as the primary owner: the check keys on the admin agent, not on ADMIN_EMAIL", () => {
   const need = {
-    tool: "capsid_admin_manage_switches",
+    tool: "capsid_admin_run_controls",
+    action: "perform",
     grant: "write" as const,
     admin: true,
     stepUp: true,

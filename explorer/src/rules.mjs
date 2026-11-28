@@ -1,5 +1,5 @@
 // Shared by the front page's build and its script so the first render and the interactive state cannot disagree
-// (src/scope.ts needFor, checkScope; src/job-claims.ts evaluationRows). Pure: build.mjs bundles explorer.js with this inlined.
+// (src/scope.ts needFor, checkScope). Pure: build.mjs bundles explorer.js with this inlined.
 
 export const NEED = {
   read: "read access",
@@ -34,15 +34,4 @@ export function reachSentence(needs, held) {
           ? "A read-only agent"
           : `An agent with ${[held.read && "read", held.write && "write", held.admin && "admin"].filter(Boolean).join(" and ")} access`;
   return `${who} can use ${full} of ${needs.length} tools${part ? `, and ${part} more in part` : ""}.`;
-}
-
-/** @param {string} kind @param {number} n */
-export const valueWords = (kind, n) => (kind === "ci_green" ? (n ? "Yes" : "No") : String(n));
-
-/** @param {string} kind @param {number} said @param {number} read */
-export function verdict(kind, said, read) {
-  const r = valueWords(kind, read);
-  return said === read
-    ? `They match. Capsid saves ${r}.`
-    : `Caught. The agent said ${valueWords(kind, said)} and GitHub says ${r}. Capsid saves GitHub's answer and flags the mismatch.`;
 }

@@ -1,6 +1,5 @@
 import { sendEmail } from "@dustinedwards/site-runtime/email";
 import type { Env } from "./env";
-import { RETRY_CAP_REASON } from "./jobs-schema";
 import { PORTAL_HOST } from "./portal-host";
 import { auditStatement } from "./store-guards";
 import { digestProblem } from "./digest";
@@ -14,28 +13,24 @@ import {
   type PushSubscriptionKeys,
 } from "@dustinedwards/site-runtime/web-push";
 import { toSqlTime } from "@dustinedwards/site-runtime/time";
-import { HOUR_MS, DAY_MS, utcDay } from "./time";
+import { DAY_MS, utcDay } from "./time";
 
 const STATE_KEY = "push:state";
 const SENT_TTL_MS = 30 * DAY_MS;
-const QUESTION_AGE_MS = 4 * HOUR_MS;
-const QUESTION_PRIORITY = 70;
-// A rollback or a cap older than this when first seen is history, not an alert.
+// A rollback older than this when first seen is history, not an alert.
 const RECENT_MS = DAY_MS;
 const MAX_PER_TICK = 3;
 export const MAX_DEVICES = 10;
 export const PORTAL_URL = `https://${PORTAL_HOST}/`;
 
 // Where a tap lands: the item itself on the Portal, not its home page (the UX audit's M2).
-// A job opens in its drawer on Jobs.
 const portalPath = (path: string) => `https://${PORTAL_HOST}${path}`;
-const jobUrl = (id: string) => portalPath(`/queue/job/${encodeURIComponent(id)}`);
 // A site's own page (/sites/<namespace>), at a tab when one is named.
 const siteUrl = (namespace: string, tab?: "deploys") =>
   portalPath(`/sites/${encodeURIComponent(namespace)}${tab ? `?tab=${tab}` : ""}`);
 const SITES_URL = portalPath("/sites");
 
-type UrgentKind = "rollback" | "correction-cap" | "question" | "site" | "tls" | "domain";
+type UrgentKind = "rollback" | "site" | "tls" | "domain";
 
 interface Urgent {
   key: string;
@@ -65,9 +60,7 @@ async function readState(env: Env): Promise<PushState> {
   return { sent: parsed.sent ?? {} };
 }
 
-const hours = (ms: number) => `${Math.floor(ms / HOUR_MS)}h`;
-
-// The triggers, from what the watcher and the queue already keep. Reads only.
+// The triggers, from what the watcher already keeps. Reads only.
 async function gatherUrgent(env: Env, now: Date): Promise<Urgent[]> {
   const out: Urgent[] = [];
   const t = now.getTime();
@@ -92,49 +85,11 @@ async function gatherUrgent(env: Env, now: Date): Promise<Urgent[]> {
     });
   }
 
-  // 2 and 3. Blocked jobs: at the correction cap, or a question on a priority job.
-  const blocked = await env.DB.prepare(
-    `SELECT id, namespace, priority, result_summary, updated_at FROM jobs WHERE status = 'blocked' ORDER BY updated_at LIMIT 200`,
-  ).all<{
-    id: string;
-    namespace: string;
-    priority: number;
-    result_summary: string | null;
-    updated_at: string;
-  }>();
-  for (const j of blocked.results ?? []) {
-    const summary = j.result_summary ?? "";
-    const age = t - Date.parse(j.updated_at);
-    if (summary.startsWith(RETRY_CAP_REASON) && age <= RECENT_MS) {
-      out.push({
-        key: `cap:${j.id}:${j.updated_at}`,
-        kind: "correction-cap",
-        namespace: j.namespace,
-        title: "Correction cap reached",
-        body: `${j.namespace} job ${j.id}: the reviewer and the driver did not converge. It needs your call.`,
-        url: jobUrl(j.id),
-      });
-    } else if (
-      summary.startsWith("QUESTION:") &&
-      j.priority >= QUESTION_PRIORITY &&
-      age > QUESTION_AGE_MS
-    ) {
-      out.push({
-        key: `question:${j.id}:${j.updated_at}`,
-        kind: "question",
-        namespace: j.namespace,
-        title: "Question waiting",
-        body: `${j.namespace} job ${j.id}, priority ${j.priority}, asked ${hours(age)} ago.`,
-        url: jobUrl(j.id),
-      });
-    }
-  }
-
-  // 4. Sites, from the five-minute pulse.
+  // 2. Sites, from the five-minute pulse.
   for (const a of pulseAlerts(await readPulse(env), now))
     out.push({ ...a, kind: "site", url: siteUrl(a.namespace) });
 
-  // 4, the error rate: the watcher's site-errors findings from its last pass. A snapshot
+  // The error rate: the watcher's site-errors findings from its last pass. A snapshot
   // that cannot be read alerts nothing; the Portal shows that it could not be read.
   const snapshot = await readSnapshot(env).catch(() => null);
   const day = utcDay(now);
@@ -152,7 +107,7 @@ async function gatherUrgent(env: Env, now: Date): Promise<Urgent[]> {
     });
   }
 
-  // 5. A TLS certificate 21 or 3 days from expiry (src/tls-expiry.ts), from the watcher's
+  // 3. A TLS certificate 21 or 3 days from expiry (src/tls-expiry.ts), from the watcher's
   // last read, and a domain registration 30 or 7 days out, from the last snapshot. One
   // that cannot be read alerts nothing.
   for (const a of tlsAlerts(await readStoredTls(env).catch(() => null), now))

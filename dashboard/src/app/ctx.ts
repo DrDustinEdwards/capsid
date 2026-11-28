@@ -6,7 +6,6 @@ export const VIEWS = [
   { id: "health", label: "Health", key: "h" },
   { id: "sites", label: "Sites", key: "s" },
   { id: "prs", label: "Pull requests", key: "p" },
-  { id: "queue", label: "Jobs", key: "q" },
   { id: "projects", label: "Projects", key: "o" },
   { id: "activity", label: "Activity", key: "l" },
   { id: "agents", label: "Agents", key: "a" },
@@ -27,11 +26,6 @@ export type HealthTab = (typeof HEALTH_TABS)[number]["id"];
 export const SITES_TABS = [
   { id: "all", label: "All sites" },
   { id: "deploys", label: "Deploys" },
-] as const;
-
-export const QUEUE_TABS = [
-  { id: "jobs", label: "Jobs" },
-  { id: "checks", label: "Checks" },
 ] as const;
 
 export const AGENT_TABS = [
@@ -58,7 +52,6 @@ export type SiteTab = (typeof SITE_TABS)[number]["id"];
 const PAGE_TABS: Partial<Record<(typeof VIEWS)[number]["id"], ReadonlyArray<{ id: string }>>> = {
   health: HEALTH_TABS,
   sites: SITES_TABS,
-  queue: QUEUE_TABS,
   agents: AGENT_TABS,
   packages: PACKAGE_TABS,
 };
@@ -73,7 +66,7 @@ export function tabOf<T extends { id: string }>(
 export type ViewId = (typeof VIEWS)[number]["id"];
 
 export type ViewDef = (typeof VIEWS)[number];
-export type DrawerType = "job" | "agent" | "audit";
+export type DrawerType = "agent" | "audit";
 
 function isView(v: string | undefined): v is ViewId {
   return VIEWS.some((x) => x.id === v);
@@ -96,7 +89,7 @@ export interface Ctx {
   copy: (text: string) => void;
   say: (msg: string) => void;
   confirm: (req: ConfirmRequest) => void;
-  performed: (p: PortalPerformed, undo?: UndoRequest) => void;
+  performed: (p: PortalPerformed) => void;
   signOut: () => void;
 }
 
@@ -105,48 +98,17 @@ export interface ConfirmRequest {
   params: Record<string, string>;
   title: string;
   onDone?: (p: PortalPerformed) => void;
-  undo?: UndoRequest;
 }
 
-export interface UndoRequest {
-  action: PortalAction;
-  params: Record<string, string>;
-  focus?: string;
-}
-
-export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>([
-  "resume_job",
-  "release_job",
-  "fail_job",
-  "close_shipped",
-  "supersede_job",
-  "park_job",
-  "pr_close",
-]);
-
-export const TAKES_NOTE: ReadonlySet<PortalAction> = new Set<PortalAction>(["resume_job"]);
+export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["pr_close"]);
 
 const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) => string)> = {
-  overnight: (p) =>
-    p.value === "off"
-      ? "Turn off"
-      : p.value === "subscription"
-        ? "Run on subscription"
-        : "Run on API key",
-  resume_job: "Resume job",
-  release_job: "Release job",
-  fail_job: "Mark failed",
-  close_shipped: "Close as shipped",
-  supersede_job: "Supersede job",
-  park_job: "Park job",
-  unpark_job: "Unpark job",
   pr_close: "Close pull request",
   revoke_agent: "Revoke agent",
   activate_agent: "Activate agent",
   site_add: "Add site",
   site_edit: "Save changes",
   site_remove: "Remove site",
-  reset_breaker: "Reset and resume",
   package_add: "Add package",
   package_edit: "Save changes",
   package_remove: "Remove package",
@@ -166,13 +128,8 @@ export function performLabel(action: PortalAction, params: Record<string, string
 
 export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>([
   "revoke_agent",
-  "fail_job",
   "site_remove",
   "package_remove",
-  "reset_breaker",
-  "release_job",
-  "close_shipped",
-  "supersede_job",
   "pr_close",
   "namespace_remove",
   "site_key_rotate",
@@ -180,7 +137,6 @@ export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>([
 
 export const DESTRUCTIVE: ReadonlySet<PortalAction> = new Set<PortalAction>([
   "revoke_agent",
-  "fail_job",
   "site_remove",
   "package_remove",
   "namespace_remove",
@@ -200,7 +156,7 @@ export interface Route {
   drawer: { type: DrawerType; id: string } | null;
 }
 
-export const DRAWER_TYPES: readonly DrawerType[] = ["job", "agent", "audit"];
+export const DRAWER_TYPES: readonly DrawerType[] = ["agent", "audit"];
 
 export function parseRoute(path: string): Route {
   const segs = path

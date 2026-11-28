@@ -18,8 +18,8 @@ import { callSignal } from "./call-signal";
 import { textResponse } from "@dustinedwards/site-runtime/http";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
-// The signed endpoints that are not MCP: the backup credential mint and the Amazon copy's report, and
-// the bench's three (src/bench.ts). Each is HMAC over timestamp and body, refused
+// The signed endpoints that are not MCP: the backup credential mint and the Amazon copy's report.
+// Each is HMAC over timestamp and body, refused
 // outside a time window and replay-protected by a jti the database claims.
 
 // Signed with a backup-specific key derived under its own context, so the copy job's
@@ -80,8 +80,7 @@ export async function claimJti(
 }
 
 // The backup key: IMPROVE_SCORE_SECRET, the Worker's one root secret, under the backup's own
-// context string, so it differs from the job and policy signing key (src/signed-docs.ts) by
-// construction.
+// context string.
 export async function deriveBackupCredentialKey(rootSecret: string): Promise<string> {
   return hmacSha256Hex(rootSecret, "capsid-backup-credential:v1");
 }
@@ -313,30 +312,16 @@ export async function verifyBackupCredentialRequest(
   });
 }
 
-// The bench endpoints' check, under the same rules as the backup's, against the bench key.
-export async function verifyBenchRequest(
-  env: Pick<Env, "BENCH_SECRET">,
-  signed: { timestamp: string; signature: string; body: string },
-  now: Date,
-): Promise<{ ok: true } | { ok: false; status: number; refusal: string }> {
-  return verifyHmac({ IMPROVE_SCORE_SECRET: env.BENCH_SECRET }, signed, now, {
-    deriveKey: async (key) => key,
-    missingSecret: "bench reporting is not configured: BENCH_SECRET is unset",
-    badSig: "bench request signature does not verify",
-  });
-}
 type Verify = (
   signed: { timestamp: string; signature: string; body: string },
   now: Date,
 ) => Promise<{ ok: true } | HmacFail>;
 
-// The shared front of every HMAC-signed endpoint (the backup pair in src/routes.ts, the bench's in
-// src/bench.ts): a bounded body, the signature over the endpoint family's own header pair, then the
-// parse, then the jti. The jti is spent only once the body is known good.
+// The shared front of the HMAC-signed endpoints (the backup pair in src/routes.ts): a bounded body,
+// the signature over the X-Backup-* header pair, then the parse, then the jti. The jti is spent only once the body is known good.
 export async function signedRequestBody<T extends { jti: string }>(
   request: Request,
   opts: {
-    headers: "Backup" | "Bench";
     verify: Verify;
     db: D1Database;
     scope: string;
@@ -352,8 +337,8 @@ export async function signedRequestBody<T extends { jti: string }>(
     };
   const verdict = await opts.verify(
     {
-      timestamp: request.headers.get(`X-${opts.headers}-Timestamp`) ?? "",
-      signature: request.headers.get(`X-${opts.headers}-Signature`) ?? "",
+      timestamp: request.headers.get("X-Backup-Timestamp") ?? "",
+      signature: request.headers.get("X-Backup-Signature") ?? "",
       body: bounded.text,
     },
     new Date(),

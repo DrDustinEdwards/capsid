@@ -18,34 +18,22 @@ const fake = (fingerprint: string, namespace = "sample"): Finding => ({
   fingerprint,
   namespace,
   title: `Watcher: something [${fingerprint}]`,
-  body: "evidence",
   evidence: ["line"],
 });
 
-function pass(found: Finding[], open: Map<string, string>, memory = fakeFindingMemory()) {
-  const posted: string[] = [];
-  const closed: Array<{ id: string; summary?: string }> = [];
+function pass(found: Finding[], memory = fakeFindingMemory()) {
   const result = runPass(
     {
       findings: async () => ({ findings: found, ran: new Set(WATCHER_CHECKS) }),
-      open: async () => open,
-      clear: async (id, summary) => {
-        closed.push({ id, summary });
-        return true;
-      },
-      post: async (f) => {
-        posted.push(f.fingerprint);
-        return { ok: true as const, jobId: `job_${f.fingerprint}` };
-      },
       memory: memory.memory,
     },
     NOW,
   );
-  return { result, posted, closed, memory };
+  return { result, memory };
 }
 
-test("an unclassed fingerprint is a job", () => {
-  assert.equal(findingClass("something-new-entirely"), "job");
+test("an unclassed fingerprint is an alert", () => {
+  assert.equal(findingClass("something-new-entirely"), "alert");
 });
 
 test("EVERY OWNERS PATTERN HAS A CLASS, and every class names an owner (derived, both ways)", () => {
@@ -60,86 +48,27 @@ test("EVERY OWNERS PATTERN HAS A CLASS, and every class names an owner (derived,
   );
 });
 
-test("A DIGEST- OR ATTENTION-CLASS FINDING POSTS NO JOB, and is remembered open with no job", async () => {
-  const w = pass(
-    [fake("live-csp-script-sample-home"), fake("anomaly-rate-sample-driver")],
-    new Map(),
-  );
+test("a digest or attention finding is recorded open, and a second sighting is counted", async () => {
+  const w = pass([fake("live-csp-script-sample-home"), fake("anomaly-rate-sample-driver")]);
   const result = await w.result;
-  assert.deepEqual(w.posted, []);
-  assert.deepEqual(result.posted, []);
-  assert.deepEqual(result.routed, ["live-csp-script-sample-home", "anomaly-rate-sample-driver"]);
-  assert.equal(w.memory.rows.get("anomaly-rate-sample-driver")!.job_id, null);
-  const row = w.memory.rows.get("live-csp-script-sample-home")!;
-  assert.equal(row.state, "open");
-  assert.equal(row.job_id, null);
-  const again = pass([fake("live-csp-script-sample-home")], new Map(), w.memory);
-  await again.result;
-  assert.deepEqual(again.posted, [], "a second sighting posted");
+  assert.deepEqual(result.recorded, ["live-csp-script-sample-home", "anomaly-rate-sample-driver"]);
+  assert.equal(w.memory.rows.get("live-csp-script-sample-home")!.state, "open");
+  await pass([fake("live-csp-script-sample-home")], w.memory).result;
   assert.equal(w.memory.rows.get("live-csp-script-sample-home")!.seen_count, 2);
 });
 
 test("a digest finding that stops being seen is cleared in memory", async () => {
-  const w = pass([fake("live-headers-sample-home")], new Map());
+  const w = pass([fake("live-headers-sample-home")]);
   await w.result;
-  await pass([], new Map(), w.memory).result;
+  await pass([], w.memory).result;
   assert.equal(w.memory.rows.get("live-headers-sample-home")!.state, "cleared");
 });
 
-test("a queued job for a finding that is now digest or attention class is cleared with a note, once", async () => {
-  const row: FindingRow = {
-    fingerprint: "live-headers-sample-home",
-    namespace: "sample",
-    title: "Watcher: x [live-headers-sample-home]",
-    state: "open",
-    job_id: "job_old",
-    first_seen_at: hoursAgo(10),
-    last_seen_at: hoursAgo(1),
-    seen_count: 3,
-    cleared_at: null,
-    reopen_after: null,
-    evidence: "[]",
-    updated_at: hoursAgo(1),
-  };
-  const memory = fakeFindingMemory([
-    row,
-    { ...row, fingerprint: "anomaly-rate-x", job_id: "job_old2" },
-  ]);
-  const w = pass(
-    [fake("live-headers-sample-home"), fake("anomaly-rate-x"), fake("ci-red-sample")],
-    new Map([
-      ["live-headers-sample-home", "job_old"],
-      ["anomaly-rate-x", "job_old2"],
-      ["ci-red-sample", "job_ci"],
-    ]),
-    memory,
-  );
-  const result = await w.result;
-  assert.deepEqual(w.closed, [
-    {
-      id: "job_old",
-      summary: "cleared: moved to the weekly digest, no job needed",
-    },
-    {
-      id: "job_old2",
-      summary: "cleared: moved to the Portal's attention list, no job needed",
-    },
-  ]);
-  assert.deepEqual(result.cleared, ["live-headers-sample-home", "anomaly-rate-x"]);
-  assert.equal(
-    memory.rows.get("live-headers-sample-home")!.job_id,
-    null,
-    "the row still points at the closed job",
-  );
-  assert.deepEqual(w.posted, [], "a job-class finding with an open job was posted again");
-});
-
-const routedRow = (over: Partial<FindingRow>): FindingRow => ({
+const row = (over: Partial<FindingRow>): FindingRow => ({
   fingerprint: "live-headers-sample-home",
   namespace: "sample",
   title: "Watcher: x [live-headers-sample-home]",
   state: "open",
-  job_id: null,
   first_seen_at: hoursAgo(100),
   last_seen_at: hoursAgo(1),
   seen_count: 3,
@@ -152,59 +81,28 @@ const routedRow = (over: Partial<FindingRow>): FindingRow => ({
 
 test("A DISMISSED DIGEST OR ATTENTION ROW STAYS DISMISSED", async () => {
   const memory = fakeFindingMemory([
-    routedRow({ state: "dismissed" }),
-    routedRow({ fingerprint: "anomaly-rate-x", state: "dismissed" }),
+    row({ state: "dismissed" }),
+    row({ fingerprint: "anomaly-rate-x", state: "dismissed" }),
   ]);
-  const w = pass([fake("live-headers-sample-home"), fake("anomaly-rate-x")], new Map(), memory);
-  await w.result;
+  await pass([fake("live-headers-sample-home"), fake("anomaly-rate-x")], memory).result;
   assert.equal(memory.rows.get("live-headers-sample-home")!.state, "dismissed");
   assert.equal(memory.rows.get("anomaly-rate-x")!.state, "dismissed");
 });
 
 test("A CLEARED DIGEST ROW STAYS CLEARED INSIDE THE QUIET PERIOD and reopens outside it", async () => {
-  const inside = routedRow({
+  const inside = row({
     state: "cleared",
     cleared_at: hoursAgo(1),
     reopen_after: new Date(NOW.getTime() + 3_600_000).toISOString(),
   });
-  const outside = routedRow({
+  const outside = row({
     fingerprint: "anomaly-rate-x",
     state: "cleared",
     cleared_at: hoursAgo(30),
     reopen_after: hoursAgo(6),
   });
   const memory = fakeFindingMemory([inside, outside]);
-  await pass([fake("live-headers-sample-home"), fake("anomaly-rate-x")], new Map(), memory).result;
+  await pass([fake("live-headers-sample-home"), fake("anomaly-rate-x")], memory).result;
   assert.equal(memory.rows.get("live-headers-sample-home")!.state, "cleared");
   assert.equal(memory.rows.get("anomaly-rate-x")!.state, "open");
-  assert.equal(memory.rows.get("anomaly-rate-x")!.job_id, null);
-});
-
-test("A ROUTED FINDING WHOSE JOB IS CLAIMED STAYS ATTACHED TO IT", async () => {
-  const memory = fakeFindingMemory([routedRow({ job_id: "job_held" })]);
-  const closed: string[] = [];
-  const result = await runPass(
-    {
-      findings: async () => ({
-        findings: [fake("live-headers-sample-home")],
-        ran: new Set(WATCHER_CHECKS),
-      }),
-      open: async () => new Map([["live-headers-sample-home", "job_held"]]),
-      clear: async (id) => {
-        closed.push(id);
-        return false;
-      },
-      post: async () => ({ ok: false as const }),
-      memory: memory.memory,
-    },
-    NOW,
-  );
-  assert.deepEqual(closed, ["job_held"]);
-  assert.deepEqual(result.cleared, []);
-  assert.equal(
-    memory.rows.get("live-headers-sample-home")!.job_id,
-    "job_held",
-    "the job was orphaned",
-  );
-  assert.equal(memory.rows.get("live-headers-sample-home")!.state, "open");
 });

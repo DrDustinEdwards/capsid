@@ -8,9 +8,6 @@ export type TaskId =
   | "backup"
   | "tick"
   | "watcher"
-  | "outcome-sweep"
-  | "merge-resume"
-  | "park-due"
   | "maintenance"
   | "site-repair"
   | "site-backup"
@@ -37,9 +34,6 @@ export const TASKS: ReadonlyArray<{
   { id: "tick", label: "Five-minute tick", period_ms: 5 * MINUTE_MS, timeout_ms: 4 * MINUTE_MS },
   { id: "watcher", label: "Watcher pass", period_ms: null },
   { id: "backup", label: "Backup", period_ms: DAY_MS, timeout_ms: 14 * MINUTE_MS },
-  { id: "outcome-sweep", label: "Merge-state sweep", period_ms: null },
-  { id: "merge-resume", label: "Stale-job merge resume", period_ms: null },
-  { id: "park-due", label: "Parked jobs coming back", period_ms: null },
   { id: "maintenance", label: "Daily maintenance pass", period_ms: DAY_MS },
   { id: "site-repair", label: "Site repairs", period_ms: null },
   { id: "site-backup", label: "Site backups", period_ms: null },

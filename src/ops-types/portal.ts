@@ -5,20 +5,11 @@ import type { OpsFeed } from "./feed";
 // cross-site, 410 token expired, 413 body too large.
 
 export type PortalAction =
-  | "overnight"
-  | "resume_job"
-  | "release_job"
-  | "fail_job"
-  | "close_shipped"
-  | "supersede_job"
-  | "park_job"
-  | "unpark_job"
   | "pr_close"
   | "revoke_agent"
   | "site_add"
   | "site_edit"
   | "site_remove"
-  | "reset_breaker"
   | "package_add"
   | "package_edit"
   | "package_remove"
@@ -31,8 +22,7 @@ export type PortalAction =
   | "activate_agent"
   | "site_key_rotate";
 
-// Params are by action; most writes need a reason, and undo: "true" marks the reverse of a change
-// just made (click row portal-undo-<action>).
+// Params are by action.
 export interface PortalActionRequest {
   action: PortalAction;
   params: Record<string, string>;
@@ -56,16 +46,8 @@ export interface PortalPerformed {
 
 export interface PortalNamespace {
   namespace: string;
-  breaker: {
-    open: boolean;
-    failed: number;
-    threshold: number;
-    since: string;
-    reset_at: string | null;
-  };
   // Null means no truth report was ever run, which is not an integrity of zero.
   latest_report: { integrity: number | null; generated: string } | null;
-  jobs: { queued: number; claimed: number; blocked: number; done_today: number };
   repos: Array<{ repo: string; label: string }>;
 }
 
@@ -82,7 +64,6 @@ export interface PortalActivityRow {
   action: string | null;
   namespace: string | null;
   path: string | null;
-  target: "job" | "document" | null;
   detail: AuditDetail;
 }
 

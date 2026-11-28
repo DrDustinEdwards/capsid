@@ -16,10 +16,8 @@ import {
 import { ghFetch } from "./github/client";
 import { bearerToken } from "@dustinedwards/site-runtime/agent-keys";
 import { textResponse } from "@dustinedwards/site-runtime/http";
-import { readJob } from "./jobs-transition";
 import { pathClassOf, type PathClass } from "./merge-class";
 import { worthReviewer, type ChangedFile } from "./model-routing";
-import { splitSignedTask } from "./signed-docs";
 import { auditStatement } from "./store-guards";
 
 const ISSUER = "https://token.actions.githubusercontent.com";
@@ -39,9 +37,8 @@ async function issuerKeys(): Promise<KeySource> {
 
 // THE AUTOMATIC PR REVIEWER (D5). A reviewer that did not build the work reads a pull request and
 // says whether it does what it claims. It catches what CI and the claim checks cannot: work that
-// passes and is still wrong (a misread job, a skipped requirement, a weak test). The reviewer sees
-// the diff, the description, the job the description names (if any) and the repository's CLAUDE.md
-// at the BASE, so a pull request cannot rewrite the rules it is judged by.
+// passes and is still wrong (a misread description, a skipped requirement, a weak test). The
+// reviewer sees the diff, the description and the repository's CLAUDE.md at the BASE, so a pull request cannot rewrite the rules it is judged by.
 
 export const REVIEW_RUN_PATH = "/review/run";
 const REVIEW_MODEL = "@cf/deepseek-ai/deepseek-v4.1-flash-1017";
@@ -218,34 +215,6 @@ async function readRules(env: Env, who: ReviewCaller, base: string): Promise<str
   return resp.ok ? (await resp.text()).slice(0, MAX_CONTEXT_CHARS) : "";
 }
 
-// The Capsid job the description names, when it is a job of a namespace this repository is
-// mapped to. A job of another namespace is not this pull request's to be judged against.
-async function readNamedJob(
-  env: Env,
-  who: ReviewCaller,
-  body: string,
-): Promise<{ id: string; text: string } | null> {
-  const id = /\bjob_[0-9a-f]{12}\b/.exec(body)?.[0];
-  if (!id) return null;
-  const job = await readJob(env.DB, id);
-  if (!job) return null;
-  const row = await env.DB.prepare("SELECT repos FROM namespaces WHERE namespace = ?1")
-    .bind(job.namespace)
-    .first<{ repos: string }>();
-  const full = `${who.owner}/${who.repo}`.toLowerCase();
-  let mapped = false;
-  try {
-    mapped = (JSON.parse(row?.repos ?? "[]") as Array<{ repo?: string }>).some(
-      (r) => r.repo?.toLowerCase() === full,
-    );
-  } catch {
-    mapped = false;
-  }
-  return mapped
-    ? { id, text: `${job.title}\n\n${splitSignedTask(job.body).body}`.slice(0, MAX_CONTEXT_CHARS) }
-    : null;
-}
-
 // The diff as the model reads it: each file's patch under its name, lockfiles left out, cut at the
 // cap with a line that says so.
 function diffText(files: readonly PullFile[]): string {
@@ -268,8 +237,8 @@ function diffText(files: readonly PullFile[]): string {
 const SYSTEM = [
   "You review one pull request for a small network of web apps. You did not write it. CI already ran the tests and type checks, so do not repeat what they catch.",
   "Look for what passes and is still wrong:",
-  "- misread job: the change does something other than what the job or the description asks.",
-  "- skipped requirement: something the job, the description or the repository's rules require is missing.",
+  "- misread description: the change does something other than what the description asks.",
+  "- skipped requirement: something the description or the repository's rules require is missing.",
   "- weak test: a test that would pass even if the change were wrong, or a behavior change with no test where the rules ask for one.",
   "- bug: code that will misbehave on a real input.",
   "- security: a secret, an injection, a missing check on who may do something, or untrusted input that is trusted.",
@@ -279,17 +248,9 @@ const SYSTEM = [
   UNTRUSTED_DATA_RULE,
 ].join("\n");
 
-function prompt(
-  pull: Pull,
-  rules: string,
-  job: { id: string; text: string } | null,
-  diff: string,
-): string {
+function prompt(pull: Pull, rules: string, diff: string): string {
   return [
     `The pull request's title and description:\n${untrusted("pull-request", `${pull.title}\n\n${pull.body}`.slice(0, MAX_CONTEXT_CHARS))}`,
-    job
-      ? `The job it names, ${job.id}:\n${untrusted("job", job.text)}`
-      : "The description names no Capsid job, so judge the change against the description and the rules alone.",
     rules
       ? `The repository's rules (CLAUDE.md at the base):\n${untrusted("rules", rules)}`
       : "The repository has no CLAUDE.md.",
@@ -359,16 +320,13 @@ async function reviewPull(
       } else if (!env.AI) {
         result = { status: "error", error: "this Worker has no AI binding", head_sha: pull.head };
       } else {
-        const [rules, job] = await Promise.all([
-          readRules(env, who, pull.base),
-          readNamedJob(env, who, pull.body),
-        ]);
+        const rules = await readRules(env, who, pull.base);
         const answer = await env.AI.run(
           REVIEW_MODEL,
           {
             messages: [
               { role: "system", content: SYSTEM },
-              { role: "user", content: prompt(pull, rules, job, diffText(files)) },
+              { role: "user", content: prompt(pull, rules, diffText(files)) },
             ],
             tools: [REPORT_TOOL],
             tool_choice: "required",
@@ -391,7 +349,7 @@ async function reviewPull(
               head_sha: pull.head,
             };
         const usage = (answer as { usage?: unknown } | null)?.usage;
-        extra = { job_id: job?.id ?? null, why: scope.reasons, usage: usage ?? null };
+        extra = { why: scope.reasons, usage: usage ?? null };
       }
     } catch (err) {
       result = {

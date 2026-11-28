@@ -1,7 +1,4 @@
 import { Alert } from "capsomer/react/banner";
-import { Row, RowList } from "capsomer/react/row-list";
-import "capsomer/row-list.css";
-import { rowLink } from "../lib/router";
 import {
   Fragment,
   useEffect,
@@ -14,21 +11,125 @@ import {
 import { Dialog } from "capsomer/react/dialog";
 import { Missing as NoValue } from "capsomer/react/empty";
 import { Spinner } from "capsomer/react/skeleton";
-import { useApp, type DrawerType } from "./ctx";
+import { useApp, type ConfirmRequest, type DrawerType } from "./ctx";
 import { fetchActivity } from "../lib/api";
 import { useAnswer } from "capsomer/react/data";
 import { actionWords } from "../lib/audit-words";
-import { KIND_STATUS, JOB } from "../lib/derive";
+import { KIND_STATUS } from "../lib/derive";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
-import { Pill, Status } from "capsomer/react/status";
+import { Pill } from "capsomer/react/status";
 import { Time } from "capsomer/react/time";
 import { agentState, nsList } from "../lib/agents";
-import { AgentControls, Head, JobBody } from "./DrawerJob";
+import type { OpsAgent } from "../types";
+import { DangerZone } from "capsomer/react/danger-zone";
+import "capsomer/danger-zone.css";
 import "capsomer/summary-list.css";
 import "capsomer/detail-panel.css";
 
 type Ref = { type: DrawerType; id: string };
+
+function Head({
+  label,
+  title,
+  sub,
+  badge,
+  onClose,
+}: {
+  label: string;
+  title: string;
+  sub?: string;
+  badge?: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <header className="cap-dialog-header" data-divider>
+        <div className="cap-detail-heading">
+          <p className="cap-detail-kind">{label}</p>
+          <div className="cap-detail-titlerow">
+            <h2 className="cap-dialog-title" id="drawerTitle">
+              {title}
+            </h2>
+            {badge}
+          </div>
+          {sub && <p className="cap-detail-id">{sub}</p>}
+        </div>
+      </header>
+      <button
+        type="button"
+        className="cap-btn cap-dialog-close"
+        data-variant="quiet"
+        data-icon-only
+        data-close
+        aria-label="Close"
+        onClick={onClose}
+      >
+        ×
+      </button>
+    </>
+  );
+}
+
+function ChangeIt({ label, req, hint }: { label: string; req: ConfirmRequest; hint?: string }) {
+  const { confirm } = useApp();
+  return (
+    <div>
+      <p className="section-title">Change it</p>
+      <div className="cap-cluster" data-gap="3">
+        <button
+          type="button"
+          className="cap-btn"
+          data-variant="primary"
+          onClick={() => confirm(req)}
+        >
+          {label}
+        </button>
+      </div>
+      {hint && (
+        <p className="cap-text hint" data-tone="dim" data-size="small">
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AgentControls({ a }: { a: OpsAgent }) {
+  const { confirm } = useApp();
+  if (a.revoked_at) return null;
+  return (
+    <div className="cap-stack" data-gap="4">
+      {a.pending && (
+        <ChangeIt
+          label="Activate"
+          req={{
+            action: "activate_agent",
+            params: { name: a.name },
+            title: `Activate agent ${a.name}`,
+          }}
+          hint="Its key works only once you activate it. If you did not ask for it, revoke it."
+        />
+      )}
+      <DangerZone note="Ends this credential.">
+        <button
+          type="button"
+          className="cap-btn"
+          data-variant="danger"
+          onClick={() =>
+            confirm({
+              action: "revoke_agent",
+              params: { name: a.name },
+              title: `Revoke agent ${a.name}`,
+            })
+          }
+        >
+          Revoke
+        </button>
+      </DangerZone>
+    </div>
+  );
+}
 
 function Missing({ what, onClose }: { what: string; onClose: () => void }) {
   return (
@@ -173,13 +274,10 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
 }
 
 function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
-  const { feed, now, href } = useApp();
+  const { feed, now } = useApp();
   const a = feed.live.agents.find((x) => x.name === name);
   if (!a) return <Missing what={`Agent ${name}`} onClose={onClose} />;
   const st = agentState(a, now);
-  const mine = feed.live.jobs.filter(
-    (j) => j.claimed_by === `agent:${a.name}` || j.claimed_by === a.name,
-  );
   return (
     <>
       <Head
@@ -219,49 +317,10 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
               </dd>
             </>
           )}
-          <dt>Jobs</dt>
-          <dd className="cap-num">
-            {a.jobs_done} done · {a.jobs_failed} failed · {a.jobs_blocked} blocked
-          </dd>
-          <dt>Pull requests</dt>
-          <dd className="cap-num">
-            {a.prs_merged} merged of {a.prs_opened} opened
-          </dd>
-          <dt>CI green</dt>
-          <dd className="cap-num">
-            {a.ci_green_rate == null ? "-" : `${Math.round(a.ci_green_rate * 100)}%`}
-          </dd>
-          <dt>Median job</dt>
-          <dd className="cap-num">
-            {a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}
-          </dd>
           <dt>Flags</dt>
           <dd>{a.flags.join(", ") || "none"}</dd>
         </dl>
         <AgentControls a={a} />
-        <div>
-          <p className="section-title">Holding now</p>
-          {mine.length ? (
-            <RowList label="Holding now">
-              {mine.map((j) => (
-                <Row
-                  key={j.id}
-                  status={
-                    <Status {...KIND_STATUS[JOB[j.status].kind]}>{JOB[j.status].label}</Status>
-                  }
-                  title={j.title}
-                  href={href(`job:${j.id}`)}
-                  meta={ago(parse(j.updated_at), now)}
-                  renderLink={rowLink}
-                />
-              ))}
-            </RowList>
-          ) : (
-            <div className="cap-text" data-tone="dim">
-              Nothing claimed or blocked.
-            </div>
-          )}
-        </div>
       </div>
     </>
   );
@@ -269,7 +328,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
 
 // Native showModal, so the page behind is inert and Tab stays inside (audit DECIDE 9).
 export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => void }) {
-  const { feed, open } = useApp();
+  const { open } = useApp();
   const [shown, setShown] = useState<Ref | null>(route);
   if (route && (shown?.type !== route.type || shown.id !== route.id)) setShown(route);
   const routed = useRef(route != null);
@@ -278,14 +337,7 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
   });
   const ref = route ?? shown;
   let body: ReactNode = null;
-  if (ref?.type === "job") {
-    const j = feed.live.jobs.find((x) => x.id === ref.id);
-    body = j ? (
-      <JobBody j={j} onClose={onClose} />
-    ) : (
-      <Missing what={`Job ${ref.id}`} onClose={onClose} />
-    );
-  } else if (ref?.type === "agent") {
+  if (ref?.type === "agent") {
     body = <AgentBody name={ref.id} onClose={onClose} />;
   } else if (ref?.type === "audit") {
     body = <AuditBody key={ref.id} id={ref.id} onClose={onClose} />;

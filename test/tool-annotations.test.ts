@@ -39,15 +39,6 @@ const DESTRUCTIVE = [
   /\bdeleteBranch\(/,
   /\bmanagePr\(/,
   /\bwriteRepoFile\(/,
-  // The administrator's switches: sign_policy overwrites a policy document and
-  // breaker_reset a namespace's breaker. Named because the writes happen in another module.
-  /\bsignPolicyDocument\(/,
-  /\bresetBreaker\(/,
-  // The work queue's mutating entry points; the writes happen in src/jobs.ts.
-  /\bclaimJob\(/,
-  /\bcompleteJob\(/,
-  /\bfailJob\(/,
-  /\bblockJob\(/,
   // The credential control plane's two overwriting entry points (revoke,
   // update_scopes); the statements live in src/agents-admin.ts.
   /\brevokeAgent\(/,
@@ -55,7 +46,7 @@ const DESTRUCTIVE = [
   // delete_namespace's perform; its batch deletes each document through pathMutation
   // in src/namespace-delete.ts.
   /\bperformNamespaceDelete\(/,
-  // The controls' perform: it can revoke an agent, fail a job or remove a site, through
+  // The controls' perform: it can revoke an agent or remove a site, through
   // the mutators src/controls-perform.ts calls.
   /\bperformControl\(/,
 ];
@@ -106,8 +97,8 @@ test("PLANT: the served tool lists pass the family's tools/list check, and a rea
   );
   const read = await servedTools(grantAgent("read", "opkey:readonly0000"), [buildServer]);
   assert.ok(
-    read.some((t) => t.name === "capsid_work_jobs"),
-    "a read grant is no longer served capsid_work_jobs, so this checks less than it says",
+    read.some((t) => t.name === "capsid_lint_namespace"),
+    "a read grant is no longer served capsid_lint_namespace, so this checks less than it says",
   );
   assert.deepEqual(
     toolListProblems(read)
@@ -162,7 +153,7 @@ test("PLANT: every mutating tool is served with destructiveHint true", async () 
   const served = await servedAnnotations();
   const mutating = TOOLS.filter(destructiveTool);
   assert.ok(
-    mutating.length >= 9,
+    mutating.length >= 7,
     `the destructive scan found only ${mutating.length} mutating tools; it is broken`,
   );
   const understated = mutating.filter((name) => served.get(name)?.destructiveHint !== true);
@@ -287,14 +278,6 @@ const OPEN_WORLD_THROUGH: Record<
   string,
   { reason: string; via: RegExp; evidence: Array<{ file: string; pattern: RegExp }> }
 > = {
-  jobs: {
-    reason: "complete and fail check their evidence against GitHub",
-    via: /\bcompleteAsCaller\(/,
-    evidence: [
-      { file: "jobs-holder.ts", pattern: /\bverifyEvidence\(/ },
-      { file: "job-outcomes.ts", pattern: /\bghFetch\(/ },
-    ],
-  },
   whats_next: {
     reason: "reads every mapped repo's open pull requests, their check runs and their mergeability",
     via: /\bwhatsNext\(/,
@@ -480,7 +463,6 @@ const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }>
     idempotent: false,
     reason: "a merge or close of a reopened pull request is not a no-op",
   },
-  capsid_work_jobs: { idempotent: false, reason: "post creates a job on every call" },
   capsid_admin_manage_namespaces: {
     idempotent: false,
     reason: "register creates one on every call it is not refused",
@@ -494,10 +476,6 @@ const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }>
     reason:
       "a perform spends its single-use token, so a repeat of the same call is refused rather than repeated",
   },
-  capsid_admin_manage_switches: {
-    idempotent: false,
-    reason: "sign_policy snapshots and audit-logs the policy on every call",
-  },
 };
 
 // What creates something new on every call. An audit_log row records a call, not state the tool acts on, so it is left out.
@@ -507,7 +485,6 @@ const NEW_EACH_CALL = [
   /\bwriteRepoFile\(/,
   /\bmanagePr\(/,
   /\bmintAgent\(/,
-  /\bpostJob\(/,
   // A namespaces row, written in src/namespace-admin.ts since the Portal's namespace_add shares it.
   /\bregisterNamespace\(/,
 ];
@@ -542,7 +519,7 @@ test("PLANT: no tool that creates something new on every call is served as idemp
     toolOps(tool).some((b) => matches(b.body, NEW_EACH_CALL) || insertsFresh(b.body)),
   );
   assert.ok(
-    creators.length >= 4,
+    creators.length >= 3,
     `the scan found only ${creators.length} tools that create on every call; it is broken`,
   );
   const overstated = creators.filter((name) => served.get(name)?.idempotentHint !== false);

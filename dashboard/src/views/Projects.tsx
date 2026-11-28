@@ -52,30 +52,11 @@ function Report({ n }: { n: PortalNamespace }) {
   );
 }
 
-function Row({
-  n,
-  onChanged,
-  onEdit,
-}: {
-  n: PortalNamespace;
-  onChanged: () => void;
-  onEdit: () => void;
-}) {
-  const { confirm } = useApp();
+function Row({ n, onEdit }: { n: PortalNamespace; onEdit: () => void }) {
   return (
     <tr data-row="">
       <td>
-        <div className="cap-stack" data-gap="2" data-align="start">
-          <b className="cap-mono">{n.namespace}</b>
-          {n.breaker.open && (
-            <>
-              <Status tone="crit">Paused after repeated failures</Status>
-              <div className="src wrap">
-                {n.breaker.failed} jobs failed since {n.breaker.since} UTC.
-              </div>
-            </>
-          )}
-        </div>
+        <b className="cap-mono">{n.namespace}</b>
       </td>
       <td data-label="Repos">
         {n.repos.length ? (
@@ -97,12 +78,6 @@ function Row({
       <td data-label="Driver">
         <Driver ns={n.namespace} />
       </td>
-      <td data-label="Jobs" className="cap-num nowrap">
-        {n.jobs.queued} queued · {n.jobs.claimed} running
-        <div className="src">
-          {n.jobs.blocked} blocked · {n.jobs.done_today} done today
-        </div>
-      </td>
       <td data-label="Integrity">
         <Report n={n} />
       </td>
@@ -116,23 +91,6 @@ function Row({
           >
             Edit
           </button>
-          {n.breaker.open && (
-            <button
-              type="button"
-              className="cap-btn"
-              aria-label={`Reset ${n.namespace}`}
-              onClick={() =>
-                confirm({
-                  action: "reset_breaker",
-                  params: { namespace: n.namespace },
-                  title: `Reset ${n.namespace} and hand out its jobs again`,
-                  onDone: onChanged,
-                })
-              }
-            >
-              Reset
-            </button>
-          )}
         </div>
       </td>
     </tr>
@@ -193,7 +151,6 @@ function Roster() {
                   <th>Project</th>
                   <th>Repos</th>
                   <th>Driver</th>
-                  <th>Jobs</th>
                   <th>Integrity</th>
                   <th>
                     <span className="cap-sr-only">Controls</span>
@@ -202,12 +159,7 @@ function Roster() {
               </thead>
               <tbody>
                 {data.namespaces.map((n) => (
-                  <Row
-                    key={n.namespace}
-                    n={n}
-                    onChanged={read}
-                    onEdit={() => ed.edit(n, n.namespace)}
-                  />
+                  <Row key={n.namespace} n={n} onEdit={() => ed.edit(n, n.namespace)} />
                 ))}
               </tbody>
             </table>

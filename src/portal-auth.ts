@@ -287,7 +287,7 @@ export async function handlePortalCallback(
 // A bearer token is refused, not redirected: an agent key cannot follow a login redirect, and a 302 to
 // Access would look to it like the Portal being down.
 const BEARER_REFUSAL =
-  "forbidden: Capsid Portal admits the administrator's Access session only. An agent key authenticates to /ops/mcp, not to this page; the same state is served by capsid_read_status action status and capsid_work_jobs there. Open the Portal in a browser to sign in as the administrator.";
+  "forbidden: Capsid Portal admits the administrator's Access session only. An agent key authenticates to /ops/mcp, not to this page; the same state is served by capsid_read_status action status there. Open the Portal in a browser to sign in as the administrator.";
 
 export type PortalGate = { ok: true; user: PortalUser } | { ok: false; response: Response };
 

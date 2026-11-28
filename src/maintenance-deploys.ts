@@ -42,7 +42,6 @@ function behind(
   return {
     rule: "undeployed-merge",
     namespace: site.namespace,
-    job: null,
     line: `${site.script} was last deployed ${site.deployed_on.slice(0, 16).replace("T", " ")} UTC, ${days(merged - deployed)} before ${head.repo}'s last commit on ${head.branch} (${head.sha.slice(0, 7)}): deploy it, or say why it waits.`,
   };
 }
@@ -104,7 +103,6 @@ function notChecked(namespace: string, problem: string): MaintenanceItem {
   return {
     rule: "deploys-not-checked",
     namespace,
-    job: null,
     line: `Deploys in ${namespace} were not checked (${problem}): what is missing is not a clean result.`,
   };
 }

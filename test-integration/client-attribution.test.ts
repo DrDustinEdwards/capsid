@@ -69,7 +69,7 @@ describe("the MCP client behind a write", () => {
       "Sample Bot",
     );
 
-    // No client: the Worker's own pass is "system", an agent key on a job names the job, a person is not guessed.
+    // No client: the Worker's own pass is "system", an agent key or a person is not guessed.
     for (const [actor, params] of [
       ["system:maintenance", {}],
       ["agent:runner", { job_id: "job_1" }],
@@ -79,7 +79,7 @@ describe("the MCP client behind a write", () => {
     const labels = await env.DB.prepare(
       "SELECT client FROM audit_log WHERE action = 'sample-label' ORDER BY id",
     ).all<{ client: string | null }>();
-    expect(labels.results.map((r) => r.client)).toEqual(["system", "job:job_1", null]);
+    expect(labels.results.map((r) => r.client)).toEqual(["system", null, null]);
 
     await call("Other Bot", "capsid_delete_doc", {
       namespace: "sample",

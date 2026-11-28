@@ -9,7 +9,6 @@ import {
   parseBackupCredentialRequest,
   verifyBackupCredentialRequest,
 } from "../src/signed-requests.ts";
-import { deriveTaskKey } from "../src/signed-docs.ts";
 import {
   OFFACCOUNT_AUDIT_SOURCES,
   OFFACCOUNT_AUDITS,
@@ -42,20 +41,6 @@ test("verification refuses a bad signature and admits a good one", async () => {
 
   const ok = await verifyBackupCredentialRequest(env, { timestamp, signature: good, body }, now);
   assert.equal(ok.ok, true, `a correctly signed request was refused: ${ok.ok ? "" : ok.refusal}`);
-
-  // The signed-document key must not open the backup endpoint: the derivation contexts differ.
-  const taskKey = await deriveTaskKey("root-secret");
-  const cross = createHmac("sha256", taskKey).update(`${timestamp}.${body}`).digest("hex");
-  const refused = await verifyBackupCredentialRequest(
-    env,
-    { timestamp, signature: cross, body },
-    now,
-  );
-  assert.equal(
-    refused.ok,
-    false,
-    "the signed-document key signed its way into the backup credential",
-  );
 });
 
 test("a stale timestamp is refused in both directions", async () => {

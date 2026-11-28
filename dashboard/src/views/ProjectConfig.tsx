@@ -85,7 +85,7 @@ export function ProjectForm({
       onClose={onClose}
       danger={
         !adding && (
-          <DangerZone note="Archived documents, versions, the audit log and finished jobs are kept.">
+          <DangerZone note="Archived documents, versions, and the audit log are kept.">
             <label className="check">
               <input
                 type="checkbox"

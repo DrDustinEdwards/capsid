@@ -35,8 +35,8 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-// D1 statements: one per task, and 13 more.
-export const OPS_FEED_READS = { d1: 13 + TASKS.length, kv: 6 } as const;
+// D1 statements: one per task, and 7 more. KV gets: the snapshot twice and the refresh stamp.
+export const OPS_FEED_READS = { d1: 7 + TASKS.length, kv: 3 } as const;
 
 // The uptime target the Portal shows each site against.
 const UPTIME_TARGET = 0.999;
@@ -274,7 +274,7 @@ export const handleOpsRefresh = behindGate(async (request, env, now, user, deps:
       auditStatement(env.DB, actor, "portal-ops-refresh", null, null, {
         ran: report.ran,
         note: report.note,
-        posted: report.posted,
+        recorded: report.recorded,
         cleared: report.cleared,
         source_address: sourceAddress(request),
       }),

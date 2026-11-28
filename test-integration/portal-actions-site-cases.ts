@@ -1,6 +1,5 @@
 import { env } from "cloudflare:test";
 import { expect } from "vitest";
-import { breakerResetKey } from "../src/job-breaker";
 import {
   OPERATOR_TOKEN,
   operatorCalls,
@@ -58,10 +57,6 @@ export const SITE_CASES: Record<string, Case> = {
       return { namespace: "txasm", revision: String(row?.revision) };
     },
     after: async () => expect(await siteRow("txasm")).toBeNull(),
-  },
-  reset_breaker: {
-    params: async () => ({ namespace: "capsid" }),
-    after: async () => expect(await env.APP_KV.get(breakerResetKey("capsid"))).not.toBeNull(),
   },
   package_add: {
     params: async () => ({

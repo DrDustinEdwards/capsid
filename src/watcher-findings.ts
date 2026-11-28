@@ -2,13 +2,11 @@ import type { Env } from "./env";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 
-// THE WATCHER'S MEMORY OF A FINDING, one watcher_findings row per fingerprint, kept across jobs
-// (migrations/0024_watcher_findings.sql says why it exists). A job leaves the open set when a
-// person supersedes or fails it, so a job alone would be filed again by the next pass that still
-// sees the condition.
+// THE WATCHER'S MEMORY OF A FINDING, one watcher_findings row per fingerprint
+// (migrations/0024_watcher_findings.sql), so a condition seen on every pass is one finding.
 
-// THE QUIET PERIOD: six hours. A finding that cleared, or that a person dismissed and then cleared,
-// is filed again only when it is seen at least six hours after it cleared.
+// THE QUIET PERIOD: six hours. A finding that cleared is opened again only when it is seen at least
+// six hours after it cleared.
 export const REOPEN_QUIET_MS = 6 * HOUR_MS;
 
 // The newest sightings kept on a row. Older ones are dropped, so a finding that
@@ -16,9 +14,6 @@ export const REOPEN_QUIET_MS = 6 * HOUR_MS;
 export const MAX_EVIDENCE = 20;
 const MAX_EVIDENCE_LINES = 8;
 const MAX_EVIDENCE_LINE = 300;
-
-// The result_summary the watcher's own clear writes (clearFinding, src/watcher.ts).
-export const CLEARED_SUMMARY = "cleared";
 
 const FINDING_STATES = ["open", "dismissed", "cleared"] as const;
 type FindingState = (typeof FINDING_STATES)[number];
@@ -28,7 +23,6 @@ export interface FindingRow {
   namespace: string;
   title: string;
   state: FindingState;
-  job_id: string | null;
   first_seen_at: string;
   last_seen_at: string;
   seen_count: number;
@@ -84,80 +78,36 @@ export function appendEvidence(
   return JSON.stringify(list.slice(-MAX_EVIDENCE));
 }
 
-// The job a row points at, as far as the decision needs it.
-export interface JobEnd {
-  status: string;
-  result_summary: string | null;
-  updated_at: string;
-}
-
-export const clearedByWatcher = (job: JobEnd) =>
-  job.status === "failed" &&
-  (job.result_summary === CLEARED_SUMMARY ||
-    (job.result_summary?.startsWith(`${CLEARED_SUMMARY}: `) ?? false));
-
 export type SightingVerdict =
-  // Its job is open and the row knows it: count the sighting.
-  | { do: "bump" }
-  // An open job the row does not point at: a job posted before this table existed, or
-  // a row a lost write left behind. The row adopts it, 'open'.
-  | { do: "adopt"; jobId: string }
-  // The row's job was ended by a person while the condition still holds.
-  | { do: "dismiss" }
-  // Record the sighting, post nothing.
-  | { do: "quiet"; why: string }
-  // File it.
-  | { do: "post" };
+  // Open it, or count the sighting on an open row.
+  | { do: "record" }
+  // Count the sighting and leave the row as it is.
+  | { do: "quiet"; why: string };
 
-// What one sighting does, from the row (null when there is none), the open job the queue holds for
-// this fingerprint, and, for an 'open' row whose job is no longer open, how that job ended. Pure:
-// the pass does the reads and the writes.
-export function onSighting(
-  row: FindingRow | null,
-  openJobId: string | null,
-  rowJob: JobEnd | null,
-  now: Date,
-): SightingVerdict {
-  if (openJobId)
-    return row?.state === "open" && row.job_id === openJobId
-      ? { do: "bump" }
-      : { do: "adopt", jobId: openJobId };
-  if (!row) return { do: "post" };
-
-  if (row.state === "open") {
-    // An open row with no job is a post that was refused: file it again.
-    if (!row.job_id) return { do: "post" };
-    // The watcher's own clear ended the job, and the row missed its move to 'cleared'.
-    // The job's last transition is when it cleared, so the quiet period runs from there.
-    if (rowJob && clearedByWatcher(rowJob)) {
-      const reopen = Date.parse(rowJob.updated_at) + REOPEN_QUIET_MS;
-      if (Number.isNaN(reopen) || now.getTime() >= reopen) return { do: "post" };
-      return { do: "quiet", why: `cleared at ${rowJob.updated_at}, inside the quiet period` };
-    }
-    // Superseded, failed, done, or gone, by somebody other than the watcher's clear.
-    return { do: "dismiss" };
-  }
-
+// What one sighting does, from the row (null when there is none). Pure: the pass does the reads
+// and the writes.
+export function onSighting(row: FindingRow | null, now: Date): SightingVerdict {
+  if (!row || row.state === "open") return { do: "record" };
   if (row.state === "dismissed")
     return { do: "quiet", why: "dismissed, and it has not cleared since" };
 
   // cleared
   const reopen = row.reopen_after ? Date.parse(row.reopen_after) : Number.NaN;
-  // A cleared row with no usable reopen_after is filed rather than muted: a watcher
+  // A cleared row with no usable reopen_after is opened rather than muted: a watcher
   // that goes quiet on a corrupt stamp reads as health.
   if (Number.isNaN(reopen)) {
     logEvent(
       "WATCHER_REOPEN_UNREADABLE",
       {
-        message: `WATCHER_REOPEN_UNREADABLE ${row.fingerprint}: reopen_after '${row.reopen_after}'; filing it`,
+        message: `WATCHER_REOPEN_UNREADABLE ${row.fingerprint}: reopen_after '${row.reopen_after}'; opening it`,
       },
       { level: "error" },
     );
-    return { do: "post" };
+    return { do: "record" };
   }
   if (now.getTime() < reopen)
     return { do: "quiet", why: `cleared at ${row.cleared_at}, quiet until ${row.reopen_after}` };
-  return { do: "post" };
+  return { do: "record" };
 }
 
 /** The reopen_after a clear at `now` writes. */
@@ -169,16 +119,12 @@ export interface FindingMemory {
   // The rows for these fingerprints, and every 'open' or 'dismissed' row (the ones a pass may
   // clear), keyed by fingerprint.
   load(fingerprints: string[]): Promise<Map<string, FindingRow>>;
-  /** How a job ended, or null when there is no such job. */
-  job(id: string): Promise<JobEnd | null>;
-  /** A first row. False when a row already exists. */
-  insert(f: Sighted, state: FindingState, jobId: string | null, now: Date): Promise<boolean>;
+  /** A first row, open. False when a row already exists. */
+  insert(f: Sighted, now: Date): Promise<boolean>;
   /** A sighting with no state change. False when the row has left `row.state`. */
   sight(row: FindingRow, f: Sighted, now: Date): Promise<boolean>;
-  /** To 'open' with this job (null for a digest or attention finding), from the state it was read in. */
-  open(row: FindingRow, f: Sighted, jobId: string | null, now: Date): Promise<boolean>;
-  /** From 'open' with its job ended by a person, to 'dismissed'. */
-  dismiss(row: FindingRow, f: Sighted, now: Date): Promise<boolean>;
+  /** To 'open', from the state it was read in. */
+  open(row: FindingRow, f: Sighted, now: Date): Promise<boolean>;
   /** From 'open' or 'dismissed' to 'cleared', quiet until reopenAfter(now). */
   clear(row: FindingRow, now: Date): Promise<boolean>;
 }
@@ -204,30 +150,15 @@ export function d1FindingMemory(env: Env): FindingMemory {
       return rows;
     },
 
-    async job(id) {
-      return db
-        .prepare("SELECT status, result_summary, updated_at FROM jobs WHERE id = ?1")
-        .bind(id)
-        .first<JobEnd>();
-    },
-
-    async insert(f, state, jobId, now) {
+    async insert(f, now) {
       const iso = now.toISOString();
       const won = await db
         .prepare(
-          `INSERT INTO watcher_findings (fingerprint, namespace, title, state, job_id, first_seen_at, last_seen_at, seen_count, evidence, updated_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 1, ?7, ?6)
+          `INSERT INTO watcher_findings (fingerprint, namespace, title, state, first_seen_at, last_seen_at, seen_count, evidence, updated_at)
+           VALUES (?1, ?2, ?3, 'open', ?4, ?4, 1, ?5, ?4)
            ON CONFLICT (fingerprint) DO NOTHING RETURNING fingerprint`,
         )
-        .bind(
-          f.fingerprint,
-          f.namespace,
-          f.title,
-          state,
-          jobId,
-          iso,
-          appendEvidence(f.fingerprint, null, f, now),
-        )
+        .bind(f.fingerprint, f.namespace, f.title, iso, appendEvidence(f.fingerprint, null, f, now))
         .first<{ fingerprint: string }>();
       return won !== null;
     },
@@ -250,40 +181,19 @@ export function d1FindingMemory(env: Env): FindingMemory {
       return won !== null;
     },
 
-    async open(row, f, jobId, now) {
+    async open(row, f, now) {
       const iso = now.toISOString();
       const won = await db
         .prepare(
-          `UPDATE watcher_findings SET state = 'open', job_id = ?3, title = ?4, namespace = ?5, cleared_at = NULL, reopen_after = NULL,
-                  seen_count = seen_count + 1, last_seen_at = ?6, evidence = ?7, updated_at = ?6
+          `UPDATE watcher_findings SET state = 'open', title = ?3, namespace = ?4, cleared_at = NULL, reopen_after = NULL,
+                  seen_count = seen_count + 1, last_seen_at = ?5, evidence = ?6, updated_at = ?5
            WHERE fingerprint = ?1 AND state = ?2 RETURNING fingerprint`,
         )
         .bind(
           row.fingerprint,
           row.state,
-          jobId,
           f.title,
           f.namespace,
-          iso,
-          appendEvidence(row.fingerprint, row.evidence, f, now),
-        )
-        .first<{ fingerprint: string }>();
-      return won !== null;
-    },
-
-    async dismiss(row, f, now) {
-      const iso = now.toISOString();
-      // Keyed on the job too: a row another pass has since moved to a new job is not
-      // dismissed on the old one's ending.
-      const won = await db
-        .prepare(
-          `UPDATE watcher_findings SET state = 'dismissed', reopen_after = NULL, cleared_at = NULL,
-                  seen_count = seen_count + 1, last_seen_at = ?3, evidence = ?4, updated_at = ?3
-           WHERE fingerprint = ?1 AND state = 'open' AND job_id = ?2 RETURNING fingerprint`,
-        )
-        .bind(
-          row.fingerprint,
-          row.job_id,
           iso,
           appendEvidence(row.fingerprint, row.evidence, f, now),
         )

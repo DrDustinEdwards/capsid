@@ -16,20 +16,10 @@ import "capsomer/group.css";
 import "capsomer/row-list.css";
 import { ReadAgain } from "capsomer/react/read-state";
 import { PageHead, ProjectSelect } from "./shared";
-import { Suspense, lazy } from "react";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 
-const SinceLastLooked = lazy(() =>
-  import("./Overnight").then((m) => ({ default: m.SinceLastLooked })),
-);
 const MinutesTile = trendChart("MinutesTile");
-const WaitingChart = trendChart("WaitingChart");
-
-const TARGET_LABEL: Record<"job" | "document", string> = {
-  job: "(job)",
-  document: "(mirror document)",
-};
 
 export function Activity() {
   const { feed, now: appNow } = useApp();
@@ -54,9 +44,6 @@ export function Activity() {
   return (
     <div className="cap-admin-page">
       <PageHead title="Activity" />
-      <Suspense fallback={null}>
-        <SinceLastLooked />
-      </Suspense>
       <WeeklyDigest />
       <form
         className="cap-cluster"
@@ -160,12 +147,6 @@ export function Activity() {
                       {actionWords(r.action) ?? (
                         <span className="cap-mono">{r.action ?? <Missing />}</span>
                       )}
-                      {r.target && (
-                        <span className="cap-text" data-tone="dim">
-                          {" "}
-                          {TARGET_LABEL[r.target]}
-                        </span>
-                      )}
                       {actionWords(r.action) && <div className="src cap-mono">{r.action}</div>}
                     </td>
                     <td className="cap-mono">{r.namespace ?? <Missing />}</td>
@@ -186,9 +167,6 @@ export function Activity() {
       <div className="chart-row" id="trends">
         <ChartSlot>
           <MinutesTile />
-        </ChartSlot>
-        <ChartSlot>
-          <WaitingChart />
         </ChartSlot>
       </div>
     </div>

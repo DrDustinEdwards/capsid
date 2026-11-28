@@ -7,12 +7,10 @@ import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES } from "./o
 import { readResources } from "./system-facts-store";
 import { APP_ROSTER } from "./roster";
 import { readStaleCanon } from "./stale-canon";
-import { capsidStatus } from "./status";
 import {
   type DeployVerdict,
   deployVerdict,
   healthFindings,
-  statusFindings,
   type CiRun,
   ciFindings,
 } from "./watcher-detect";
@@ -72,12 +70,6 @@ export async function gatherPlatform({ env, now, out, ran, observed }: Pass) {
     });
     if (migrations !== null) ran.add("migrations");
     out.push(...healthFindings(health, head ?? null, migrations?.newest ?? null, "capsid", deploy));
-  }
-
-  const status = await attempt("status", () => capsidStatus(env));
-  if (status) {
-    ran.add("status");
-    out.push(...statusFindings(status));
   }
 
   // The Amazon copy, as capsid-backups' watch.yml last reported it (src/offaccount.ts). An
@@ -187,7 +179,7 @@ export async function gatherPlatform({ env, now, out, ran, observed }: Pass) {
   if (deploysRead === DEPLOY_ROSTER.length) ran.add("deploys");
 
   // Canon documents a merged pull request left citing a removed, renamed or changed file
-  // (src/stale-canon.ts, improvement item 23). A digest finding: it posts no job, and it
+  // (src/stale-canon.ts, improvement item 23). A digest finding: it
   // clears when the document is next written or stops citing the path.
   const staleCanon = await attempt("stale canon", () => readStaleCanon(env, now));
   if (staleCanon) {

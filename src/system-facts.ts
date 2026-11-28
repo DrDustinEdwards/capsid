@@ -80,7 +80,6 @@ export async function systemFactsTick(
     items.push({
       rule: "model-not-checked",
       namespace: "capsid",
-      job: null,
       line: `The versions model could not be built tonight (${why(err)}): the last good one is still served.`,
     });
     notes.push(`versions failed: ${why(err)}`);
@@ -101,7 +100,6 @@ export async function systemFactsTick(
     items.push({
       rule: "model-not-checked",
       namespace: "capsid",
-      job: null,
       line: `The secrets and data model could not be built tonight (${why(err)}): the last good one is still served.`,
     });
     notes.push(`resources failed: ${why(err)}`);

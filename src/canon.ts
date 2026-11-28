@@ -1,7 +1,5 @@
 import type { Agent } from "./agents";
 
-import { callerIsSeat } from "./jobs-transition";
-
 // Dustin's rulings (capsid/rulings/) are dated records of what he decided, not rules, and no
 // session is served them as rules. They are guarded the same way, so an unattended key cannot
 // rewrite the record, but they are not canon.
@@ -40,6 +38,11 @@ const matches = (rules: readonly CanonRule[], namespace: string, path: string): 
 
 export function isCanonPath(namespace: string, path: string): boolean {
   return matches(CANON_RULES, namespace, path);
+}
+
+// The seat: the admin, or a caller trusted to merge.
+function callerIsSeat(agent: Agent): boolean {
+  return agent.admin || agent.scopes.flags.can_merge;
 }
 
 export function canonGuarded(agent: Agent, namespace: string, path: string): boolean {

@@ -3,12 +3,10 @@ import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
-import { grantAgent } from "../src/agents";
-import { blockJob, claimJob, postJob } from "../src/jobs";
 import { capsidStatus } from "../src/status";
+import type { Env } from "../src/env";
 import type { Inbox } from "../src/inbox";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
-import { jobsEnv } from "./jobs-fixture";
 
 // "What needs Dustin, per app", through the whole Worker with the credentials a caller would present: GET /ops/inbox and improve_status.
 // Everything planted is sample data: namespace "sample", example.com.
@@ -17,9 +15,6 @@ const ORIGIN = "https://capsid.test";
 const DRIVER_KEY = "capsid_agent_" + "d".repeat(64);
 // A key on every namespace (the seat), which sees every app.
 const SEAT_KEY = "capsid_agent_" + "e".repeat(64);
-const ADMIN = grantAgent("write", "github:DrDustinEdwards");
-const DRIVER = grantAgent("write", "agent:driver-aaaa");
-const NOW = new Date("2026-10-08T12:00:00.000Z");
 const PR = "https://github.com/example-org/sample/pull/42";
 
 async function inboxAs(bearer: string | null): Promise<Response> {
@@ -28,23 +23,21 @@ async function inboxAs(bearer: string | null): Promise<Response> {
   });
 }
 
-async function blocked(
-  namespace: string,
-  title: string,
-  reason: string,
-  question = false,
-  command = "Merge it",
-): Promise<string> {
-  const posted = await postJob(jobsEnv(), ADMIN, NOW, { namespace, title, body: "do the thing" });
-  expect(posted.ok, posted.refusal).toBe(true);
-  const id = posted.job!.id;
-  expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
-  const out = question
-    ? await blockJob(jobsEnv(), DRIVER, NOW, id, { reason, question: true })
-    : await blockJob(jobsEnv(), DRIVER, NOW, id, { reason, command });
-  expect(out.ok, out.refusal).toBe(true);
-  return id;
+// An app's report as POST /ops/inbox/report stores it, planted straight into KV.
+async function reported(namespace: string, title: string, link: string | null = null) {
+  const at = new Date().toISOString();
+  await env.APP_KV.put(
+    `inbox:report:${namespace}`,
+    JSON.stringify({
+      namespace,
+      reported_at: at,
+      reported_by: `agent:${namespace}-app`,
+      items: [{ title, kind: "report", link, since: at }],
+    }),
+  );
 }
+
+const workerEnv = () => env as unknown as Env;
 
 const snapshot = {
   version: 1,
@@ -88,6 +81,8 @@ const snapshot = {
 
 beforeEach(async () => {
   await resetCapsidDb();
+  for (const { name } of (await env.APP_KV.list({ prefix: "inbox:report" })).keys)
+    await env.APP_KV.delete(name);
   for (const ns of ["capsid", "sample"]) {
     await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
       .bind(ns, JSON.stringify([{ repo: "example-org/sample", label: "primary" }]))
@@ -118,8 +113,8 @@ describe("GET /ops/inbox", () => {
   });
 
   it("gives a one-namespace driver its own app only, with every source counted and the pull request as the link", async () => {
-    await blocked("capsid", "Add the health route", `Merge ${PR} once CI is green`);
-    await blocked("sample", "Not for this driver", "needs the seat");
+    await reported("capsid", "Add the health route", PR);
+    await reported("sample", "Not for this driver");
     const response = await inboxAs(DRIVER_KEY);
     expect(response.status, await response.clone().text()).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("private, max-age=30");
@@ -130,46 +125,24 @@ describe("GET /ops/inbox", () => {
     const body = (await response.json()) as Inbox;
     expect(body.apps.map((a) => a.namespace)).toEqual(["capsid"]);
     const app = body.apps[0];
-    expect(app.items.map((i) => i.kind).sort()).toEqual(["blocked-job", "ci"]);
+    expect(app.items.map((i) => i.kind).sort()).toEqual(["ci", "report"]);
     expect(app.count).toBe(2);
     expect(app.severity).toBe("needs-you");
-    expect(app.items.find((i) => i.kind === "blocked-job")?.link).toBe(PR);
+    expect(app.items.find((i) => i.kind === "report")?.link).toBe(PR);
     expect(
       JSON.stringify(body),
-      "another namespace's job title leaked to a scoped caller",
+      "another namespace's report leaked to a scoped caller",
     ).not.toContain("Not for this driver");
     expect(body.count).toBe(2);
   });
 
-  it("leaves out a blocked job whose migration the seat has applied, and keeps one whose migration is not", async () => {
-    // The test database has every migration in migrations/ applied, 0001_init among them.
-    await blocked(
-      "capsid",
-      "Apply the first migration",
-      "needs the seat",
-      false,
-      "npx wrangler d1 migrations apply capsid --remote (migrations/0001_init.sql)",
-    );
-    await blocked(
-      "capsid",
-      "Apply a future migration",
-      "needs the seat",
-      false,
-      "npx wrangler d1 migrations apply capsid --remote (migrations/9999_not_yet.sql)",
-    );
-    const body = (await (await inboxAs(SEAT_KEY)).json()) as Inbox;
-    const titles = body.apps.flatMap((a) => a.items.map((i) => i.title));
-    expect(titles).not.toContain("Apply the first migration");
-    expect(titles).toContain("Apply a future migration");
-  });
-
-  it("gives an every-namespace key every app: a question and a down site under a namespace with no site row, and quiet configured apps at none", async () => {
-    await blocked("sample", "Choose a name", "Which name do you want?", true);
+  it("gives an every-namespace key every app: a report and a down site under a namespace with no site row, and quiet configured apps at none", async () => {
+    await reported("sample", "Choose a name");
     const response = await inboxAs(SEAT_KEY);
     expect(response.status, await response.clone().text()).toBe(200);
     const body = (await response.json()) as Inbox;
     const sample = body.apps.find((a) => a.namespace === "sample");
-    expect(sample?.items.map((i) => i.kind).sort()).toEqual(["question", "site-down"]);
+    expect(sample?.items.map((i) => i.kind).sort()).toEqual(["report", "site-down"]);
     expect(sample?.severity).toBe("needs-you");
     const quiet = body.apps.find((a) => a.namespace === "dustinedwards");
     expect(quiet, "a configured app with nothing waiting still appears").toBeDefined();
@@ -188,18 +161,18 @@ describe("GET /ops/inbox", () => {
 
   it("an unreadable snapshot does not fail the inbox, it reads as nothing", async () => {
     await env.APP_KV.put("ops:snapshot", "{{{");
-    await blocked("capsid", "Still counted", "needs the seat");
+    await reported("capsid", "Still counted");
     const response = await inboxAs(DRIVER_KEY);
     expect(response.status).toBe(200);
     const body = (await response.json()) as Inbox;
-    expect(body.apps[0].items.map((i) => i.kind)).toEqual(["blocked-job"]);
+    expect(body.apps[0].items.map((i) => i.kind)).toEqual(["report"]);
   });
 });
 
 describe("improve_status carries the same answer per namespace", () => {
   it("needs_dustin matches what the route serves for that namespace", async () => {
-    await blocked("capsid", "Add the health route", `Merge ${PR}`);
-    const status = await capsidStatus(jobsEnv(), "capsid");
+    await reported("capsid", "Add the health route", PR);
+    const status = await capsidStatus(workerEnv(), "capsid");
     const capsid = status.namespaces.find((n) => n.namespace === "capsid");
     expect(capsid?.needs_dustin.count).toBe(2);
     expect(capsid?.needs_dustin.severity).toBe("needs-you");
@@ -245,7 +218,7 @@ describe("POST /ops/inbox/report", () => {
       link: `${CAPSID_ORIGIN}/drafts`,
     });
     expect(body.apps[0].severity).toBe("needs-you");
-    const status = await capsidStatus(jobsEnv(), "capsid");
+    const status = await capsidStatus(workerEnv(), "capsid");
     const relayed = status.namespaces
       .find((n) => n.namespace === "capsid")
       ?.needs_dustin.items.find((i) => i.kind === "report");

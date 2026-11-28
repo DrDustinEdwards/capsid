@@ -1,5 +1,4 @@
 import type { OpenRef } from "./derive";
-import { JOB, isOpen } from "./derive";
 import type { OpsFeed } from "../types";
 import { parse } from "capsomer/behavior/time";
 
@@ -19,18 +18,18 @@ const HOT = /^(probe|down|offaccount|backup)/;
 export function incidents(feed: OpsFeed): Incident[] {
   const items: Incident[] = [];
   const seen = new Set<string>();
-  for (const j of feed.live.jobs) {
-    if (!j.finding) continue;
-    seen.add(j.finding.fingerprint);
+  for (const f of feed.live.findings) {
+    if (f.class !== "alert") continue;
+    seen.add(f.fingerprint);
     items.push({
-      sev: HOT.test(j.finding.fingerprint) ? "crit" : "warn",
-      open: isOpen(j),
-      title: j.title.replace(/^Watcher: /, "").replace(/ \[[^\]]*\]$/, ""),
-      fp: j.finding.fingerprint,
-      ns: j.namespace,
-      at: parse(j.created_at),
-      ref: `job:${j.id}`,
-      status: JOB[j.status].label.toLowerCase(),
+      sev: HOT.test(f.fingerprint) ? "crit" : "warn",
+      open: true,
+      title: f.headline,
+      fp: f.fingerprint,
+      ns: f.namespace,
+      at: parse(f.first_seen),
+      ref: null,
+      status: "open",
     });
   }
   for (const c of feed.snapshot?.checks ?? []) {
@@ -45,7 +44,7 @@ export function incidents(feed: OpsFeed): Incident[] {
         ns: "watcher",
         at: parse(feed.snapshot?.pass_at ?? feed.live.generated),
         ref: null,
-        status: "no job in the live window",
+        status: "not recorded yet",
       });
     }
   }

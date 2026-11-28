@@ -30,27 +30,6 @@ export interface PortalPush {
   results?: { id: number; status: number }[];
 }
 
-// GET /portal/api/stale -> PortalStale: jobs that look stuck (src/stale-jobs.ts), over every namespace. `rule` is the
-// first test met: prs-settled, steps-seen, resumed-not-completed (24h+), unchanged (3 days).
-export type StaleRule = "unchanged" | "resumed-not-completed" | "prs-settled" | "steps-seen";
-
-export interface OpsStaleJob {
-  id: string;
-  namespace: string;
-  title: string;
-  status: string;
-  updated_at: string;
-  rule: StaleRule;
-  reason: string;
-}
-
-export interface PortalStale {
-  generated: string;
-  rows: OpsStaleJob[];
-  truncated: boolean;
-  note: string | null;
-}
-
 // GET /portal/api/library -> PortalLibrary (src/portal-library.ts), read-only. One of three answers by query
 // string: the shelves (none), a search (?q=) or one document (?ns=&path=).
 export type LibraryShelf = "decisions" | "rulings" | "research";
@@ -97,14 +76,6 @@ export interface TrendMinutesWeek {
   start: string; // its Monday, YYYY-MM-DD
   minutes: number;
   sessions: number;
-  decisions: number;
-}
-
-export interface TrendQueueDay {
-  day: string;
-  posted: number;
-  ended: number;
-  open: number;
 }
 
 export interface TrendMergeWeek {
@@ -152,7 +123,6 @@ export interface PortalTrends {
   generated: string;
   weeks: number;
   minutes: { weeks: TrendMinutesWeek[]; truncated: boolean; note: string };
-  queue: TrendQueueDay[];
   merges: {
     weeks: TrendMergeWeek[];
     rollbacks: Array<{
@@ -182,10 +152,6 @@ export interface PortalTrends {
 // GET /portal/api/maintenance -> PortalMaintenance: the last daily pass's findings and actions. A "-not-checked"
 // rule is a failed read, shown so a missing read is never taken for clean.
 export type MaintenanceRule =
-  | "later-passed"
-  | "shipped-elsewhere"
-  | "followups-missing"
-  | "auto-resumed"
   | "pr-awaiting-seat"
   | "pr-red"
   | "prs-not-checked"
@@ -207,7 +173,6 @@ export type MaintenanceRule =
 export interface OpsMaintenanceItem {
   rule: MaintenanceRule;
   namespace: string;
-  job: string | null;
   pr?: string;
   line: string;
 }
@@ -312,103 +277,3 @@ export interface PortalBackups {
   amazon_report_at: string | null;
   not_configured: string[];
 }
-
-// The overnight plan and morning digest (src/overnight-plan.ts): `capsid_work_jobs` list views "plan" and "digest"
-// and GET /portal/api/plan and /digest serve the same readers.
-
-interface PlannedJob {
-  id: string;
-  namespace: string;
-  title: string;
-  priority: number;
-  estimate_minutes: number;
-  estimate_source: "policy" | "record" | "default";
-  /** Needs a human confirmation for a risky step: the session does the ordinary work and lists that step in the PR. */
-  gated: boolean;
-}
-
-export interface PlanLane {
-  repo: string;
-  namespaces: string[];
-  heavy: boolean;
-  jobs: PlannedJob[];
-  planned_minutes: number;
-}
-
-export interface SkippedJob {
-  id: string;
-  namespace: string;
-  title: string;
-  reason: string;
-}
-
-export interface OvernightPlan {
-  generated: string;
-  budget_minutes: number;
-  // So "every repo is heavy" is never a surprise.
-  policy: "document" | "default" | "invalid";
-  policy_note: string | null;
-  heavy_planned_minutes: number;
-  lanes: PlanLane[];
-  skipped: SkippedJob[];
-  queued_read: number;
-  truncated: boolean;
-}
-
-export interface UsageTotals {
-  cost_usd: number | null;
-  active_seconds: number | null;
-  tokens_input: number | null;
-  tokens_output: number | null;
-  tokens_cache_read: number | null;
-  tokens_cache_creation: number | null;
-}
-
-export interface DigestJob {
-  id: string;
-  namespace: string;
-  title: string;
-  status: string;
-  result_kind: string | null;
-  duration_minutes: number | null;
-  blocked_count: number | null;
-  usage: UsageTotals;
-}
-
-export interface DigestBlocked {
-  id: string;
-  namespace: string;
-  title: string;
-  at: string;
-  summary: string;
-  pull_requests: string[];
-  usage: UsageTotals;
-}
-
-export interface DigestPr {
-  job_id: string;
-  namespace: string;
-  url: string;
-  state: "merged" | "open" | "unchecked";
-  source: "outcome" | "blocked summary";
-}
-
-export interface OvernightDigest {
-  generated: string;
-  since: string;
-  for_namespace: string | null;
-  finished: DigestJob[];
-  blocked: DigestBlocked[];
-  pull_requests_ready: DigestPr[];
-  pull_requests_merged: number;
-  totals: {
-    usage: UsageTotals & { jobs: number };
-    jobs_without_usage: number;
-  };
-  truncated: string[];
-}
-
-export type PortalPlan = OvernightPlan;
-
-// GET /portal/api/digest?since= -> PortalDigest over every namespace; since defaults to 24 hours, a non-ISO one is a 400.
-export type PortalDigest = OvernightDigest;

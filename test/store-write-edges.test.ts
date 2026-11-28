@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
-import { signPolicyDocument } from "../src/policy-sign.ts";
-import { GATE_POLICY_PATH } from "../src/gate-policy.ts";
-import { fakeD1, fakeEnv, fakeKv, type DocRow, type FakeD1Options } from "./fakes.ts";
+import { fakeD1, fakeEnv, type DocRow, type FakeD1Options } from "./fakes.ts";
 
 // Built from its code point so this file carries no literal wide dash.
 const EM = String.fromCharCode(0x2014);
@@ -78,46 +76,4 @@ test("replace still normalizes the whole body, because the caller supplied all o
   await client.close();
   assert.equal(result.isError, undefined, result.content[0]?.text);
   assert.equal(storedBody(fake.recorded), "x, y");
-});
-
-test("PLANT: sign_policy refuses and writes nothing when the policy changes between its read and its batch", async () => {
-  const fake = fakeD1({
-    documents: [
-      {
-        namespace: "capsid",
-        path: GATE_POLICY_PATH,
-        title: "p",
-        body: "# policy\n\n- version: 1\n",
-      },
-    ],
-    raceAfterPreRead: (rows, target) => {
-      const row = rows.documents.find(
-        (d) => d.namespace === target.namespace && d.path === target.path,
-      );
-      assert.ok(row);
-      row.body = "# policy\n\n- version: 2\n";
-    },
-  });
-  const env = fakeEnv({
-    DB: fake.db,
-    IMPROVE_SCORE_SECRET: "test-improve-secret",
-    APP_KV: fakeKv().kv,
-  });
-  const result = await signPolicyDocument(
-    env,
-    "github:DrDustinEdwards",
-    "capsid",
-    GATE_POLICY_PATH,
-  );
-  assert.equal(result.ok, false, "the signer overwrote a policy edit with the signed older body");
-  assert.match(result.ok ? "" : result.error, /changed or was removed after sign_policy read it/);
-  // The pin was written before the batch aborted, so the refusal must not say nothing was written.
-  assert.doesNotMatch(result.ok ? "" : result.error, /Nothing was signed or written/);
-  assert.match(result.ok ? "" : result.error, /anti-rollback record \(policy:signed:/);
-  assert.deepEqual(fake.recorded, [], "a refused signing must commit nothing");
-  assert.equal(
-    fake.rows.documents.find((d) => d.path === GATE_POLICY_PATH)?.body,
-    "# policy\n\n- version: 2\n",
-    "the newer policy must be left in place",
-  );
 });

@@ -38,7 +38,6 @@ test("PLANT: an action the agent never did in 14 days is a finding, owned by the
     ["anomaly-new-action-sample-driver-delete-namespace"],
   );
   assert.equal(owningCheck(found[0].fingerprint), "agent anomalies");
-  assert.match(found[0].body, /nothing was suspended or revoked/);
 });
 
 test("PLANT: a busiest hour over three times the baseline's, and over the floor, is a spike; under the floor it is not", () => {

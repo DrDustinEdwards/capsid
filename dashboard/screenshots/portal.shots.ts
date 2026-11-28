@@ -68,39 +68,21 @@ test("a site's own page, light", async ({ page }) => {
   await shoot(page, "site-light");
 });
 
-test("queue with a job drawer open, light", async ({ page }) => {
-  await open(page, "queue");
-  await page.locator('main [data-open^="job:"]').first().click();
-  const drawer = page.locator("dialog.drawer[open]");
-  await expect(drawer).toBeVisible();
-  await expect.poll(() => drawer.evaluate((el) => getComputedStyle(el).transform)).toBe("none");
-  await shoot(page, "queue-drawer-light");
-});
-
 test("a control's preview open, light", async ({ page }) => {
-  await open(page, "queue");
-  await page.goto("queue/job/job_0cdf2803f0ba");
-  await page.getByRole("button", { name: "Mark failed", exact: true }).click();
+  await open(page, "agents");
+  await page.goto("agents/agent/sample-d-driver");
+  await page.locator("dialog.drawer[open]").getByRole("button", { name: "Revoke" }).click();
   const dialog = page.locator("dialog.confirm");
   await expect(dialog).toBeVisible();
-  await dialog
-    .getByRole("textbox", { name: "Reason", exact: true })
-    .pressSequentially("maintenance window");
-  await dialog.getByRole("button", { name: "Preview" }).click();
   await dialog.getByText("Details", { exact: true }).click();
   await expect(dialog.getByText("What changes")).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Mark failed", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Revoke agent", exact: true })).toBeVisible();
   await shoot(page, "control-preview-light");
 });
 
 test("activity, light", async ({ page }) => {
   await open(page, "activity");
   await shoot(page, "activity-light");
-});
-
-test("jobs' checks, light", async ({ page }) => {
-  await open(page, "queue#checks");
-  await shoot(page, "checks-light");
 });
 
 test.describe("on a phone", () => {

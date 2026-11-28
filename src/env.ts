@@ -37,12 +37,9 @@ export interface Env extends Omit<
   GITHUB_APP_CLIENT_ID: string;
   GITHUB_APP_PRIVATE_KEY: string;
   BUILD_SHA?: string;
-  // Root secret the job and policy signing key (src/signed-docs.ts) and the backup credential key
-  // (src/signed-requests.ts) are derived from. Named for the improve loop that first used it;
+  // Root secret the backup credential key (src/signed-requests.ts) is derived from. Named for the improve loop that first used it;
   // renaming a Worker secret is a step only the seat can take.
   IMPROVE_SCORE_SECRET?: string;
-  // The capsid-bench repo's signing key (src/bench.ts), the same value as its BENCH_KEY secret.
-  BENCH_SECRET?: string;
   // The backup credential mint (src/signed-requests.ts): the temp-access-credentials token and the
   // parent it derives from. Omitted from RepoEnv.
   R2_TEMP_CRED_TOKEN?: string;

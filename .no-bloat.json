@@ -12,12 +12,12 @@
     }
   ],
   "baseline": {
-    "measured_at": "c5353dd",
+    "measured_at": "458af03",
     "knip (Worker)": {},
     "knip (dashboard)": {},
     "jscpd": {
-      "clones": 117,
-      "lines": 985,
+      "clones": 89,
+      "lines": 723,
       "percentage": 0.72,
       "unread": 4
     },
@@ -27,25 +27,23 @@
     },
     "legacy": {},
     "size": {
-      "dashboard/dev/mock-api.ts": 2965,
-      "dashboard/src/app/App.tsx": 646,
-      "dashboard/src/lib/derive.ts": 513,
+      "dashboard/dev/mock-api.ts": 2087,
+      "dashboard/src/app/App.tsx": 585,
       "dashboard/src/views/SiteTraffic.tsx": 605,
-      "dashboard/src/views/TrendCharts.tsx": 826,
-      "explorer/src/explorer.css": 1639,
-      "explorer/src/explorer.js": 528,
-      "explorer/src/pages.mjs": 816,
+      "dashboard/src/views/TrendCharts.tsx": 515,
+      "explorer/src/explorer.css": 1435,
+      "explorer/src/pages.mjs": 810,
       "scripts/verify-live.mjs": 671,
-      "src/ops-cloudflare.ts": 565,
-      "test/fakes.ts": 1427
+      "src/ops-cloudflare.ts": 546,
+      "test/fakes.ts": 1232
     },
     "tests": {
-      "files": 262,
-      "cases": 1890
+      "files": 202,
+      "cases": 1279
     },
     "comments": {
-      "lines": 6812,
-      "code": 118340,
+      "lines": 5120,
+      "code": 85570,
       "percentage": 5.35
     }
   }

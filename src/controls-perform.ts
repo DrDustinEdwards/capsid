@@ -1,14 +1,6 @@
 import { adminAgentForEmail } from "./agents";
 import { activateAgent, revokeAgent } from "./agents-admin";
-import {
-  type ActionParams,
-  type Surface,
-  SWITCHES,
-  auditPrefix,
-  clickAuditAction,
-  deleteOptionsFrom,
-  switchReasonRefusal,
-} from "./controls-base";
+import { type ActionParams, type Surface, auditPrefix, deleteOptionsFrom } from "./controls-base";
 import {
   namespaceNameRefusal,
   registerNamespace,
@@ -18,14 +10,11 @@ import {
 } from "./namespace-admin";
 import { deleteAsPlanned } from "./namespace-delete-perform";
 import { type ActionResult, type PerformContext, required } from "./controls-perform-base";
-import { performJobAction } from "./controls-perform-jobs";
 import { performSiteAction } from "./controls-perform-sites";
 import type { Env } from "./env";
 import { managePr } from "./github";
-import { resetBreaker } from "./job-breaker";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import type { PortalAction } from "./ops-types/portal";
-import { overnightValueRefusal, setOvernight } from "./overnight";
 import { auditStatement } from "./store-guards";
 import { plural } from "@drdustinedwards/site-helpers/text";
 
@@ -46,13 +35,6 @@ export async function performAction(
   const actor = agent.actor;
   // Set once the mutator succeeds, so the catch knows whether the action happened.
   const state: PerformContext["state"] = { committed: false, summary: "", warning: null };
-  // The switches: a reason in both directions, checked again because a token signed before this rule
-  // could lack one. The reason and whether this is an Undo go in the click row.
-  const switchReason = SWITCHES.has(action) ? required(params, "reason") : null;
-  if (SWITCHES.has(action) && !switchReason)
-    return { ok: false, refusal: switchReasonRefusal(action) };
-  const undo = params.undo === "true";
-  const click = clickAuditAction(action, params, surface);
   // The click's own audit row, naming the admin and the click's address (sourceAddress); the shared
   // mutators' rows do not always say who asked.
   const auditClick = async (
@@ -68,11 +50,6 @@ export async function performAction(
       }),
     ]);
   };
-  const switchDetail = (result: object) => ({
-    ...result,
-    reason: switchReason,
-    ...(undo ? { undo: true } : {}),
-  });
   const c: PerformContext = {
     env,
     agent,
@@ -82,58 +59,9 @@ export async function performAction(
     surface,
     state,
     auditClick,
-    switchDetail,
-    switchReason,
-    undo,
-    click,
   };
   try {
     switch (action) {
-      case "reset_breaker": {
-        const namespace = required(params, "namespace");
-        if (!namespace) return { ok: false, refusal: "reset_breaker needs a namespace." };
-        const result = await resetBreaker(env, actor, now, { namespace });
-        if (!result.ok) return { ok: false, refusal: result.error };
-        state.committed = true;
-        state.summary = `Reset the circuit breaker for ${namespace}.`;
-        await auditClick(namespace, result.state);
-        break;
-      }
-      case "overnight": {
-        const value = required(params, "value");
-        const bad = overnightValueRefusal(value ?? undefined);
-        if (bad) return { ok: false, refusal: bad };
-        const result = await setOvernight(env, actor, now, {
-          value: value ?? undefined,
-          reason: switchReason ?? undefined,
-        });
-        state.committed = true;
-        state.summary =
-          result.mode === "off"
-            ? "Turned the overnight run off."
-            : `Set the overnight run to run on ${result.mode === "api" ? "the API key" : "the subscription"}.`;
-        await auditClick(
-          null,
-          switchDetail({
-            mode: result.mode,
-            ...(result.decision ? { decision: result.decision } : {}),
-          }),
-          click,
-        );
-        break;
-      }
-      case "resume_job":
-      case "release_job":
-      case "fail_job":
-      case "close_shipped":
-      case "supersede_job":
-      case "park_job":
-      case "unpark_job":
-      case "run_job": {
-        const r = await performJobAction(c, action);
-        if (r) return r;
-        break;
-      }
       case "namespace_add":
       case "namespace_edit": {
         const namespace = required(params, "namespace") ?? undefined;
@@ -217,7 +145,8 @@ export async function performAction(
       case "package_edit":
       case "package_remove":
       case "site_repair":
-      case "site_backup": {
+      case "site_backup":
+      case "run_job": {
         const r = await performSiteAction(c, action);
         if (r) return r;
         break;

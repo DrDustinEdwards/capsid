@@ -5,42 +5,6 @@ import type {
 } from "capsomer/behavior/attention-list";
 import type { OpsSiteConfig, OpsPackageConfig, OpsSnapshot } from "./sites";
 
-export type OpsJobStatus =
-  | "queued"
-  | "claimed"
-  | "blocked"
-  | "done"
-  | "failed"
-  | "superseded"
-  | "parked";
-
-export interface OpsJob {
-  id: string;
-  namespace: string;
-  title: string;
-  status: OpsJobStatus;
-  priority: number;
-  posted_by: string;
-  claimed_by: string | null;
-  created_at: string;
-  // The last transition: there is no blocked_at or done_at column.
-  updated_at: string;
-  blocked_count: number;
-  resumed_count: number;
-  gate_required: boolean;
-  waits_on: string | null;
-  command: string | null;
-  // "mismatch" withholds the command (null); "legacy-unsigned" is a block from before signing.
-  command_signature: "verified" | "legacy-unsigned" | "mismatch" | "unconfigured" | null;
-  // Optional so a feed written before it, and the app's sample data, stay valid.
-  question?: boolean;
-  parked_reason?: string;
-  started_by?: string;
-  started_at?: string;
-  result_ref: string | null;
-  finding: { fingerprint: string; seen_count: number | null; last_seen: string | null } | null;
-}
-
 export interface OpsAgent {
   name: string;
   kind: string;
@@ -50,35 +14,6 @@ export interface OpsAgent {
   revoked_at: string | null;
   pending: boolean;
   archived_at: string | null;
-  jobs_done: number;
-  jobs_failed: number;
-  jobs_blocked: number;
-  prs_opened: number;
-  prs_merged: number;
-  pr_merge_rate: number | null;
-  ci_green_rate: number | null;
-  median_duration_minutes: number | null;
-}
-
-export interface OpsPr {
-  job_id: string;
-  pr_url: string;
-  merged: boolean | null;
-  merge_verified_at: string | null;
-  recorded_at: string;
-}
-
-interface OpsOvernight {
-  mode: "off" | "api" | "subscription";
-  decision: {
-    decided_by: string;
-    decided_on: string;
-    ruling: string;
-    reasoning: string;
-    set_by: string;
-    set_at: string;
-    reason: string;
-  } | null;
 }
 
 export interface SharedCodeApp {
@@ -152,24 +87,14 @@ export interface CompletenessView {
 }
 
 export type { InboxSeverity } from "capsomer/behavior/attention-list";
-export type InboxKind =
-  | "blocked-job"
-  | "question"
-  | "ci"
-  | "site-down"
-  | "report"
-  | "stale-claim"
-  | "parked-due";
+export type InboxKind = "ci" | "site-down" | "report";
 export type InboxItem = CapsomerInboxItem<InboxKind>;
 export type InboxApp = CapsomerInboxApp<InboxKind>;
 export type Inbox = CapsomerInbox<InboxKind>;
 
 export interface OpsLive {
   generated: string;
-  jobs: OpsJob[];
   agents: OpsAgent[];
-  prs: OpsPr[];
-  overnight: OpsOvernight;
   namespaces: Array<{ name: string }>;
   sites: OpsSiteConfig[];
   packages: OpsPackageConfig[];
@@ -181,7 +106,7 @@ export interface OpsLive {
 export interface OpsFinding {
   fingerprint: string;
   namespace: string;
-  class: "digest" | "attention";
+  class: "alert" | "digest" | "attention";
   headline: string;
   first_seen: string;
   last_seen: string;

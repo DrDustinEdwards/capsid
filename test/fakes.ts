@@ -4,15 +4,12 @@ import { gunzipSync } from "node:zlib";
 // The D1 fake is row-backed: WHERE resolves against the bound values, so a handler asking for the wrong row gets nothing
 // back. A fake that cannot disagree with the handler cannot test it.
 import type { OpsFeedData } from "../src/ops-feed.ts";
-import { recordFor, type AgentRecord } from "../src/agent-record.ts";
 import { EXCLUDED as BACKUP_EXCLUDED, TABLES as BACKUP_TABLES } from "../src/backup.ts";
-import { OPEN_JOB_STATUSES, type JobStatus } from "../src/jobs-schema.ts";
 import {
   REOPEN_QUIET_MS,
   appendEvidence,
   type FindingMemory,
   type FindingRow,
-  type JobEnd,
 } from "../src/watcher-findings.ts";
 import {
   applyWrite,
@@ -267,12 +264,6 @@ export interface FakeD1Options {
   // check that the live schema matches TABLES.
   extraTables?: string[];
   agents?: Array<Record<string, unknown>>;
-  // Queue rows, for the readers that look a job up rather than transition it.
-  // The queue's own transitions are driven against real SQLite in test-integration.
-  jobs?: Array<Record<string, unknown>>;
-  // The PR URLs an outcome named (migrations/0015). Absent by default.
-  jobOutcomePrs?: Array<{ job_id: string; pr_url: string }>;
-  jobOutcomes?: Array<Record<string, unknown>>;
 }
 
 export interface FakeD1Rows {
@@ -285,13 +276,6 @@ export interface FakeD1Rows {
   improve_jti: Array<Record<string, unknown>>;
   audit_log: Array<{ id?: number; namespace: string; path: string; actor: string | null }>;
   agents: Array<Record<string, unknown>>;
-  jobs: Array<Record<string, unknown>>;
-  job_outcome_prs: Array<{ job_id: string; pr_url: string }>;
-  job_outcomes: Array<Record<string, unknown>>;
-  job_touches: Array<Record<string, unknown>>;
-  // migrations/0023. Append-only on the real table (triggers); here they only land.
-  job_claims: Array<Record<string, unknown>>;
-  job_evaluations: Array<Record<string, unknown>>;
 }
 
 export interface FakeD1 {
@@ -308,10 +292,6 @@ export interface FakeD1 {
 // Each is an INSERT ... SELECT NULL guarded by an EXISTS clause, and each aborts the
 // batch with the same NOT NULL violation, which is what D1 does.
 const GUARD_ERROR = "NOT NULL constraint failed: document_versions.document_id";
-
-// postJob's INSERT, whose bound order is (id, namespace, title, body, priority,
-// posted_by, gate_required, required_scopes, min_record, created_at, ...).
-const isJobInsert = (sql: string) => /^\s*INSERT INTO jobs \(/i.test(sql);
 
 // Column projection, so `SELECT *` and a named column list are distinguishable.
 // Applied only to a plain identifier list; a SELECT with a function call or an alias
@@ -346,19 +326,6 @@ function guardFires(sql: string, params: unknown[], rows: FakeD1Rows): boolean {
   const flat = sql.replace(/\s+/g, " ");
   if (!/INSERT INTO document_versions \(document_id, namespace, path\) SELECT NULL/i.test(flat))
     return false;
-  // requireJobUnchanged: fires unless the job still has the status, holder and
-  // updated_at the caller read. Matched before the documents lookup below, which
-  // would find no document named after the job id and fire every time.
-  if (/SELECT NULL, 'jobs', \?1/i.test(flat)) {
-    const [id, status, claimedBy, updatedAt] = params;
-    return !rows.jobs.some(
-      (j) =>
-        j.id === id &&
-        j.status === status &&
-        (j.claimed_by ?? null) === (claimedBy ?? null) &&
-        j.updated_at === updatedAt,
-    );
-  }
   const [namespace, path] = params as [string, string];
   const row = rows.documents.find((d) => d.namespace === namespace && d.path === path);
   if (/AND body IS \?3/i.test(flat)) return !(row && row.body === params[2]);
@@ -388,56 +355,8 @@ function landSnapshot(params: unknown[], rows: FakeD1Rows): WriteResult {
   return { changes: 1, returning: [{ id }] };
 }
 
-// touchStatement (src/job-touches.ts): waited_ms is a subquery over the latest gate row
-// for the job, resolved here against rows.job_touches in the same order SQLite reads
-// it (by id), so a gate earlier in the same batch counts.
-const TOUCH_INSERT =
-  /^INSERT INTO job_touches \(job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at\) VALUES/i;
-
-function landTouch(params: unknown[], rows: FakeD1Rows): WriteResult {
-  const [job_id, namespace, kind, actor, actor_kind, detail, at, sinceGate] = params;
-  const gates = rows.job_touches.filter((t) => t.job_id === job_id && t.kind === "gate");
-  const latest = gates.reduce<Record<string, unknown> | null>(
-    (best, t) => (!best || Number(t.id) > Number(best.id) ? t : best),
-    null,
-  );
-  const waited_ms =
-    sinceGate === 1 && latest
-      ? Math.round(Date.parse(String(at)) - Date.parse(String(latest.at)))
-      : null;
-  const id = rows.job_touches.reduce((max, t) => Math.max(max, Number(t.id ?? 0)), 0) + 1;
-  rows.job_touches.push({ id, job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at });
-  return { changes: 1, returning: [] };
-}
-
-const jobDefaults = (): Row => ({
-  priority: 0,
-  status: "queued",
-  claimed_by: null,
-  claimed_at: null,
-  result_ref: null,
-  result_summary: null,
-  gate_required: 0,
-  resumed_count: 0,
-  blocked_count: 0,
-  required_scopes: null,
-  corrections_count: 0,
-  min_record: null,
-  started_at: null,
-  started_by: null,
-  parked_until: null,
-  created_at: sqliteNow(),
-  updated_at: sqliteNow(),
-});
-
 const mainTable = (flat: string): string | undefined =>
   /^SELECT .+? FROM (\w+)/is.exec(flat.trim())?.[1];
-
-// recordFor's and the skills summary's read of job_outcomes, which excludes outcomes
-// whose job was superseded with a NOT EXISTS subquery. The subquery is resolved here
-// against rows.jobs and the rest of the statement goes through selectRows.
-const NOT_SUPERSEDED =
-  / (WHERE|AND) NOT EXISTS \(SELECT 1 FROM jobs j WHERE j\.id = o\.job_id AND j\.status = 'superseded'\)/i;
 
 export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
   const rows: FakeD1Rows = {
@@ -468,12 +387,6 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     improve_jti: [],
     audit_log: (opts.auditLog ?? []).map((a) => ({ ...a })),
     agents: [...(opts.agents ?? [])],
-    jobs: (opts.jobs ?? []).map((j) => ({ ...jobDefaults(), ...j })),
-    job_outcome_prs: (opts.jobOutcomePrs ?? []).map((p) => ({ ...p })),
-    job_outcomes: (opts.jobOutcomes ?? []).map((o) => ({ ...o })),
-    job_touches: [],
-    job_claims: [],
-    job_evaluations: [],
   };
   // The tables a write lands in, so a write whose WHERE matched nothing is
   // distinguishable from one that landed.
@@ -523,19 +436,6 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       unique: [["id"], ["name"], ["key_hash"]],
       defaults: () => ({ created_at: sqliteNow(), revoked_at: null, last_seen: null }),
     },
-    jobs: { rows: rows.jobs, unique: [["id"]], defaults: jobDefaults },
-    job_outcomes: {
-      rows: rows.job_outcomes,
-      unique: [["job_id"]],
-      defaults: () => ({ recorded_at: sqliteNow() }),
-    },
-    job_outcome_prs: {
-      rows: rows.job_outcome_prs as Row[],
-      unique: [["job_id", "pr_url"]],
-      defaults: () => ({ merged: null, merge_verified_at: null, recorded_at: sqliteNow() }),
-    },
-    job_claims: { rows: rows.job_claims, unique: [], autoId: true, defaults: () => ({}) },
-    job_evaluations: { rows: rows.job_evaluations, unique: [], autoId: true, defaults: () => ({}) },
   };
 
   // One write, applied to the rows. A statement this fake does not model throws rather
@@ -554,39 +454,8 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       return { changes: 0, returning: [] };
     }
     if (SNAPSHOT_LIVE.test(flat)) return landSnapshot(params, rows);
-    if (TOUCH_INSERT.test(flat)) return landTouch(params, rows);
     const audit = landAuditRow(flat, params, rows);
     if (audit) return audit;
-    // jobs_open_title (migrations/0019): one open job per (namespace, title). The
-    // queue's duplicate refusal is this index firing, so a fake without it would
-    // post every duplicate.
-    if (isJobInsert(flat)) {
-      const [, namespace, title] = params as [string, string, string];
-      const taken = rows.jobs.some(
-        (j) =>
-          j.namespace === namespace &&
-          j.title === title &&
-          OPEN_JOB_STATUSES.includes(j.status as JobStatus),
-      );
-      if (taken) throw new Error("D1_ERROR: UNIQUE constraint failed: jobs.namespace, jobs.title");
-    }
-    // evaluationStatements (src/job-claims.ts) names its claim with a scalar subquery,
-    // resolved here against the claim rows this batch has already landed.
-    const claimRef = /\(SELECT MAX\(id\) FROM job_claims WHERE job_id = \?(\d+)\)/i.exec(flat);
-    if (claimRef) {
-      const jobId = params[Number(claimRef[1]) - 1];
-      const ids = rows.job_claims.filter((c) => c.job_id === jobId).map((c) => Number(c.id));
-      const resolved = flat.replace(
-        claimRef[0],
-        ids.length > 0 ? String(Math.max(...ids)) : "NULL",
-      );
-      const landed = applyWrite(tables, resolved, params);
-      if (!landed)
-        throw new Error(
-          `fake D1: unmodelled write. Model it in test/fakes.ts or test/fake-sql.ts: ${flat}`,
-        );
-      return landed;
-    }
     const result = applyWrite(tables, flat, params);
     if (!result)
       throw new Error(
@@ -596,32 +465,10 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
   };
   const isWrite = (sql: string) => /^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql);
 
-  // Reads of jobs, job_outcomes, job_outcome_prs, job_evaluations and job_touches, and
-  // every COUNT, resolved through the whole statement rather than one or two of its
+  // Every COUNT, resolved through the whole statement rather than one or two of its
   // filters. Null when the statement is for another branch.
   const tableSelect = (flat: string, params: unknown[]): Row[] | null => {
     const main = mainTable(flat);
-    if (main === "job_outcomes") {
-      let pool = rows.job_outcomes;
-      let text = flat;
-      if (NOT_SUPERSEDED.test(text)) {
-        pool = pool.filter(
-          (o) => !rows.jobs.some((j) => j.id === o.job_id && j.status === "superseded"),
-        );
-        text = text.replace(NOT_SUPERSEDED, (_m, keyword: string) =>
-          keyword.toUpperCase() === "WHERE" ? " WHERE 1 = 1" : "",
-        );
-      }
-      return selectRows(
-        pool,
-        text.replace(/ FROM job_outcomes o\b/i, " FROM job_outcomes"),
-        params,
-      );
-    }
-    if (main === "jobs" || main === "job_outcome_prs")
-      return selectRows(tables[main].rows, flat, params);
-    if (main === "job_evaluations" || main === "job_touches")
-      return selectRows(rows[main], flat, params);
     if (main && tables[main] && /^SELECT COUNT\(\*\) AS n FROM/i.test(flat.trim()))
       return selectRows(tables[main].rows, flat, params);
     return null;
@@ -683,8 +530,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       if (/SET last_seen/i.test(flat)) row.last_seen = "2026-09-11 02:00:00";
       return { id: row.id };
     }
-    // Jobs and outcome reads. Every filter in the statement applies, and a COUNT
-    // counts.
+    // A COUNT counts, with every filter in the statement applied.
     const selected = tableSelect(flat, params);
     if (selected) return selected[0] ?? null;
     // The agents table (migrations/0008). The resolver's lookup is an indexed
@@ -748,12 +594,6 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       const answered = loopTableExec(flat, params, rows);
       return answered.handled ? answered.results : [];
     }
-    // The read of the PR URLs recorded against one job.
-    if (/^SELECT pr_url FROM job_outcome_prs WHERE job_id = \?1$/i.test(flat.trim())) {
-      return rows.job_outcome_prs
-        .filter((r) => r.job_id === params[0])
-        .map((r) => ({ pr_url: r.pr_url }));
-    }
     // What @dustinedwards/d1-dump reads to find the tables: every table the
     // migrations create, documents_fts with its shadow tables, and wrangler's
     // excluded tables (the d1_migrations ledger among them), as a deployed database holds them.
@@ -811,7 +651,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
         .slice(0, limit);
     }
     // The backup dump: SELECT * FROM <table>, no WHERE. Anchored at the end, or a
-    // `SELECT * FROM jobs WHERE ...` read is answered with every row.
+    // `SELECT * FROM agents WHERE ...` read is answered with every row.
     const dump = flat.trim().match(/^SELECT \* FROM "?(\w+)"?$/i);
     if (dump) {
       const table = dump[1];
@@ -820,7 +660,6 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       if (table === "namespaces") return rows.namespaces;
       if (table === "document_links") return rows.links;
       if (table === "agents") return rows.agents;
-      if (table === "jobs") return rows.jobs;
       return [];
     }
     // The `namespaces` tool's listing: aliased, with an unconsolidated subselect, so
@@ -1259,14 +1098,6 @@ export function fakeToolCallLog(options: { failing?: boolean } = {}) {
   };
 }
 
-// The agent record
-
-// A fixture built by the real function from empty rows, so a field added to
-// AgentRecord cannot be silently missing from every AgentSummary fixture.
-export function agentRecord(overrides: Partial<AgentRecord> = {}): AgentRecord {
-  return { ...recordFor("agent:fixture", { outcomes: [], jobs: [] }), ...overrides };
-}
-
 // The watcher's finding memory
 
 // An in-memory FindingMemory (src/watcher-findings.ts) for driving runPass without a
@@ -1278,15 +1109,12 @@ export interface FakeFindingMemory {
   writes: string[];
 }
 
-export function fakeFindingMemory(
-  seed: FindingRow[] = [],
-  jobs: Record<string, JobEnd> = {},
-): FakeFindingMemory {
+export function fakeFindingMemory(seed: FindingRow[] = []): FakeFindingMemory {
   const rows = new Map(seed.map((r) => [r.fingerprint, { ...r }]));
   const writes: string[] = [];
-  const guarded = (row: FindingRow, extra: (cur: FindingRow) => boolean = () => true) => {
+  const guarded = (row: FindingRow) => {
     const cur = rows.get(row.fingerprint);
-    return cur && cur.state === row.state && extra(cur) ? cur : null;
+    return cur && cur.state === row.state ? cur : null;
   };
   const memory: FindingMemory = {
     async load(fingerprints) {
@@ -1299,18 +1127,14 @@ export function fakeFindingMemory(
         if (row.state !== "cleared") out.set(row.fingerprint, { ...row });
       return out;
     },
-    async job(id) {
-      return jobs[id] ?? null;
-    },
-    async insert(f, state, jobId, now) {
+    async insert(f, now) {
       if (rows.has(f.fingerprint)) return false;
       const iso = now.toISOString();
       rows.set(f.fingerprint, {
         fingerprint: f.fingerprint,
         namespace: f.namespace,
         title: f.title,
-        state,
-        job_id: jobId,
+        state: "open",
         first_seen_at: iso,
         last_seen_at: iso,
         seen_count: 1,
@@ -1319,7 +1143,7 @@ export function fakeFindingMemory(
         evidence: appendEvidence(f.fingerprint, null, f, now),
         updated_at: iso,
       });
-      writes.push(`insert:${f.fingerprint}:${state}`);
+      writes.push(`insert:${f.fingerprint}`);
       return true;
     },
     async sight(row, f, now) {
@@ -1335,12 +1159,11 @@ export function fakeFindingMemory(
       writes.push(`sight:${row.fingerprint}`);
       return true;
     },
-    async open(row, f, jobId, now) {
+    async open(row, f, now) {
       const cur = guarded(row);
       if (!cur) return false;
       Object.assign(cur, {
         state: "open",
-        job_id: jobId,
         title: f.title,
         namespace: f.namespace,
         cleared_at: null,
@@ -1350,22 +1173,7 @@ export function fakeFindingMemory(
         evidence: appendEvidence(row.fingerprint, row.evidence, f, now),
         updated_at: now.toISOString(),
       });
-      writes.push(`open:${row.fingerprint}:${jobId}`);
-      return true;
-    },
-    async dismiss(row, f, now) {
-      const cur = guarded(row, (c) => c.state === "open" && c.job_id === row.job_id);
-      if (!cur) return false;
-      Object.assign(cur, {
-        state: "dismissed",
-        reopen_after: null,
-        cleared_at: null,
-        seen_count: cur.seen_count + 1,
-        last_seen_at: now.toISOString(),
-        evidence: appendEvidence(row.fingerprint, row.evidence, f, now),
-        updated_at: now.toISOString(),
-      });
-      writes.push(`dismiss:${row.fingerprint}`);
+      writes.push(`open:${row.fingerprint}`);
       return true;
     },
     async clear(row, now) {
@@ -1414,10 +1222,7 @@ export const FEED: OpsFeedData = {
     store: { size_bytes: null, cap_bytes: 10 * 1024 ** 3 },
     inbox: { generated: "2026-09-28T12:00:00.000Z", count: 0, severity: "none", apps: [] },
     findings: [],
-    jobs: [],
     agents: [],
-    prs: [],
-    overnight: { mode: "off", decision: null },
     sites: [],
     packages: [],
     namespaces: [{ name: "sample" }],

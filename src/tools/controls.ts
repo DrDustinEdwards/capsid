@@ -20,7 +20,7 @@ export function defineControlOperations(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "controls",
     {
-      description: `The administrator's controls, the same ones Capsid Portal's buttons run: ${PORTAL_ACTIONS.join(", ")}. Admin only. Two steps, never one. action "list" returns each control, the params it takes and whether it needs a reason. action "preview" (control, params) reads the current state, WRITES NOTHING, and returns what will change, the audit rows it will write and a token good for ${TOKEN_TTL_SECONDS / 60} minutes. action "perform" (token) runs exactly what that preview described, once: the token binds the action, its params and you, and is spent when used, so a second perform of it is refused and you preview again. Performing from here writes a control-<action> audit row naming you and the surface; the Portal writes portal-<action>. Merging a pull request and minting a credential are deliberately not controls: a merge can start a deploy and stays with capsid_close_pr action merge behind can_merge, and a mint stays with capsid_admin_manage_agents. REFUSES: a caller that is not the administrator signed in through Access; an unknown control; site_key_rotate and activate_agent, which run only from a click in the Portal; a param the control does not take; a switch with no reason; a token that is malformed, expired, issued to someone else or already used.`,
+      description: `The administrator's controls, the same ones Capsid Portal's buttons run: ${PORTAL_ACTIONS.join(", ")}. Admin only. Two steps, never one. action "list" returns each control and the params it takes. action "preview" (control, params) reads the current state, WRITES NOTHING, and returns what will change, the audit rows it will write and a token good for ${TOKEN_TTL_SECONDS / 60} minutes. action "perform" (token) runs exactly what that preview described, once: the token binds the action, its params and you, and is spent when used, so a second perform of it is refused and you preview again. Performing from here writes a control-<action> audit row naming you and the surface; the Portal writes portal-<action>. Merging a pull request and minting a credential are deliberately not controls: a merge can start a deploy and stays with capsid_close_pr action merge behind can_merge, and a mint stays with capsid_admin_manage_agents. REFUSES: a caller that is not the administrator signed in through Access; an unknown control; site_key_rotate and activate_agent, which run only from a click in the Portal; a param the control does not take; a token that is malformed, expired, issued to someone else or already used.`,
       inputSchema: {
         action: z.enum(["list", "preview", "perform"]).describe("list | preview | perform."),
         control: z
@@ -62,7 +62,6 @@ export function defineControlOperations(server: McpServer, ctx: ToolCtx): void {
             controls: CONTROLS.map((c) => ({
               control: c.name,
               params: c.fields,
-              reason_required: c.reasonRequired,
             })),
             next: 'Call action "preview" with a control and its params, read the plan, then call action "perform" with the token.',
           });

@@ -5,7 +5,7 @@ import "capsomer/command-menu.css";
 import type { OpsFeed } from "../types";
 import type { ViewDef, ViewId } from "./ctx";
 import { stopCommands, type StopActions } from "../lib/stops";
-import { JOB, PROBE, hasSites, siteKey } from "../lib/derive";
+import { PROBE, hasSites, siteKey } from "../lib/derive";
 import { ago, hostOf } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 
@@ -41,15 +41,6 @@ function commands(
       hint: `${hostOf(s.origin)} · ${PROBE[s.state].label}`,
       run: () => a.open(`site:${siteKey(s)}`),
     });
-  for (const j of feed?.live.jobs ?? [])
-    out.push({
-      id: `job-${j.id}`,
-      group: "Job",
-      label: j.title,
-      keywords: [j.namespace],
-      hint: `${JOB[j.status].label} · ${j.namespace}`,
-      run: () => a.open(`job:${j.id}`),
-    });
   for (const g of feed?.live.agents ?? [])
     out.push({
       id: `agent-${g.name}`,
@@ -74,18 +65,6 @@ function commands(
     shortcut: "?",
     run: a.help,
   });
-  for (const j of feed?.live.jobs ?? []) {
-    if (j.status === "blocked" && j.command) {
-      const cmd = j.command;
-      out.push({
-        id: `copy-${j.id}`,
-        group: "Copy",
-        label: `Copy the command for: ${j.title}`,
-        hint: j.namespace,
-        run: () => a.copy(cmd),
-      });
-    }
-  }
   return out;
 }
 

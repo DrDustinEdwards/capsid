@@ -1,7 +1,7 @@
 import { AGENT_TABS, tabOf, useApp } from "../app/ctx";
 import { KIND_STATUS } from "../lib/derive";
 import { agentState, archiveAgents, nsList, rosterAgents } from "../lib/agents";
-import { DAY, ago, pct } from "../lib/format";
+import { DAY, ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import { Status } from "capsomer/react/status";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
@@ -32,20 +32,7 @@ function AgentName({ a }: { a: OpsAgent }) {
   );
 }
 
-function AgentWork({ a }: { a: OpsAgent }) {
-  return (
-    <>
-      <td data-label="Done / failed / blocked" className="cap-num">
-        {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}
-      </td>
-      <td data-label="PRs merged" className="cap-num">
-        {a.prs_merged} of {a.prs_opened}
-      </td>
-    </>
-  );
-}
-
-// Revoked agents wait 7 days in the live table (docs/auth.md; a one-job runner key leaves sooner), then are archived. Both are history, so rows open the drawer.
+// Revoked agents wait 7 days in the live table (docs/auth.md), then are archived. Both are history, so rows open the drawer.
 function Archive() {
   const { feed, now } = useApp();
   const rows = archiveAgents(feed.live.agents);
@@ -64,8 +51,6 @@ function Archive() {
                   <th>Agent</th>
                   <th>Revoked</th>
                   <th>Archive</th>
-                  <th>Done / failed / blocked</th>
-                  <th>PRs merged</th>
                   <th>Last seen</th>
                 </tr>
               </thead>
@@ -92,7 +77,6 @@ function Archive() {
                         </Status>
                       )}
                     </td>
-                    <AgentWork a={a} />
                     <td data-label="Last seen">
                       {a.last_seen ? ago(parse(a.last_seen), now) : "never"}
                     </td>
@@ -163,11 +147,6 @@ function Roster() {
               <tr>
                 <th>Agent</th>
                 <th>Last seen</th>
-                <th>Done / failed / blocked</th>
-                <th>PRs merged</th>
-                <th>Merge rate</th>
-                <th>CI green</th>
-                <th>Median job</th>
                 <th>Flags</th>
               </tr>
             </thead>
@@ -188,16 +167,6 @@ function Roster() {
                       <div className="src">
                         {a.last_seen ? ago(parse(a.last_seen), now) : "never"}
                       </div>
-                    </td>
-                    <AgentWork a={a} />
-                    <td data-label="Merge rate" className="cap-num">
-                      {pct(a.pr_merge_rate, 0)}
-                    </td>
-                    <td data-label="CI green" className="cap-num">
-                      {pct(a.ci_green_rate, 0)}
-                    </td>
-                    <td data-label="Median job" className="cap-num">
-                      {a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}
                     </td>
                     <td data-label="Flags">
                       {a.flags.length ? (

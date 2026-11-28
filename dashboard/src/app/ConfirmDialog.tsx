@@ -18,14 +18,7 @@ import { performAction, previewAction } from "../lib/api";
 import { ago } from "../lib/format";
 import { parse, utc } from "capsomer/behavior/time";
 import type { PortalPerformed, PortalPreview } from "../types";
-import {
-  DESTRUCTIVE,
-  NEEDS_REASON,
-  ONE_WAY,
-  TAKES_NOTE,
-  performLabel,
-  type ConfirmRequest,
-} from "./ctx";
+import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, performLabel, type ConfirmRequest } from "./ctx";
 
 interface DialogProps {
   req: ConfirmRequest;
@@ -68,14 +61,11 @@ export function ConfirmDialog({ req, csrf, onClose, onSignedOut }: DialogProps) 
   const doIt = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
-  const noteRef = useRef<HTMLTextAreaElement>(null);
   const started = useRef(false);
   const needsReason = NEEDS_REASON.has(req.action);
   const given = needsReason ? (req.params.reason ?? "").trim() : "";
   const askReason = needsReason && !given;
   const [reason, setReason] = useState("");
-  const takesNote = TAKES_NOTE.has(req.action);
-  const [note, setNote] = useState("");
   const step = useTwoStep({
     preview: (params: Record<string, string>) =>
       previewAction(csrf, { action: req.action, params }),
@@ -98,13 +88,9 @@ export function ConfirmDialog({ req, csrf, onClose, onSignedOut }: DialogProps) 
       reasonRef.current?.focus();
       return;
     }
-    const typedNote = takesNote
-      ? (noteRef.current?.value ?? (note || req.params.note || "")).trim()
-      : "";
     const params = {
       ...req.params,
       ...(needsReason ? { reason: typed } : {}),
-      ...(typedNote ? { note: typedNote } : {}),
     };
     await step.runPreview(params);
   };
@@ -165,7 +151,7 @@ export function ConfirmDialog({ req, csrf, onClose, onSignedOut }: DialogProps) 
       size="md"
     >
       <DialogHeader>
-        {/* The server's summary can name a job by its id, so it sits under the plain heading once the preview answers. */}
+        {/* The server's summary can name a record by its id, so it sits under the plain heading once the preview answers. */}
         <DialogTitle>{req.title}</DialogTitle>
         {preview && <DialogDescription data-summary="">{preview.summary}</DialogDescription>}
       </DialogHeader>
@@ -205,19 +191,6 @@ export function ConfirmDialog({ req, csrf, onClose, onSignedOut }: DialogProps) 
                 }}
               />
             </Field>
-            {takesNote && (
-              <Field label="Note for the driver (optional)">
-                <textarea
-                  ref={noteRef}
-                  className="cap-input"
-                  rows={4}
-                  maxLength={16384}
-                  value={note}
-                  readOnly={busy}
-                  onChange={(e) => setNote(e.target.value)}
-                />
-              </Field>
-            )}
           </form>
         )}
         {pending === "preview" && (
