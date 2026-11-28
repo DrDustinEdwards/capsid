@@ -12,6 +12,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 import { testPem } from "./test-pem.ts";
+import { repoGuards } from "../src/tools/repo-guards.ts";
 
 function makeEnv(
   repos: unknown[] | null,
@@ -24,6 +25,7 @@ function makeEnv(
         bind: () => ({
           first: async () => (repos === null ? null : { repos: JSON.stringify(repos) }),
         }),
+        all: async () => ({ results: [{ namespace: "ns", repos: JSON.stringify(repos ?? []) }] }),
       }),
     },
     APP_KV: kv.kv,
@@ -61,6 +63,62 @@ test("resolveRepo rejects an unmapped selector with the valid values", async () 
     () => resolveRepo(makeEnv(TWO_REPOS), "ns", "owner/somewhere-else"),
     /not mapped to namespace ns.*owner\/primary-repo/s,
   );
+});
+
+// Two namespaces, so a repo can be named from a namespace that does not map it.
+function twoNamespaces() {
+  const rows: Record<string, unknown[]> = {
+    a: [{ repo: "Owner/a-repo", label: "primary" }],
+    b: [
+      { repo: "Owner/b-repo", label: "primary" },
+      { repo: "Owner/tools", label: "tools" },
+    ],
+  };
+  return fakeEnv({
+    DB: {
+      prepare: () => ({
+        bind: (ns: string) => ({
+          first: async () => (rows[ns] ? { repos: JSON.stringify(rows[ns]) } : null),
+        }),
+        all: async () => ({
+          results: Object.entries(rows).map(([namespace, r]) => ({
+            namespace,
+            repos: JSON.stringify(r),
+          })),
+        }),
+      }),
+    },
+    APP_KV: fakeKv({ seedToken: true }).kv,
+  });
+}
+
+test("resolveRepo reaches a repo another namespace maps and names that namespace", async () => {
+  for (const selector of ["owner/tools", "Owner/tools", "tools", "b-repo"]) {
+    const ref = await resolveRepo(twoNamespaces(), "a", selector);
+    assert.equal(ref.namespace, "b", selector);
+  }
+  await assert.rejects(
+    () => resolveRepo(twoNamespaces(), "a", "owner/nowhere"),
+    /not mapped to namespace a or to any other/,
+  );
+});
+
+test("a repo named from another namespace is scope-checked against the namespace that maps it", async () => {
+  const asked: Array<string | undefined> = [];
+  const { guardedRead } = repoGuards({
+    env: twoNamespaces(),
+    scope: (need: { namespace?: string }) => {
+      asked.push(need.namespace);
+      return need.namespace === "a" ? null : "unauthorized: not scoped to b";
+    },
+  } as never);
+  let ran = false;
+  const result = (await guardedRead("read_repo_file", "a", "owner/tools", async () => {
+    ran = true;
+  })) as { isError?: boolean };
+  assert.equal(result.isError, true);
+  assert.equal(ran, false);
+  assert.deepEqual(asked, ["b"]);
 });
 
 test("resolveRepo rejects an unknown namespace", async () => {

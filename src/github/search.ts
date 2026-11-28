@@ -1,6 +1,7 @@
 import type { RepoEnv as Env } from "../env";
 import { DEFAULT_SCAN_RESULTS, MAX_SCAN_CAP, DEFAULT_SCAN_FILES } from "../limits";
-import { ghFetch, resolveRepo, getDefaultBranch } from "./client";
+import { errorMessage } from "@dustinedwards/site-runtime/log";
+import { ghFetch, mappedRepos, resolveRepo, getDefaultBranch } from "./client";
 import { fromBase64Text } from "@dustinedwards/site-runtime/encoding";
 
 // search_code walks the tree: GET /search/code returns 200 with total_count 0 for private repos
@@ -253,4 +254,61 @@ export async function searchCode(
   }
 
   return result;
+}
+
+// One search over every mapped repo the caller may read. max_files and max_results are totals, since
+// each file is one request against the App's hourly quota; repos past the caps are named, not dropped.
+export async function searchAllRepos(
+  env: Env,
+  query: string,
+  opts: {
+    pathPrefix?: string;
+    maxResults?: number;
+    maxFiles?: number;
+    readable: (m: { namespace: string; repo: string }) => boolean;
+  },
+) {
+  let resultsLeft = Math.min(opts.maxResults || DEFAULT_SCAN_RESULTS, MAX_SCAN_CAP);
+  let filesLeft = Math.min(opts.maxFiles || DEFAULT_SCAN_FILES, MAX_SCAN_CAP);
+  const repos = (await mappedRepos(env)).filter(opts.readable);
+  const items: Array<{ repo: string; path: string; line: number; text: string }> = [];
+  const searched: Array<{ repo: string; files_scanned: number; truncated?: true; error?: string }> =
+    [];
+  const notSearched: string[] = [];
+  for (const m of repos) {
+    if (resultsLeft <= 0 || filesLeft <= 0) {
+      notSearched.push(m.repo);
+      continue;
+    }
+    try {
+      const r = await searchCode(env, m.namespace, query, {
+        repoSelector: m.repo,
+        pathPrefix: opts.pathPrefix,
+        maxResults: resultsLeft,
+        maxFiles: filesLeft,
+      });
+      items.push(...r.items.map((i) => ({ repo: m.repo, ...i })));
+      resultsLeft -= r.items.length;
+      filesLeft -= r.files_scanned;
+      searched.push({
+        repo: m.repo,
+        files_scanned: r.files_scanned,
+        ...(r.truncated && { truncated: true as const }),
+      });
+    } catch (err) {
+      searched.push({ repo: m.repo, files_scanned: 0, error: errorMessage(err) });
+    }
+  }
+  const truncated = notSearched.length > 0 || searched.some((r) => r.truncated);
+  return {
+    query,
+    total_results: items.length,
+    truncated,
+    ...(truncated && {
+      note: "Partial: a cap ran out. Narrow with path_prefix, or search the named repos one at a time.",
+    }),
+    repos: searched,
+    ...(notSearched.length > 0 && { not_searched: notSearched }),
+    items,
+  };
 }

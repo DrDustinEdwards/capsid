@@ -187,7 +187,7 @@ export function guardRegistrations(
       if (shared) return shared;
       const namespace = typeof args.namespace === "string" ? args.namespace : undefined;
       // Only a full owner/name can be compared to the axis here; the repo tools
-      // resolve a label and check the result (scopedRepo in src/tools/repo.ts).
+      // resolve the selector and check the namespace that maps it (src/tools/repo-guards.ts).
       const selector = typeof args.repo === "string" ? args.repo : undefined;
       const repo = selector?.includes("/") ? selector : undefined;
       const refusal = checkScope(agent, {

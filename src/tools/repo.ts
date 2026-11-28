@@ -18,6 +18,7 @@ import {
   REPO_PATCH_BUDGET,
   repoHistory,
   repoRefs,
+  searchAllRepos,
   searchCode,
 } from "../github";
 import {
@@ -64,7 +65,8 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
   const { guardedRead, guardedWrite } = repoGuards(ctx);
 
-  const REPO_ARG = 'A repo label or mapped "owner/name". Defaults to the primary repo.';
+  const REPO_ARG =
+    "A label of this namespace, or any repo a namespace maps by owner/name or name. Defaults to the primary repo.";
 
   ctx.ops.define(
     "list_repo_tree",
@@ -120,7 +122,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     "search_code",
     {
       description:
-        "Case-insensitive substring search across a namespace repo's files. Scans blobs server-side, so scope large repos with path_prefix. Returns path, line number and the matching line. A scan that stops early sets truncated:true with a note and a next_start to resume from; a truncated result is a partial scan.",
+        "Case-insensitive substring search across a namespace repo's files, or with all_repos every mapped repo you may read, on each default branch. Scans blobs server-side, so scope large repos with path_prefix. Returns path, line number and the matching line. A scan that stops early sets truncated:true with a note and a next_start to resume from (all_repos lists the repos not reached instead); a truncated result is a partial scan.",
       inputSchema: {
         query: bounded(MAX_QUERY),
         namespace: nsName,
@@ -155,19 +157,36 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
             "Candidate-file offset to resume a truncated scan; pass the previous result's next_start.",
           ),
         repo: repoSelector.optional().describe(REPO_ARG),
+        all_repos: z
+          .boolean()
+          .optional()
+          .describe(
+            "Search every mapped repo you may read. Not combinable with repo, ref or start.",
+          ),
       },
     },
-    ({ query, namespace, path_prefix, ref, max_results, max_files, start, repo }) =>
-      guardedRead("search_code", namespace, repo, () =>
-        searchCode(env, namespace, query, {
+    ({ query, namespace, path_prefix, ref, max_results, max_files, start, repo, all_repos }) =>
+      guardedRead("search_code", namespace, repo, () => {
+        if (!all_repos)
+          return searchCode(env, namespace, query, {
+            pathPrefix: path_prefix,
+            ref,
+            maxResults: max_results,
+            maxFiles: max_files,
+            start,
+            repoSelector: repo,
+          });
+        if (repo || ref || start)
+          throw new Error("search_code: all_repos takes no repo, ref or start");
+        return searchAllRepos(env, query, {
           pathPrefix: path_prefix,
-          ref,
           maxResults: max_results,
           maxFiles: max_files,
-          start,
-          repoSelector: repo,
-        }),
-      ),
+          readable: (m) =>
+            ctx.scope({ ...toolSurfaceOf("search_code"), namespace: m.namespace, repo: m.repo }) ===
+            null,
+        });
+      }),
   );
 
   ctx.ops.define(
@@ -246,10 +265,15 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     ({ namespace, repo, limit, ref, run_id, jobs, job, step }) =>
       // A build log carries whatever the workflow echoed, so a read-only caller gets none; asked of
       // checkScope, and the same answer gates the failed-run tail and a step's log.
-      guardedRead("ci_status", namespace, repo, () =>
+      guardedRead("ci_status", namespace, repo, (resolved) =>
         ciStatus(env, namespace, repo, {
           limit,
-          logTail: ctx.scope({ ...toolSurfaceOf("ci_status"), namespace, grant: "write" }) === null,
+          logTail:
+            ctx.scope({
+              ...toolSurfaceOf("ci_status"),
+              namespace: resolved.namespace,
+              grant: "write",
+            }) === null,
           ref,
           runId: run_id,
           jobs,
