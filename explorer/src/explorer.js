@@ -8,7 +8,7 @@ import { enhance as enhanceTheme, toggleTheme } from "capsomer/behavior/theme-sw
 import { enhance as enhanceMeters } from "capsomer/behavior/meter";
 import { trustedHtml } from "capsomer/behavior/trusted-html";
 import { startPage } from "@dustinedwards/site-runtime/page-client";
-import { reachSentence, reaches, valueWords, verdict } from "./rules.mjs";
+import { reachSentence, reaches } from "./rules.mjs";
 
 // First, before anything renders: the Trusted Types default policy and INP reporting (site-runtime ./page-client).
 startPage();
@@ -193,80 +193,6 @@ for (const panel of document.querySelectorAll("[data-board]")) {
       apply();
     });
   }
-}
-
-// It keeps the rule the build wrote it with (src/rules.mjs verdict, src/job-claims.ts evaluationRows).
-for (const desk of document.querySelectorAll("[data-desk]")) {
-  const said = desk.querySelector("[data-desk-said]");
-  const read = desk.querySelector("[data-desk-read]");
-  const kept = desk.querySelector("[data-desk-kept]");
-  const cell = desk.querySelector(".desk-kept");
-  const stamp = desk.querySelector("[data-desk-stamp]");
-  const out = desk.querySelector("[data-desk-verdict]");
-  const tally = desk.querySelector("[data-desk-tally]");
-  const kinds = [...desk.querySelectorAll("[data-kind]")];
-  let kind = kinds[0].dataset.kind;
-  let truth = Number(kinds[0].dataset.read);
-  let claim = truth;
-  let tries = 0;
-  let caught = 0;
-  let run = 0;
-  const wait = (ms) => new Promise((r) => setTimeout(r, reduced.matches ? 0 : ms));
-  const check = async (counted) => {
-    const mine = ++run;
-    const agree = claim === truth;
-    said.textContent = valueWords(kind, claim);
-    desk.dataset.phase = "sent";
-    out.textContent = "Checking with GitHub\u2026";
-    await wait(350);
-    if (mine !== run) return;
-    desk.dataset.phase = "reading";
-    read.textContent = kept.textContent = "\u2026";
-    await wait(700);
-    if (mine !== run) return;
-    read.textContent = valueWords(kind, truth);
-    await wait(250);
-    if (mine !== run) return;
-    kept.textContent = valueWords(kind, truth);
-    if (agree) cell.dataset.agree = "";
-    else delete cell.dataset.agree;
-    stamp.textContent = agree ? "Match" : "Caught";
-    desk.dataset.phase = "done";
-    out.textContent = verdict(kind, claim, truth);
-    if (counted) {
-      tries++;
-      if (!agree) caught++;
-      tally.textContent = `Caught ${caught} of ${tries} ${tries === 1 ? "lie" : "lies"}`;
-    }
-  };
-  const pick = (k) => {
-    for (const o of kinds) o.setAttribute("aria-pressed", String(o === k));
-    kind = k.dataset.kind;
-    truth = Number(k.dataset.read);
-  };
-  for (const k of kinds) {
-    k.addEventListener("click", () => {
-      pick(k);
-      claim = truth;
-      void check(false);
-    });
-  }
-  for (const b of desk.querySelectorAll("[data-desk-step]")) {
-    b.addEventListener("click", () => {
-      const max = kind === "ci_green" ? 1 : 99;
-      claim = Math.min(max, Math.max(0, claim + Number(b.dataset.deskStep)));
-      void check(false);
-    });
-  }
-  desk.querySelector("[data-desk-fool]").addEventListener("click", () => {
-    pick(kinds[Math.floor(Math.random() * kinds.length)]);
-    if (kind === "ci_green") claim = 1 - truth;
-    else {
-      const off = 1 + Math.floor(Math.random() * 3);
-      claim = truth - off >= 0 && Math.random() < 0.4 ? truth - off : truth + off;
-    }
-    void check(true);
-  });
 }
 
 // The stylesheet shows each row by how it matched (src/home.mjs, knowledge).

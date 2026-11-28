@@ -1,5 +1,4 @@
 import type { RepoEnv as Env } from "../env";
-import { TEST_FILE } from "../model-routing";
 import { readAllPages as readPages } from "@dustinedwards/site-runtime/github";
 import { ghFetch } from "./client";
 
@@ -75,13 +74,6 @@ export function ciVerdict(runs: readonly CheckRunRow[]): {
   return { conclusion: "success", note: `${runs.length} check(s) green` };
 }
 
-const JOB_ID_IN_BODY = /\bjob_[0-9a-f]{12}\b/;
-
-/** The Capsid job a pull request's description names, or null. */
-export function jobIdFromBody(body: string): string | null {
-  return JOB_ID_IN_BODY.exec(body ?? "")?.[0] ?? null;
-}
-
 export interface PrFiles {
   paths: string[];
   problem: string | null;
@@ -96,10 +88,6 @@ export interface PrFileRow {
   deletions?: number;
   patch?: string;
 }
-
-const TEST_DIRS = ["test/", "test-integration/", "dashboard/e2e/"];
-export const inTestDir = (path: string | undefined) =>
-  path !== undefined && (TEST_DIRS.some((d) => path.startsWith(d)) || TEST_FILE.test(path));
 
 export async function readPrFiles(
   env: Env,

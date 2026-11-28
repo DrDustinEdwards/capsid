@@ -1,8 +1,8 @@
 {
   "initial_js_kb": 210.6,
   "lazy_chunk_kb": 27.8,
-  "css_kb": 44.3,
-  "lazy_css_kb": 12,
+  "css_kb": 43.4,
+  "lazy_css_kb": 12.5,
   "client": "dashboard/build/client",
   "server": "dashboard/build/server/index.js"
 }

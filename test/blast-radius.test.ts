@@ -254,7 +254,7 @@ test("DERIVED: every write tool is on the enforcement point's path", () => {
     `these write tools are not covered by checkScope: ${uncovered.join(", ")}`,
   );
   // Vacuity: the walk found a real surface, and the operations it dispatches to.
-  assert.ok(toolBlocks().length >= 17, "the tool walk collapsed");
+  assert.ok(toolBlocks().length >= 15, "the tool walk collapsed");
   assert.ok(ops.size >= 30, "the operation walk collapsed");
 });
 

@@ -97,7 +97,7 @@ export async function publicBuildTick(
   const code = await storeCode(env, model, privacy, today, now, readers.codeMap);
 
   const c = doc.counts;
-  const note = `${c.public} public and ${c.private} private system(s), ${c.containers} container(s), ${c.relationships} relationship(s), ${doc.flows?.length ?? 0} of ${model.flows?.length ?? 0} flow(s) whole; visibility read for ${repos.length} repo(s); stats as of ${stats.as_of}, ${stats.jobs.completed_30d} job(s) finished in 30 days; ${code.note}`;
+  const note = `${c.public} public and ${c.private} private system(s), ${c.containers} container(s), ${c.relationships} relationship(s), ${doc.flows?.length ?? 0} of ${model.flows?.length ?? 0} flow(s) whole; visibility read for ${repos.length} repo(s); stats as of ${stats.as_of}; ${code.note}`;
   return code.failed ? { ran: true, note, codeFailed: true } : { ran: true, note };
 }
 

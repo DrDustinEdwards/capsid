@@ -14,18 +14,15 @@ import {
   flowsOf,
   layout,
   manualHead,
-  minutes,
-  percent,
-  reading,
   sectionAt,
   stepPath,
   stepWords,
 } from "./pages.mjs";
-import { NEED, reachSentence, reaches, valueWords, verdict } from "./rules.mjs";
+import { NEED, reachSentence, reaches } from "./rules.mjs";
 import { toolPath } from "./tools.mjs";
 
 const DESCRIPTION =
-  "Capsid is an open-source MCP server for AI coding agents. It gives them a shared memory, limits what each one can do, and checks their finished work against GitHub.";
+  "Capsid is an open-source MCP server for AI coding agents. It gives them a shared memory and limits what each one can do.";
 // A function, because pages.mjs imports this module.
 const siteData = (
   AUTHOR = { "@type": "Person", "@id": `${SITE}/#person`, name: "Dustin Edwards", url: SITE },
@@ -51,52 +48,8 @@ const siteData = (
     }),
   ]);
 
-/** @param {any} stats */
-export function weekLabels(stats) {
-  return weekEnds(stats).map((d) =>
-    d.toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }),
-  );
-}
-
-/** @param {any} stats @returns {Date[]} */
-export function weekEnds(stats) {
-  const end = Date.parse(`${stats.as_of}T00:00:00Z`) - 86_400_000;
-  return stats.jobs.completed_by_week.map(
-    (/** @type {number} */ _c, /** @type {number} */ i, /** @type {number[]} */ all) =>
-      new Date(end - (all.length - 1 - i) * 7 * 86_400_000),
-  );
-}
-
-// A step with no reading of its own carries none.
-/** @param {any} stats @returns {Record<string, [string, string][]>} */
-function readingsByStep(stats) {
-  const { jobs: j, verification: v, gates: g } = stats;
-  return {
-    posted: [[String(j.completed_30d), "jobs completed, last 30 days"]],
-    claimed: [
-      [String(j.open), "open now"],
-      [String(j.blocked), "waiting on a person"],
-    ],
-    worked: [[minutes(j.median_duration_minutes_30d), "median job time, last 30 days"]],
-    blocked: [
-      [String(g.waits_30d), "approval waits, last 30 days"],
-      [minutes(g.median_wait_minutes_30d), "median wait"],
-    ],
-    "pull request": [[percent(v.pr_merge_rate_90d), "of agents' pull requests merged"]],
-    merged: [[percent(g.share_ended_by_policy_30d), "of waits the signed policy cleared"]],
-    deployed: [[percent(v.ci_green_rate_90d), "of checked jobs with passing CI"]],
-    verified: [[stats.capsid.sha7, "the commit running now"]],
-    "claims checked": [
-      [
-        percent(v.agreement_rate_90d),
-        `of ${v.evaluations_90d} claims matched GitHub, last 90 days`,
-      ],
-    ],
-  };
-}
-
 const BREAKERS = [
-  ["read", "Read", "Read notes, repos and the job queue"],
+  ["read", "Read", "Read notes and repos"],
   ["write", "Write", "Edit notes, branches and pull requests"],
   ["admin", "Admin", "Create agents and change settings"],
 ];
@@ -110,34 +63,11 @@ const FEEDS = {
   admin: "admin",
 };
 
-// The checks the Worker runs on a claim (src/job-claims.ts, WORKER_EVALUATIONS); ci_green is a yes or a no.
-/** @type {[string, string, number][]} */
-const CHECKS = [
-  ["pr_merged", "Pull requests merged", 2],
-  ["commits", "Commits", 7],
-  ["files_changed", "Files changed", 12],
-  ["ci_green", "CI passed", 1],
-];
-
-/** @param {any} stats */
-function hero(stats) {
-  const v = stats.verification;
-  const [kind, , read] = CHECKS[0];
-  const desk = `<h2 class="desk-title" data-plain>Catch an agent</h2>
-<div class="desk-kinds" role="group" aria-label="What the agent reports">${CHECKS.map(([k, name, n], i) => `<button type="button" class="desk-kind" data-kind="${k}" data-read="${n}" aria-pressed="${i === 0}">${name}</button>`).join("")}</div>
-<div class="desk-row">
-<div class="desk-cell"><span class="desk-label">The agent says</span><span class="desk-value" data-desk-said>${valueWords(kind, read)}</span><span class="desk-step"><button type="button" data-desk-step="-1" aria-label="One less">\u2212</button><button type="button" data-desk-step="1" aria-label="One more">+</button></span></div>
-<div class="desk-cell desk-github"><span class="desk-label">GitHub says</span><span class="desk-value" data-desk-read>${valueWords(kind, read)}</span></div>
-<div class="desk-cell desk-kept" data-agree><span class="desk-label">Capsid saves</span><span class="desk-value" data-desk-kept>${valueWords(kind, read)}</span><span class="desk-stamp" aria-hidden="true" data-desk-stamp>Match</span></div>
-</div>
-<p class="desk-verdict" role="status" data-desk-verdict>${verdict(kind, read, read)}</p>
-<p class="desk-play"><button type="button" class="cap-btn" data-variant="primary" data-desk-fool>Try to fool it</button><span data-desk-tally></span></p>
-<p class="desk-fact">In the last 90 days this server checked ${v.evaluations_90d.toLocaleString("en-US")} claims, and ${percent(v.agreement_rate_90d)} matched GitHub. <a href="/numbers/">All the numbers</a></p>
-`;
+function hero() {
   const words = renderToStaticMarkup(
     h(Hero, {
-      title: "AI agents say it's done. Capsid checks.",
-      lead: "Capsid is an open-source MCP server you run on Cloudflare. Your agents start every session from the same project notes. Each one can use only the tools you allow. When an agent says a job is done, Capsid asks GitHub whether it is.",
+      title: "One memory and one set of rules for your AI agents.",
+      lead: "Capsid is an open-source MCP server you run on Cloudflare. Your agents start every session from the same project notes. Each one can use only the tools you allow.",
       actions: [
         h(
           "a",
@@ -150,14 +80,8 @@ function hero(stats) {
           },
           "Install it",
         ),
-        h("a", { key: "tour", className: "hero-link", href: "#tour" }, "See how a job runs"),
+        h("a", { key: "tour", className: "hero-link", href: "#tour" }, "See how it works"),
       ],
-      aside: h("div", {
-        className: "desk",
-        "data-ui": "",
-        "data-desk": "",
-        dangerouslySetInnerHTML: { __html: desk },
-      }),
     }),
   );
   return `<div class="front cap-page">
@@ -171,13 +95,13 @@ ${words}
 /** @type {{ q: string, retired: number, rows: [string, string, boolean, boolean, boolean][] }[]} */
 const SEARCHES = [
   {
-    q: "How does an agent prove a job is done?",
+    q: "Which tools may a read-only agent use?",
     retired: 1,
     rows: [
       ["Decisions", "sample/decisions.md", false, true, true],
-      ["Checking claims against GitHub", "sample/specs/verification.md", true, true, false],
-      ["Outcome rows", "sample/specs/outcomes.md", false, true, false],
-      ["Session: the claim check", "sample/sessions/2026-10-20.md", true, false, false],
+      ["Grants and flags", "sample/specs/grants.md", true, true, false],
+      ["Agent tokens", "sample/specs/agents.md", false, true, false],
+      ["Session: the read grant", "sample/sessions/2026-10-20.md", true, false, false],
     ],
   },
   {
@@ -277,23 +201,20 @@ function board(tools) {
 </section>`;
 }
 
-function tour(/** @type {any} */ model, /** @type {any} */ stats) {
+function tour(/** @type {any} */ model) {
   const core = model.systems.find((/** @type {any} */ s) => s.ring === "core");
   const flows = flowsOf(model).filter(
     (f) => core && f.steps.every((x) => x.touches.every((p) => p.system === core.id)),
   );
-  const life = flows.find((f) => f.id === "job-life") ?? flows[0];
+  const life = flows.find((f) => f.id === "session-start") ?? flows[0];
   if (!life) return "";
-  const readings = readingsByStep(stats);
   const chapters = life.steps
     .map((st) => {
       const { name, text } = stepWords(st);
-      const kept = readings[name.toLowerCase()] ?? [];
       return `<li class="chapter" data-tour-step="${st.n}">
 <h3>${escapeHtml(name)} <span class="chapter-n">${st.n} of ${life.steps.length}</span></h3>
 <p>${escapeHtml(text)}</p>
 <p class="chapter-parts">${st.touches.map((p) => `<span class="part-name" data-part="${escapeHtml(p.id)}">${escapeHtml(p.name)}</span>`).join("")}</p>
-${kept.length ? `<dl class="readings readings-small">${kept.map(([value, label]) => reading(value, label)).join("")}</dl>` : ""}
 <p class="chapter-link"><a href="${stepPath(life.id, st.n)}">Open this step</a></p>
 </li>`;
     })
@@ -301,7 +222,7 @@ ${kept.length ? `<dl class="readings readings-small">${kept.map(([value, label])
   return `<section class="tour" id="tour" aria-labelledby="tour-title">
 <div class="tour-grid cap-page">
 <div class="tour-words">
-<h2 class="tour-title" id="tour-title">How a job runs</h2>
+<h2 class="tour-title" id="tour-title">${escapeHtml(life.name)}</h2>
 <p class="lead">${escapeHtml(life.description ?? "")}</p>
 <ol class="tour-steps">${chapters}</ol>
 </div>
@@ -339,14 +260,14 @@ function holds(
 /** @param {any} model @param {any} stats @param {any[]} tools @param {any} codeIndex */
 export function homePage(model, stats, tools, codeIndex) {
   const body = [
-    hero(stats),
+    hero(),
     knowledge(model, stats),
     board(tools),
-    tour(model, stats),
+    tour(model),
     holds(model, stats, tools, codeIndex),
   ].join("\n");
   return layout({
-    title: "Capsid: shared memory and a fact-check for AI coding agents",
+    title: "Capsid: shared memory and access control for AI coding agents",
     fullTitle: true,
     description: DESCRIPTION,
     path: "/",

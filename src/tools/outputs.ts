@@ -20,26 +20,6 @@ const listed = { documents: rows, count: num, limit: num, truncated: bool, note:
 // guardedWrite (./repo-guards) adds audit_warning to any repo write whose audit row failed.
 const written = (shape: Shape): Shape => ({ ...shape, audit_warning: str.optional() });
 
-const jobResult: Shape = {
-  ok: bool,
-  action: str,
-  job: obj.optional(),
-  jobs: rows.optional(),
-  truncated: bool.optional(),
-  note: str.optional(),
-  warnings: strs.optional(),
-  outcome: obj.optional(),
-  resume_note: obj.optional(),
-  resume_notes: rows.optional(),
-  resume_notes_dropped: num.optional(),
-  overlaps: obj.optional(),
-  started: obj.optional(),
-  routing: obj.optional(),
-  routing_note: str.optional(),
-  models: obj.optional(),
-  versions: rows.optional(),
-};
-
 const searchConsole = { namespace: str, origin: str, property: str, report: str };
 const bing = { namespace: str, origin: str, site: str, report: str };
 const traffic = { namespace: str, origin: str, report: str, since: str };
@@ -357,66 +337,10 @@ const OUTPUTS: Record<string, Shape> = {
     truncated: bool,
   },
 
-  jobs: mergeOutputs([
-    jobResult,
-    { ok: bool, action: str, stale: rows, truncated: bool.optional(), note: str.optional() },
-    {
-      generated: str,
-      budget_minutes: num,
-      policy: str,
-      policy_note: nullable(str),
-      heavy_planned_minutes: num,
-      lanes: rows,
-      skipped: rows,
-      queued_read: num,
-      truncated: bool,
-      for_namespace: nullable(str),
-    },
-    { ok: bool, action: str, models: obj },
-    {
-      generated: str,
-      since: str,
-      for_namespace: nullable(str),
-      finished: rows,
-      blocked: rows,
-      pull_requests_ready: rows,
-      pull_requests_merged: num,
-      totals: obj,
-      truncated: strs,
-    },
-  ]),
   status: {
     canon_paths: rows,
-    policies: obj,
-    overnight: obj,
     agents: rows.optional(),
     namespaces: rows,
   },
-  admin_control: mergeOutputs([
-    {
-      ok: z.literal(true),
-      action: str,
-      namespace: str,
-      path: str,
-      signature: str,
-      sha256: str,
-      bytes: num,
-      resigned: bool,
-    },
-    { action: str, mode: str, decision: nullable(obj) },
-    { ok: z.literal(true), action: str, state: obj },
-    {
-      action: str,
-      key: str,
-      hash: str,
-      entry: str,
-      grant: str,
-      already_listed: bool,
-      next_step: str,
-      command: str,
-      warning: str,
-    },
-  ]),
-
   ...ADMIN_OUTPUTS,
 };

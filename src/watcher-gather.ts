@@ -7,16 +7,14 @@ import { readTlsExpiry, TLS_EXPIRY_KEY } from "./tls-expiry";
 import type { Env } from "./env";
 import { readLiveConfig, liveChecks, defaultBranchHead } from "./live-checks";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
-import { checkManualSteps, liveStepReaders } from "./manual-steps";
 import { readServerErrors } from "./site-traffic";
 import {
   cloudflareCredentials,
   readWebAnalyticsSites,
   readCloudflare,
   readSecretNames,
-  readAccessAppNames,
 } from "./ops-cloudflare";
-import { readPackage, npmVersions } from "./ops-packages";
+import { readPackage } from "./ops-packages";
 import { readPackageConfig } from "./ops-package-config";
 import { readSiteConfig, type OpsSite, sitesFrom, siteMapDrift } from "./ops-sites";
 import { probeSite, readSnapshot } from "./ops-snapshot";
@@ -106,7 +104,7 @@ export async function gatherFindings(
   // The previous pass's rings, for "down on two probes in a row". A snapshot that is
   // absent or unreadable (readSnapshot logs it) has no previous probe to compare; a
   // KV read that throws means the check cannot judge, so it does not count as run and
-  // an open site-down job is not cleared on no evidence.
+  // an open site-down finding is not cleared on no evidence.
   const prev = await attempt("previous snapshot", async () => ({
     snapshot: await readSnapshot(env),
   }));
@@ -314,27 +312,6 @@ export async function gatherFindings(
     });
     if (read) observed.packages = read;
   }
-
-  // The manual steps blocked jobs name with a "check:" line (src/manual-steps.ts): after
-  // the secret names above, so a secret set since the last pass is seen on this one. Read,
-  // never judged: no finding comes from a step, and the counts go to stale:steps for the
-  // inbox and the stale view.
-  const steps = await attempt("manual steps", () =>
-    checkManualSteps(
-      env,
-      now,
-      liveStepReaders(env, {
-        npmVersions: (name) => npmVersions(fetchImpl, name),
-        accessAppNames: async () => {
-          const credentials = cloudflareCredentials(env);
-          if (!credentials.ok) throw new Error(credentials.reason);
-          return readAccessAppNames(fetchImpl, credentials.token, credentials.account);
-        },
-      }),
-    ),
-  );
-  if (steps && steps.seen.length > 0)
-    logEvent("WATCHER_STEPS_SEEN", { message: `WATCHER_STEPS_SEEN ${steps.note}` });
 
   return { findings: out, ran, observed };
 }

@@ -41,7 +41,7 @@ function calls(): Array<{ file: string; text: string }> {
 
 // A floor below the real count, so removing a log line is not a test edit, and above zero so a scan that
 // matches nothing cannot pass.
-const MIN_LOG_EVENT_SITES = 80;
+const MIN_LOG_EVENT_SITES = 76;
 
 test("no file in src/ calls console.log, warn or error directly", () => {
   const found = directCalls();

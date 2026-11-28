@@ -48,10 +48,7 @@ test("at 1024 px and at 390 px, no tab of a site's page scrolls sideways", async
   expect(problems).toEqual([]);
 });
 
-const DRAWERS = [
-  { type: "job", from: "queue" },
-  { type: "agent", from: "agents" },
-] as const;
+const DRAWERS = [{ type: "agent", from: "agents" }] as const;
 
 for (const d of DRAWERS) {
   test(`at 1024 px the ${d.type} drawer does not scroll sideways`, async ({ page }) => {

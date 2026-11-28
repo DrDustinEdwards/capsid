@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { buildAdminServer, buildServer } from "../src/server.ts";
+import { buildServer } from "../src/server.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
-import { watcherAgent } from "../src/watcher.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // The surfaces the registrar cannot see. guardRegistrations wraps server.registerTool;
 // resources and prompts are raw protocol handlers, `namespaces` takes no arguments so
-// namespaceRefusal has nothing to fire on, and `jobs` list and improve_run's control
-// actions need their own checks. Every plant goes through a real MCP client, because a
+// namespaceRefusal has nothing to fire on, and lint's gather needs its own check. Every plant goes through a real MCP client, because a
 // real client can reach these surfaces.
 
 const DOCS = [
@@ -43,13 +41,12 @@ const NAMESPACES = [
   },
 ];
 
-async function connect(
-  caller: Agent,
-  jobs: Array<Record<string, unknown>> = [],
-  build: typeof buildServer = buildServer,
-) {
-  const d1 = fakeD1({ documents: DOCS, namespaces: NAMESPACES, jobs });
-  const server = build(fakeEnv({ DB: d1.db, APP_KV: fakeKv({ seedToken: true }).kv }), caller);
+async function connect(caller: Agent) {
+  const d1 = fakeD1({ documents: DOCS, namespaces: NAMESPACES });
+  const server = buildServer(
+    fakeEnv({ DB: d1.db, APP_KV: fakeKv({ seedToken: true }).kv }),
+    caller,
+  );
   const client = new Client({ name: "scope-surfaces", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
@@ -170,9 +167,9 @@ test("PLANT: prompts/list shows only the caller's namespaces", async () => {
 
 test("PLANT: a caller narrowed away from capsid_read_doc lists no resources and no prompts", async () => {
   // The read handlers ask checkScope as capsid_read_doc; the lists must ask the same, or a
-  // narrowed key (a bench run key, a jobs-only driver) enumerates paths and prompt names.
+  // narrowed key (a status-only driver) enumerates paths and prompt names.
   const narrowed = driver();
-  narrowed.scopes.tools = ["capsid_work_jobs"];
+  narrowed.scopes.tools = ["capsid_read_status"];
   const { client, close } = await connect(narrowed);
   await assert.rejects(client.listResources(), /capsid_read_doc/);
   await assert.rejects(client.listPrompts(), /capsid_read_doc/);
@@ -235,126 +232,12 @@ test("THE ADMIN STILL GETS THE INVENTORY, which is who it is for", async () => {
   assert.ok(Array.isArray(body.agents), "the admin lost the inventory it is the audience for");
 });
 
-// capsid_work_jobs.list, and the improve loop's control surface
-
-test("PLANT: an agent scoped to capsid_work_jobs.post is REFUSED action list", async () => {
-  // The registrar passes the action, which is what makes the qualified list apply here.
-  const caller = driver();
-  caller.scopes.tools = ["capsid_work_jobs", "capsid_work_jobs.post"];
-  const { client, close } = await connect(caller);
-  const result = (await client.callTool({
-    name: "capsid_work_jobs",
-    arguments: { action: "list", namespace: "capsid" },
-  })) as {
-    isError?: boolean;
-    content: Array<{ text: string }>;
-  };
-  await close();
-  assert.equal(result.isError, true, "a post-only agent listed the queue");
-  assert.match(
-    result.content[0].text,
-    /not scoped to the 'capsid_work_jobs\.list' tool/,
-    result.content[0].text,
-  );
-});
-
-test("THE INNOCENT DIRECTION: an agent scoped to capsid_work_jobs.list may list", async () => {
-  const caller = driver();
-  caller.scopes.tools = ["capsid_work_jobs", "capsid_work_jobs.list"];
-  const seeded = {
-    id: "job_listed",
-    namespace: "capsid",
-    title: "a listed job",
-    status: "queued",
-    priority: 0,
-    posted_by: "github:seat",
-  };
-  const { client, close } = await connect(caller, [seeded]);
-  const result = (await client.callTool({
-    name: "capsid_work_jobs",
-    arguments: { action: "list", namespace: "capsid" },
-  })) as {
-    isError?: boolean;
-    content: Array<{ text: string }>;
-  };
-  await close();
-  assert.doesNotMatch(
-    result.content[0].text,
-    /unauthorized:/,
-    `a list-scoped agent was refused list: ${result.content[0].text}`,
-  );
-  assert.notEqual(result.isError, true, result.content[0].text);
-  const listed = JSON.parse(result.content[0].text) as {
-    ok: boolean;
-    action: string;
-    jobs: Array<{ id: string }>;
-  };
-  assert.equal(listed.ok, true);
-  assert.deepEqual(
-    listed.jobs.map((j) => j.id),
-    ["job_listed"],
-    "the list did not return the queue",
-  );
-});
-
-test("PLANT: a WRITE-ONLY agent is refused jobs list, which is the grant half", async () => {
-  // The registrar checks no grant for `capsid_work_jobs`, because TOOL_GRANTS calls it an "action"
-  // tool, so the handler's own check is the only guard here. The caller clears the
-  // registrar on purpose: a post-only caller would be refused on the tools axis first,
-  // and the plant would stay green with the handler check deleted.
-  const caller = driver();
-  caller.scopes.grants = ["write"];
-  const { client, close } = await connect(caller);
-  const result = (await client.callTool({
-    name: "capsid_work_jobs",
-    arguments: { action: "list", namespace: "capsid" },
-  })) as {
-    isError?: boolean;
-    content: Array<{ text: string }>;
-  };
-  await close();
-  assert.equal(result.isError, true, "an agent with no read grant listed the queue");
-  assert.match(result.content[0].text, /requires the read grant/, result.content[0].text);
-});
-
-test("PLANT: a driver is REFUSED the administrator's switches: its status tool serves none, and the admin tool is admin only", async () => {
-  // breaker_reset reopens a namespace's queue and overnight starts unattended sessions.
-  // Neither is an action of the driver's capsid_read_status; both are
-  // capsid_admin_manage_switches, admin only.
-  const driverSide = await connect(driver());
-  const asked = (await driverSide.client.callTool({
-    name: "capsid_read_status",
-    arguments: { action: "breaker_reset", namespace: "capsid" },
-  })) as {
-    isError?: boolean;
-    content: Array<{ text: string }>;
-  };
-  await driverSide.close();
-  assert.equal(asked.isError, true, "capsid_read_status served breaker_reset");
-  for (const args of [
-    { action: "breaker_reset", namespace: "capsid" },
-    { action: "overnight", value: "off", namespace: "capsid" },
-  ]) {
-    // The namespace is passed because the tool declares one and namespaceRefusal fires
-    // first for a scoped caller that omits it; this plant is about the admin check.
-    const admin = await connect(driver(), [], buildAdminServer);
-    const result = (await admin.client.callTool({
-      name: "capsid_admin_manage_switches",
-      arguments: args,
-    })) as {
-      content: Array<{ text: string }>;
-    };
-    await admin.close();
-    assert.match(result.content[0].text, /admin only/, `${args.action}: ${result.content[0].text}`);
-  }
-});
-
-// lint gather, the same shape as jobs.list
+// lint gather
 
 test("PLANT: a WRITE-ONLY agent is refused lint gather, which is the grant half", async () => {
   // lint is an "action" tool, so the registrar names no grant and the handler must ask
-  // for read on gather. The caller clears the registrar for the reason given on the
-  // jobs.list plant: full tools axis, one grant, and the grant is the wrong one.
+  // for read on gather. The caller clears the registrar on purpose: full tools axis, one
+  // grant, and the grant is the wrong one, so the plant would fail with the handler check deleted.
   const caller = driver();
   caller.scopes.grants = ["write"];
   const { client, close } = await connect(caller);
@@ -412,25 +295,4 @@ test("THE OTHER INNOCENT DIRECTION: the write branches still take the write gran
   await close();
   assert.equal(result.isError, true, "a read-only agent ran lint report, which writes a document");
   assert.match(result.content[0].text, /requires the write grant/, result.content[0].text);
-});
-
-test("the in-Worker watcher is NOT the write-only caller that reaches gather", async () => {
-  // The watcher's tools axis is ["capsid_work_jobs", "capsid_work_jobs.post"], so the registrar refuses it lint
-  // before any grant is considered. An omitted mode resolves to the handler's default
-  // before the axis is consulted, so the refusal names capsid_lint_namespace.gather.
-  const { client, close } = await connect(watcherAgent());
-  const result = (await client.callTool({
-    name: "capsid_lint_namespace",
-    arguments: { namespace: "capsid" },
-  })) as {
-    isError?: boolean;
-    content: Array<{ text: string }>;
-  };
-  await close();
-  assert.equal(result.isError, true);
-  assert.match(
-    result.content[0].text,
-    /not scoped to the 'capsid_lint_namespace\.gather' tool/,
-    result.content[0].text,
-  );
 });

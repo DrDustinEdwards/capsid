@@ -349,8 +349,8 @@ describe("the OAuth round trip", () => {
       /capsid_write_doc not found/,
     );
     const posted = await rpc(3, "tools/call", {
-      name: "capsid_work_jobs",
-      arguments: { action: "post", namespace: "sample", title: "x", body: "x" },
+      name: "capsid_lint_namespace",
+      arguments: { mode: "finalize", namespace: "sample" },
     });
     expect(posted.status, "a read-only grant reached a write action").toBe(403);
     const challenge = posted.headers.get("WWW-Authenticate") ?? "";

@@ -20,6 +20,7 @@ import {
   CAPSID_DUMP,
   NO_BACKUP_SITES,
 } from "./site-backup";
+import { CAPSID_NAMESPACE, jobRefusal } from "./site-jobs";
 
 const SITE_FIELDS = ["name", "origin", "health_path", "platform", "script"] as const;
 
@@ -34,7 +35,8 @@ export async function planSiteAction(
     | "package_edit"
     | "package_remove"
     | "site_repair"
-    | "site_backup",
+    | "site_backup"
+    | "run_job",
   p: Record<string, string>,
   actor: string,
   click: string,
@@ -268,6 +270,30 @@ export async function planSiteAction(
           "Each site runs its own backup jobs now (its D1 dump and its files passes), through the path its nightly cron runs, recorded in its cron_runs. A dump adds a run under the site's own checks; a files pass copies under files/ in its backups bucket and goes on where it stopped. The result is shown when every site answers, up to five minutes. Each call is an audit_log and a task_runs row (site-backup). The tokens are never shown or recorded.",
         ],
         audit: [`site-backup by ${actor}`, click],
+      };
+    }
+    case "run_job": {
+      if (!p.namespace || !p.name) return refused("run_job needs a namespace and a job name.");
+      const bad = await jobRefusal(env, p.namespace, p.name);
+      if (bad) return refused(bad);
+      if (p.namespace === CAPSID_NAMESPACE)
+        return {
+          ok: true,
+          changes: [
+            `capsid: run Capsid's own ${p.name} job within five minutes, on the next tick, the same run as the nightly 09:00 UTC cron, with its task_runs row (${p.name}). The dump waits for the cron's lease, so it never overlaps a run.`,
+          ],
+          audit: [`site-job by ${actor}`, click],
+        };
+      const row = await readSiteRow(env.DB, p.namespace);
+      const wait = await limitRefusalFor(env, p.namespace, `run_job:${p.name}`, new Date());
+      if (wait) return refused(`${p.name} on ${p.namespace} waits: ${wait}`);
+      return {
+        ok: true,
+        changes: [
+          `POST ${row?.origin ?? ""}${row?.operator?.path ?? ""} with tool run_job { job: "${p.name}" }, authorized by the Capsid Worker secret ${row?.operator?.auth_var ?? ""} (the token is never shown or recorded).`,
+          "The site runs that job now through the code its cron runs (site-runtime runJobTool), recorded in its cron_runs so /health's cron check sees the run, and answers each run's outcome; the result is shown when it returns, up to five minutes. A name the site does not run is refused by the site, naming its jobs. One audit_log and one task_runs row (site-job) record it.",
+        ],
+        audit: [`site-job by ${actor}`, click],
       };
     }
   }

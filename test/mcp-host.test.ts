@@ -43,7 +43,7 @@ test("PLANT: the MCP host serves every machine route and nothing else", () => {
 });
 
 // The path list is kept by hand, and a route left off it is a 404 in production while every handler test passes
-// (/bench/repro shipped that way). Every declared route outside the Portal must be on it.
+// (a /bench route once shipped that way). Every declared route outside the Portal must be on it.
 test("PLANT: the MCP host serves every declared route outside the Portal", () => {
   for (const path of [...Object.keys(UNGATED_ROUTES), ...Object.keys(ROUTE_GRANTS)]) {
     if (path === "/portal" || path.startsWith("/portal/")) continue;

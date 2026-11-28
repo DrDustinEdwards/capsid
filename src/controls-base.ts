@@ -1,26 +1,15 @@
-import type { JobRow } from "./jobs-schema";
 import type { PortalAction } from "./ops-types/portal";
-import { prUrlsFromJob } from "./outcome-prs";
 
 // The admin controls' shared vocabulary (src/controls.ts is the core): the action list, the audit
 // row names, and the helpers both the plan and the perform read.
 
 export const PORTAL_ACTIONS: readonly PortalAction[] = [
-  "overnight",
-  "resume_job",
-  "fail_job",
-  "release_job",
-  "close_shipped",
-  "supersede_job",
-  "park_job",
-  "unpark_job",
   "pr_close",
   "revoke_agent",
   "activate_agent",
   "site_add",
   "site_edit",
   "site_remove",
-  "reset_breaker",
   "package_add",
   "package_edit",
   "package_remove",
@@ -38,12 +27,6 @@ export type ActionParams = Record<string, string | undefined>;
 // The click's own audit row is `<prefix><action>`. Rows written before the move to /portal say
 // console-<action>; a query across that date names both (docs/schema.md).
 const CLICK_AUDIT_PREFIX = "portal-";
-
-// The automation switch (overnight) takes a reason in both directions, and an Undo from the
-// Portal's result message sends the reverse change with undo: "true". Its click row is then
-// `portal-undo-<action>`, so an undo reads as its own row, never as a fresh decision.
-export const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["overnight"]);
-const UNDO_INFIX = "undo-";
 
 // Which front door an action came in by. A click in the Portal and a call to the controls tool are
 // the same control; the audit row says which (controls design, section 2): portal-<action> from
@@ -64,22 +47,8 @@ export const portalOnlyRefusal = (action: PortalAction, surface: Surface): strin
 export const auditPrefix = (surface: Surface) =>
   surface === "portal" ? CLICK_AUDIT_PREFIX : CHAT_AUDIT_PREFIX;
 
-export function clickAuditAction(
-  action: PortalAction,
-  params: ActionParams,
-  surface: Surface = "portal",
-): string {
-  return `${auditPrefix(surface)}${params.undo === "true" ? UNDO_INFIX : ""}${action}`;
-}
-
-/** What a switch without a reason is told, at preview and again at perform. */
-export function switchReasonRefusal(action: PortalAction): string {
-  switch (action) {
-    case "overnight":
-      return "overnight needs a reason: why the overnight run goes on, off, or changes what it runs on. It is recorded in the audit row with the change.";
-    default:
-      return `${action} needs a reason, recorded in the audit row with the change.`;
-  }
+export function clickAuditAction(action: PortalAction, surface: Surface = "portal"): string {
+  return `${auditPrefix(surface)}${action}`;
 }
 
 export const UNKNOWN_ACTION = (action: string) =>
@@ -110,19 +79,3 @@ export function deleteOptionsFrom(
     },
   };
 }
-
-// close_shipped's complete (stale jobs D4: the existing admin_complete path, crediting the
-// holder). The pull requests the job names, from result_ref and the summary, become the evidence
-// the outcome verifies, at most the 10 the capsid_work_jobs tool takes.
-const CLOSE_SHIPPED_MAX_PRS = 10;
-export function shippedEvidence(job: JobRow): { result_ref?: string; prs: string[]; more: number } {
-  const all = prUrlsFromJob(job);
-  const prs = all.slice(0, CLOSE_SHIPPED_MAX_PRS);
-  const ref = job.result_ref && prs.includes(job.result_ref) ? job.result_ref : prs[0];
-  return { ...(ref ? { result_ref: ref } : {}), prs, more: all.length - prs.length };
-}
-
-export const CLOSE_SHIPPED_NEEDS_REASON =
-  "close_shipped needs a reason: what shipped, and how you know. It is the job's result summary.";
-export const SUPERSEDE_NEEDS_REASON =
-  "supersede_job needs a reason: what replaced this job, or why it was withdrawn.";

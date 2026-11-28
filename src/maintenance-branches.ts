@@ -128,7 +128,6 @@ export async function gatherBranchItems(
         items.push({
           rule: "branch-pruned",
           namespace,
-          job: null,
           line: `${plan.repo} branch ${c.branch} was deleted: pull request #${c.pr} merged from its tip ${c.sha}. Put it back with git push origin ${c.sha}:refs/heads/${c.branch} if it was wanted.`,
         });
       }
@@ -136,7 +135,6 @@ export async function gatherBranchItems(
         items.push({
           rule: "branch-merged",
           namespace,
-          job: null,
           line: `${plan.repo} branch ${s.branch} is merged and was not pruned: ${s.reason}.`,
         });
       }
@@ -144,7 +142,6 @@ export async function gatherBranchItems(
         items.push({
           rule: "branch-merged",
           namespace,
-          job: null,
           line: `${done.remaining} more merged branch(es) in ${plan.repo} wait for the next run (${PRUNE_CAP} are deleted per repo per run).`,
         });
       }
@@ -153,14 +150,12 @@ export async function gatherBranchItems(
         items.push({
           rule: "branch-merged",
           namespace,
-          job: null,
           line: `${plan.repo} branch ${c.branch} is merged (pull request #${c.pr}, tip ${c.sha}): delete it, or keep-list it.`,
         });
       }
       items.push({
         rule: "branch-merged",
         namespace,
-        job: null,
         line: `${plan.prune.length} merged branch(es) in ${plan.repo} would be pruned; the auto-prune is off, so none was deleted.`,
       });
     }
@@ -229,7 +224,6 @@ export async function gatherBranchItems(
         items.push({
           rule: "branch-pruned",
           namespace,
-          job: null,
           line: `${plan.repo} branch ${c.branch} was deleted: no open pull request and no commit for ${s.age} days (${s.reason}). Put it back with git push origin ${c.sha}:refs/heads/${c.branch} if it was wanted.`,
         });
       }
@@ -237,14 +231,12 @@ export async function gatherBranchItems(
         items.push({
           rule: "branch-stale",
           namespace,
-          job: null,
           line: `${plan.repo} branch ${k.branch} is old and was not pruned: ${k.reason}.`,
         });
       if (done.remaining > 0) {
         items.push({
           rule: "branch-stale",
           namespace,
-          job: null,
           line: `${done.remaining} more old branch(es) in ${plan.repo} wait for the next run (${PRUNE_CAP} are deleted per repo per run).`,
         });
       }
@@ -254,7 +246,6 @@ export async function gatherBranchItems(
       items.push({
         rule: "branch-stale",
         namespace,
-        job: null,
         line: `${plan.repo} branch ${s.branch} has had no commit for ${s.age} days (${s.reason}): delete it, open its pull request, or keep-list it.`,
       });
     }
@@ -266,7 +257,6 @@ function notChecked(namespace: string, problem: string): MaintenanceItem {
   return {
     rule: "branches-not-checked",
     namespace,
-    job: null,
     line: `Branches in ${namespace} were not fully checked (${problem}): what is missing is not a clean result.`,
   };
 }

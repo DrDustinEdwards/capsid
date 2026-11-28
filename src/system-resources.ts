@@ -162,7 +162,7 @@ export function resourceDrift(
 ): { items: OpsMaintenanceItem[]; read: number } {
   const items: OpsMaintenanceItem[] = [];
   const add = (line: string, rule: OpsMaintenanceItem["rule"] = "model-drift") =>
-    items.push({ rule, namespace: "capsid", job: null, line });
+    items.push({ rule, namespace: "capsid", line });
   for (const p of doc.problems)
     add(`${p}, so part of the secrets and data model was not checked today.`, "model-not-checked");
 

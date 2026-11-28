@@ -1295,273 +1295,6 @@
   },
   "live": {
     "generated": "2026-09-28T12:00:00.000Z",
-    "jobs": [
-      {
-        "id": "job_7c1e44b0a912",
-        "namespace": "sample",
-        "title": "Watcher: the Amazon copy of sample is stale [offaccount-stale-sample]",
-        "status": "blocked",
-        "priority": 0,
-        "posted_by": "agent:watcher",
-        "claimed_by": "agent:sample-driver",
-        "created_at": "2026-09-18T16:48:00.000Z",
-        "updated_at": "2026-09-18T19:12:00.000Z",
-        "blocked_count": 1,
-        "resumed_count": 0,
-        "gate_required": false,
-        "waits_on": "Clear the billing hold on the backup account, then run the copy.",
-        "command": "gh workflow run offaccount --repo example-org/sample-backups",
-        "command_signature": "verified",
-        "result_ref": null,
-        "finding": {
-          "fingerprint": "offaccount-stale-sample",
-          "seen_count": 14,
-          "last_seen": "2026-09-28T11:30:00.000Z"
-        }
-      },
-      {
-        "id": "job_e946e3196ab8",
-        "namespace": "sample",
-        "title": "Operations dashboard: every site in one view",
-        "status": "claimed",
-        "priority": 2,
-        "posted_by": "access:operator@example.com",
-        "claimed_by": "agent:sample-driver",
-        "created_at": "2026-09-27T00:00:00.000Z",
-        "updated_at": "2026-09-28T11:40:00.000Z",
-        "blocked_count": 0,
-        "resumed_count": 0,
-        "gate_required": false,
-        "waits_on": null,
-        "command": null,
-        "command_signature": null,
-        "result_ref": null,
-        "finding": null
-      },
-      {
-        "id": "job_91b3c0de5a24",
-        "namespace": "sample",
-        "title": "Design only: paired comparison for the methods note",
-        "status": "blocked",
-        "priority": 0,
-        "posted_by": "access:operator@example.com",
-        "claimed_by": "agent:sample-driver",
-        "created_at": "2026-09-26T07:12:00.000Z",
-        "updated_at": "2026-09-26T09:36:00.000Z",
-        "blocked_count": 1,
-        "resumed_count": 0,
-        "gate_required": true,
-        "waits_on": "QUESTION: Read the design and answer its DECIDE list in a resume note.",
-        "command": "Answer in a resume note",
-        "command_signature": "verified",
-        "result_ref": null,
-        "finding": null,
-        "question": true
-      },
-      {
-        "id": "job_15e10168e61c",
-        "namespace": "sample-b",
-        "title": "Sync the score block onto the open scorer PR",
-        "status": "blocked",
-        "priority": 0,
-        "posted_by": "access:operator@example.com",
-        "claimed_by": "agent:sample-b-driver",
-        "created_at": "2026-09-22T12:00:00.000Z",
-        "updated_at": "2026-09-23T00:00:00.000Z",
-        "blocked_count": 2,
-        "resumed_count": 1,
-        "gate_required": false,
-        "waits_on": "Merge sample-b #15 when its CI runs green.",
-        "command": "gh pr merge 15 --repo example-org/sample-b --squash",
-        "command_signature": "legacy-unsigned",
-        "result_ref": null,
-        "finding": null
-      },
-      {
-        "id": "job_9ab0bcf483ae",
-        "namespace": "sample-b",
-        "title": "Find why /api/health answers 404 on the live site",
-        "status": "queued",
-        "priority": 1,
-        "posted_by": "access:operator@example.com",
-        "claimed_by": null,
-        "created_at": "2026-09-28T07:00:00.000Z",
-        "updated_at": "2026-09-28T07:00:00.000Z",
-        "blocked_count": 0,
-        "resumed_count": 0,
-        "gate_required": false,
-        "waits_on": null,
-        "command": null,
-        "command_signature": null,
-        "result_ref": null,
-        "finding": null
-      },
-      {
-        "id": "job_0cdf2803f0ba",
-        "namespace": "sample-c",
-        "title": "Report the deployed sha from /health",
-        "status": "queued",
-        "priority": 0,
-        "posted_by": "access:operator@example.com",
-        "claimed_by": null,
-        "created_at": "2026-09-27T10:00:00.000Z",
-        "updated_at": "2026-09-27T10:00:00.000Z",
-        "blocked_count": 0,
-        "resumed_count": 0,
-        "gate_required": false,
-        "waits_on": null,
-        "command": null,
-        "command_signature": null,
-        "result_ref": null,
-        "finding": null
-      },
-      {
-        "id": "job_5e0aa1b2c3d4",
-        "namespace": "sample-c",
-        "title": "Rebuild the methods index after the note is ruled",
-        "status": "parked",
-        "priority": 1,
-        "posted_by": "access:operator@example.com",
-        "claimed_by": null,
-        "created_at": "2026-09-27T10:00:00.000Z",
-        "updated_at": "2026-09-27T10:00:00.000Z",
-        "blocked_count": 0,
-        "resumed_count": 0,
-        "gate_required": false,
-        "waits_on": null,
-        "command": null,
-        "command_signature": null,
-        "result_ref": null,
-        "finding": null,
-        "parked_reason": "comes back when the methods note is ruled"
-      },
-      {
-        "id": "job_09db004529f4",
-        "namespace": "sample-c",
-        "title": "Watcher: error rate above 1% of requests [errors-sample-c]",
-        "status": "queued",
-        "priority": 2,
-        "posted_by": "agent:watcher",
-        "claimed_by": null,
-        "created_at": "2026-09-28T09:30:00.000Z",
-        "updated_at": "2026-09-28T09:30:00.000Z",
-        "blocked_count": 0,
-        "resumed_count": 0,
-        "gate_required": false,
-        "waits_on": null,
-        "command": null,
-        "command_signature": null,
-        "result_ref": null,
-        "finding": {
-          "fingerprint": "errors-sample-c",
-          "seen_count": null,
-          "last_seen": null
-        }
-      },
-      {
-        "id": "job_6db2b533410e",
-        "namespace": "sample-f",
-        "title": "Watcher: sample-f.example.com failed 3 probes in a row [probe-sample-f]",
-        "status": "queued",
-        "priority": 3,
-        "posted_by": "agent:watcher",
-        "claimed_by": null,
-        "created_at": "2026-09-28T10:54:00.000Z",
-        "updated_at": "2026-09-28T10:54:00.000Z",
-        "blocked_count": 0,
-        "resumed_count": 0,
-        "gate_required": false,
-        "waits_on": null,
-        "command": null,
-        "command_signature": null,
-        "result_ref": null,
-        "finding": {
-          "fingerprint": "probe-sample-f",
-          "seen_count": null,
-          "last_seen": null
-        }
-      },
-      {
-        "id": "job_6b5a4c3d2e1f",
-        "namespace": "sample",
-        "title": "Record the login switch dates in the auth doc",
-        "status": "done",
-        "priority": 0,
-        "posted_by": "access:operator@example.com",
-        "claimed_by": "agent:sample-driver",
-        "created_at": "2026-09-28T02:00:00.000Z",
-        "updated_at": "2026-09-28T11:10:00.000Z",
-        "blocked_count": 0,
-        "resumed_count": 0,
-        "gate_required": false,
-        "waits_on": null,
-        "command": null,
-        "command_signature": null,
-        "result_ref": "https://github.com/example-org/sample-a/pull/190",
-        "finding": null
-      },
-      {
-        "id": "job_d524d7459d9e",
-        "namespace": "sample-b",
-        "title": "Publish queue shows scheduled posts",
-        "status": "done",
-        "priority": 0,
-        "posted_by": "access:operator@example.com",
-        "claimed_by": "agent:sample-b-driver",
-        "created_at": "2026-09-27T22:00:00.000Z",
-        "updated_at": "2026-09-28T06:00:00.000Z",
-        "blocked_count": 0,
-        "resumed_count": 0,
-        "gate_required": false,
-        "waits_on": null,
-        "command": null,
-        "command_signature": null,
-        "result_ref": null,
-        "finding": null
-      },
-      {
-        "id": "job_4173dbeb8cc3",
-        "namespace": "sample-c",
-        "title": "Rotate the image cache key",
-        "status": "failed",
-        "priority": 0,
-        "posted_by": "access:operator@example.com",
-        "claimed_by": "agent:sample-c-driver",
-        "created_at": "2026-09-27T16:00:00.000Z",
-        "updated_at": "2026-09-28T03:00:00.000Z",
-        "blocked_count": 0,
-        "resumed_count": 0,
-        "gate_required": false,
-        "waits_on": null,
-        "command": null,
-        "command_signature": null,
-        "result_ref": null,
-        "finding": null
-      },
-      {
-        "id": "job_f71dff903287",
-        "namespace": "sample",
-        "title": "Watcher: deploy drift, live sha behind main [deploy-drift-4e7f2a0]",
-        "status": "superseded",
-        "priority": 0,
-        "posted_by": "agent:watcher",
-        "claimed_by": null,
-        "created_at": "2026-09-27T13:00:00.000Z",
-        "updated_at": "2026-09-27T18:00:00.000Z",
-        "blocked_count": 0,
-        "resumed_count": 0,
-        "gate_required": false,
-        "waits_on": null,
-        "command": null,
-        "command_signature": null,
-        "result_ref": null,
-        "finding": {
-          "fingerprint": "deploy-drift-4e7f2a0",
-          "seen_count": null,
-          "last_seen": null
-        }
-      }
-    ],
     "agents": [
       {
         "name": "sample-driver",
@@ -1571,15 +1304,7 @@
         "last_seen": "2026-09-28T11:57:00.000Z",
         "revoked_at": null,
         "pending": false,
-        "archived_at": null,
-        "jobs_done": 41,
-        "jobs_failed": 3,
-        "jobs_blocked": 58,
-        "prs_opened": 36,
-        "prs_merged": 31,
-        "pr_merge_rate": 0.86,
-        "ci_green_rate": 0.94,
-        "median_duration_minutes": 212
+        "archived_at": null
       },
       {
         "name": "sample-b-driver",
@@ -1589,15 +1314,7 @@
         "last_seen": "2026-09-28T06:12:00.000Z",
         "revoked_at": null,
         "pending": false,
-        "archived_at": null,
-        "jobs_done": 64,
-        "jobs_failed": 5,
-        "jobs_blocked": 22,
-        "prs_opened": 71,
-        "prs_merged": 66,
-        "pr_merge_rate": 0.93,
-        "ci_green_rate": 0.9,
-        "median_duration_minutes": 96
+        "archived_at": null
       },
       {
         "name": "sample-c-driver",
@@ -1607,15 +1324,7 @@
         "last_seen": "2026-09-27T07:12:00.000Z",
         "revoked_at": null,
         "pending": false,
-        "archived_at": null,
-        "jobs_done": 12,
-        "jobs_failed": 2,
-        "jobs_blocked": 4,
-        "prs_opened": 13,
-        "prs_merged": 11,
-        "pr_merge_rate": 0.85,
-        "ci_green_rate": null,
-        "median_duration_minutes": 118
+        "archived_at": null
       },
       {
         "name": "sample-d-driver",
@@ -1625,15 +1334,7 @@
         "last_seen": "2026-09-20T09:36:00.000Z",
         "revoked_at": null,
         "pending": false,
-        "archived_at": null,
-        "jobs_done": 6,
-        "jobs_failed": 0,
-        "jobs_blocked": 3,
-        "prs_opened": 5,
-        "prs_merged": 5,
-        "pr_merge_rate": 1,
-        "ci_green_rate": null,
-        "median_duration_minutes": 77
+        "archived_at": null
       },
       {
         "name": "seat",
@@ -1643,15 +1344,7 @@
         "last_seen": "2026-09-28T11:22:00.000Z",
         "revoked_at": null,
         "pending": false,
-        "archived_at": null,
-        "jobs_done": 11,
-        "jobs_failed": 0,
-        "jobs_blocked": 9,
-        "prs_opened": 3,
-        "prs_merged": 58,
-        "pr_merge_rate": null,
-        "ci_green_rate": null,
-        "median_duration_minutes": null
+        "archived_at": null
       },
       {
         "name": "watcher",
@@ -1661,15 +1354,7 @@
         "last_seen": "2026-09-28T11:48:00.000Z",
         "revoked_at": null,
         "pending": false,
-        "archived_at": null,
-        "jobs_done": 0,
-        "jobs_failed": 17,
-        "jobs_blocked": 0,
-        "prs_opened": 0,
-        "prs_merged": 0,
-        "pr_merge_rate": null,
-        "ci_green_rate": null,
-        "median_duration_minutes": null
+        "archived_at": null
       },
       {
         "name": "reviewer",
@@ -1679,15 +1364,7 @@
         "last_seen": "2026-09-24T07:12:00.000Z",
         "revoked_at": null,
         "pending": false,
-        "archived_at": null,
-        "jobs_done": 0,
-        "jobs_failed": 0,
-        "jobs_blocked": 0,
-        "prs_opened": 0,
-        "prs_merged": 0,
-        "pr_merge_rate": null,
-        "ci_green_rate": null,
-        "median_duration_minutes": null
+        "archived_at": null
       },
       {
         "name": "old-auditor",
@@ -1697,15 +1374,7 @@
         "last_seen": null,
         "revoked_at": "2026-09-17T12:00:00.000Z",
         "pending": false,
-        "archived_at": "2026-09-24T12:05:00.000Z",
-        "jobs_done": 0,
-        "jobs_failed": 0,
-        "jobs_blocked": 0,
-        "prs_opened": 0,
-        "prs_merged": 0,
-        "pr_merge_rate": null,
-        "ci_green_rate": null,
-        "median_duration_minutes": null
+        "archived_at": "2026-09-24T12:05:00.000Z"
       },
       {
         "name": "sample-old-key",
@@ -1715,62 +1384,19 @@
         "last_seen": "2026-09-21T10:02:00.000Z",
         "revoked_at": "2026-09-25T15:20:00.000Z",
         "pending": false,
-        "archived_at": null,
-        "jobs_done": 0,
-        "jobs_failed": 0,
-        "jobs_blocked": 0,
-        "prs_opened": 0,
-        "prs_merged": 0,
-        "pr_merge_rate": null,
-        "ci_green_rate": null,
-        "median_duration_minutes": null
+        "archived_at": null
       },
       {
-        "name": "runner-job_6b5a4c3d2e1f-s4410",
+        "name": "old-runner",
         "kind": "session",
         "namespaces": ["sample"],
         "flags": [],
         "last_seen": "2026-09-26T08:40:00.000Z",
         "revoked_at": "2026-09-26T08:41:00.000Z",
         "pending": false,
-        "archived_at": "2026-09-26T09:00:00.000Z",
-        "jobs_done": 1,
-        "jobs_failed": 0,
-        "jobs_blocked": 0,
-        "prs_opened": 0,
-        "prs_merged": 0,
-        "pr_merge_rate": null,
-        "ci_green_rate": null,
-        "median_duration_minutes": null
+        "archived_at": "2026-09-26T09:00:00.000Z"
       }
     ],
-    "prs": [
-      {
-        "job_id": "job_6b5a4c3d2e1f",
-        "pr_url": "https://github.com/example-org/sample-a/pull/190",
-        "merged": null,
-        "merge_verified_at": null,
-        "recorded_at": "2026-09-28T11:10:00.000Z"
-      },
-      {
-        "job_id": "job_d524d7459d9e",
-        "pr_url": "https://github.com/example-org/sample-b/pull/214",
-        "merged": true,
-        "merge_verified_at": "2026-09-28T06:12:00.000Z",
-        "recorded_at": "2026-09-28T06:00:00.000Z"
-      },
-      {
-        "job_id": "job_91b3c0de5a24",
-        "pr_url": "https://github.com/example-org/sample-a/pull/188",
-        "merged": false,
-        "merge_verified_at": "2026-09-26T12:00:00.000Z",
-        "recorded_at": "2026-09-26T07:12:00.000Z"
-      }
-    ],
-    "overnight": {
-      "mode": "off",
-      "decision": null
-    },
     "namespaces": [
       {
         "name": "sample"
@@ -1934,44 +1560,22 @@
     },
     "inbox": {
       "generated": "2026-09-28T12:00:00.000Z",
-      "count": 5,
-      "severity": "needs-you",
+      "count": 2,
+      "severity": "failing",
       "apps": [
         {
           "namespace": "sample",
           "name": "Sample A",
-          "count": 2,
-          "severity": "needs-you",
-          "items": [
-            {
-              "title": "Watcher: the Amazon copy of sample is stale [offaccount-stale-sample]",
-              "kind": "blocked-job",
-              "link": null,
-              "since": "2026-09-18T19:12:00.000Z",
-              "job": "job_7c1e44b0a912"
-            },
-            {
-              "title": "Design only: paired comparison for the methods note",
-              "kind": "blocked-job",
-              "link": null,
-              "since": "2026-09-26T09:36:00.000Z",
-              "job": "job_91b3c0de5a24"
-            }
-          ]
+          "count": 0,
+          "severity": "none",
+          "items": []
         },
         {
           "namespace": "sample-b",
           "name": "Sample B",
-          "count": 2,
-          "severity": "needs-you",
+          "count": 1,
+          "severity": "failing",
           "items": [
-            {
-              "title": "Sync the score block onto the open scorer PR",
-              "kind": "blocked-job",
-              "link": null,
-              "since": "2026-09-23T00:00:00.000Z",
-              "job": "job_15e10168e61c"
-            },
             {
               "title": "CI is failing on 1a2b3c4",
               "kind": "ci",
@@ -2038,7 +1642,38 @@
         }
       ]
     },
-    "findings": []
+    "findings": [
+      {
+        "fingerprint": "offaccount-stale-sample",
+        "namespace": "sample",
+        "class": "alert",
+        "headline": "the Amazon copy of sample is stale",
+        "first_seen": "2026-09-18T16:48:00.000Z",
+        "last_seen": "2026-09-28T11:30:00.000Z",
+        "seen_count": 14,
+        "evidence": []
+      },
+      {
+        "fingerprint": "errors-sample-c",
+        "namespace": "sample-c",
+        "class": "alert",
+        "headline": "error rate above 1% of requests",
+        "first_seen": "2026-09-28T09:30:00.000Z",
+        "last_seen": "2026-09-28T09:30:00.000Z",
+        "seen_count": 1,
+        "evidence": []
+      },
+      {
+        "fingerprint": "probe-sample-f",
+        "namespace": "sample-f",
+        "class": "alert",
+        "headline": "sample-f.example.com failed 3 probes in a row",
+        "first_seen": "2026-09-28T10:54:00.000Z",
+        "last_seen": "2026-09-28T10:54:00.000Z",
+        "seen_count": 1,
+        "evidence": []
+      }
+    ]
   },
   "refresh_allowed_at": null,
   "scheduled": {
@@ -2111,23 +1746,23 @@
         ]
       },
       {
-        "id": "merge-resume",
-        "label": "Stale-job merge resume",
+        "id": "site-repair",
+        "label": "Site repairs",
         "period_ms": null,
         "flag": "never",
         "recent": []
       },
       {
-        "id": "outcome-sweep",
-        "label": "Merge-state sweep",
-        "period_ms": null,
+        "id": "maintenance",
+        "label": "Daily maintenance pass",
+        "period_ms": 86400000,
         "flag": null,
         "recent": [
           {
             "started_at": "2026-09-28T02:59:57.000Z",
             "finished_at": "2026-09-28T03:00:00.000Z",
             "outcome": "ok",
-            "reason": "checked 4, changed 1, seeded 0"
+            "reason": "listed 4, read 12"
           }
         ]
       }

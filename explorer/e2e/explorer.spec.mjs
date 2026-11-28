@@ -10,7 +10,7 @@ const PAGES = [
   "/systems/",
   "/flows/",
   "/tools/",
-  "/tools/capsid_work_jobs/",
+  "/tools/capsid_read_status/",
   "/numbers/",
   "/code/",
   "/search/",

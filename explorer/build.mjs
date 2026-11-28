@@ -106,7 +106,7 @@ const llmsTxt = (systems, tools) =>
   llmsDocument({
     title: "Capsid",
     summary:
-      "Capsid is an open-source (MIT) MCP server for AI coding agents, run on one Cloudflare Worker. Agents start every session from shared project notes, each one can use only the tools it is allowed, and when an agent says a job is done, Capsid checks GitHub. This site runs on one live Capsid server and rebuilds every day from its public data.",
+      "Capsid is an open-source (MIT) MCP server for AI coding agents, run on one Cloudflare Worker. Agents start every session from shared project notes, and each one can use only the tools it is allowed. This site runs on one live Capsid server and rebuilds every day from its public data.",
     intro: [
       "- Code: https://github.com/DrDustinEdwards/capsid\n- Author: Dustin Edwards, https://dustinedwards.info",
     ],
@@ -117,7 +117,7 @@ const llmsTxt = (systems, tools) =>
           {
             title: "Overview",
             url: `${ORIGIN}/`,
-            description: "what Capsid is and how a job runs through it",
+            description: "what Capsid is and how a session starts",
           },
           {
             title: "Systems",

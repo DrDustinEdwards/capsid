@@ -84,7 +84,6 @@ interface Preview {
   refusals: string[];
   counts: Record<string, number>;
   token?: string;
-  open_jobs: Array<{ id: string }>;
   live_agents: string[];
   policy_paths: string[];
 }
@@ -151,10 +150,6 @@ async function n(sql: string, ...binds: unknown[]): Promise<number> {
   return Number(row?.n ?? 0);
 }
 
-async function auditRows(ns: string): Promise<number> {
-  return n("SELECT COUNT(*) AS n FROM audit_log WHERE namespace = ?1", ns);
-}
-
 describe("capsid_admin_manage_namespaces delete_preview refusals", () => {
   it("an unregistered namespace is refused as not found", async () => {
     const result = await callAs(ADMIN, {
@@ -165,32 +160,14 @@ describe("capsid_admin_manage_namespaces delete_preview refusals", () => {
     expect(result.content[0].text).toMatch(/namespace not found/);
   });
 
-  for (const status of ["queued", "claimed", "blocked"]) {
-    it(`PLANT: a ${status} job refuses it, even with cascade, and names the job and the jobs tool`, async () => {
-      const ns = fresh();
-      await register(ns);
-      const id = `job_${ns.slice(-12)}`;
-      await job(ns, id, status);
-      const before = await auditRows(ns);
-      const p = await preview(ns, { cascade: true });
-      expect(p.verdict).toBe("refused");
-      expect(p.token).toBeUndefined();
-      expect(p.refusals.join(" ")).toContain(id);
-      expect(p.refusals.join(" ")).toMatch(/cascade never reaches jobs/);
-      expect(p.refusals.join(" ")).toMatch(/jobs tool/);
-      expect(await auditRows(ns), "a preview wrote an audit row").toBe(before);
-    });
-  }
-
-  it("a finished job, a revoked agent and archived documents do not refuse it, and are counted as kept", async () => {
+  it("a job row left by the retired queue, a revoked agent and archived documents do not refuse it", async () => {
     const ns = fresh();
     await register(ns);
-    await job(ns, `job_${ns.slice(-12)}`, "done");
+    await job(ns, `job_${ns.slice(-12)}`, "queued");
     await agent(`${ns}-gone`, [ns], true);
     await doc(ns, "archive/old.md");
     const p = await preview(ns);
     expect(p.verdict, p.refusals.join(" ")).toBe("allowed");
-    expect(p.counts.jobs_finished).toBe(1);
     expect(p.counts.agents_revoked).toBe(1);
     expect(p.counts.agents_live).toBe(0);
     expect(p.counts.documents_archived).toBe(1);
@@ -431,21 +408,6 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/does not verify/);
-  });
-
-  it("PLANT: a job opened after the preview refuses the perform", async () => {
-    const ns = fresh();
-    await register(ns);
-    const p = await preview(ns);
-    await job(ns, `job_${ns.slice(-12)}`, "queued");
-    const result = await callAs(ADMIN, {
-      namespace: ns,
-      action: "delete_perform",
-      token: p.token,
-    });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toMatch(/open job/);
-    expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
   });
 });
 

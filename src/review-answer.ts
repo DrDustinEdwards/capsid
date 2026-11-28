@@ -5,7 +5,7 @@ export const MAX_FINDINGS = 5;
 const VERDICTS = ["APPROVE", "CHANGES", "BLOCK"] as const;
 export type Verdict = (typeof VERDICTS)[number];
 const FINDING_KINDS = [
-  "misread job",
+  "misread description",
   "skipped requirement",
   "weak test",
   "bug",

@@ -14,7 +14,7 @@ const MAX_PER_PASS = 20;
 const ARCHIVE_ACTION = "agents.archive";
 
 const ARCHIVED_COLUMNS =
-  "id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, last_seen, archive_reason AS reason, audit_rows, jobs, archived_at";
+  "id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, last_seen, archive_reason AS reason, audit_rows, archived_at";
 
 export interface ArchivedAgent {
   id: string;
@@ -28,7 +28,6 @@ export interface ArchivedAgent {
   last_seen: string | null;
   reason: ArchiveReason;
   audit_rows: number;
-  jobs: number;
   archived_at: string;
 }
 
@@ -59,11 +58,7 @@ function archiveStatements(db: D1Database, actor: string, due: DueRow): D1Prepar
     db
       .prepare(
         `UPDATE agents SET archived_at = datetime('now'), archive_reason = ?2,
-                audit_rows = (SELECT COUNT(*) FROM audit_log WHERE actor = ?3),
-                jobs = (SELECT COUNT(*) FROM (
-                   SELECT id FROM jobs WHERE posted_by = ?3 OR claimed_by = ?3
-                   UNION SELECT job_id FROM job_outcomes WHERE agent = ?3
-                   UNION SELECT job_id FROM job_claims WHERE agent = ?3))
+                audit_rows = (SELECT COUNT(*) FROM audit_log WHERE actor = ?3)
           WHERE id = ?1 AND revoked_at IS NOT NULL AND archived_at IS NULL`,
       )
       .bind(due.id, due.reason, agentActor),

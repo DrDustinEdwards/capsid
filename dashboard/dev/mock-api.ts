@@ -6,8 +6,7 @@
 // ring_slot so live.generated is "now", which keeps the relative times readable.
 //
 // It also mocks the Portal's controls (preview and perform), GET
-// /portal/api/namespaces, GET /portal/api/activity, GET /portal/api/claims, GET
-// /portal/api/stale, a site page's GET /portal/api/site-search,
+// /portal/api/namespaces, GET /portal/api/activity, a site page's GET /portal/api/site-search,
 // /portal/api/site-traffic, /portal/api/workers-builds and /portal/api/build-log, GET /portal/api/maintenance, GET and POST /portal/api/push and POST
 // /portal/api/sign-out, with the Worker's refusals:
 // text/plain 400 for a bad request, 403 for a missing or wrong X-Capsid-CSRF, 410 for
@@ -26,9 +25,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { shiftTimes } from "../src/lib/demo.ts";
 import type {
-  ClaimsGroup,
   OpsFeed,
-  OpsJob,
   OpsPackageConfig,
   OpsSiteConfig,
   PortalAction,
@@ -37,7 +34,6 @@ import type {
   PortalTrends,
   LibraryEntry,
   PortalPackageHistory,
-  PortalStale,
   PortalSiteSearch,
   PortalSiteTraffic,
   PortalWorkersBuilds,
@@ -46,16 +42,11 @@ import type {
   SearchRow,
   TrafficAiCrawlers,
   PortalPush,
-  PortalPlan,
-  PortalDigest,
   PortalMaintenance,
   PortalConvergence,
   PortalBackups,
   ConvergenceSite,
-  OpsStaleJob,
   PortalActivityRow,
-  PortalClaimsAggregate,
-  PortalClaimsJob,
   PortalNamespace,
   PortalNamespaces,
   PortalPerformed,
@@ -68,20 +59,11 @@ const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
 const ACTIONS: PortalAction[] = [
-  "overnight",
-  "resume_job",
-  "release_job",
-  "fail_job",
-  "close_shipped",
-  "supersede_job",
-  "park_job",
-  "unpark_job",
   "revoke_agent",
   "activate_agent",
   "site_add",
   "site_edit",
   "site_remove",
-  "reset_breaker",
   "package_add",
   "package_edit",
   "package_remove",
@@ -92,36 +74,6 @@ const ACTIONS: PortalAction[] = [
   "namespace_remove",
   "site_key_rotate",
 ];
-// The automation switches: a reason in both directions, and an optional undo: "true"
-// that the Worker records as portal-undo-<action> (src/portal-actions.ts).
-const SWITCHES: PortalAction[] = ["overnight"];
-
-// The click row's action name, as the Worker names it, in the mock's "portal." form.
-function clickName(action: PortalAction, params: Record<string, string>): string {
-  return `portal.${params.undo === "true" ? "undo-" : ""}${action}`;
-}
-
-// The Worker's checks on the switches' shared params, with its refusal text.
-function checkSwitch(action: PortalAction, params: Record<string, string>): void {
-  // Park and unpark are each other's reverse, so they take undo too (src/controls.ts).
-  if (
-    params.undo !== undefined &&
-    !SWITCHES.includes(action) &&
-    action !== "park_job" &&
-    action !== "unpark_job"
-  )
-    throw new Refusal(400, `${action} takes no undo; 'undo' is not one of them.`);
-  if (!SWITCHES.includes(action)) return;
-  if (params.undo !== undefined && params.undo !== "true")
-    throw new Refusal(400, `${action}'s undo is "true" or absent; got '${params.undo}'.`);
-  if (!(params.reason ?? "").trim())
-    throw new Refusal(
-      400,
-      `${action} needs a reason. It is recorded in the audit row with the change.`,
-    );
-}
-// The namespaces whose queue breaker is open in the sample, until a reset closes it.
-const BREAKER_OPEN = ["sample-b"];
 // Registered in the mock but with no site row, so an add has somewhere to go. The site
 // map in the fixture reports it as unmapped.
 const EXTRA_REGISTERED = ["sample-i"];
@@ -140,12 +92,6 @@ const shift = shiftTimes;
 
 // What the controls changed since the dev server started.
 interface MockState {
-  // Namespaces whose breaker was reset since the mock started.
-  breakerReset: Set<string>;
-  overnight: "off" | "api" | "subscription" | null;
-  // The reason typed when the overnight switch was last set, recorded with the decision.
-  overnightReason: string;
-  jobs: Map<string, Partial<OpsJob>>;
   revoked: Map<string, string>;
   activated: Set<string>;
   // The site configuration as it stands, every row, by namespace.
@@ -470,8 +416,8 @@ function sharedCode() {
   };
 }
 
-// The Library's answers (src/portal-library.ts), in sample names: a decision record that
-// names a job in the sample feed, a ruling linked to it, a research note, and a search
+// The Library's answers (src/portal-library.ts), in sample names: a decision record, a ruling
+// linked to it, a research note, and a search
 // that matches two of them.
 // Relative to the mock's clock, so "updated 2d ago" reads the same on every run.
 const daysAgo = (n: number) => new Date(mockNow() - n * 86_400_000).toISOString();
@@ -483,7 +429,7 @@ const LIBRARY_DOCS: Array<LibraryEntry & { body: string }> = [
     type: "decision",
     status: "published",
     updated_at: daysAgo(2),
-    body: "# Sample decisions log\n\n- **Quokka layout** (2026-10-09). The pages follow the quokka layout. Built in job_7c1e44b0a912.\n- **Two themes** (2026-10-08). Every page is checked in light and dark.",
+    body: "# Sample decisions log\n\n- **Quokka layout** (2026-10-09). The pages follow the quokka layout.\n- **Two themes** (2026-10-08). Every page is checked in light and dark.",
   },
   {
     namespace: "sample",
@@ -600,12 +546,10 @@ function mockTrends(weeks: number): PortalTrends {
         start: w.start,
         minutes: w.m,
         sessions: 4 + (i % 3),
-        decisions: 9 + i,
       })),
       truncated: false,
-      note: "An estimate: the administrator's own writes and job touches, sessions split at a 5-minute gap, plus 1 minute each. Reading the Portal without acting is not counted.",
+      note: "An estimate: the administrator's own writes, sessions split at a 5-minute gap, plus 1 minute each. Reading the Portal without acting is not counted.",
     },
-    queue: days.map((d, i) => ({ day: d, posted: 3 + (i % 4), ended: 4 + (i % 3), open: 30 - i })),
     merges: {
       weeks: weekRows.map((w, i) => ({
         week: w.week,
@@ -802,26 +746,6 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
         s.cloudflare = { state: "no-token", reason: "CF_OPS_TOKEN is not set" };
     }
   }
-  if (st.overnight != null) {
-    out.live.overnight = {
-      mode: st.overnight,
-      // As the Worker records it when the subscription is chosen (src/overnight.ts).
-      decision:
-        st.overnight === "subscription"
-          ? {
-              decided_by: "Sample Person",
-              decided_on: "2026-10-04",
-              ruling:
-                "capsid/decisions.md, 2026-10-04: overnight runs may use the subscription, by the owner's choice",
-              reasoning: "The use is personal, on the owner's own repositories, and not shared.",
-              set_by: `access:${ACTOR}`,
-              set_at: new Date(mockNow()).toISOString(),
-              reason: st.overnightReason,
-            }
-          : null,
-    };
-  }
-  out.live.jobs = out.live.jobs.map((j) => ({ ...j, ...st.jobs.get(j.id) }));
   for (const a of out.live.agents) {
     if (st.revoked.has(a.name)) a.revoked_at = st.revoked.get(a.name) ?? null;
     if (st.activated.has(a.name)) a.pending = false;
@@ -912,200 +836,19 @@ function plan(
   action: PortalAction,
   params: Record<string, string>,
 ): { summary: string; done: string; changes: string[]; apply: (st: MockState) => void } {
-  checkSwitch(action, params);
   const now = new Date(mockNow()).toISOString();
-  const job = () => {
-    const id = need(params, "id", "The job id");
-    const j = f.live.jobs.find((x) => x.id === id);
-    if (!j) throw new Refusal(400, `No job ${id}.`);
-    return j;
-  };
   switch (action) {
-    case "reset_breaker": {
-      const ns = need(params, "namespace", "The namespace");
-      if (!f.live.namespaces.some((x) => x.name === ns))
-        throw new Refusal(400, `${ns} is not a roster namespace.`);
-      return {
-        summary: `Reset the queue's circuit breaker for ${ns}.`,
-        done: `Reset the circuit breaker for ${ns}.`,
-        changes: [`jobs:breaker:reset:${ns}: -> now. Holder fails before now stop counting.`],
-        apply: (st) => void st.breakerReset.add(ns),
-      };
-    }
-    case "overnight": {
-      const value = need(params, "value", "The value");
-      if (!["api", "subscription", "off"].includes(value))
-        throw new Refusal(400, `overnight must be api, subscription or off, not ${value}.`);
-      if (value === f.live.overnight.mode)
-        throw new Refusal(400, `The overnight run is already ${value}.`);
-      return {
-        summary: `Set the overnight run to ${value}.`,
-        done: `The overnight run is now ${value}.`,
-        changes: [
-          `overnight:mode: ${f.live.overnight.mode} -> ${value}`,
-          ...(value === "subscription"
-            ? ["Recorded with the switch: the owner's decision of 2026-10-04 and its reasoning."]
-            : []),
-        ],
-        apply: (st) => {
-          st.overnight = value as "api" | "subscription" | "off";
-          st.overnightReason = params.reason?.trim() ?? "";
-        },
-      };
-    }
-    case "resume_job": {
-      const j = job();
-      need(params, "reason", "A reason");
-      if (j.status !== "blocked")
-        throw new Refusal(
-          400,
-          `Job ${j.id} is ${j.status}, not blocked. Only a blocked job resumes.`,
-        );
-      return {
-        summary: `Resume ${j.id} (${j.title}).`,
-        done: `Resumed ${j.id}; it is queued.`,
-        changes: [
-          `jobs.${j.id}.status: blocked -> queued`,
-          `jobs.${j.id}.resumed_count: ${j.resumed_count} -> ${j.resumed_count + 1}`,
-          ...(params.note
-            ? [`The resume note carries your note of ${params.note.length} characters in full.`]
-            : []),
-        ],
-        apply: (st) =>
-          void st.jobs.set(j.id, {
-            status: "queued",
-            waits_on: null,
-            command: null,
-            claimed_by: null,
-            resumed_count: j.resumed_count + 1,
-            updated_at: now,
-          }),
-      };
-    }
-    case "close_shipped": {
-      const j = job();
-      need(params, "reason", "A reason");
-      if (j.status !== "blocked")
-        throw new Refusal(
-          400,
-          `Job ${j.id} is ${j.status}, not blocked. Close as shipped ends a blocked job whose work landed.`,
-        );
-      return {
-        summary: `Close ${j.id} (${j.title}) as shipped.`,
-        done: `Closed ${j.id} as shipped; the outcome is credited to ${j.claimed_by ?? "its holder"}.`,
-        changes: [
-          `jobs.${j.id}.status: blocked -> done`,
-          `The outcome row credits ${j.claimed_by ?? "nobody"}, who did the work. No claim is recorded for you.`,
-        ],
-        apply: (st) =>
-          void st.jobs.set(j.id, {
-            status: "done",
-            waits_on: null,
-            command: null,
-            updated_at: now,
-          }),
-      };
-    }
-    case "supersede_job": {
-      const j = job();
-      const reason = need(params, "reason", "A reason");
-      const worked = j.blocked_count > 0 || j.resumed_count > 0 || j.result_ref !== null;
-      if (j.status !== "queued" && !(j.status === "claimed" && !worked))
-        throw new Refusal(
-          400,
-          `${j.id} is ${j.status}. Supersede closes a queued job, or a claimed one with no work recorded.`,
-        );
-      return {
-        summary: `Supersede ${j.id} (${j.title}).`,
-        done: `Superseded ${j.id}.`,
-        changes: [
-          `jobs.${j.id}.status: ${j.status} -> superseded`,
-          "No outcome row is written against anybody.",
-        ],
-        apply: (st) =>
-          void st.jobs.set(j.id, {
-            status: "superseded",
-            claimed_by: null,
-            updated_at: now,
-            waits_on: `Superseded: ${reason}`,
-          }),
-      };
-    }
-    case "park_job": {
-      const j = job();
-      const reason = need(params, "reason", "A reason");
-      if (j.status !== "queued")
-        throw new Refusal(400, `${j.id} is ${j.status}. Park changes a queued job.`);
-      return {
-        summary: `Park ${j.id} (${j.title}).`,
-        done: `Parked ${j.id}.`,
-        changes: [`jobs.${j.id}.status: queued -> parked, with "${reason}"`],
-        apply: (st) =>
-          void st.jobs.set(j.id, { status: "parked", parked_reason: reason, updated_at: now }),
-      };
-    }
-    case "unpark_job": {
-      const j = job();
-      if (j.status !== "parked") throw new Refusal(400, `${j.id} is ${j.status}, not parked.`);
-      return {
-        summary: `Unpark ${j.id} (${j.title}).`,
-        done: `Unparked ${j.id}; it is queued again.`,
-        changes: [`jobs.${j.id}.status: parked -> queued, at priority ${j.priority}`],
-        apply: (st) =>
-          void st.jobs.set(j.id, { status: "queued", parked_reason: undefined, updated_at: now }),
-      };
-    }
-    case "release_job": {
-      const j = job();
-      need(params, "reason", "A reason");
-      if (j.status !== "claimed")
-        throw new Refusal(
-          400,
-          `Job ${j.id} is ${j.status}, not claimed. Only a claimed job is released.`,
-        );
-      return {
-        summary: `Release ${j.id} from ${j.claimed_by ?? "its holder"}.`,
-        done: `Released ${j.id}; it is queued.`,
-        changes: [
-          `jobs.${j.id}.status: claimed -> queued`,
-          `jobs.${j.id}.claimed_by: ${j.claimed_by ?? "none"} -> none`,
-        ],
-        apply: (st) =>
-          void st.jobs.set(j.id, { status: "queued", claimed_by: null, updated_at: now }),
-      };
-    }
-    case "fail_job": {
-      const j = job();
-      need(params, "reason", "A reason");
-      if (!["queued", "claimed", "blocked"].includes(j.status))
-        throw new Refusal(
-          400,
-          `Job ${j.id} is ${j.status}; only an open job can be marked failed.`,
-        );
-      return {
-        summary: `Mark ${j.id} failed.`,
-        done: `Marked ${j.id} failed.`,
-        changes: [`jobs.${j.id}.status: ${j.status} -> failed`],
-        apply: (st) =>
-          void st.jobs.set(j.id, { status: "failed", claimed_by: null, updated_at: now }),
-      };
-    }
     case "revoke_agent": {
       const name = need(params, "name", "The agent name");
       const a = f.live.agents.find((x) => x.name === name);
       if (!a) throw new Refusal(400, `No agent ${name}.`);
       if (a.revoked_at) throw new Refusal(400, `${name} is already revoked.`);
-      const held = f.live.jobs.filter(
-        (j) =>
-          j.status === "claimed" && (j.claimed_by === name || j.claimed_by === `agent:${name}`),
-      );
       return {
         summary: `Revoke the agent ${name}.`,
         done: `Revoked ${name}.`,
         changes: [
           `agents.${name}.revoked_at: none -> now`,
           "Its token stops working on the next request.",
-          ...held.map((j) => `Job ${j.id} it holds stays claimed until the seat releases it.`),
         ],
         apply: (st) => void st.revoked.set(name, now),
       };
@@ -1665,152 +1408,6 @@ function buildLog(build: string): PortalBuildLog {
   };
 }
 
-// GET /portal/api/stale, from the feed's own jobs so each row opens a drawer: the first
-// blocked job as if its pull requests had all merged, and every blocked or claimed job
-// unchanged for 3 days by the Worker's rule (src/stale-jobs.ts).
-function stale(f: OpsFeed): PortalStale {
-  const now = mockNow();
-  const rows: OpsStaleJob[] = [];
-  const open = f.live.jobs
-    .filter((j) => j.status === "blocked" || j.status === "claimed")
-    .sort((a, b) => Date.parse(a.updated_at) - Date.parse(b.updated_at));
-  const settled = open.find((j) => j.status === "blocked");
-  for (const j of open) {
-    const days = Math.floor((now - Date.parse(j.updated_at)) / 86_400_000);
-    const base = {
-      id: j.id,
-      namespace: j.namespace,
-      title: j.title,
-      status: j.status,
-      updated_at: j.updated_at,
-    };
-    if (j === settled)
-      rows.push({
-        ...base,
-        rule: "prs-settled",
-        reason: `blocked, and every pull request it names is settled (1 merged, 0 closed without merging, read ${new Date(now - 240_000).toISOString()})`,
-      });
-    else if (days >= 3)
-      rows.push({
-        ...base,
-        rule: "unchanged",
-        reason: `${j.status} and unchanged since ${j.updated_at} (${days} day${days === 1 ? "" : "s"})`,
-      });
-  }
-  return { generated: new Date(now).toISOString(), rows, truncated: false, note: null };
-}
-
-// GET /portal/api/plan, from the feed's queued jobs: one lane per namespace, the first
-// four planned at an hour each and the rest skipped as over the budget, a gated job marked.
-function tonight(f: OpsFeed): PortalPlan {
-  const queued = f.live.jobs
-    .filter((j) => j.status === "queued")
-    .sort((a, b) => b.priority - a.priority);
-  const lanes = new Map<string, PortalPlan["lanes"][number]>();
-  const skipped: PortalPlan["skipped"] = [];
-  let used = 0;
-  for (const j of queued) {
-    if (used >= 240) {
-      skipped.push({
-        id: j.id,
-        namespace: j.namespace,
-        title: j.title,
-        reason: "over tonight's budget: the heavy lanes have 240 of 240 minutes planned",
-      });
-      continue;
-    }
-    const repo = `example-org/${j.namespace}`;
-    const lane = lanes.get(repo) ?? {
-      repo,
-      namespaces: [j.namespace],
-      heavy: true,
-      jobs: [],
-      planned_minutes: 0,
-    };
-    lane.jobs.push({
-      id: j.id,
-      namespace: j.namespace,
-      title: j.title,
-      priority: j.priority,
-      estimate_minutes: 60,
-      estimate_source: "default",
-      gated: j.gate_required,
-    });
-    lane.planned_minutes += 60;
-    used += 60;
-    lanes.set(repo, lane);
-  }
-  return {
-    generated: new Date(mockNow()).toISOString(),
-    budget_minutes: 240,
-    policy: "document",
-    policy_note: null,
-    heavy_planned_minutes: used,
-    lanes: [...lanes.values()],
-    skipped,
-    queued_read: queued.length,
-    truncated: false,
-  };
-}
-
-// GET /portal/api/digest?since=, from the feed: what finished and blocked since then, and
-// the pull requests recorded against jobs.
-function digest(f: OpsFeed, since: string): PortalDigest {
-  const after = (t: string) => Date.parse(t) >= Date.parse(since);
-  const none = {
-    cost_usd: null,
-    active_seconds: null,
-    tokens_input: null,
-    tokens_output: null,
-    tokens_cache_read: null,
-    tokens_cache_creation: null,
-  };
-  const finished = f.live.jobs.filter(
-    (j) => (j.status === "done" || j.status === "failed") && after(j.updated_at),
-  );
-  const blocked = f.live.jobs.filter((j) => j.status === "blocked" && after(j.updated_at));
-  const prs = f.live.prs.filter((p) => after(p.recorded_at));
-  return {
-    generated: new Date(mockNow()).toISOString(),
-    since,
-    for_namespace: null,
-    finished: finished.map((j) => ({
-      id: j.id,
-      namespace: j.namespace,
-      title: j.title,
-      status: j.status,
-      result_kind: null,
-      duration_minutes: null,
-      blocked_count: j.blocked_count,
-      usage: none,
-    })),
-    blocked: blocked.map((j) => ({
-      id: j.id,
-      namespace: j.namespace,
-      title: j.title,
-      at: j.updated_at,
-      summary: j.waits_on ?? "",
-      pull_requests: [],
-      usage: none,
-    })),
-    pull_requests_ready: prs
-      .filter((p) => p.merged !== true)
-      .map((p) => ({
-        job_id: p.job_id,
-        namespace: f.live.jobs.find((j) => j.id === p.job_id)?.namespace ?? "sample",
-        url: p.pr_url,
-        state: p.merged === null ? "unchecked" : "open",
-        source: "outcome",
-      })),
-    pull_requests_merged: prs.filter((p) => p.merged === true).length,
-    totals: {
-      usage: { ...none, jobs: 0 },
-      jobs_without_usage: finished.length,
-    },
-    truncated: [],
-  };
-}
-
 // GET /portal/api/backups: each site that sets backup: true, as the Worker would read it live.
 function backups(st: MockState): PortalBackups {
   const now = mockNow();
@@ -1958,10 +1555,9 @@ function convergence(st: MockState): PortalConvergence {
   return { generated: new Date(now).toISOString(), sites };
 }
 
-// GET /portal/api/maintenance: one row per kind of finding the daily pass makes, the job
-// rows naming the feed's own jobs so they open a drawer. WF_MOCK=no-snapshot answers as
-// before the first pass.
-function maintenance(f: OpsFeed): PortalMaintenance {
+// GET /portal/api/maintenance: one row per kind of finding the daily pass makes.
+// WF_MOCK=no-snapshot answers as before the first pass.
+function maintenance(): PortalMaintenance {
   const now = mockNow();
   if (process.env.WF_MOCK === "no-snapshot")
     return {
@@ -1969,54 +1565,34 @@ function maintenance(f: OpsFeed): PortalMaintenance {
       items: [],
       read: { prs: 0, branches: 0, repos: 0, roster: 7, deploys: 0 },
     };
-  // The sample feed has both; a feed without one fails here, not with a made-up id.
-  const queued = f.live.jobs.find((j) => j.status === "queued")!.id;
-  const blocked = f.live.jobs.find((j) => j.status === "blocked")!.id;
   const pr = "https://github.com/example-org/sample/pull/41";
   return {
     generated: new Date(now - 3 * 3_600_000).toISOString(),
     items: [
       {
-        rule: "auto-resumed",
-        namespace: "sample",
-        job: blocked,
-        line: `${blocked} was resumed because its pull requests merged: its holder confirms the deploy and completes it.`,
-      },
-      {
         rule: "pr-awaiting-seat",
         namespace: "sample",
-        job: blocked,
         pr,
-        line: `${pr} (${blocked}) is green and has been open 2.1 days: merge it or say why it waits.`,
+        line: `${pr} is green and has been open 2.1 days: merge it or say why it waits.`,
       },
       {
         rule: "undeployed-merge",
         namespace: "sample-b",
-        job: null,
         line: "sample-b was last deployed 2026-10-04 09:00 UTC, 4.0 days before example-org/sample-b's last commit on main (1a2b3c4): deploy it, or say why it waits.",
-      },
-      {
-        rule: "later-passed",
-        namespace: "sample",
-        job: queued,
-        line: `${queued} is queued as LATER 2026-10-01, a date that has passed: re-title it or work it.`,
       },
       {
         rule: "branch-merged",
         namespace: "sample",
-        job: null,
         line: "3 merged branch(es) in example-org/sample would be pruned; the auto-prune is off, so none was deleted.",
       },
       {
         rule: "branch-stale",
         namespace: "sample-c",
-        job: null,
         line: "example-org/sample-c branch feat/old-idea has had no commit for 41 days (no pull request): delete it, open its pull request, or keep-list it.",
       },
       {
         rule: "deploys-not-checked",
         namespace: "sample-c",
-        job: null,
         line: "Deploys in sample-c were not checked (Cloudflare was not read for it (CF_OPS_TOKEN is not set)): what is missing is not a clean result.",
       },
     ],
@@ -2039,21 +1615,8 @@ function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
   const empty: PortalNamespace = {
     namespace: "",
     latest_report: null,
-    jobs: { queued: 0, claimed: 0, blocked: 0, done_today: 0 },
-    breaker: { open: false, failed: 0, threshold: 3, since: "", reset_at: null },
     repos: [],
   };
-  const since = new Date(now - 24 * H).toISOString().slice(0, 19).replace("T", " ");
-  const breaker = (ns: string): PortalNamespace["breaker"] =>
-    BREAKER_OPEN.includes(ns) && !st.breakerReset.has(ns)
-      ? { open: true, failed: 3, threshold: 3, since, reset_at: null }
-      : {
-          open: false,
-          failed: 0,
-          threshold: 3,
-          since,
-          reset_at: st.breakerReset.has(ns) ? new Date(now).toISOString() : null,
-        };
   return {
     generated: new Date(now).toISOString(),
     // The roster as the mock holds it: the fixture's projects less any deleted, then any added.
@@ -2061,21 +1624,12 @@ function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
       .filter((name) => projectRepos(st, name) !== null)
       .map((name) => {
         const n = { name };
-        const js = f.live.jobs.filter((j) => j.namespace === n.name);
-        const count = (s: OpsJob["status"]) => js.filter((j) => j.status === s).length;
         const repos = JSON.parse(projectRepos(st, n.name) ?? "[]") as PortalNamespace["repos"];
         return {
           ...empty,
           ...detail[n.name],
           namespace: n.name,
-          breaker: breaker(n.name),
           repos,
-          jobs: {
-            queued: count("queued"),
-            claimed: count("claimed"),
-            blocked: count("blocked"),
-            done_today: count("done"),
-          },
         };
       }),
   };
@@ -2084,8 +1638,6 @@ function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
 function seedActivity(): PortalActivityRow[] {
   const now = mockNow();
   const M = 60_000;
-  // A job transition writes two rows with one action, actor, path and second, one for
-  // the job and one for its mirror document, as the Worker does (src/portal-activity.ts).
   // What each row recorded, by name, as src/audit-detail.ts reads it from the params.
   const none = { reason: null, changes: null, fields: [], withheld: 0, unreadable: false };
   const d = (over: Partial<PortalActivityRow["detail"]>): PortalActivityRow["detail"] => ({
@@ -2099,7 +1651,6 @@ function seedActivity(): PortalActivityRow[] {
       string | null,
       string | null,
       string | null,
-      PortalActivityRow["target"],
       PortalActivityRow["detail"],
     ]
   > = [
@@ -2109,65 +1660,13 @@ function seedActivity(): PortalActivityRow[] {
       "write",
       "sample",
       "sample/notes/run-log.md",
-      "document",
       d({ fields: [{ name: "Mode", value: "append" }], withheld: 1 }),
-    ],
-    [
-      11,
-      "agent:watcher",
-      "job-posted",
-      "sample-b",
-      "jobs/job_9ab0bcf483ae.md",
-      "job",
-      d({
-        fields: [
-          { name: "Job", value: "job_9ab0bcf483ae" },
-          { name: "Priority", value: "40" },
-        ],
-      }),
-    ],
-    [
-      11,
-      "agent:watcher",
-      "job-posted",
-      "sample-b",
-      "jobs/job_9ab0bcf483ae.md",
-      "document",
-      d({ withheld: 1 }),
-    ],
-    [
-      26,
-      "agent:sample-driver",
-      "jobs.block",
-      "sample",
-      "sample/jobs/job_7c1e44b0a912.md",
-      "job",
-      d({
-        reason: "The push is ready for the seat.",
-        fields: [
-          { name: "Job", value: "job_7c1e44b0a912" },
-          { name: "Status", value: "blocked" },
-        ],
-      }),
-    ],
-    [
-      48,
-      "seat",
-      "jobs.resume",
-      "sample",
-      "sample/jobs/job_91b3c0de5a24.md",
-      "job",
-      d({
-        reason: "Merged #41 and confirmed the deploy.",
-        fields: [{ name: "Job", value: "job_91b3c0de5a24" }],
-      }),
     ],
     [
       70,
       ACTOR,
       "ops-site-edited",
       "sample-b",
-      null,
       null,
       d({
         changes: [
@@ -2187,42 +1686,20 @@ function seedActivity(): PortalActivityRow[] {
       "write",
       "sample-b",
       "sample-b/core.md",
-      "document",
       d({ fields: [{ name: "Mode", value: "overwrite" }], withheld: 1 }),
     ],
-    [
-      180,
-      ACTOR,
-      "portal-overnight",
-      null,
-      null,
-      null,
-      d({
-        reason: "Nightly runs are off while the fixture repo is rebuilt.",
-        fields: [{ name: "Mode", value: "off" }],
-      }),
-    ],
-    [240, "agent:reviewer", "read", "sample-c", "sample-c/decisions.md", null, d({})],
-    [
-      400,
-      null,
-      "lint.finalize",
-      "sample",
-      "sample/archive/old-note.md",
-      null,
-      d({ unreadable: true }),
-    ],
+    [240, "agent:reviewer", "read", "sample-c", "sample-c/decisions.md", d({})],
+    [400, null, "lint.finalize", "sample", "sample/archive/old-note.md", d({ unreadable: true })],
     [
       720,
       "agent:sample-c-driver",
       "write",
       "sample-c",
       "sample-c/notes/run-log.md",
-      "document",
       d({ fields: [{ name: "Mode", value: "append" }] }),
     ],
   ];
-  return rows.map(([m, actor, action, namespace, path, target, detail], i) => ({
+  return rows.map(([m, actor, action, namespace, path, detail], i) => ({
     id: 1000 - i,
     at: new Date(now - m * M).toISOString(),
     actor,
@@ -2230,7 +1707,6 @@ function seedActivity(): PortalActivityRow[] {
     action,
     namespace,
     path,
-    target,
     detail,
   }));
 }
@@ -2239,295 +1715,7 @@ function seedActivity(): PortalActivityRow[] {
 // state what the Portal reads.
 const ACTIVITY_LIMIT = 50;
 
-// Claims, with fake data only: per-agent groups for the aggregate, and two jobs from the
-// fixture with their claims, checks and touches for the drill-in. Any other job id is
-// the Worker's JSON 404.
-type ClaimRow = PortalClaimsJob["claims"][number];
-type EvaluationRow = PortalClaimsJob["evaluations"][number];
-
-function seedClaimGroups(): ClaimsGroup[] {
-  const touches = (
-    count: number,
-    byKind: Record<string, number>,
-    byActor: Record<string, number>,
-    waits: number[],
-  ): ClaimsGroup["touches"] => {
-    const sorted = [...waits].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    const median =
-      sorted.length === 0
-        ? null
-        : sorted.length % 2
-          ? sorted[mid]!
-          : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
-    return {
-      count,
-      by_kind: byKind,
-      by_actor_kind: byActor,
-      waits: waits.length,
-      waited_ms_total: waits.length ? waits.reduce((a, b) => a + b, 0) : null,
-      waited_ms_median: median,
-    };
-  };
-  const agr = (agree: number, disagree: number, unclaimed: number, unchecked: number) => ({
-    agree,
-    disagree,
-    unclaimed,
-    unchecked,
-  });
-  return [
-    {
-      agent: "agent:sample-b-driver",
-      namespace: "sample-b",
-      jobs: 3,
-      claims: 4,
-      evaluations: {
-        pr_merged: agr(2, 0, 0, 0),
-        prs_opened: agr(2, 0, 0, 0),
-        commits: agr(1, 1, 0, 0),
-        files_changed: agr(2, 0, 0, 0),
-        ci_green: agr(0, 0, 2, 0),
-      },
-      touches: touches(3, { gate: 1, approval: 1, note: 1 }, { human: 2, seat: 1 }, [2_700_000]),
-    },
-    {
-      agent: "agent:sample-c-driver",
-      namespace: "sample-c",
-      jobs: 2,
-      claims: 2,
-      evaluations: {
-        pr_merged: agr(0, 1, 0, 0),
-        prs_opened: agr(1, 0, 0, 0),
-        commits: agr(0, 0, 1, 0),
-        files_changed: agr(0, 0, 0, 1),
-        ci_green: agr(0, 0, 1, 0),
-      },
-      touches: touches(1, { admin_fail: 1 }, { seat: 1 }, []),
-    },
-    {
-      agent: "agent:sample-driver",
-      namespace: "sample",
-      jobs: 5,
-      claims: 8,
-      evaluations: {
-        pr_merged: agr(3, 1, 0, 0),
-        prs_opened: agr(4, 0, 0, 0),
-        commits: agr(2, 1, 1, 0),
-        files_changed: agr(3, 0, 0, 1),
-        ci_green: agr(0, 0, 4, 0),
-      },
-      touches: touches(
-        6,
-        { gate: 3, approval: 2, correction: 1 },
-        { human: 4, policy: 1, seat: 1 },
-        [540_000, 11_520_000, 1_800_000],
-      ),
-    },
-    {
-      agent: null,
-      namespace: "sample-f",
-      jobs: 0,
-      claims: 0,
-      evaluations: {},
-      touches: touches(1, { release: 1 }, { seat: 1 }, []),
-    },
-  ];
-}
-
-// Ended waits by namespace, gate class and who ended them (visual 2), sample figures.
-function seedWaits(): PortalClaimsAggregate["waits"] {
-  const H = 3_600_000;
-  const w = (
-    namespace: string,
-    gate_class: string,
-    ended_by: string,
-    waits: number,
-    hours: number,
-  ) => ({
-    namespace,
-    gate_class,
-    ended_by,
-    waits,
-    waited_ms_total: Math.round(hours * H),
-    waited_ms_median: Math.round((hours / waits) * H),
-  });
-  return [
-    w("sample", "needs_human", "human", 4, 24.4),
-    w("sample-b", "needs_human", "human", 2, 6.2),
-    w("sample", "push_branch", "human", 3, 4.2),
-    w("sample", "push_branch", "policy", 5, 0.4),
-    w("sample-b", "migration", "human", 1, 2.7),
-    w("sample", "open_pr", "policy", 6, 0.6),
-    w("sample-c", "open_pr", "seat", 2, 0.9),
-  ];
-}
-
-function seedClaimJobs(): Map<string, Omit<PortalClaimsJob, "generated">> {
-  const now = mockNow();
-  const at = (minutesAgo: number) => new Date(now - minutesAgo * 60_000).toISOString();
-  const SHA = "0123456789abcdef0123456789abcdef01234567";
-  const claim = (
-    id: number,
-    jobId: string,
-    action: ClaimRow["action"],
-    minutesAgo: number,
-    over: Partial<ClaimRow> = {},
-  ): ClaimRow => ({
-    id,
-    job_id: jobId,
-    action,
-    agent: "agent:sample-driver",
-    namespace: "sample",
-    raw: "{}",
-    capsid_sha: SHA,
-    recorded_at: at(minutesAgo),
-    ...over,
-  });
-  const PR = "https://github.com/example/sample/pull/41";
-  const done = "job_6b5a4c3d2e1f";
-  const blocked = "job_7c1e44b0a912";
-  const evaluation = (
-    id: number,
-    name: string,
-    claimed: string | null,
-    verified: string | null,
-    agreement: EvaluationRow["agreement"],
-    label: EvaluationRow["score_label"],
-    value: number | null,
-  ): EvaluationRow => ({
-    id,
-    job_id: done,
-    claim_id: 3,
-    name,
-    score_value: value,
-    score_label: label,
-    claimed,
-    verified,
-    agreement,
-    evaluator: "worker",
-    evaluator_id: `capsid@${SHA}`,
-    explanation: null,
-    recorded_at: at(95),
-  });
-  return new Map<string, Omit<PortalClaimsJob, "generated">>([
-    [
-      done,
-      {
-        job: {
-          id: done,
-          namespace: "sample",
-          title: "Record the login switch dates in the auth doc",
-          status: "done",
-          claimed_by: "agent:sample-driver",
-        },
-        outcome: {
-          job_id: done,
-          agent: "agent:sample-driver",
-          namespace: "sample",
-          prs_opened: 1,
-          prs_merged: 1,
-          commits: 2,
-          files_changed: 1,
-          tests_added: null,
-          ci_green: null,
-          blocked_count: 1,
-          resumed_count: 1,
-          duration_minutes: 34,
-          result_kind: "pr",
-          verified:
-            '{"prs_opened":true,"prs_merged":true,"commits":true,"files_changed":true,"ci_green":false}',
-          recorded_at: at(95),
-        },
-        claims: [
-          claim(2, done, "block", 190, {
-            raw: '{"reason":"needs a push","command":"git push -u origin docs/auth-dates"}',
-          }),
-          claim(3, done, "complete", 95, {
-            raw: `{"evidence":{"prs":["${PR}"],"commits":3,"files_changed":1},"claim":{"prs_merged":["${PR}"],"tests":{"result":"not_run"},"deploy_state":"none","files_touched":["docs/auth.md"],"versions":{"model_id":"sample-model","client_name":"sample-client","client_version":"1.0.0","permission_mode":"default"}}}`,
-          }),
-        ],
-        evaluations: [
-          evaluation(1, "pr_merged", "1", "1", "agree", "pass", 1),
-          evaluation(2, "prs_opened", "1", "1", "agree", "pass", 1),
-          evaluation(3, "commits", "3", "2", "disagree", "pass", 2),
-          evaluation(4, "files_changed", "1", "1", "agree", "pass", 1),
-          evaluation(5, "ci_green", null, null, "unclaimed", "unknown", null),
-        ],
-        touches: [
-          {
-            id: 1,
-            job_id: done,
-            namespace: "sample",
-            kind: "gate",
-            actor: "agent:sample-driver",
-            actor_kind: "driver",
-            waited_ms: null,
-            detail: '{"reason":"needs a push","command":"git push -u origin docs/auth-dates"}',
-            at: at(190),
-          },
-          {
-            id: 2,
-            job_id: done,
-            namespace: "sample",
-            kind: "approval",
-            actor: "access:admin@example.com",
-            actor_kind: "human",
-            waited_ms: 3_300_000,
-            detail: '{"reason":"pushed"}',
-            at: at(135),
-          },
-        ],
-        limit: 200,
-        truncated: [],
-      },
-    ],
-    [
-      blocked,
-      {
-        job: {
-          id: blocked,
-          namespace: "sample",
-          title: "Watcher: the Amazon copy of sample is stale [offaccount-stale-sample]",
-          status: "blocked",
-          claimed_by: "agent:sample-driver",
-        },
-        outcome: null,
-        claims: [
-          claim(1, blocked, "block", 26, {
-            raw: '{"reason":"the workflow needs a secret","command":"gh secret set SAMPLE_KEY"}',
-          }),
-        ],
-        evaluations: [],
-        touches: [
-          {
-            id: 3,
-            job_id: blocked,
-            namespace: "sample",
-            kind: "gate",
-            actor: "agent:sample-driver",
-            actor_kind: "driver",
-            waited_ms: null,
-            detail: '{"reason":"the workflow needs a secret"}',
-            at: at(26),
-          },
-        ],
-        limit: 200,
-        truncated: [],
-      },
-    ],
-  ]);
-}
-
-// The Worker's since and until check: an ISO date or time, or it is a 400.
-function isoOrNull(value: string | null): string | null {
-  if (!value) return null;
-  const parsed = Date.parse(value);
-  return /^\d{4}-\d{2}-\d{2}(T|$)/.test(value) && !Number.isNaN(parsed)
-    ? new Date(parsed).toISOString()
-    : "bad";
-}
-
-// A browser test's "nothing waits" (cookie wf-mock=quiet): nothing in the inbox or paused. A cookie, not a route the test intercepts, since the page's first reads are
+// A browser test's "nothing waits" (cookie wf-mock=quiet): nothing in the inbox. A cookie, not a route the test intercepts, since the page's first reads are
 // the server's (dev/serve.ts forwards the page's cookies to them).
 function quiet(req: IncomingMessage): boolean {
   return /(?:^|;\s*)wf-mock=quiet(?:;|$)/.test(req.headers.cookie ?? "");
@@ -2552,10 +1740,6 @@ export function mockHandler(): (
 ) => void {
   let nextRefresh = 0;
   const st: MockState = {
-    breakerReset: new Set(),
-    overnight: null,
-    overnightReason: "",
-    jobs: new Map(),
     revoked: new Map(),
     activated: new Set(),
     sites: seedSites(),
@@ -2567,8 +1751,6 @@ export function mockHandler(): (
     tokens: new Map(),
   };
   const csrf = () => fixture().csrf;
-  const claimGroups = seedClaimGroups();
-  const claimJobs = seedClaimJobs();
 
   async function action(
     req: IncomingMessage,
@@ -2611,7 +1793,7 @@ export function mockHandler(): (
           action: a,
           summary: p.summary,
           changes: p.changes,
-          audit: [`${clickName(a, params)} by ${ACTOR}`],
+          audit: [`portal.${a} by ${ACTOR}`],
           token,
           expires_at: new Date(expires).toISOString(),
         };
@@ -2629,18 +1811,16 @@ export function mockHandler(): (
       st.tokens.delete(token);
       const p = plan(f, st, t.action, t.params);
       p.apply(st);
-      const ns =
-        t.params.namespace ?? f.live.jobs.find((j) => j.id === t.params.id)?.namespace ?? null;
+      const ns = t.params.namespace ?? null;
       const { reason, ...named } = t.params;
       st.activity.unshift({
         id: (st.activity[0]?.id ?? 0) + 1,
-        target: null,
         at: new Date(mockNow()).toISOString(),
         actor: ACTOR,
         client: null,
-        action: clickName(t.action, t.params),
+        action: `portal.${t.action}`,
         namespace: ns,
-        path: t.params.id ? `${ns}/jobs/${t.params.id}.md` : null,
+        path: null,
         detail: {
           reason: reason ?? null,
           changes: null,
@@ -2678,15 +1858,11 @@ export function mockHandler(): (
       "/portal/api/actions/perform",
       "/portal/api/namespaces",
       "/portal/api/activity",
-      "/portal/api/claims",
       "/portal/api/packages/history",
-      "/portal/api/stale",
       "/portal/api/site-search",
       "/portal/api/site-traffic",
       "/portal/api/workers-builds",
       "/portal/api/build-log",
-      "/portal/api/plan",
-      "/portal/api/digest",
       "/portal/api/maintenance",
       "/portal/api/convergence",
       "/portal/api/backups",
@@ -2710,15 +1886,8 @@ export function mockHandler(): (
       action(req, res, path.endsWith("preview") ? "preview" : "perform").catch(next);
       return;
     }
-    if (path === "/portal/api/namespaces") {
-      const out = namespaces(feed(nextRefresh, st), st);
-      if (quiet(req)) for (const n of out.namespaces) n.breaker.open = false;
-      return send(res, 200, out);
-    }
-    if (path === "/portal/api/stale") {
-      if (req.method !== "GET") return send(res, 405, { error: "method" });
-      return send(res, 200, stale(feed(nextRefresh, st)));
-    }
+    if (path === "/portal/api/namespaces")
+      return send(res, 200, namespaces(feed(nextRefresh, st), st));
     // A site page's reads, with the Worker's 400s for a bad namespace, days, limit or build.
     if (
       path === "/portal/api/site-search" ||
@@ -2761,25 +1930,6 @@ export function mockHandler(): (
         );
       return send(res, 200, buildLog(build));
     }
-    if (path === "/portal/api/plan") {
-      if (req.method !== "GET") return send(res, 405, { error: "method" });
-      return send(res, 200, tonight(feed(nextRefresh, st)));
-    }
-    if (path === "/portal/api/digest") {
-      if (req.method !== "GET") return send(res, 405, { error: "method" });
-      const since = isoOrNull(url.searchParams.get("since"));
-      if (since === "bad")
-        return refuse(
-          res,
-          400,
-          "since must be an ISO 8601 time such as 2026-10-04 or 2026-10-04T22:00:00Z.",
-        );
-      return send(
-        res,
-        200,
-        digest(feed(nextRefresh, st), since ?? new Date(mockNow() - 86_400_000).toISOString()),
-      );
-    }
     if (path === "/portal/api/backups") {
       if (req.method !== "GET") return send(res, 405, { error: "method" });
       return send(res, 200, backups(st));
@@ -2790,7 +1940,7 @@ export function mockHandler(): (
     }
     if (path === "/portal/api/maintenance") {
       if (req.method !== "GET") return send(res, 405, { error: "method" });
-      return send(res, 200, maintenance(feed(nextRefresh, st)));
+      return send(res, 200, maintenance());
     }
     if (path === "/portal/api/push") {
       if (req.method === "GET") return send(res, 200, pushView());
@@ -2904,34 +2054,6 @@ export function mockHandler(): (
       const p = st.packages.find((x) => x.name === name);
       if (!p) return send(res, 404, { error: `${name} is not a configured package.` });
       return send(res, 200, mockHistory(p));
-    }
-    if (path === "/portal/api/claims") {
-      if (req.method !== "GET") return send(res, 405, { error: "method" });
-      const job = url.searchParams.get("job")?.trim();
-      if (job) {
-        const found = claimJobs.get(job);
-        if (!found) return send(res, 404, { error: `no job ${job}` });
-        const out: PortalClaimsJob = { generated: new Date(mockNow()).toISOString(), ...found };
-        return send(res, 200, out);
-      }
-      const namespace = url.searchParams.get("namespace")?.trim() || null;
-      const agent = url.searchParams.get("agent")?.trim() || null;
-      const since = isoOrNull(url.searchParams.get("since"));
-      const until = isoOrNull(url.searchParams.get("until"));
-      if (since === "bad" || until === "bad")
-        return refuse(res, 400, "since and until must be ISO 8601 times such as 2026-09-01.");
-      const groups = claimGroups.filter(
-        (g) => (!namespace || g.namespace === namespace) && (!agent || g.agent === agent),
-      );
-      const out: PortalClaimsAggregate = {
-        generated: new Date(mockNow()).toISOString(),
-        filter: { namespace, agent, since, until },
-        groups,
-        waits: seedWaits().filter((w) => !namespace || w.namespace === namespace),
-        usage: [],
-        truncated: [],
-      };
-      return send(res, 200, out);
     }
     if (req.method !== "POST" || req.headers["x-capsid-ops"] !== "refresh")
       return send(res, 400, { error: "refresh needs POST and X-Capsid-Ops: refresh" });

@@ -15,30 +15,26 @@ const feed = (): OpsFeed => JSON.parse(SAMPLE) as OpsFeed;
 function run(f: OpsFeed) {
   const calls: string[] = [];
   const list = stopCommands(f, {
-    flip: (id) => void calls.push(`flip ${id}`),
     confirm: (r) => void calls.push(`confirm ${r.action} ${JSON.stringify(r.params)}`),
   });
   return { list, calls, texts: list.map((c) => c.label) };
 }
 
-test("PLANT: a revoked agent has no Revoke, and an off switch no Turn off", () => {
+test("PLANT: a revoked agent has no Revoke", () => {
   const f = feed();
-  f.live.overnight.mode = "off";
   const { texts } = run(f);
   const revoked = f.live.agents.filter((a) => a.revoked_at).map((a) => a.name);
   assert.ok(revoked.length > 0, "the sample has a revoked agent");
   for (const name of revoked) assert.ok(!texts.includes(`Revoke ${name}`), name);
-  assert.ok(!texts.includes("Turn the overnight run off"));
 });
 
-test("PLANT: each stop runs its own control: a switch is pressed, a revoke previews", () => {
+test("PLANT: each stop runs its own control: a revoke previews", () => {
   const f = feed();
-  f.live.overnight.mode = "subscription";
   const { list, calls } = run(f);
   for (const c of list) c.run();
   const live = f.live.agents
     .filter((a) => !a.revoked_at)
     .map((a) => `confirm revoke_agent ${JSON.stringify({ name: a.name })}`);
-  assert.deepEqual(calls, ["flip sw-overnight", ...live]);
+  assert.deepEqual(calls, live);
   assert.ok(list.every((c) => c.group === "Stop"));
 });

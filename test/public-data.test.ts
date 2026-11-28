@@ -21,11 +21,6 @@ const ctx = { waitUntil: (_p: Promise<unknown>) => {} };
 // GitHub's answer for every repo the bundled model names, as measured 2026-10-10.
 const PRIVATE_REPOS = new Set(["capsid-backups", "writing"]);
 const NO_ROWS = (systems: StatsRows["systems"]): StatsRows => ({
-  finished: [],
-  open: [],
-  outcomes: [],
-  evaluations: [],
-  waits: [],
   rings: [],
   documents: 0,
   namespaces: 0,

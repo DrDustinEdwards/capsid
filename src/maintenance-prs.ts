@@ -1,11 +1,11 @@
 import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
-import { ciVerdict, jobIdFromBody, readAllPages, readCheckRuns } from "./github/pr-files";
+import { ciVerdict, readAllPages, readCheckRuns } from "./github/pr-files";
 import type { MaintenanceItem } from "./maintenance";
 import { HOUR_MS, days } from "./time";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The daily maintenance pass's pull request rules: a green driver PR still open is waiting for the
+// The daily maintenance pass's pull request rules: a green pull request still open is waiting for the
 // seat (shown with its age); A read that fails is listed as "not checked", so a missing read never
 // passes as clean.
 
@@ -30,7 +30,6 @@ export interface OpenPr {
   url: string;
   draft: boolean;
   created_at: string;
-  job: string | null;
   checks: PrCheck[];
 }
 
@@ -44,14 +43,13 @@ export interface PrReaders {
 
 export function greenAwaitingSeat(namespace: string, prs: OpenPr[], now: Date): MaintenanceItem[] {
   return prs
-    .filter((pr) => pr.job !== null && !pr.draft && ciVerdict(pr.checks).conclusion === "success")
+    .filter((pr) => !pr.draft && ciVerdict(pr.checks).conclusion === "success")
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
     .map((pr) => ({
       rule: "pr-awaiting-seat" as const,
       namespace,
-      job: pr.job,
       pr: pr.url,
-      line: `${pr.url} (${pr.job}) is green and has been open ${days(now.getTime() - Date.parse(pr.created_at))}: merge it or say why it waits.`,
+      line: `${pr.url} is green and has been open ${days(now.getTime() - Date.parse(pr.created_at))}: merge it or say why it waits.`,
     }));
 }
 
@@ -111,7 +109,6 @@ export async function gatherPrItems(
       items.push({
         rule: "pr-red",
         namespace,
-        job: pr.job,
         pr: pr.url,
         line: `${pr.url} has been red for ${days(now.getTime() - Date.parse(since))}: ${where}. Fix it or close it.`,
       });
@@ -124,7 +121,6 @@ function notChecked(namespace: string, problem: string): MaintenanceItem {
   return {
     rule: "prs-not-checked",
     namespace,
-    job: null,
     line: `Open pull requests in ${namespace} were not fully checked (${problem}): what is missing is not a clean result.`,
   };
 }
@@ -134,7 +130,6 @@ interface RawPr {
   html_url: string;
   draft?: boolean;
   created_at: string;
-  body: string | null;
   head: { sha: string };
 }
 
@@ -182,7 +177,6 @@ export function githubPrReaders(env: Env): PrReaders {
           url: pr.html_url,
           draft: pr.draft === true,
           created_at: pr.created_at,
-          job: jobIdFromBody(pr.body ?? ""),
           checks: checks.items.map((c) => ({
             id: c.id,
             name: c.name,

@@ -208,7 +208,7 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     // separates `src/gone.ts` from another repo's `apps/web/...`.
     const repoRoots = new Set([...input.repoPaths].map((p) => p.split("/")[0]));
     // A document path in this namespace is a store address, whatever it looks like (the prefix list
-    // cannot reach `jobs/<id>.md`, and `improve/` is also a real directory). Excluded documents count.
+    // cannot reach every store prefix, and `improve/` is also a real directory). Excluded documents count.
     const documentPaths = new Set(docs.map((d) => d.path));
     const cited = new Map<string, Set<string>>();
     for (const doc of standing) {

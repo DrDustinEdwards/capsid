@@ -1,15 +1,5 @@
 // Types only: the app never imports runtime code from the Worker.
 export type {
-  ClaimsAgreement,
-  ClaimsAgreementCounts,
-  ClaimsGroup,
-  ClaimsWaitRow,
-  JobClaimRow,
-  JobEvaluationRow,
-  PortalClaimsAggregate,
-  PortalClaimsJob,
-} from "../../src/ops-types/claims";
-export type {
   CompletenessArea,
   CompletenessCell,
   CompletenessStatus,
@@ -22,7 +12,6 @@ export type {
   InboxItem,
   OpsAgent,
   OpsFeed,
-  OpsJob,
   OpsTask,
   OpsTaskRun,
 } from "../../src/ops-types/feed";
@@ -56,10 +45,7 @@ export type {
   PortalLibrary,
   PortalTrends,
   TrendCiRepo,
-  PortalStale,
   PortalPush,
-  PortalPlan,
-  PortalDigest,
   PortalMaintenance,
   PortalConvergence,
   PortalBackups,
@@ -68,8 +54,6 @@ export type {
   ConvergenceCheck,
   OpsMaintenanceItem,
   MaintenanceRule,
-  OpsStaleJob,
-  StaleRule,
 } from "../../src/ops-types/views";
 export type {
   PortalSiteSearch,

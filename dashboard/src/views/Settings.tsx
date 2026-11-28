@@ -9,16 +9,12 @@ import "capsomer/switch.css";
 import "./Settings.css";
 import { PageHead } from "./shared";
 
-const Automation = lazy(() => import("./Automation").then((m) => ({ default: m.Automation })));
 const PhoneAlerts = lazy(() => import("./PhoneAlerts").then((m) => ({ default: m.PhoneAlerts })));
 
 export function Settings() {
   return (
     <div className="cap-admin-page">
       <PageHead title="Settings" />
-      <Suspense fallback={null}>
-        <Automation />
-      </Suspense>
       <Suspense fallback={null}>
         <PhoneAlerts />
       </Suspense>

@@ -1,77 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DIGEST_LAST_KEY, digestProblem, digestState, digestTick } from "../src/digest.ts";
-import type { OvernightDigest } from "../src/ops-types/views.ts";
 import { selectRows, type Row } from "./fake-sql.ts";
 import { fakeKv } from "./fakes.ts";
 
 const NOON = new Date("2026-10-11T12:05:00.000Z");
 const H = 3_600_000;
-
-const usage = {
-  cost_usd: null,
-  active_seconds: null,
-  tokens: { input: null, output: null, cache_read: null, cache_creation: null },
-} as never;
-const EMPTY: OvernightDigest = {
-  generated: NOON.toISOString(),
-  since: "",
-  for_namespace: null,
-  finished: [],
-  blocked: [],
-  pull_requests_ready: [],
-  pull_requests_merged: 0,
-  totals: {
-    usage: { jobs: 0 } as never,
-    jobs_without_usage: 0,
-  },
-  truncated: [],
-};
-const FULL: OvernightDigest = {
-  ...EMPTY,
-  finished: [
-    {
-      id: "job_done",
-      namespace: "capsid",
-      title: "Ship the thing",
-      status: "done",
-      result_kind: "pr",
-      duration_minutes: 30,
-      blocked_count: 0,
-      usage,
-    },
-  ],
-  blocked: [
-    {
-      id: "job_q",
-      namespace: "carrel",
-      title: "Which domain?",
-      at: NOON.toISOString(),
-      summary: "QUESTION: which domain?",
-      pull_requests: [],
-      usage,
-    },
-    {
-      id: "job_b",
-      namespace: "sample",
-      title: "Create the bucket",
-      at: NOON.toISOString(),
-      summary: "run this",
-      pull_requests: [],
-      usage,
-    },
-  ],
-  pull_requests_ready: [
-    {
-      job_id: "job_done",
-      namespace: "capsid",
-      url: "https://github.com/owner/capsid/pull/9",
-      state: "open",
-      source: "outcome",
-    },
-  ],
-  pull_requests_merged: 2,
-};
 
 function world(
   opts: {
@@ -89,11 +23,12 @@ function world(
     seed: opts.last ? { [DIGEST_LAST_KEY]: JSON.stringify(opts.last) } : {},
   });
   const deploys = opts.deploys ?? [];
+  const bound: unknown[][] = [];
   const db = {
     prepare: (sql: string) => {
       let params: unknown[] = [];
       const st = {
-        bind: (...p: unknown[]) => ((params = p), st),
+        bind: (...p: unknown[]) => ((params = p), bound.push(p), st),
         all: async () => {
           if (opts.findingsThrow && /FROM watcher_findings/.test(sql)) throw new Error("D1 down");
           return {
@@ -124,15 +59,13 @@ function world(
             },
           },
   } as never;
-  return { env, sent, kv };
+  return { env, sent, kv, bound };
 }
-
-const read = (d: OvernightDigest) => async () => d;
 
 test("Email Routing not on: nothing is read or sent, and the reason names it", async () => {
   for (const routing of ["", "off", "yes"]) {
     const w = world({ routing });
-    const report = await digestTick(w.env, NOON, read(FULL));
+    const report = await digestTick(w.env, NOON);
     assert.equal(report.ran, false);
     assert.match(report.note, /Email Routing is not on/);
     assert.equal(w.sent.length, 0);
@@ -166,21 +99,21 @@ test("routing on but an address or the binding missing: still nothing, and it sa
 
 test("nothing before 12:00 UTC; then one mail, and none again that day", async () => {
   const w = world();
-  assert.equal((await digestTick(w.env, new Date("2026-10-11T11:59:00Z"), read(FULL))).ran, false);
-  const first = await digestTick(w.env, NOON, read(FULL));
+  assert.equal((await digestTick(w.env, new Date("2026-10-11T11:59:00Z"))).ran, false);
+  const first = await digestTick(w.env, NOON);
   assert.equal(first.sent, true);
   assert.equal(w.sent.length, 1);
-  const again = await digestTick(w.env, new Date(NOON.getTime() + 6 * H), read(FULL));
+  const again = await digestTick(w.env, new Date(NOON.getTime() + 6 * H));
   assert.equal(again.ran, false);
   assert.equal(w.sent.length, 1);
   assert.equal(
-    (await digestTick(w.env, new Date(NOON.getTime() + 24 * H), read(FULL))).sent,
+    (await digestTick(w.env, new Date(NOON.getTime() + 24 * H))).sent,
     true,
     "the next day sent nothing",
   );
 });
 
-test("the mail lists what waits by class, questions, blocked jobs, rollbacks and what finished", async () => {
+test("the mail lists the rollbacks since the last digest and links the Portal", async () => {
   const w = world({
     deploys: [
       {
@@ -191,16 +124,17 @@ test("the mail lists what waits by class, questions, blocked jobs, rollbacks and
       },
     ],
   });
-  await digestTick(w.env, NOON, read(FULL));
+  await digestTick(w.env, NOON);
   const m = w.sent[0]!;
   assert.equal(m.to, "admin@example.com");
   assert.equal(m.from, "capsid@example.com");
-  assert.equal(m.subject, "Capsid digest 2026-10-11: 2 waiting on you");
-  assert.match(m.text, /Questions \(1\)\n- carrel job_q: Which domain\?/);
-  assert.match(m.text, /Blocked \(1\)\n- sample job_b: Create the bucket/);
+  assert.equal(m.subject, "Capsid digest 2026-10-11: 1 rollback(s)");
   assert.match(m.text, /Rollbacks \(1\)\n- owner\/capsid at aaaaaaa: rolled back/);
-  assert.match(m.text, /Finished \(1\), 2 pull request\(s\) merged/);
   assert.match(m.text, /https:\/\/portal\.dustinedwards\.info\//);
+  const quiet = world();
+  await digestTick(quiet.env, NOON);
+  assert.equal(quiet.sent[0]!.subject, "Capsid digest 2026-10-11: no rollbacks");
+  assert.match(quiet.sent[0]!.text, /Nothing happened\./);
 });
 
 test("a refused send is recorded for the day and not retried every tick", async () => {
@@ -209,46 +143,35 @@ test("a refused send is recorded for the day and not retried every tick", async 
       throw new Error("destination address not verified");
     },
   });
-  const report = await digestTick(w.env, NOON, read(FULL));
+  const report = await digestTick(w.env, NOON);
   assert.deepEqual({ ran: report.ran, sent: report.sent }, { ran: true, sent: false });
   assert.match(report.note, /destination address not verified/);
-  assert.equal((await digestTick(w.env, new Date(NOON.getTime() + H), read(FULL))).ran, false);
+  assert.equal((await digestTick(w.env, new Date(NOON.getTime() + H))).ran, false);
   const state = await digestState(w.env);
   assert.equal(state.last?.outcome, "failed");
 });
 
 test("a digest covers the time since the last one sent, or the last day", async () => {
-  const seen: string[] = [];
-  const spy = async (_e: unknown, a: { since: string }) => (seen.push(a.since), EMPTY);
-  await digestTick(
-    world({ last: { at: "2026-10-09T12:00:00.000Z", outcome: "sent", note: "" } }).env,
-    NOON,
-    spy as never,
+  const since = async (last?: object) => {
+    const w = world(last ? { last } : {});
+    await digestTick(w.env, NOON);
+    return w.bound[0]![0];
+  };
+  assert.deepEqual(
+    [
+      await since({ at: "2026-10-09T12:00:00.000Z", outcome: "sent", note: "" }),
+      await since(),
+      await since({ at: "2026-10-10T12:00:00.000Z", outcome: "failed", note: "" }),
+    ],
+    ["2026-10-09 12:00:00", "2026-10-10 12:05:00", "2026-10-10 12:05:00"],
   );
-  await digestTick(world().env, NOON, spy as never);
-  await digestTick(
-    world({ last: { at: "2026-10-10T12:00:00.000Z", outcome: "failed", note: "" } }).env,
-    NOON,
-    spy as never,
-  );
-  assert.deepEqual(seen, [
-    "2026-10-09T12:00:00.000Z",
-    "2026-10-10T12:05:00.000Z",
-    "2026-10-10T12:05:00.000Z",
-  ]);
 });
 
-const FINDING = (
-  fingerprint: string,
-  namespace: string,
-  headline: string,
-  job_id: string | null = null,
-): Row => ({
+const FINDING = (fingerprint: string, namespace: string, headline: string): Row => ({
   fingerprint,
   namespace,
   title: `Watcher: ${headline} [${fingerprint}]`,
   state: "open",
-  job_id,
   first_seen_at: "2026-10-05T10:00:00.000Z",
   last_seen_at: "2026-10-12T11:00:00.000Z",
   seen_count: 4,
@@ -262,10 +185,10 @@ test("on Monday the mail lists the open digest-class findings per site; other da
     FINDING("live-headers-sample-home", "sample", "Sample is missing security headers"),
     FINDING("live-headers-other-home", "other", "Other is missing security headers"),
     FINDING("anomaly-rate-sample-driver", "capsid", "an agent is busy"),
-    FINDING("site-down-sample", "sample", "Sample is down", "job_x"),
+    FINDING("site-down-sample", "sample", "Sample is down"),
   ];
   const monday = world({ findings });
-  await digestTick(monday.env, MONDAY, read(EMPTY));
+  await digestTick(monday.env, MONDAY);
   const text = monday.sent[0]!.text;
   assert.match(text, /Weekly digest \(3 open/);
   assert.match(
@@ -274,21 +197,21 @@ test("on Monday the mail lists the open digest-class findings per site; other da
   );
   assert.match(text, /other\n- Other is missing security headers/);
   assert.doesNotMatch(text, /busy/, "an attention-class finding was in the weekly digest");
-  assert.doesNotMatch(text, /is down/, "a job-class finding was in the weekly digest");
+  assert.doesNotMatch(text, /is down/, "an alert-class finding was in the weekly digest");
   const sunday = world({ findings });
-  await digestTick(sunday.env, NOON, read(EMPTY));
+  await digestTick(sunday.env, NOON);
   assert.doesNotMatch(sunday.sent[0]!.text, /Weekly digest/);
   const none = world();
-  await digestTick(none.env, MONDAY, read(EMPTY));
+  await digestTick(none.env, MONDAY);
   assert.doesNotMatch(none.sent[0]!.text, /Weekly digest/);
 });
 
 test("a failing weekly read is a one-line note and the mail still goes out", async () => {
   const w = world({ findingsThrow: true });
-  const report = await digestTick(w.env, MONDAY, read(EMPTY));
+  const report = await digestTick(w.env, MONDAY);
   assert.equal(report.sent, true);
   assert.match(w.sent[0]!.text, /Weekly digest could not be read\./);
   const other = world({ findingsThrow: true });
-  await digestTick(other.env, NOON, read(EMPTY));
+  await digestTick(other.env, NOON);
   assert.doesNotMatch(other.sent[0]!.text, /Weekly digest/, "a non-Monday read the findings");
 });

@@ -1,5 +1,5 @@
 import { parseDocParam } from "../lib/keys";
-import { type FormEvent, type ReactNode } from "react";
+import { type FormEvent } from "react";
 import { FilterBar, withParams } from "capsomer/react/filter-bar";
 import { Empty } from "capsomer/react/empty";
 import { Spinner } from "capsomer/react/skeleton";
@@ -24,34 +24,12 @@ const SHELVES: Array<{ id: LibraryShelf; title: string; none: string }> = [
   { id: "research", title: "Research", none: "No research yet." },
 ];
 
-const JOB_ID = /\bjob_[0-9a-f]{12}\b/g;
-
 function docParam(ns: string, path: string): string {
   return `${ns}/${path}`;
 }
 
 function docHref(ns: string, path: string): string {
   return `${routePath("library")}?${new URLSearchParams({ doc: docParam(ns, path) }).toString()}`;
-}
-
-function withJobLinks(text: string, back: string): ReactNode[] {
-  const out: ReactNode[] = [];
-  let last = 0;
-  for (const m of text.matchAll(JOB_ID)) {
-    const at = m.index ?? 0;
-    if (at > last) out.push(text.slice(last, at));
-    out.push(
-      <Link
-        key={`${at}-${m[0]}`}
-        href={`${routePath("library", { type: "job", id: m[0] })}${back}`}
-      >
-        <span className="cap-mono">{m[0]}</span>
-      </Link>,
-    );
-    last = at + m[0].length;
-  }
-  if (last < text.length) out.push(text.slice(last));
-  return out;
 }
 
 export function Library() {
@@ -102,7 +80,7 @@ export function Library() {
           <Status tone="crit">Could not read the library: {load.error}</Status>
         </p>
       ) : !data ? null : data.kind === "document" ? (
-        <DocumentView data={data} back={search ? `?${search}` : ""} now={now} />
+        <DocumentView data={data} now={now} />
       ) : data.kind === "search" ? (
         <Results data={data} now={now} />
       ) : (
@@ -227,11 +205,9 @@ function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" 
 
 function DocumentView({
   data,
-  back,
   now,
 }: {
   data: Extract<PortalLibrary, { kind: "document" }>;
-  back: string;
   now: number;
 }) {
   const d = data.doc;
@@ -265,7 +241,7 @@ function DocumentView({
         </>
       }
     >
-      <div className="lib-body">{withJobLinks(d.body, back)}</div>
+      <div className="lib-body">{d.body}</div>
       {edges.length > 0 && (
         <ul className="shared-local lib-edges" aria-label="Linked documents">
           {edges.map((e) => (

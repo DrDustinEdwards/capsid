@@ -1,4 +1,4 @@
-export const MIN = 60_000;
+const MIN = 60_000;
 export const HOUR = 60 * MIN;
 export const DAY = 24 * HOUR;
 export const SLOT_MS = 30 * MIN;
@@ -26,10 +26,6 @@ export function pct(x: number | null, dp = 2): string {
 
 export function shortId(id: string | null, n = 8): string {
   return id ? id.slice(0, n) : "";
-}
-
-export function agentLabel(agent: string): string {
-  return /^(agent:)?runner-job_/.test(agent) ? "a seat-started runner" : agent;
 }
 
 export function hostOf(origin: string): string {

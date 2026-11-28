@@ -17,11 +17,11 @@ Dustin and the co-owners also read it as a daily window on Capsid.
 
 ## Product Purpose
 
-capsid.dustinedwards.info shows Capsid, an MCP server and control plane for AI coding agents, as a product any team could run on its own systems. This site is one live instance, seen from outside: the systems it runs, what it is made of, what runs through it step by step, every MCP tool it serves, its daily numbers and its code's health. Success is a stranger understanding, within a screen or two, that Capsid queues agents' work, gates what they may do, and checks every claim against GitHub before a job counts as done, and believing it because the numbers are live.
+capsid.dustinedwards.info shows Capsid, an MCP server and control plane for AI coding agents, as a product any team could run on its own systems. This site is one live instance, seen from outside: the systems it runs, what it is made of, what runs through it step by step, every MCP tool it serves, its daily numbers and its code's health. Success is a stranger understanding, within a screen or two, that Capsid gives agents one shared memory and gates what they may do, and believing it because the numbers are live.
 
 ## Positioning
 
-Every figure is Capsid's own record, rebuilt each day from its public model and numbers. The tools are read from the Worker's own registrations and the flows from its model, so the site can't drift from what is served. Claims are checked against GitHub, not taken on an agent's word.
+Every figure is Capsid's own record, rebuilt each day from its public model and numbers. The tools are read from the Worker's own registrations and the flows from its model, so the site can't drift from what is served.
 
 ## Operating Context
 
@@ -42,7 +42,7 @@ Capsid is presented as a tool any team can run, not as a portrait of Dustin's ow
 
 ## Evidence on Hand
 
-The live public model (17 systems, their parts and lines, three flows), the daily stats (jobs, claims checked against GitHub, approval waits, uptime), 22 tool registrations, and code maps with complexity, coverage, CRAP and mutation scores. There are no photographs, testimonials, customers or press, and none may be invented.
+The live public model (17 systems, their parts and lines, three flows), the daily stats (uptime and the store), 15 tool registrations, and code maps with complexity, coverage, CRAP and mutation scores. There are no photographs, testimonials, customers or press, and none may be invented.
 
 ## Product Principles
 

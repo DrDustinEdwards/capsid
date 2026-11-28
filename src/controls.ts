@@ -11,7 +11,6 @@ import {
   PORTAL_ACTIONS,
   portalOnlyRefusal,
   type Surface,
-  SWITCHES,
   UNKNOWN_ACTION,
 } from "./controls-base";
 
@@ -26,34 +25,8 @@ export const TOKEN_TTL_SECONDS = 5 * 60;
 const CONFIRM_LABEL = "capsid-portal-confirm:v2";
 
 function describeAction(action: PortalAction, params: ActionParams): string {
-  const said = describeOnce(action, params);
-  return params.undo === "true" ? `Undo: ${said}` : said;
-}
-
-function describeOnce(action: PortalAction, params: ActionParams): string {
   const ns = params.namespace ?? "";
-  const id = params.id ?? "";
   switch (action) {
-    case "overnight":
-      return params.value === "off"
-        ? "Turn the overnight run OFF. No scheduled run starts; one already running finishes."
-        : params.value === "subscription"
-          ? "Set the overnight run to run on the SUBSCRIPTION. The scheduler may then start the per-namespace drivers on your machine overnight, billed against your Max plan. This records your decision, its date and its reasoning where the switch is set."
-          : "Set the overnight run to run on the API key. The scheduler refuses to start unless it authenticates with ANTHROPIC_API_KEY and no subscription token is in use. Billed per token to your Console account.";
-    case "resume_job":
-      return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, and that driver continues it. It does not move to you. If the job was blocked by a shared identity such as your own admin session, it goes back to the queue with your approval instead, and the next free session claims it.`;
-    case "release_job":
-      return `Release job ${id} back to the queue. Whoever holds it loses the claim, the next free session claims it, and no outcome is recorded against the holder.`;
-    case "fail_job":
-      return `Mark job ${id} failed. This is the seat stepping in on a job it does not hold, and it is recorded as such.`;
-    case "close_shipped":
-      return `Close blocked job ${id} as shipped. Its work landed, so the job moves to done, and the outcome is credited to the driver that did the work, not to you. The pull requests it names are read from GitHub for the outcome, and the close is recorded as yours.`;
-    case "supersede_job":
-      return `Supersede job ${id}${params.replaced_by ? ` with ${params.replaced_by}` : ""}. It ends as superseded, replaced before any work was done: no outcome row is written against anybody.`;
-    case "park_job":
-      return `Park job ${id}. It stays listed but is never claimed or planned until somebody unparks it; the reason says when it comes back.`;
-    case "unpark_job":
-      return `Unpark job ${id}. It goes back to the queue at its priority, and the next free session may claim it.`;
     case "pr_close":
       return `Close pull request #${params.number ?? ""} in ${ns}${params.repo ? ` (${params.repo})` : ""} without merging it. Its head branch is deleted as capsid_close_pr action close deletes it. GitHub can reopen it; the Portal does not.`;
     case "revoke_agent":
@@ -68,8 +41,6 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Change how Capsid Portal watches ${ns}. The watcher reads the new row on its next pass.`;
     case "site_remove":
       return `Remove ${ns} from the Portal's site configuration. The watcher stops probing it on its next pass.`;
-    case "reset_breaker":
-      return `Reset the queue's circuit breaker for ${ns}. Jobs its drivers failed before now stop counting, so ${ns} hands out work again until the threshold is reached anew.`;
     case "package_add":
       return `Add the npm package ${params.name ?? ""} to the packages Capsid Portal watches. The watcher reads it from its next pass.`;
     case "package_edit":
@@ -91,7 +62,7 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
     case "namespace_edit":
       return `Change the repo mapping of the project ${ns}. The repo tools resolve through it from the next call, so it changes what an agent scoped to ${ns} may reach. The namespace is not renamed and its documents do not move.`;
     case "namespace_remove":
-      return `Delete the project ${ns}: its live documents (each snapshotted first) and their links, its site row and its registration. Archived documents, versions, the audit log and finished jobs are kept, and registering ${ns} again brings the archived documents back into scope.`;
+      return `Delete the project ${ns}: its live documents (each snapshotted first) and their links, its site row and its registration. Archived documents, versions and the audit log are kept, and registering ${ns} again brings the archived documents back into scope.`;
     case "site_key_rotate":
       return `Mint a new operator key for ${ns}'s site API and set it on the site's Worker, then on Carrel. The old key stops working on each side as it is replaced. The new key is never shown, logged or recorded.`;
   }
@@ -100,14 +71,6 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
 // The params each action takes. Anything else is refused rather than carried into a token nobody
 // reads.
 const FIELDS: Record<PortalAction, readonly string[]> = {
-  overnight: ["value", "reason", "undo"],
-  resume_job: ["id", "reason", "note"],
-  release_job: ["id", "reason"],
-  fail_job: ["id", "reason"],
-  close_shipped: ["id", "reason"],
-  supersede_job: ["id", "reason", "replaced_by"],
-  park_job: ["id", "reason", "undo"],
-  unpark_job: ["id", "reason", "undo"],
   pr_close: ["namespace", "repo", "number", "reason"],
   revoke_agent: ["name"],
   activate_agent: ["name"],
@@ -123,7 +86,6 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
     "operator",
   ],
   site_remove: ["namespace", "revision"],
-  reset_breaker: ["namespace"],
   package_add: ["name", "repo", "formerly"],
   package_edit: ["name", "revision", "repo", "formerly"],
   package_remove: ["name", "revision"],
@@ -162,14 +124,13 @@ function paramsFrom(
 }
 
 /**
- * One control: its name, the params it takes, whether it needs a reason, and the two steps every
+ * One control: its name, the params it takes, and the two steps every
  * surface goes through. plan writes nothing. perform calls the one mutator that exists for the
  * control, then writes the click's audit row.
  */
 export interface Control {
   name: PortalAction;
   fields: readonly string[];
-  reasonRequired: boolean;
   plan(env: Env, email: string, params: Record<string, string>, surface: Surface): Promise<Plan>;
   perform(
     env: Env,
@@ -184,7 +145,6 @@ export interface Control {
 export const CONTROLS: readonly Control[] = PORTAL_ACTIONS.map((name) => ({
   name,
   fields: FIELDS[name],
-  reasonRequired: SWITCHES.has(name),
   plan: (env, email, params, surface) => planAction(env, email, name, params, surface),
   perform: (env, email, source, now, params, surface) =>
     performAction(env, email, source, now, name, params, surface),

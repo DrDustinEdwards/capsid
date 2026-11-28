@@ -12,7 +12,6 @@ import {
 } from "../store-guards";
 import { normalizeDashes } from "../normalize";
 import { parseLinks, type LinkEdge } from "../links";
-import { JOB_DOC_PREFIX } from "../jobs-schema";
 import { validateDocStatus, validateDocType } from "../doc-meta";
 import {
   bounded,
@@ -27,7 +26,7 @@ import {
   docPath,
 } from "../limits";
 import { assembleBody } from "../write-modes";
-import { policyWriteRefusal } from "../signed-docs";
+import { policyWriteRefusal } from "../policy-docs";
 import { concurrentEditWarning } from "../server";
 import { canonGuarded, canonRefusal } from "../canon";
 import { ruleDocWriteRefusal } from "../rule-docs";
@@ -69,25 +68,10 @@ export function policyPathsRefusal(
     if (overrideRefusal) return overrideRefusal;
   }
   for (const path of paths) {
-    const refusal =
-      policyWriteRefusal(namespace, path, allow) ?? jobMirrorRefusal(tool, namespace, path);
+    const refusal = policyWriteRefusal(namespace, path, allow);
     if (refusal) return refusal;
   }
   return null;
-}
-
-// A jobs/ document is a job's mirror, written only by the jobs code in the row's batch; the brief
-// serves it as a task, so one written by hand could stand in for a signed job never posted.
-function jobMirrorRefusal(
-  tool: "write" | "restore" | "delete" | "move",
-  namespace: string,
-  path: string,
-): string | null {
-  if (!path.startsWith(JOB_DOC_PREFIX)) return null;
-  return (
-    `${namespace}/${path} is under ${JOB_DOC_PREFIX}, where each document mirrors a job and is written only by capsid_work_jobs. ` +
-    `A ${tool} here is refused for every caller. Nothing changed. Change the job through capsid_work_jobs.`
-  );
 }
 
 // A supersedes or replaces edge makes the daily pass mark its target superseded (src/supersede.ts),

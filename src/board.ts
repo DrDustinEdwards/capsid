@@ -1,11 +1,11 @@
-// The coordinator board: the parts capsid_admin_whats_next adds beside the jobs and pull requests,
+// The coordinator board: the parts capsid_admin_whats_next adds beside the pull requests,
 // so the coordinator sees in one read which threads are working, which handoffs are open and how
 // much of each is done, what waits on Dustin, what the watcher has open, and which open pull
 // requests change the same files (Dustin, 2026-11-28, Capsid redesign change 4).
 
 import type { Env } from "./env";
 import { openHandoffs, type BoardHandoff } from "./handoffs";
-import { overlapsOf, type PrOverlap } from "./job-overlaps";
+import { overlapsOf, type PrOverlap } from "./pr-overlaps";
 import { readPrFiles } from "./github/pr-files";
 import { externalFence } from "./provenance";
 import { mapLimit } from "./map-limit";
@@ -111,7 +111,7 @@ async function findings(db: D1Database): Promise<Board["findings"]> {
 }
 
 // Same-file overlaps between the open pull requests of each repo, each pair once, the older
-// pull request first (src/job-overlaps.ts).
+// pull request first (src/pr-overlaps.ts).
 async function overlaps(
   env: Env,
   prs: BoardPr[],

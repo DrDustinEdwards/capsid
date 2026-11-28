@@ -183,10 +183,6 @@ export function singleConfig(
 // grant: same tool and handler, action narrowed to READ_ACTIONS, so the listed tool is read-only in
 // fact and annotated so (area 11, T7).
 const READ_VIEWS: Record<string, { key: string; fields: readonly string[] }> = {
-  capsid_work_jobs: {
-    key: "action",
-    fields: ["namespace", "status", "view", "stale", "since", "id"],
-  },
   capsid_lint_namespace: { key: "mode", fields: ["namespace"] },
 };
 

@@ -1,7 +1,6 @@
 ﻿import assert from "node:assert/strict";
 import { test } from "node:test";
 import { portalDisplay, portalSessionCookie } from "../src/portal-auth.ts";
-import { RESUME_MARKER } from "../src/jobs.ts";
 import {
   handleOpsFeed,
   handleOpsRefresh,
@@ -12,94 +11,15 @@ import {
   PORTAL_CSRF_COOKIE,
   refreshAllowedAt,
 } from "../src/ops-feed.ts";
-import { opsAgentFrom, opsJobFrom, type JobFeedRow } from "../src/ops-live.ts";
+import { opsAgentFrom } from "../src/ops-live.ts";
 import { OPS_SNAPSHOT_KEY } from "../src/ops-snapshot.ts";
-import {
-  openWatcherFingerprints,
-  watcherTick,
-  WATCHER_ACTOR,
-  WATCHER_LAST_KEY,
-  type Gathered,
-} from "../src/watcher.ts";
-import {
-  agentRecord,
-  captureErrors,
-  FEED,
-  fakeEnv,
-  fakeKv,
-  withPortalSessionEnds,
-} from "./fakes.ts";
+import { watcherTick, WATCHER_LAST_KEY, type Gathered } from "../src/watcher.ts";
+import { captureErrors, FEED, fakeEnv, fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
 const SECRET = "ops-feed-test-cookie-secret";
 const NOW = new Date("2026-09-28T12:00:00.000Z");
 
-const job = (over: Partial<JobFeedRow> = {}): JobFeedRow => ({
-  id: "job_000000000001",
-  namespace: "sample",
-  title: "a job",
-  status: "queued",
-  priority: 0,
-  posted_by: "github:sample",
-  claimed_by: null,
-  created_at: "2026-09-28 10:00:00",
-  updated_at: "2026-09-28T11:00:00.000Z",
-  blocked_count: 0,
-  resumed_count: 0,
-  gate_required: 0,
-  result_ref: null,
-  result_summary: null,
-  ...over,
-});
-
-test("a blocked job's summary is split into what it waits on and the exact command", () => {
-  // The summary exactly as blockJob writes it.
-  const summary = `waiting on the push\n\n${RESUME_MARKER}\n\n    git push -u origin feat/x`;
-  const shaped = opsJobFrom(job({ status: "blocked", result_summary: summary, gate_required: 1 }));
-  assert.equal(shaped.waits_on, "waiting on the push");
-  assert.equal(shaped.command, "git push -u origin feat/x");
-  assert.equal(shaped.gate_required, true);
-  const noCommand = opsJobFrom(job({ status: "blocked", result_summary: "a reason only" }));
-  assert.equal(noCommand.waits_on, "a reason only");
-  assert.equal(noCommand.command, null);
-  const done = opsJobFrom(job({ status: "done", result_summary: summary }));
-  assert.equal(done.waits_on, null);
-  assert.equal(done.command, null);
-});
-
-test("a watcher job's fingerprint is read exactly as openWatcherFingerprints reads it", async () => {
-  const titles = [
-    "Watcher: CI red on master [ci-red-abc1234]",
-    "Watcher: trailing space [mirror-stale]  ",
-    "Watcher: a [bracket] mid-title [site-down-sample]",
-    "Watcher: no fingerprint at all",
-  ];
-  const rows = titles.map((title, i) => ({ id: `job_00000000000${i}`, title }));
-  const db = { prepare: () => ({ bind: () => ({ all: async () => ({ results: rows }) }) }) };
-  const watcher = await openWatcherFingerprints(fakeEnv({ DB: db }));
-  const fromWatcher = new Map([...watcher].map(([fp, id]) => [id, fp]));
-  assert.equal(
-    fromWatcher.size,
-    3,
-    "the fixtures must give the watcher three fingerprints, or the comparison below proves little",
-  );
-  for (const row of rows) {
-    const shaped = opsJobFrom(job({ id: row.id, title: row.title, posted_by: WATCHER_ACTOR }));
-    assert.equal(shaped.finding?.fingerprint ?? null, fromWatcher.get(row.id) ?? null, row.title);
-  }
-  assert.equal(opsJobFrom(job({ title: "mine [not-a-finding]" })).finding, null);
-});
-
-test("an agent is shown with the record the status computes for it, and without its grants", () => {
-  const record = agentRecord({
-    jobs_done: 4,
-    jobs_failed: 1,
-    jobs_blocked: 2,
-    prs_opened: 3,
-    prs_merged: 2,
-    pr_merge_rate: 0.667,
-    ci_green_rate: null,
-    median_duration_minutes: 12,
-  });
+test("an agent is shown without its grants", () => {
   const shaped = opsAgentFrom({
     name: "sample-driver",
     kind: "driver",
@@ -110,7 +30,6 @@ test("an agent is shown with the record the status computes for it, and without 
     revoked_at: null,
     pending: false,
     archived_at: null,
-    record,
   });
   assert.deepEqual(shaped, {
     name: "sample-driver",
@@ -121,14 +40,6 @@ test("an agent is shown with the record the status computes for it, and without 
     revoked_at: null,
     pending: false,
     archived_at: null,
-    jobs_done: 4,
-    jobs_failed: 1,
-    jobs_blocked: 2,
-    prs_opened: 3,
-    prs_merged: 2,
-    pr_merge_rate: 0.667,
-    ci_green_rate: null,
-    median_duration_minutes: 12,
   });
 });
 

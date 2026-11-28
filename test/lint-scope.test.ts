@@ -194,8 +194,8 @@ test("THE INNOCENT DIRECTION: an unrestricted caller still gets the rules, every
   }
 });
 
-test("PLANT: finalize archives no canon or job mirror a writer typed as episodic, and no write lands", async () => {
-  const guarded = ["core.md", "decisions.md", "jobs/20260101-abc.md"];
+test("PLANT: finalize archives no canon a writer typed as episodic, and no write lands", async () => {
+  const guarded = ["core.md", "decisions.md"];
   const { client, recorded, close } = await connect(
     scopedTo(["sample"], "*"),
     guarded.map((path) => ({ namespace: "sample", path, type: "episodic", body: "lorem" })),

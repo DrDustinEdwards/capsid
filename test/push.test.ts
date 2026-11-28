@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { RETRY_CAP_REASON } from "../src/jobs-schema.ts";
 import { PORTAL_CSRF_COOKIE } from "../src/ops-feed.ts";
 import { PORTAL_CSRF_HEADER } from "../src/portal-actions.ts";
 import { portalSessionCookie } from "../src/portal-auth.ts";
@@ -38,9 +37,8 @@ const DEVICE = await keyPair();
 const AUTH = base64url(crypto.getRandomValues(new Uint8Array(16)));
 const ENDPOINT = "https://fcm.googleapis.com/fcm/send/device-1";
 
-function db(seed: { jobs?: Row[]; deploys?: Row[]; devices?: Row[] } = {}) {
+function db(seed: { deploys?: Row[]; devices?: Row[] } = {}) {
   const tables: Record<string, TableSpec> = {
-    jobs: { rows: seed.jobs ?? [], unique: [["id"]] },
     deploy_outcomes: { rows: seed.deploys ?? [], unique: [["repo", "run_id"]] },
     push_subscriptions: { rows: seed.devices ?? [], unique: [], autoId: true },
     audit_log: { rows: [], unique: [], autoId: true },
@@ -92,7 +90,6 @@ const device = (over: Row = {}): Row => ({
 });
 function world(
   opts: {
-    jobs?: Row[];
     deploys?: Row[];
     devices?: Row[];
     state?: object;
@@ -100,7 +97,6 @@ function world(
   } = {},
 ) {
   const { d1, tables, writes } = db({
-    jobs: opts.jobs,
     deploys: opts.deploys,
     devices: opts.devices ?? [device()],
   });
@@ -210,34 +206,6 @@ test("a rollback and a failed rollback alert; a verified deploy and an old rollb
   const report = await pushTick(w.env, NOW, s.fetcher);
   assert.deepEqual(report.sent.sort(), ["rollback:owner/capsid:1", "rollback:owner/carrel:2"]);
   assert.deepEqual(s.got.map((g) => g.title).sort(), ["Deploy rolled back", "Rollback failed"]);
-});
-
-test("a job at the correction cap alerts; a question alerts only past 4 hours on priority 70 or more", async () => {
-  const job = (id: string, priority: number, summary: string, ageMs: number): Row => ({
-    id,
-    namespace: "capsid",
-    title: "secret title",
-    priority,
-    status: "blocked",
-    result_summary: summary,
-    updated_at: iso(-ageMs),
-  });
-  const jobs = [
-    job("job_cap", 10, `${RETRY_CAP_REASON}\n\nreview by x: CHANGES`, H),
-    job("job_q_old_high", 70, "QUESTION: which one?", 4 * H + 60_000),
-    job("job_q_young_high", 90, "QUESTION: which one?", 3 * H),
-    job("job_q_old_low", 69, "QUESTION: which one?", 30 * H),
-    job("job_blocked", 90, "run this command", 30 * H),
-  ];
-  const w = world({ jobs });
-  const s = service();
-  const report = await pushTick(w.env, NOW, s.fetcher);
-  assert.deepEqual(report.sent.map((k) => k.split(":")[0] + ":" + k.split(":")[1]).sort(), [
-    "cap:job_cap",
-    "question:job_q_old_high",
-  ]);
-  for (const g of s.got)
-    assert.doesNotMatch(g.body, /secret title/, "an alert carried a job's title");
 });
 
 test("a site alerts when down on two probes in a row and when back, once each, and degraded once a day per failing check", async () => {

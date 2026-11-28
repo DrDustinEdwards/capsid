@@ -106,7 +106,6 @@ export async function gatherReleaseItems(
           items.push({
             rule: "release-untagged",
             namespace,
-            job: null,
             line: `${repo} is at version ${decision.version}, which is not a plain x.y.z release, so the pass does not tag it: tag it by hand if it is one.`,
           });
         continue;
@@ -115,7 +114,6 @@ export async function gatherReleaseItems(
         items.push({
           rule: "release-backwards",
           namespace,
-          job: null,
           line: `${repo} is at version ${head.version} on ${head.branch}, below its newest tag ${decision.newest}, so ${decision.tag} was not made: raise the version past ${decision.newest}.`,
         });
         continue;
@@ -125,7 +123,6 @@ export async function gatherReleaseItems(
         items.push({
           rule: "release-untagged",
           namespace,
-          job: null,
           line: `${repo} is at version ${head.version} with no tag; the auto-tag is off (${RELEASE_TAGS_SWITCH_KEY}), so ${tag} was not made.`,
         });
         continue;
@@ -134,7 +131,6 @@ export async function gatherReleaseItems(
         items.push({
           rule: "release-untagged",
           namespace,
-          job: null,
           line: `${repo} is at version ${head.version} with no tag: it waits for the next run (${RELEASE_TAG_CAP} tags are made per run).`,
         });
         continue;
@@ -151,7 +147,6 @@ export async function gatherReleaseItems(
         items.push({
           rule: "release-untagged",
           namespace,
-          job: null,
           line: `${repo} is at version ${head.version} with no tag, and the commit that set it was not found in the last ${COMMITS_READ} commits to package.json: tag it by hand.`,
         });
         continue;
@@ -198,7 +193,6 @@ export async function gatherReleaseItems(
     items.push({
       rule: "release-tagged",
       namespace,
-      job: null,
       line: `${repo} was tagged ${tag} at ${sha}${after}. Its bump-consumers workflow runs on the tag.`,
     });
   }
@@ -209,7 +203,6 @@ function notChecked(namespace: string, problem: string): MaintenanceItem {
   return {
     rule: "releases-not-checked",
     namespace,
-    job: null,
     line: `Releases were not fully checked (${problem}): what is missing is not a clean result.`,
   };
 }

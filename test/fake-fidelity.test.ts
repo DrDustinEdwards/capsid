@@ -44,25 +44,6 @@ test("C1-17: a batch that aborts on a guard leaves every row as it was", async (
   assert.equal(fake.recorded.length, 0);
 });
 
-test("C1-17: a keyed jobs UPDATE ... RETURNING moves only the row its CAS names", async () => {
-  const fake = fakeD1({
-    jobs: [{ id: "j-1", namespace: "sample", title: "t", status: "queued", posted_by: "watcher" }],
-  });
-  // The watcher's clear (src/watcher.ts): only a queued job it posted.
-  const clear = (postedBy: string) =>
-    fake.db
-      .prepare(
-        `UPDATE jobs SET status = 'failed', result_summary = ?2, updated_at = ?3
-         WHERE id = ?1 AND status = 'queued' AND posted_by = ?4 RETURNING id`,
-      )
-      .bind("j-1", "cleared", "2026-09-25T00:00:00.000Z", postedBy)
-      .first<{ id: string }>();
-  assert.equal(await clear("someone-else"), null);
-  assert.equal(fake.rows.jobs[0].status, "queued");
-  assert.deepEqual(await clear("watcher"), { id: "j-1" });
-  assert.equal(fake.rows.jobs[0].status, "failed");
-});
-
 test("C1-18: the nightly jti prune keeps a nonce seen within the day", async () => {
   const fake = fakeD1();
   fake.rows.improve_jti.push({ scope: "backup", jti: "old", seen_at: "2020-01-01 00:00:00" });

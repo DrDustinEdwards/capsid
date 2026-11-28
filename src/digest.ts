@@ -1,6 +1,5 @@
 import { sendEmail } from "@dustinedwards/site-runtime/email";
 import type { Env } from "./env";
-import { readOvernightDigest } from "./overnight-digest";
 import { PORTAL_HOST } from "./portal-host";
 import type { DigestState } from "./ops-types/views";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
@@ -8,8 +7,7 @@ import { weeklyDigestLines } from "./watcher-digest";
 import { DAY_MS, utcDay } from "./time";
 
 // Once a UTC day, after DIGEST_HOUR_UTC, the tick mails one plain-text message to ALERT_EMAIL:
-// what waits on Dustin now, rollbacks, and what finished, blocked and became ready since the last
-// digest.
+// the rollbacks since the last digest, and on Mondays the watcher's weekly digest.
 
 export const DIGEST_LAST_KEY = "digest:last";
 const DIGEST_HOUR_UTC = 12;
@@ -62,17 +60,11 @@ const list = <T>(items: T[], line: (t: T) => string): string[] => [
   ...(items.length > LIST_MAX ? [`- and ${items.length - LIST_MAX} more in the Portal`] : []),
 ];
 
-type DigestReader = typeof readOvernightDigest;
-
 async function composeDigest(
   env: Env,
   now: Date,
   since: string,
-  read: DigestReader = readOvernightDigest,
-): Promise<{ subject: string; text: string; waiting: number }> {
-  const digest = await read(env, { since }, now);
-  const questions = digest.blocked.filter((b) => b.summary.startsWith("QUESTION:"));
-  const blocked = digest.blocked.filter((b) => !b.summary.startsWith("QUESTION:"));
+): Promise<{ subject: string; text: string }> {
   const rolled = await env.DB.prepare(
     `SELECT repo, head_sha, outcome FROM deploy_outcomes WHERE outcome IN ('rolled_back', 'rollback_failed') AND recorded_at >= ?1 ORDER BY recorded_at LIMIT 20`,
   )
@@ -80,37 +72,17 @@ async function composeDigest(
     .all<{ repo: string; head_sha: string; outcome: string }>();
   const rollbacks = rolled.results ?? [];
 
-  const waiting = questions.length + blocked.length;
   const day = utcDay(now);
   const text: string[] = [`Capsid, ${day}. Since ${since.replace("T", " ").slice(0, 16)} UTC.`, ""];
   const section = (title: string, lines: string[]) => {
     if (lines.length) text.push(title, ...lines, "");
   };
   section(
-    `Questions (${questions.length})`,
-    list(questions, (q) => `${q.namespace} ${q.id}: ${q.title}`),
-  );
-  section(
-    `Blocked (${blocked.length})`,
-    list(blocked, (b) => `${b.namespace} ${b.id}: ${b.title}`),
-  );
-  section(
     `Rollbacks (${rollbacks.length})`,
     list(
       rollbacks,
       (r) =>
         `${r.repo} at ${r.head_sha.slice(0, 7)}: ${r.outcome === "rollback_failed" ? "the rollback failed" : "rolled back"}`,
-    ),
-  );
-  section(
-    `Pull requests ready (${digest.pull_requests_ready.length})`,
-    list(digest.pull_requests_ready, (p) => `${p.namespace} ${p.job_id}: ${p.url}`),
-  );
-  section(
-    `Finished (${digest.finished.length}), ${digest.pull_requests_merged} pull request(s) merged`,
-    list(
-      digest.finished,
-      (j) => `${j.namespace} ${j.id}: ${j.title} (${j.result_kind ?? j.status})`,
     ),
   );
   // Mondays UTC only: the watcher's hygiene findings, per site (src/watcher-digest.ts). A failed
@@ -129,20 +101,11 @@ async function composeDigest(
     }
   }
   if (weekly.length) text.push(...weekly, "");
-  if (
-    waiting === 0 &&
-    rollbacks.length === 0 &&
-    digest.finished.length === 0 &&
-    digest.pull_requests_ready.length === 0
-  )
-    text.push("Nothing waits on you and nothing happened.", "");
-  if (digest.truncated.length)
-    text.push(`Some lists were cut: ${digest.truncated.join("; ")}.`, "");
+  if (rollbacks.length === 0 && weekly.length === 0) text.push("Nothing happened.", "");
   text.push(`Open the Portal: ${PORTAL_URL}`);
   return {
-    subject: `Capsid digest ${day}: ${waiting === 0 ? "nothing waits on you" : `${waiting} waiting on you`}`,
+    subject: `Capsid digest ${day}: ${rollbacks.length === 0 ? "no rollbacks" : `${rollbacks.length} rollback(s)`}`,
     text: text.join("\n"),
-    waiting,
   };
 }
 
@@ -152,11 +115,7 @@ export interface DigestReport {
   sent: boolean;
 }
 
-export async function digestTick(
-  env: Env,
-  now: Date,
-  read: DigestReader = readOvernightDigest,
-): Promise<DigestReport> {
+export async function digestTick(env: Env, now: Date): Promise<DigestReport> {
   const problem = digestProblem(env);
   if (problem) return { ran: false, note: problem, sent: false };
   if (now.getUTCHours() < DIGEST_HOUR_UTC)
@@ -173,7 +132,7 @@ export async function digestTick(
       ? lastAt
       : now.getTime() - DAY_MS,
   ).toISOString();
-  const mail = await composeDigest(env, now, since, read);
+  const mail = await composeDigest(env, now, since);
   const sent = await sendEmail(env.EMAIL, {
     from: env.ALERT_FROM!,
     to: env.ALERT_EMAIL!,

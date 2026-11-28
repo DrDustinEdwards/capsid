@@ -1,7 +1,4 @@
 import type { Env } from "./env";
-import { mergeResumeTick } from "./merge-resume";
-import { returnDueParked } from "./jobs";
-import { sweepIfDue } from "./outcome-prs-sweep";
 import { offaccountDispatchTick } from "./offaccount-dispatch";
 import { runTask, type TaskResult } from "./task-runs";
 import { watcherTick } from "./watcher";
@@ -18,8 +15,7 @@ import { logEvent } from "@dustinedwards/site-runtime/log";
 
 // The five-minute tick's steps, in order. Each is its own task in the run ledger (src/task-runs.ts): runTask records a run, and records and logs a throw without rethrowing, so one step's throw does not stop the rest. A step not due returns null from its judge and records nothing.
 export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> {
-  // The watcher, on its own half-hourly stamp. It only posts jobs, so the worst a
-  // broken pass can do is add a row to the queue.
+  // The watcher, on its own half-hourly stamp. It only records findings.
   await runTask(
     env,
     "watcher",
@@ -30,46 +26,6 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       return { outcome: "ok", reason: watched.note };
     },
     { tag: "WATCHER_THREW:", rethrow: false },
-  );
-
-  // Stale jobs: a blocked job whose named pull requests have all merged goes back to its
-  // holder with a note. It resumes and never completes; see src/merge-resume.ts. Recorded
-  // only when it resumed something, so the ledger is not one empty pass every five minutes.
-  await runTask(
-    env,
-    "merge-resume",
-    () => mergeResumeTick(env, now),
-    (report): TaskResult => {
-      // A stale:prs cache that could not be written is recorded even on a pass that
-      // resumed nothing, so the stale view's missing rows have a cause on the ledger.
-      if (report.cache_error) {
-        logEvent(
-          "MERGE_RESUME_CACHE",
-          { message: `MERGE_RESUME_CACHE ${report.note}` },
-          { level: "error" },
-        );
-        return { outcome: "refused", reason: report.note };
-      }
-      if (report.resumed.length === 0) return null;
-      logEvent("MERGE_RESUME", { message: `MERGE_RESUME ${report.note}` });
-      return { outcome: "ok", reason: report.note };
-    },
-    { tag: "MERGE_RESUME_THREW:", rethrow: false },
-  );
-
-  // Parked jobs whose due date passed go back to the queue (src/jobs-park.ts). Recorded
-  // only when one was due; a due job kept parked (its title is taken) is a refusal on the
-  // ledger, and the inbox shows it until the seat acts.
-  await runTask(
-    env,
-    "park-due",
-    () => returnDueParked(env, now),
-    (report): TaskResult | null => {
-      if (report.returned.length === 0 && report.kept.length === 0) return null;
-      logEvent("PARK_DUE", { message: `PARK_DUE ${report.note}` });
-      return { outcome: report.kept.length ? "refused" : "ok", reason: report.note };
-    },
-    { tag: "PARK_DUE_THREW:", rethrow: false },
   );
 
   // The nightly Amazon copy (capsid-backups' offaccount.yml), started from here when GitHub's
@@ -160,23 +116,6 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       return { outcome: report.failed > 0 ? "refused" : "ok", reason: report.note };
     },
     { tag: "DOC_INDEX_THREW:", rethrow: false },
-  );
-
-  // The daily merge-state sweep. Outcome rows record a pull request as unmerged when written,
-  // because the driver blocks and the seat merges afterwards. The merge path corrects the rows it
-  // can see; this catches the rest (a merge done with gh, and rows from before the join table
-  // existed).
-  await runTask(
-    env,
-    "outcome-sweep",
-    () => sweepIfDue(env, now),
-    (swept): TaskResult => {
-      if (!swept) return null;
-      const line = `checked ${swept.checked}, changed ${swept.changed}, seeded ${swept.seeded}, backfilled ${swept.backfilled}`;
-      logEvent("OUTCOME_SWEEP", { message: `OUTCOME_SWEEP ${line}` });
-      return { outcome: "ok", reason: line };
-    },
-    { tag: "OUTCOME_SWEEP_THREW:", rethrow: false },
   );
 
   // The site pulse (src/site-pulse.ts): every site's health route, every tick, so a site

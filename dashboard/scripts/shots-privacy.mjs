@@ -1,4 +1,4 @@
-// A picture cannot be searched for a leaked value, so this checks the text the pictures are drawn from: it fails, naming each value, on a real email, hostname, portfolio name, unsampled job id or secret-shaped string.
+// A picture cannot be searched for a leaked value, so this checks the text the pictures are drawn from: it fails, naming each value, on a real email, hostname, portfolio name or secret-shaped string.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { redact } from "@dustinedwards/site-runtime/redact";
@@ -23,10 +23,6 @@ const EMAIL = /[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})/g;
 const REAL_NAMES =
   /\b(?:dustin|edwards|dustinedwards|foxing|foxhound|foxhoundapp|germomics|txasm|julie|julieedwards|recova|carrel|bsw)\b/gi;
 
-const JOB_ANY = /\bjob_[A-Za-z0-9_-]+/g;
-const JOB_SAMPLE = /^job_[0-9a-f]{12}(?:-s\d+)?$/;
-const NOT_A_JOB = new Set(["job_id"]);
-
 function segments(src) {
   const out = [];
   const re =
@@ -40,7 +36,7 @@ function lineOf(text, index) {
   return text.slice(0, index).split("\n").length;
 }
 
-export function scan(name, text, feedJobIds) {
+export function scan(name, text) {
   const problems = [];
   const at = (i, msg) => problems.push(`${name}:${lineOf(text, i)}: ${msg}`);
 
@@ -64,35 +60,16 @@ export function scan(name, text, feedJobIds) {
   );
   for (const m of withoutWorker.matchAll(REAL_NAMES)) at(m.index, `a real portfolio name: ${m[0]}`);
 
-  for (const m of text.matchAll(JOB_ANY)) {
-    const id = m[0];
-    if (NOT_A_JOB.has(id)) continue;
-    if (!JOB_SAMPLE.test(id)) at(m.index, `job id not of the sample shape job_<12 hex>: ${id}`);
-    else if (feedJobIds && !feedJobIds.has(id.replace(/-s\d+$/, "")))
-      at(m.index, `job id the sample feed does not define: ${id}`);
-  }
-
   for (const p of parts)
     for (const kind of Object.keys(redact(p.text).redactions))
       at(p.index, `secret-shaped value (${kind})`);
   return problems;
 }
 
-function feedJobs(files) {
-  const feed = files.find((f) => f.endsWith("sample-feed.json"));
-  if (!feed) return null;
-  const parsed = JSON.parse(readFileSync(feed, "utf8"));
-  const jobs = parsed?.live?.jobs;
-  if (!Array.isArray(jobs) || jobs.length === 0)
-    throw new Error(`shots-privacy: ${feed} has no live.jobs to check job ids against`);
-  return new Set(jobs.map((j) => j.id));
-}
-
 export function check(files = DEFAULT_FILES) {
   if (files.length === 0) throw new Error("shots-privacy: no files to check");
-  const ids = feedJobs(files);
   const problems = [];
-  for (const f of files) problems.push(...scan(f, readFileSync(f, "utf8"), ids));
+  for (const f of files) problems.push(...scan(f, readFileSync(f, "utf8")));
   return problems;
 }
 

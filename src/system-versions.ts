@@ -97,12 +97,11 @@ export function versionDrift(
     items.push({
       rule: "model-not-checked",
       namespace: a.namespace,
-      job: null,
       line: `${a.namespace}'s versions could not be read (${a.error}), so its pins were not checked today.`,
     });
   }
   for (const off of view.no_bloat_off ?? [])
-    items.push({ rule: "model-drift", namespace: off.namespace, job: null, line: off.line });
+    items.push({ rule: "model-drift", namespace: off.namespace, line: off.line });
   for (const pkg of view.packages) {
     // The newest pin per repo and place tonight, beside last night's.
     const newest = new Map<
@@ -115,7 +114,6 @@ export function versionDrift(
         items.push({
           rule: "model-drift",
           namespace: u.namespace,
-          job: null,
           line: `${u.repo ?? u.namespace} pins ${pkg.name} at ${u.pinned.slice(0, 7)} in ${u.where.replace(/ \(\d+ uses?\)$/, "")}, a commit no release tag names. Pin a release's sha.`,
         });
       const v = u.pinned ? semver(u.pinned) : null;
@@ -139,7 +137,6 @@ export function versionDrift(
         items.push({
           rule: "model-drift",
           namespace: pin.namespace,
-          job: null,
           line: `${pin.repo} moved ${pkg.name} back from ${was} to ${pin.pinned} in ${pin.where}: an older release runs an older check. Move it forward, or find who moved it.`,
         });
     }
@@ -147,7 +144,6 @@ export function versionDrift(
       items.push({
         rule: "model-not-checked",
         namespace: "capsid",
-        job: null,
         line: `${pkg.name}'s releases could not be read (${pkg.tags_error}), so no repo was checked for being behind on it today.`,
       });
     const byRepo = new Map<string, typeof pkg.users>();
@@ -163,7 +159,6 @@ export function versionDrift(
         items.push({
           rule: "model-drift",
           namespace: users[0].namespace,
-          job: null,
           line: `${repo} installs ${pins.length} versions of ${pkg.name} (${where}): bring them to one.`,
         });
       }
@@ -178,7 +173,6 @@ export function versionDrift(
         items.push({
           rule: "model-drift",
           namespace: u.namespace,
-          job: null,
           line: `${u.repo ?? u.namespace} pins ${pkg.name} ${u.pinned} in ${u.where}, ${u.behind} ${u.behind === 1 ? "release" : "releases"} behind ${pkg.latest} for ${days} days: merge its Renovate bump, or find why there is none.`,
         });
       }

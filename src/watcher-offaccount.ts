@@ -10,7 +10,7 @@ import { finding, type Finding } from "./watcher-detect";
 // copy the newest is about 24 hours older than the next dump. A tighter window would fire every morning.
 export const OFFACCOUNT_STALE_HOURS = 36;
 
-// A copy a few hours late shows on the Portal's attention list and posts no job.
+// A copy a few hours late shows on the Portal's attention list as a notice, not an alert.
 export const OFFACCOUNT_LATE_HOURS = 30;
 
 // Item 6 again: a copy under a quarter of, or over double, the median of the site's recent
@@ -130,7 +130,7 @@ export function offaccountFindings(
     } else if (hours >= OFFACCOUNT_LATE_HOURS) {
       out.push(
         finding(namespace, `offaccount-late-${site}`, `the Amazon copy of ${site} is late`, [
-          `newest complete copy: ${newest} (${hours.toFixed(1)} hours old; a warning from ${OFFACCOUNT_LATE_HOURS}, a job from ${OFFACCOUNT_STALE_HOURS})`,
+          `newest complete copy: ${newest} (${hours.toFixed(1)} hours old; a warning from ${OFFACCOUNT_LATE_HOURS}, an alert from ${OFFACCOUNT_STALE_HOURS})`,
           run,
         ]),
       );

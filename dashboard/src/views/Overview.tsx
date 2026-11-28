@@ -1,7 +1,7 @@
 import { StatTile, type StatTileProps, StatTiles } from "capsomer/react/stat-tile";
 import { Link } from "../lib/router";
 import { placePath, useApp } from "../app/ctx";
-import { ciState, hasSites, isOpen, offaccountState } from "../lib/derive";
+import { ciState, hasSites, offaccountState } from "../lib/derive";
 import { HOUR, ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
 import "capsomer/stat-tile.css";
@@ -15,14 +15,10 @@ type Tile = StatTileProps extends infer P
 
 function counts(feed: OpsFeed) {
   const sites = hasSites(feed) ? (feed.snapshot?.sites ?? []) : [];
-  const jobs = feed.live.jobs;
   return {
     down: sites.filter((s) => s.state === "down").length,
     degraded: sites.filter((s) => s.state === "degraded").length,
-    blocked: jobs.filter((j) => j.status === "blocked").length,
-    running: jobs.filter((j) => j.status === "claimed").length,
-    queued: jobs.filter((j) => j.status === "queued").length,
-    findings: jobs.filter((j) => j.finding && isOpen(j)).length,
+    findings: feed.live.findings.filter((f) => f.class === "alert").length,
     ciRed: (feed.snapshot?.ci ?? []).filter((c) => ciState(c).red).length,
   };
 }

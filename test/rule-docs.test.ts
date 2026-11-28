@@ -68,13 +68,13 @@ test("PLANT: each stale tool reference is found, and served names are not", () =
     "1. `lint(namespace)` returns the packet.", // an old call
     "a merge stays with manage_pr behind can_merge", // an old name outside backticks
     "ask `capsid_jobs` for the queue", // a capsid_ name the Worker does not serve
-    "`capsid_work_jobs` action `approve`", // a served tool with an action it does not take
+    "`capsid_write_doc` action `approve`", // a served tool with an action it does not take
     "`capsid_read_repo.read_file`", // the same, dotted
   ];
   for (const line of stale) assert.equal(staleToolNames(line).length, 1, `not found: ${line}`);
   const clean = [
     "Use `capsid_admin_manage_namespaces` action `register`.",
-    "Call `capsid_work_jobs` action `post`, then `capsid_find_docs`.",
+    "Call `capsid_write_doc` action `write`, then `capsid_find_docs`.",
     "`capsid_inspect_repo` (actions `refs` and `history`)",
     "the `write` grant, the `jobs` table, `jobs.claimed_by`",
     "`capsid_close_pr` action `delete_branch`",

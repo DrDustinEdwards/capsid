@@ -1,7 +1,6 @@
 // The MCP endpoint on the family domain: https://mcp.dustinedwards.info, a Custom Domain on this
 // Worker. That host serves the machine surface only: the MCP endpoints, the OAuth flow, the /ops
-// routes keys and runners call, the signed backup and bench endpoints, /health and the CSP report
-// sink.
+// routes keys call, the signed backup endpoints, /health and the CSP report sink.
 
 export const MCP_HOST = "mcp.dustinedwards.info";
 export const MCP_URL = `https://${MCP_HOST}/mcp`;
@@ -16,11 +15,6 @@ const MCP_HOST_PATHS = new Set([
   "/csp-report",
   "/backup/credential",
   "/backup/offaccount-report",
-  "/bench/tasks",
-  "/bench/draw",
-  "/bench/start",
-  "/bench/repro",
-  "/bench/score",
   "/review/run",
   "/public/model/v1.json",
   "/public/stats/v1.json",

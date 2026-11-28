@@ -1,7 +1,6 @@
 import { Banner } from "capsomer/react/banner";
 import { Row as CapRow, RowList } from "capsomer/react/row-list";
 import "capsomer/row-list.css";
-import { rowLink } from "../lib/router";
 import { AwayLink } from "capsomer/react/link";
 import { useState } from "react";
 import { Empty } from "capsomer/react/empty";
@@ -22,16 +21,12 @@ const RULE: Record<MaintenanceRule, { kind: Kind; label: string; order: number }
   "pr-red": { kind: "crit", label: "Red PR", order: 0 },
   "undeployed-merge": { kind: "warn", label: "Not deployed", order: 2 },
   "pr-awaiting-seat": { kind: "warn", label: "PR waiting", order: 3 },
-  "shipped-elsewhere": { kind: "warn", label: "Shipped", order: 4 },
-  "followups-missing": { kind: "warn", label: "Follow-ups", order: 5 },
-  "later-passed": { kind: "warn", label: "Date passed", order: 6 },
   "branch-merged": { kind: "warn", label: "Merged branch", order: 7 },
   "branch-stale": { kind: "warn", label: "Old branch", order: 8 },
   "model-drift": { kind: "warn", label: "Model drift", order: 8 },
   "rule-doc": { kind: "warn", label: "Rule doc", order: 8 },
   "release-backwards": { kind: "warn", label: "Version behind", order: 8 },
   "release-untagged": { kind: "warn", label: "Untagged", order: 8 },
-  "auto-resumed": { kind: "ok", label: "Resumed", order: 9 },
   "branch-pruned": { kind: "ok", label: "Pruned", order: 10 },
   "release-tagged": { kind: "ok", label: "Tagged", order: 10 },
   "prs-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
@@ -45,7 +40,7 @@ const RULE: Record<MaintenanceRule, { kind: Kind; label: string; order: number }
 const ROWS = 8;
 
 export function Maintenance() {
-  const { feed, now } = useApp();
+  const { now } = useApp();
   const [more, setMore] = useState(false);
   const load = useAnswer<PortalMaintenance>(["maintenance"], fetchMaintenance);
 
@@ -54,7 +49,6 @@ export function Maintenance() {
   const crit = items.filter((i) => RULE[i.rule].kind === "crit").length;
   const shown = more ? items : items.slice(0, Math.max(ROWS, crit));
   const hidden = items.length - shown.length;
-  const open = new Set(feed.live.jobs.map((j) => j.id));
   const r = data?.read;
   const readLine = r
     ? `${r.repos} of ${r.roster} repos, ${r.prs} open PRs, ${r.branches} branches, ${r.deploys} live deploys read`
@@ -84,7 +78,7 @@ export function Maintenance() {
         <>
           <RowList label="Maintenance">
             {shown.map((i, n) => (
-              <Row key={`${i.rule}|${n}`} item={i} opens={i.job !== null && open.has(i.job)} />
+              <Row key={`${i.rule}|${n}`} item={i} />
             ))}
           </RowList>
           {(hidden > 0 || more) && (
@@ -115,15 +109,13 @@ export function Maintenance() {
   );
 }
 
-function Row({ item, opens }: { item: OpsMaintenanceItem; opens: boolean }) {
-  const { href } = useApp();
+function Row({ item }: { item: OpsMaintenanceItem }) {
   const rule = RULE[item.rule];
   return (
     <CapRow
       tone={rule.kind === "crit" ? "crit" : undefined}
       status={<Status {...KIND_STATUS[rule.kind]}>{rule.label}</Status>}
       title={item.line}
-      href={opens && item.job ? href(`job:${item.job}`) : undefined}
       meta={<span className="ns">{item.namespace}</span>}
       actions={
         item.pr ? (
@@ -132,7 +124,6 @@ function Row({ item, opens }: { item: OpsMaintenanceItem; opens: boolean }) {
           </AwayLink>
         ) : undefined
       }
-      renderLink={rowLink}
     />
   );
 }

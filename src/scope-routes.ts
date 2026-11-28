@@ -31,18 +31,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "signed with the backup-specific HMAC key, derived from the Worker's root secret under its own context, and replay-protected",
   "/backup/offaccount-report":
     "signed with the same backup-specific HMAC key and replay-protected under its own jti scope; stores the Amazon copy's per-site run ids for the watcher (src/offaccount.ts) and returns nothing",
-  "/bench/tasks":
-    "signed with the capsid-bench HMAC key (src/bench.ts), which no backup key can produce, and replay-protected; registers a task once and never changes one",
-  "/bench/draw":
-    "signed with the capsid-bench HMAC key and replay-protected; records the registration once and appends the drawn task order, which never changes",
-  "/bench/start":
-    "signed with the capsid-bench HMAC key and replay-protected; opens a run only while KV bench:enabled reads on and under the running cap, and returns a treatment run's own run key once",
-  "/bench/repro":
-    "signed with the capsid-bench HMAC key and replay-protected; writes the harness's reproduction receipt once for one running treatment run, which its run key's complete then requires",
   "/review/run":
     "a GitHub Actions OIDC token (audience capsid-review) whose owner id is Dustin's, whose job workflow is devkit's review.yml and whose event is a pull request; reviews only that pull request, read through the GitHub App, and records the verdict (src/review.ts)",
-  "/bench/score":
-    "signed with the capsid-bench HMAC key and replay-protected; closes one running bench run, takes every arm's claim from the report, and checks the treatment's job is its own, and closes that job in the same step",
   "/ops/inbox":
     "what needs Dustin, per app (src/inbox.ts): resolveAgent on the bearer (401 without one), then each app is kept only if checkScope admits the caller's read grant on that app's namespace, so a key scoped to one namespace sees that app alone and the admin or an all-namespace read key sees every app. GET only, no CORS headers (an app's server calls it, never a browser), nothing written",
   "/ops/inbox/report":
@@ -69,12 +59,6 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/namespaces":
     "the Portal's per-namespace status, read through the function behind capsid_read_status action status, gated by portalGate",
   "/portal/api/activity": "the Portal's bounded audit_log read, gated by portalGate",
-  "/portal/api/claims":
-    "the Portal's bounded read of claims, evaluations and touches, through the capsid_admin_read_claims tool's readers, gated by portalGate",
-  "/portal/api/stale":
-    "the Portal's stale jobs, through the reader behind capsid_work_jobs action list stale: true, gated by portalGate",
-  "/portal/api/plan":
-    "the Portal's Tonight plan, through the reader behind capsid_work_jobs action list view plan, over every namespace, gated by portalGate",
   "/portal/api/site-search":
     "a site page's search tab: Search Console and Bing Webmaster for one namespace's site, through the readers behind capsid_inspect_repo actions search_console and bing_webmaster, gated by portalGate",
   "/portal/api/site-traffic":
@@ -83,8 +67,6 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "a site page's deploys tab: the Workers Builds of the Worker one namespace's site row names, through the reader behind capsid_admin_read_ops action workers_builds, gated by portalGate",
   "/portal/api/build-log":
     "one Workers Build's log for a site page's deploys tab, through the reader behind capsid_admin_read_ops action workers_build_logs, gated by portalGate",
-  "/portal/api/digest":
-    "the Portal's since-you-last-looked strip, through the reader behind capsid_work_jobs action list view digest, over every namespace, gated by portalGate",
   "/portal/api/backups":
     "Health's Backups tab: every site's backup_status read live through its operator API beside its Amazon copy, through the reader behind capsid_admin_read_ops action backups, gated by portalGate",
   "/portal/api/convergence":
@@ -104,7 +86,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/library":
     "the Portal's read-only Library: the knowledge store's shelves, a search and one document with its edges, through the readers behind capsid_find_docs and capsid_read_doc, gated by portalGate",
   "/portal/api/trends":
-    "the Portal's trends for its charts: minutes, the queue, merges and rollbacks from D1, backup slots from R2, default-branch CI from GitHub (cached an hour), read-only, gated by portalGate",
+    "the Portal's trends for its charts: minutes, merges and rollbacks from D1, backup slots from R2, default-branch CI from GitHub (cached an hour), read-only, gated by portalGate",
   "/portal/api/push":
     "the Portal's phone alerts: GET lists the devices with alerts on behind portalGate; POST turns one on or off or sends a test behind the preview's checks (portalGate, same-origin, the body cap, CSRF)",
   "/portal/api/sign-out":

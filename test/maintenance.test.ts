@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  laterPassed,
-  namesPullRequest,
-  promisesFollowUps,
-  readMaintenance,
-} from "../src/maintenance.ts";
+import { readMaintenance } from "../src/maintenance.ts";
 import {
   gatherPrItems,
   greenAwaitingSeat,
@@ -28,54 +23,6 @@ import type { OpsSnapshot, SiteSnapshot } from "../src/ops-types/sites.ts";
 import type { Env } from "../src/env.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-test("a queued LATER job is listed once its date has passed, and not before", () => {
-  const jobs = [
-    { id: "job_a", namespace: "sample", title: "LATER 2026-10-01: move the cron" },
-    { id: "job_b", namespace: "sample", title: "LATER (after 2026-12-01) rename the tool" },
-    { id: "job_c", namespace: "sample", title: "Ordinary job with a date 2026-01-01 in it" },
-  ];
-  const items = laterPassed(jobs, "2026-10-08");
-  assert.deepEqual(
-    items.map((i) => i.job),
-    ["job_a"],
-  );
-  assert.equal(items[0].rule, "later-passed");
-  assert.match(items[0].line, /LATER 2026-10-01/);
-  assert.deepEqual(
-    laterPassed(jobs, "2026-09-30"),
-    [],
-    "nothing is stale before the earliest date",
-  );
-});
-
-test("a pull request URL matches as a whole number, never as the prefix of a longer one", () => {
-  const url = "https://github.com/example-org/sample/pull/1";
-  assert.equal(namesPullRequest(`see ${url} for the change`, url), true);
-  assert.equal(namesPullRequest(`see ${url}`, url), true, "at the end of the text");
-  assert.equal(namesPullRequest("see https://github.com/example-org/sample/pull/12", url), false);
-  assert.equal(
-    namesPullRequest(
-      "see https://github.com/example-org/sample/pull/12 and https://github.com/example-org/sample/pull/1.",
-      url,
-    ),
-    true,
-    "a later whole match still counts",
-  );
-  assert.equal(namesPullRequest("no link here", url), false);
-});
-
-test("a promise of follow-up jobs is recognized in the ways drivers write it", () => {
-  assert.equal(promisesFollowUps("Piece 1 done. The rest will follow as separate jobs."), true);
-  assert.equal(promisesFollowUps("Follow-ups to be posted as separate job after the merge"), true);
-  assert.equal(promisesFollowUps("Done. Nothing further."), false);
-  assert.equal(
-    promisesFollowUps("A separate job covers the audit."),
-    false,
-    "a separate job without a promise of follow-ups",
-  );
-  assert.equal(promisesFollowUps(null), false);
-});
-
 const NOW = new Date("2026-10-08T12:00:00.000Z");
 const check = (over: Partial<PrCheck> = {}): PrCheck => ({
   id: 1,
@@ -91,7 +38,6 @@ const pr = (number: number, over: Partial<OpenPr> = {}): OpenPr => ({
   url: `https://github.com/example-org/sample/pull/${number}`,
   draft: false,
   created_at: "2026-10-05T12:00:00.000Z",
-  job: "job_000000000001",
   checks: [check()],
   ...over,
 });
@@ -103,14 +49,13 @@ const readers = (
   failingStep: async () => step,
 });
 
-test("a green driver pull request is listed with its age, and a red, pending, draft or job-less one is not", () => {
+test("a green pull request is listed with its age, and a red, pending or draft one is not", () => {
   const prs = [
     pr(1),
     pr(2, { checks: [check({ conclusion: "failure" })] }),
     pr(3, { checks: [check({ status: "in_progress", conclusion: null })] }),
     pr(4, { draft: true }),
-    pr(5, { job: null }),
-    pr(6, { checks: [] }),
+    pr(5, { checks: [] }),
   ];
   const items = greenAwaitingSeat("sample", prs, NOW);
   assert.deepEqual(
@@ -118,18 +63,16 @@ test("a green driver pull request is listed with its age, and a red, pending, dr
     [prs[0].url],
   );
   assert.equal(items[0].rule, "pr-awaiting-seat");
-  assert.equal(items[0].job, "job_000000000001");
   assert.match(items[0].line, /open 3\.0 days/);
   assert.deepEqual(
     greenAwaitingSeat("sample", prs.slice(1), NOW),
     [],
-    "no green driver pull request, nothing listed",
+    "no green pull request, nothing listed",
   );
 });
 
 test("a pull request red for more than 48 hours is listed from its first failure, and a newer red one is not", () => {
   const old = pr(7, {
-    job: null,
     checks: [
       check({ name: "lint", conclusion: "failure", completed_at: "2026-10-06T08:00:00.000Z" }),
       check({ name: "test", conclusion: "failure", completed_at: "2026-10-05T08:00:00.000Z" }),
@@ -161,7 +104,7 @@ test("the gathered list names the failing step, counts what it read, and stays q
   );
   assert.deepEqual(got.read, { sample: 2 });
 
-  const clean = await gatherPrItems(["sample"], readers([pr(9, { job: null })]), NOW);
+  const clean = await gatherPrItems(["sample"], readers([pr(9, { draft: true })]), NOW);
   assert.deepEqual(clean.items, []);
   assert.deepEqual(
     clean.read,
@@ -627,10 +570,9 @@ test("a stored list from before the disk rule was removed drops its disk items i
       {
         rule: "disk-low",
         namespace: "sample",
-        job: "job_a",
         line: "agent:x reported 22.5 GB free",
       },
-      { rule: "pr-red", namespace: "sample", job: null, line: "red for days" },
+      { rule: "pr-red", namespace: "sample", line: "red for days" },
     ],
     prs_read: {},
     branches_read: {},

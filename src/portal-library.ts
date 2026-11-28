@@ -6,7 +6,7 @@ import { jsonResponse as json } from "@dustinedwards/site-runtime/http";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The Portal's Library: GET /portal/api/library, read-only, over the knowledge store (search,
-// decisions, rulings, research, links to jobs). Writing stays in chat and with drivers.
+// decisions, rulings, research). Writing stays in chat and with drivers.
 
 export const PORTAL_LIBRARY_PATH = "/portal/api/library";
 

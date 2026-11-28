@@ -10,12 +10,10 @@ const VALUE_MAX = 300;
 
 const LABELS: Record<string, string> = {
   id: "Id",
-  job_id: "Job",
   run_url: "GitHub run",
   pr_url: "Pull request",
-  undo: "Undo of a change just made",
   ran: "Ran",
-  posted: "Findings posted",
+  recorded: "Findings recorded",
   cleared: "Findings cleared",
   note: "Note",
   error: "Error",
@@ -24,7 +22,6 @@ const LABELS: Record<string, string> = {
   old: "From",
   new: "To",
   new_path: "New path",
-  max_sessions: "Most sessions at once",
 };
 
 function withheld(key: string): boolean {

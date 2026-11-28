@@ -1,11 +1,10 @@
 # Capsid
 
-Capsid is a Model Context Protocol (MCP) server and control plane for AI coding agents. It runs as a single Cloudflare Worker and provides four functions to the agents that connect to it:
+Capsid is a Model Context Protocol (MCP) server and control plane for AI coding agents. It runs as a single Cloudflare Worker and provides three functions to the agents that connect to it:
 
 - a versioned knowledge base of project documents, stored in D1 and searchable by keyword and by meaning;
-- a work queue of signed task descriptions, from which agents claim and complete work;
 - per-agent credentials with explicit scopes, enforced at a single authorization point;
-- mediated access to GitHub repositories through a GitHub App, with a record of each agent's reported outcome alongside the outcome GitHub confirms.
+- mediated access to GitHub repositories through a GitHub App.
 
 The repository contains the source of one production deployment, operated by its owner and the co-owners listed in `CO_OWNER_EMAILS`. It is published under the MIT license for reference. It is not a hosted service and is not supported for third-party use; [Installation](#installation) describes how to run a separate instance.
 
@@ -31,14 +30,14 @@ _The public system explorer at [capsid.dustinedwards.info](https://capsid.dustin
 
 Capsid is written in TypeScript and deployed as one Cloudflare Worker. It uses the following bindings:
 
-| Binding     | Type          | Purpose                                                                                                                |
-| ----------- | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `DB`        | D1            | Documents, document versions, jobs, agents, namespaces, outcomes and the audit log. Full-text search uses SQLite FTS5. |
-| `APP_KV`    | KV            | Cached GitHub installation tokens, switches and short-lived state.                                                     |
-| `OAUTH_KV`  | KV            | OAuth grants and client registrations.                                                                                 |
-| `MEDIA`     | R2            | Daily database exports and the Markdown mirror of every document.                                                      |
-| `AI_SEARCH` | AI Search     | A derived semantic index of the documents, used for hybrid search. D1 remains the source of record.                    |
-| `ASSETS`    | Static assets | The built Capsid Portal's browser files (`dashboard/build/client`).                                                    |
+| Binding     | Type          | Purpose                                                                                                |
+| ----------- | ------------- | ------------------------------------------------------------------------------------------------------ |
+| `DB`        | D1            | Documents, document versions, agents, namespaces and the audit log. Full-text search uses SQLite FTS5. |
+| `APP_KV`    | KV            | Cached GitHub installation tokens, switches and short-lived state.                                     |
+| `OAUTH_KV`  | KV            | OAuth grants and client registrations.                                                                 |
+| `MEDIA`     | R2            | Daily database exports and the Markdown mirror of every document.                                      |
+| `AI_SEARCH` | AI Search     | A derived semantic index of the documents, used for hybrid search. D1 remains the source of record.    |
+| `ASSETS`    | Static assets | The built Capsid Portal's browser files (`dashboard/build/client`).                                    |
 
 ### Hosts
 
@@ -63,10 +62,10 @@ Every caller resolves to an agent record with a name, a set of scopes and an aud
 
 Two Cron Triggers are declared, and their expressions are defined once in `src/index.ts`:
 
-| Schedule (UTC) | Task                                                                                                                                                      |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `*/5 * * * *`  | The tick: site watcher, merge-state sweep, search indexing, phone alerts, the daily email digest, and the daily build of the public model and statistics. |
-| `0 9 * * *`    | Database backup to R2, followed by pruning of old document versions and audit rows.                                                                       |
+| Schedule (UTC) | Task                                                                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `*/5 * * * *`  | The tick: site watcher, search indexing, phone alerts, the daily email digest, and the daily build of the public model and statistics. |
+| `0 9 * * *`    | Database backup to R2, followed by pruning of old document versions and audit rows.                                                    |
 
 ## Components
 
@@ -80,29 +79,19 @@ Every overwrite or delete stores the previous body in `document_versions` and wr
 
 An agent's scopes have five axes: `namespaces`, `repos`, `tools`, `grants` (read, or read and write) and `flags`. Two flags control operations with a wide effect: merging, closing, tagging or releasing (`can_merge`), and writing autonomy policy documents (`can_touch_protected`). A new agent receives read access to its named namespaces and no flags. Scopes that fail to parse resolve to no access. The required grant for each tool is declared in `TOOL_GRANTS` (`src/scope.ts`), and a tool absent from that table requires the write grant. See [docs/auth.md](docs/auth.md).
 
-### Work queue
-
-A job consists of a title and a body; the body is the complete prompt an agent executes. Bodies are signed when posted, and a claim verifies the signature first, so a body altered outside the queue's own `edit` action is rejected. The lifecycle is `post`, `claim`, then `complete`, `fail`, `block` or `resume`. A job that reaches an operation requiring a person (a push, a deploy, a secret, a live migration or a merge) is blocked with the exact command to run. Capsid assigns each job a kind and a recommended model and effort (`src/model-routing.ts`).
-
-When an agent completes a job, it names the pull request that carries the work. Capsid then reads that pull request from GitHub and stores the verified state beside the agent's claim, so the two can be compared ([docs/work-queue.md](docs/work-queue.md)).
-
-### GitHub integration and merge policy
+### GitHub integration
 
 Repository tools resolve the target repository from the namespace mapping and check the resolved repository against the caller's `repos` axis ([docs/repo-access.md](docs/repo-access.md)). Capsid reads repositories and ends or publishes work: merging, closing, tagging and releasing require the `can_merge` flag. Agents push branches and open pull requests with their own GitHub access.
 
-Automatic merging is governed by a policy document that must be signed by the administrator before it has any effect; an unsigned policy, or one edited after signing, authorizes nothing. When enabled, the tick merges only pull requests that pass every check in the policy. Certain paths, including migrations, workflows, lockfiles and authentication code, are always refused automatic merging ([docs/autonomy.md](docs/autonomy.md)). Both automatic merging and the overnight run ([docs/overnight.md](docs/overnight.md)) are disabled in a new installation.
+Capsid runs no merge loop: a pull request merges on green, by the session that opened it or by GitHub's native auto-merge ([docs/autonomy.md](docs/autonomy.md)).
 
 ### Capsid Portal
 
-The Portal is a single-page application in `dashboard/`, served by the Worker as static assets and restricted to the administrator's Cloudflare Access session. It presents items awaiting the owner, site health, the job queue, open pull requests, deploys, agents, activity and backups, and exposes the administrative controls defined in `src/controls.ts` ([docs/portal.md](docs/portal.md)).
+The Portal is a single-page application in `dashboard/`, served by the Worker as static assets and restricted to the administrator's Cloudflare Access session. It presents items awaiting the owner, site health, open pull requests, deploys, agents, activity and backups, and exposes the administrative controls defined in `src/controls.ts` ([docs/portal.md](docs/portal.md)).
 
 ![The Portal Health view, rendered from sample data](docs/images/health-light.png)
 
 _Portal Health view, rendered from sample data._
-
-![The Portal job queue with a job's detail drawer open, rendered from sample data](docs/images/queue-drawer-light.png)
-
-_Portal job queue with a job's detail drawer open, rendered from sample data._
 
 ### Site monitoring
 
@@ -118,35 +107,32 @@ D1 Time Travel provides 30-day point-in-time recovery. In addition, the daily ba
 
 ## MCP tools
 
-Capsid serves 18 tools over two MCP servers. The count is derived from `TOOL_GRANTS` by `src/counts.ts`, and the registrations are in `src/tools/surface.ts`. Most tools take an `action` argument that selects one operation.
+Capsid serves 15 tools over two MCP servers. The count is derived from `TOOL_GRANTS` by `src/counts.ts`, and the registrations are in `src/tools/surface.ts`. Most tools take an `action` argument that selects one operation.
 
-**Capsid** (`/mcp`, `/ops/mcp`): 11 tools for project work.
+**Capsid** (`/mcp`, `/ops/mcp`): 10 tools for project work.
 
-| Tool                    | Grant      | Function                                                                                                                            |
-| ----------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `capsid_start_session`  | read       | Session briefing for a namespace.                                                                                                   |
-| `capsid_find_docs`      | read       | List, glob or full-text search documents; list reachable namespaces.                                                                |
-| `capsid_read_doc`       | read       | Read a document, its versions or its edges.                                                                                         |
-| `capsid_write_doc`      | write      | Create, change, restore or move a document.                                                                                         |
-| `capsid_delete_doc`     | write      | Delete a document, retaining its last version.                                                                                      |
-| `capsid_lint_namespace` | per action | Gather, finalize and report on a namespace's documents ([docs/consolidation.md](docs/consolidation.md)).                            |
-| `capsid_read_repo`      | read       | List directories, read files and search code in a mapped repository.                                                                |
-| `capsid_inspect_repo`   | read       | Branches, tags, pull requests, history, CI runs, live site checks and search-console data.                                          |
-| `capsid_close_pr`       | write      | Merge or close a pull request, delete a branch, tag a commit or publish a release.                                                  |
-| `capsid_work_jobs`      | per action | The work queue lifecycle.                                                                                                           |
-| `capsid_read_status`    | read       | Capsid status per namespace: queue, breaker, maintenance and items awaiting the owner. The name is retained from a removed feature. |
+| Tool                    | Grant      | Function                                                                                                 |
+| ----------------------- | ---------- | -------------------------------------------------------------------------------------------------------- |
+| `capsid_start_session`  | read       | Session briefing for a namespace.                                                                        |
+| `capsid_find_docs`      | read       | List, glob or full-text search documents; list reachable namespaces.                                     |
+| `capsid_read_doc`       | read       | Read a document, its versions or its edges.                                                              |
+| `capsid_write_doc`      | write      | Create, change, restore or move a document.                                                              |
+| `capsid_delete_doc`     | write      | Delete a document, retaining its last version.                                                           |
+| `capsid_lint_namespace` | per action | Gather, finalize and report on a namespace's documents ([docs/consolidation.md](docs/consolidation.md)). |
+| `capsid_read_repo`      | read       | List directories, read files and search code in a mapped repository.                                     |
+| `capsid_inspect_repo`   | read       | Branches, tags, pull requests, history, CI runs, live site checks and search-console data.               |
+| `capsid_close_pr`       | write      | Merge or close a pull request, delete a branch, tag a commit or publish a release.                       |
+| `capsid_read_status`    | read       | Capsid status per namespace: the lint report, maintenance and items awaiting the owner.                  |
 
-**Capsid Admin** (`/mcp/admin`): 7 tools, available to the administrator identity only.
+**Capsid Admin** (`/mcp/admin`): 5 tools, available to the administrator identity only.
 
 | Tool                             | Grant      | Function                                                                          |
 | -------------------------------- | ---------- | --------------------------------------------------------------------------------- |
 | `capsid_admin_whats_next`        | admin read | Items awaiting the owner across every namespace.                                  |
 | `capsid_admin_manage_namespaces` | admin      | Register, remap or delete a namespace.                                            |
 | `capsid_admin_manage_agents`     | admin      | Mint, revoke and re-scope agent credentials.                                      |
-| `capsid_admin_read_claims`       | admin read | Agent claims beside verified outcomes.                                            |
 | `capsid_admin_read_ops`          | admin read | Watcher state, Cloudflare Access and Email Routing configuration, Workers Builds. |
 | `capsid_admin_run_controls`      | admin      | Preview and perform administrative controls with a single-use token.              |
-| `capsid_admin_manage_switches`   | admin      | Operator keys, policy signing, the job breaker and the overnight switch.          |
 
 Adding a tool requires a recorded ruling (CLAUDE.md, Tool surface).
 
@@ -165,22 +151,22 @@ The router is `defaultHandler` in `src/routes.ts`. The principal routes are:
 | `GET /public/model/v1.json`, `/public/stats/v1.json`, `/public/code/v1.json`, `/public/versions/v1.json` | None           | Public system model, statistics, code maps and package versions.        |
 | `/portal/*`                                                                                              | Access session | The Capsid Portal and its API.                                          |
 
-The complete list, including signed backup and benchmark routes, is in [docs/auth.md](docs/auth.md#endpoints).
+The complete list, including the signed backup routes, is in [docs/auth.md](docs/auth.md#endpoints).
 
 ## Repository layout
 
-| Path                     | Contents                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------- |
-| `src/`                   | Worker source. `index.ts` is the entry point; `tools/` holds the MCP tool surface.          |
-| `migrations/`            | D1 schema migrations, applied in order.                                                     |
-| `dashboard/`             | The Capsid Portal (Vite) and its Playwright tests.                                          |
-| `explorer/`              | The public system explorer, a separate assets-only Worker.                                  |
-| `system/`                | The hand-written public system model and its JSON Schema.                                   |
-| `scripts/`               | Deploy, agent minting, backup and verification scripts.                                     |
-| `test/`                  | Unit tests and lint checks.                                                                 |
-| `test-integration/`      | Integration tests run in workerd through `@cloudflare/vitest-plugin`.                       |
-| `docs/`                  | Reference documentation. `docs/policy/` holds the reviewable copies of the signed policies. |
-| `wrangler.jsonc.example` | Template for the Worker configuration. The real `wrangler.jsonc` is not committed.          |
+| Path                     | Contents                                                                           |
+| ------------------------ | ---------------------------------------------------------------------------------- |
+| `src/`                   | Worker source. `index.ts` is the entry point; `tools/` holds the MCP tool surface. |
+| `migrations/`            | D1 schema migrations, applied in order.                                            |
+| `dashboard/`             | The Capsid Portal (Vite) and its Playwright tests.                                 |
+| `explorer/`              | The public system explorer, a separate assets-only Worker.                         |
+| `system/`                | The hand-written public system model and its JSON Schema.                          |
+| `scripts/`               | Deploy, agent minting, backup and verification scripts.                            |
+| `test/`                  | Unit tests and lint checks.                                                        |
+| `test-integration/`      | Integration tests run in workerd through `@cloudflare/vitest-plugin`.              |
+| `docs/`                  | Reference documentation.                                                           |
+| `wrangler.jsonc.example` | Template for the Worker configuration. The real `wrangler.jsonc` is not committed. |
 
 ## Installation
 
@@ -194,7 +180,7 @@ An installation requires a Cloudflare account and a GitHub App. The procedure is
 6. Run `npm run check` and `npm run deploy`.
 7. Add `https://<worker-host>/mcp` as a custom connector in the MCP client.
 
-`wrangler.jsonc`, `.dev.vars`, `.env`, keys and real document content must never be committed. Optional features, including site monitoring, Cloudflare reads, phone alerts and automatic merging, remain inactive until configured.
+`wrangler.jsonc`, `.dev.vars`, `.env`, keys and real document content must never be committed. Optional features, including site monitoring, Cloudflare reads and phone alerts, remain inactive until configured.
 
 ## Development
 
@@ -210,7 +196,7 @@ An installation requires a Cloudflare account and a GitHub App. The procedure is
 | `npm --prefix dashboard run dev`       | Serve the Portal locally against sample data.                     |
 | `EXPECT_SHA=<sha> npm run verify:live` | Verify the deployed Worker.                                       |
 
-The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#11-checks-before-a-push). Continuous integration runs these checks on every pull request, and a merge to `master` deploys to production.
+The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#10-checks-before-a-push). Continuous integration runs these checks on every pull request, and a merge to `master` deploys to production.
 
 ## Documentation
 
@@ -220,12 +206,9 @@ The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#11-checks
 - [docs/auth.md](docs/auth.md): authentication, scopes, roles, co-owners and endpoints.
 - [docs/repo-access.md](docs/repo-access.md): the GitHub App and repository resolution.
 
-**Jobs and agents**
+**Agents**
 
-- [docs/work-queue.md](docs/work-queue.md): the job lifecycle, signing and recorded evidence.
-- [docs/autonomy.md](docs/autonomy.md): automatic merging and pre-approved gates.
-- [docs/overnight.md](docs/overnight.md): the overnight plan and morning digest.
-- [docs/bench.md](docs/bench.md): the paired comparison run in capsid-bench.
+- [docs/autonomy.md](docs/autonomy.md): what runs unattended, and the watcher.
 
 **Sites and public data**
 

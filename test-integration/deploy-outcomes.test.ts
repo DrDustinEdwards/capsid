@@ -2,7 +2,6 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import { readDeployOutcomes } from "../src/deploy-outcomes";
-import { seedCapsidNamespace } from "./jobs-fixture";
 
 // The deploy-outcome reader against real D1 (migrations/0038) with GitHub stubbed: a rolled-back run is recorded once with where
 // production went, its PR and time to restore, and a second pass reads D1, not GitHub.
@@ -20,7 +19,9 @@ beforeEach(async () => {
   gateName = "live gate";
   gateConclusion = "failure";
   await env.DB.prepare("DELETE FROM deploy_outcomes").run();
-  await seedCapsidNamespace();
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+    .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
+    .run();
   await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);

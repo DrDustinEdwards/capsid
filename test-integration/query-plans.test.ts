@@ -22,7 +22,7 @@ const WHOLE_TABLE_BY_DESIGN = [
   },
   {
     file: "portal-activity.ts",
-    sql: /^SELECT id, at, actor, action, namespace, path, CASE .* END AS target, params FROM audit_log WHERE 1 = 1 ORDER BY id DESC LIMIT/is,
+    sql: /^SELECT id, at, actor, client, action, namespace, path, params FROM audit_log WHERE 1 = 1 ORDER BY id DESC LIMIT/i,
     why:
       "the Portal's UNFILTERED activity read. With no WHERE and ORDER BY id DESC LIMIT 50, SQLite walks the rowid " +
       "b-tree backwards and stops at 50 rows: the plan carries NO TEMP B-TREE, so nothing is sorted, and it reads " +

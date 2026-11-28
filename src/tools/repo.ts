@@ -38,12 +38,6 @@ import { tagRelease } from "../github/releases";
 import { repoGuards } from "./repo-guards";
 
 import { HeadMovedError } from "../github/refs";
-import { reverifyPr } from "../outcome-prs";
-import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
-
-function prUrlFor(result: { repo?: string }, number: number): string {
-  return `https://github.com/${result.repo ?? ""}/pull/${number}`;
-}
 
 // Thrown rather than returned, because guardedWrite reports a value returned from its callback as
 // success.
@@ -201,7 +195,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
         null,
         async () => {
           refuseShaOffMerge(action, sha);
-          const result = await managePr(
+          return managePr(
             env,
             namespace,
             number,
@@ -210,25 +204,6 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
             repo,
             sha,
           ).catch(headMovedRefusal(number));
-          if (action === "merge") {
-            try {
-              const url =
-                (result as { url?: string }).url ?? prUrlFor(result as { repo?: string }, number);
-              const updated = await reverifyPr(env, namespace, url, new Date());
-              if (updated.length > 0) {
-                return { ...result, outcome_rows_updated: updated.filter((u) => u.changed).length };
-              }
-            } catch (err) {
-              logEvent(
-                "OUTCOME_REVERIFY_FAILED",
-                {
-                  message: `OUTCOME_REVERIFY_FAILED pr ${number}: ${errorMessage(err)}`,
-                },
-                { level: "error" },
-              );
-            }
-          }
-          return result;
         },
         { action, repo },
       );

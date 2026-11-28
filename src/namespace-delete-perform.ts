@@ -1,6 +1,5 @@
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 import type { Env } from "./env";
-import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { isMissingRowAbort } from "./store-guards";
 import { pathMutation } from "./tools/docs";
 import { confirmKeys } from "./auth";
@@ -56,8 +55,6 @@ export async function previewNamespaceDelete(
     cascade: opts.cascade,
     allow_improve_paths: opts.allowImprovePaths,
     counts: plan.counts,
-    jobs_by_status: plan.jobs_by_status,
-    open_jobs: plan.open_jobs,
     live_agents: plan.live_agents,
     live_paths: plan.live_paths,
     max_documents: NAMESPACE_DELETE_MAX_DOCUMENTS,
@@ -99,7 +96,7 @@ export async function previewNamespaceDelete(
 
 // The batch's first statement: an INSERT that violates NOT NULL (the same abort as requireExists
 // in src/store-guards.ts), fired unless the store is still what the plan read. The live set is
-// pinned exactly: the count equals the plan's and no live path lies outside the plan's list (?6,
+// pinned exactly: the count equals the plan's and no live path lies outside the plan's list (?5,
 // JSON).
 function planGuard(db: D1Database, plan: DeletePlan, pathsJson: string): D1PreparedStatement {
   return db
@@ -110,24 +107,22 @@ function planGuard(db: D1Database, plan: DeletePlan, pathsJson: string): D1Prepa
          EXISTS (SELECT 1 FROM namespaces WHERE namespace = ?1)
          AND (SELECT COUNT(*) FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%') = ?2
          AND NOT EXISTS (SELECT 1 FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'
-                         AND path NOT IN (SELECT value FROM json_each(?6)))
+                         AND path NOT IN (SELECT value FROM json_each(?5)))
          AND (SELECT COUNT(*) FROM document_links
-              WHERE (from_ns = ?1 AND from_path IN (SELECT value FROM json_each(?6)))
-                 OR (to_ns = ?1 AND to_path IN (SELECT value FROM json_each(?6)))) = ?3
-         AND NOT EXISTS (SELECT 1 FROM jobs WHERE namespace = ?1 AND status IN (SELECT value FROM json_each(?4)))
+              WHERE (from_ns = ?1 AND from_path IN (SELECT value FROM json_each(?5)))
+                 OR (to_ns = ?1 AND to_path IN (SELECT value FROM json_each(?5)))) = ?3
          AND NOT EXISTS (SELECT 1 FROM agents WHERE revoked_at IS NULL AND
            CASE WHEN json_valid(scopes) THEN
              CASE WHEN json_type(scopes) = 'object' AND json_type(scopes, '$.namespaces') = 'array'
                THEN EXISTS (SELECT 1 FROM json_each(scopes, '$.namespaces') WHERE value = ?1) ELSE 0 END
            ELSE 0 END)
-         AND (SELECT revision FROM ops_sites WHERE namespace = ?1) IS ?5
+         AND (SELECT revision FROM ops_sites WHERE namespace = ?1) IS ?4
        )`,
     )
     .bind(
       plan.namespace,
       plan.counts.documents_live,
       plan.counts.document_links_removed,
-      JSON.stringify(OPEN_JOB_STATUSES),
       plan.ops_site_revision,
       pathsJson,
     );
@@ -239,7 +234,6 @@ export async function deleteAsPlanned(
     cascade: opts.cascade,
     allow_improve_paths: opts.allowImprovePaths,
     counts: plan.counts,
-    jobs_by_status: plan.jobs_by_status,
     documents_deleted: paths,
   });
   let results: D1Result[];
@@ -283,7 +277,7 @@ export async function deleteAsPlanned(
     if (isMissingRowAbort(err)) {
       return {
         ok: false,
-        refusal: `delete_namespace aborted, nothing changed: ${namespace} changed between the plan and the commit (a document, an edge, an open job, a live agent or its ops_sites row). Preview again.`,
+        refusal: `delete_namespace aborted, nothing changed: ${namespace} changed between the plan and the commit (a document, an edge, a live agent or its ops_sites row). Preview again.`,
       };
     }
     return {
@@ -315,7 +309,6 @@ export async function deleteAsPlanned(
       kept: {
         documents_archived: plan.counts.documents_archived,
         document_versions: plan.counts.document_versions + snapshots,
-        jobs_finished: plan.counts.jobs_finished,
         agents_revoked: plan.counts.agents_revoked,
       },
     },

@@ -544,22 +544,3 @@ export async function readSecretNames(
     SECRETS_PERMISSION,
   );
 }
-
-// Names only: an Access for SaaS app carries a client secret beside its settings
-// (src/ops-cloudflare-config.ts), and only the name is copied out.
-const ACCESS_PERMISSION = "Account / Access: Apps and Policies / Read";
-
-export async function readAccessAppNames(
-  fetchImpl: FetchLike,
-  token: string,
-  account: string,
-): Promise<string[]> {
-  return readNames(
-    fetchImpl,
-    token,
-    `${CF_API}/accounts/${encodeURIComponent(account)}/access/apps`,
-    "the Access applications list",
-    50,
-    ACCESS_PERMISSION,
-  );
-}

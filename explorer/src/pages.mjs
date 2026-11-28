@@ -276,10 +276,6 @@ const familyMap = (model, options) =>
 export const scroller = (id, inner, label) =>
   `<div class="scroller" id="${id}" role="region" aria-label="${escapeHtml(label)}" tabindex="0">${inner}</div>`;
 
-/** @param {string} value @param {string} label @param {string} [href] */
-export const reading = (value, label, href) =>
-  `<div class="reading"><dt>${href ? `<a href="${href}">${escapeHtml(label)}</a>` : escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
-
 // The model writes each step as "Name: what happens"; one without a name is called by its number.
 /** @param {{ n: number, text: string }} st */
 export function stepWords(st) {
@@ -299,8 +295,6 @@ export const percent = (/** @type {number | null} */ rate) => {
     ? `${(Math.floor(rate * 1000) / 10).toFixed(1)}%`
     : `${whole}%`;
 };
-export const minutes = (/** @type {number | null} */ m) =>
-  m === null ? "not enough data yet" : m < 120 ? `${m} minutes` : `${Math.round(m / 60)} hours`;
 
 /** @param {any} model @param {string} id @param {string} asOf @param {any[]} [maps] its code maps, if it has any @param {any} [home] the system whose code pages hold its repo, when it shares one */
 export function systemPage(model, id, asOf, maps = [], home) {

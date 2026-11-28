@@ -343,7 +343,6 @@ test("every table read whole is read at ONE instant, however many writes land be
       },
     ];
     rows.agents = [...rows.agents, { id: gen, name: gen }];
-    rows.jobs = [...rows.jobs, { id: gen, namespace: "capsid", title: gen, status: "queued" }];
   };
   type Stmt = {
     sql: string;
@@ -387,7 +386,7 @@ test("every table read whole is read at ONE instant, however many writes land be
     assert.ok(gens.length > 0, `${table} carries no writer row, so this compares nothing`);
     return Math.max(...gens);
   };
-  const whole = ["documents", "namespaces", "document_links", "agents", "jobs"];
+  const whole = ["documents", "namespaces", "document_links", "agents"];
   assert.ok(
     whole.every((t) => (TABLES as readonly string[]).includes(t)),
     "a table this test seeds is no longer exported",

@@ -5,7 +5,6 @@
 import { rewriteProse, OLD_TOOLS } from "../scripts/tool-names-lib";
 import { TOOL_GRANTS } from "./scope";
 import { COMPOSITES } from "./tools/surface";
-import { JOB_ACTIONS } from "./jobs-schema";
 import type { OpsMaintenanceItem } from "./ops-types/views";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
@@ -27,12 +26,11 @@ export function ruleDocCap(namespace: string, path: string): number | null {
 const byteLength = (text: string): number => new TextEncoder().encode(text).length;
 
 // The served surface, as tool -> its actions (null: the tool takes none this check knows).
-// Composite actions come from src/tools/surface.ts; capsid_work_jobs's from its schema.
+// Composite actions come from src/tools/surface.ts.
 const SERVED: ReadonlyMap<string, ReadonlySet<string> | null> = (() => {
   const out = new Map<string, ReadonlySet<string> | null>();
   for (const tool of Object.keys(TOOL_GRANTS)) out.set(tool, null);
   for (const spec of COMPOSITES) out.set(spec.name, new Set(Object.keys(spec.actions)));
-  out.set("capsid_work_jobs", new Set(JOB_ACTIONS));
   return out;
 })();
 
@@ -51,7 +49,7 @@ const BARE_OLD = OLD_TOOLS.filter(
 const BARE_OLD_RE = new RegExp(`(?<![\\w./-])(${BARE_OLD.join("|")})(?![\\w(-])`, "g");
 
 // An old tool name as a whole word, to say which names a line rewriteProse rewrote held.
-// Inside capsid_work_jobs, "jobs" follows an underscore and is not a match.
+// Inside capsid_lint_namespace, "lint" follows an underscore and is not a match.
 const OLD_WORD = new RegExp(
   `(?<![\\w-])(${OLD_TOOLS.slice()
     .sort((a, b) => b.length - a.length)
@@ -199,7 +197,7 @@ export function ruleDocWriteRefusal(
   if (added.length > 0) {
     reasons.push(
       `it would name ${staleSummary(added)}. ` +
-        `Use the served names (capsid_find_docs, capsid_work_jobs action post, and so on; tools/list has them all).`,
+        `Use the served names (capsid_find_docs, capsid_write_doc action write, and so on; tools/list has them all).`,
     );
   }
   if (reasons.length === 0) return null;
@@ -238,7 +236,6 @@ export async function gatherRuleDocItems(
         items.push({
           rule: "rule-doc",
           namespace: r.namespace,
-          job: null,
           line: `${describeRuleDocProblem(problem)}. Cut it or fix the names.`,
         });
     });
@@ -250,7 +247,6 @@ export async function gatherRuleDocItems(
         {
           rule: "rule-docs-not-checked",
           namespace: "capsid",
-          job: null,
           line: `The rule documents could not be read: ${message}`,
         },
       ],

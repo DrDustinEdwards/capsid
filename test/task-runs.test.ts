@@ -100,12 +100,12 @@ test("PLANT: a tick step's throw is recorded and does not stop the steps after i
   try {
     const value = await runTask(
       env,
-      "merge-resume",
+      "site-repair",
       async () => {
         throw new Error("GitHub 502");
       },
       () => null,
-      { tag: "MERGE_RESUME_THREW:", rethrow: false },
+      { tag: "SITE_REPAIR_THREW:", rethrow: false },
     );
     assert.equal(value, null);
     await runTask(
@@ -120,11 +120,11 @@ test("PLANT: a tick step's throw is recorded and does not stop the steps after i
   }
   assert.ok(after, "the step after the throw did not run");
   assert.deepEqual(inserts(), [
-    { task: "merge-resume", outcome: "threw", reason: "GitHub 502" },
+    { task: "site-repair", outcome: "threw", reason: "GitHub 502" },
     { task: "watcher", outcome: "ok", reason: "pass" },
   ]);
   assert.ok(
-    errors.lines.some((l) => JSON.parse(l).message.startsWith("MERGE_RESUME_THREW: GitHub 502")),
+    errors.lines.some((l) => JSON.parse(l).message.startsWith("SITE_REPAIR_THREW: GitHub 502")),
   );
 });
 
@@ -186,10 +186,10 @@ const flags = (runs: Partial<Record<TaskId, OpsTaskRun[]>>, cadence = 30) =>
 test("PLANT: a task whose newest run threw or was refused is failing, whatever came before", () => {
   const f = flags({
     backup: [run(60, "threw"), run(1500)],
-    "merge-resume": [run(5, "refused")],
+    "site-repair": [run(5, "refused")],
   });
   assert.equal(f.backup, "failing");
-  assert.equal(f["merge-resume"], "failing");
+  assert.equal(f["site-repair"], "failing");
 });
 
 test("PLANT: a failure of a task without a period ages out after a day; a periodic one stands until its next run", () => {

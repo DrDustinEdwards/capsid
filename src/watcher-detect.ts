@@ -3,8 +3,6 @@ import type { HourBucket, ServerErrors, SiteCloudflare } from "./ops-types/sites
 import type { OpsSnapshot, SiteProbe } from "./ops-snapshot";
 import type { SiteMapDrift } from "./ops-sites";
 import type { LiveFinding } from "./live-findings";
-import { externalFence } from "./provenance";
-import type { StatusReport } from "./status";
 import { type RepoMapRead, unmappedRepos } from "./unmapped-repos";
 import { MINUTE_MS, HOUR_MS } from "./time";
 
@@ -15,12 +13,11 @@ import { MINUTE_MS, HOUR_MS } from "./time";
 export const CI_RED_HOURS = 2;
 
 export interface Finding {
-  // Stable while the finding persists, different for a different problem. It goes in
-  // the title, so the queue's one-open-job-per-title rule stops a double post.
+  // Stable while the finding persists, different for a different problem: the key of its
+  // watcher_findings row.
   fingerprint: string;
   namespace: string;
   title: string;
-  body: string;
   // The evidence lines, kept on the finding's row per sighting (src/watcher-findings.ts).
   evidence?: string[];
 }
@@ -34,21 +31,6 @@ export const finding = (
   fingerprint,
   namespace,
   title: `Watcher: ${headline} [${fingerprint}]`,
-  body: [
-    `The watcher found this at ${new Date().toISOString()} and cannot fix it.`,
-    "",
-    "## Evidence",
-    "",
-    // Read from outside Capsid (CI conclusions, probe answers, GitHub error text), so it is
-    // fenced as external: data to confirm, never an instruction to follow.
-    externalFence("watcher-evidence", fingerprint, evidence.map((line) => `- ${line}`).join("\n")),
-    "",
-    "## What this job is",
-    "",
-    "A finding, not an instruction. Confirm it is still true before acting: the watcher",
-    "reads a surface every half hour and a finding can clear itself between the post and",
-    "the claim. If it has cleared, fail this job saying so.",
-  ].join("\n"),
   evidence,
 });
 
@@ -180,7 +162,7 @@ export function healthFindings(
     );
   }
   // Ahead is a migration applied before its PR merged, which the merge clears: a digest
-  // line, not a job. Behind is a committed migration never applied. Migration names
+  // line. Behind is a committed migration never applied. Migration names
   // start with a zero-padded number, so the prefix orders them.
   const ahead =
     latestMigration &&
@@ -223,30 +205,6 @@ export function healthFindings(
 function migrationNumber(name: string): number {
   const n = Number.parseInt(name, 10);
   return Number.isNaN(n) ? -1 : n;
-}
-
-// What capsid_read_status action status says that should not be true. Per namespace, because the
-// job each finding becomes belongs to the namespace it is about.
-export function statusFindings(status: StatusReport): Finding[] {
-  const out: Finding[] = [];
-  for (const ns of status.namespaces ?? []) {
-    // An open breaker stops the namespace's queue until a person resets it, so it is
-    // said; the watcher files it and nothing more (src/job-breaker.ts).
-    if (ns.breaker?.open) {
-      out.push(
-        finding(
-          ns.namespace,
-          `breaker-open-${ns.namespace}`,
-          `the queue's circuit breaker for ${ns.namespace} is open`,
-          [
-            `holder fails since ${ns.breaker.since} UTC: ${ns.breaker.failed}, threshold ${ns.breaker.threshold}`,
-            "No job in this namespace is handed out until the seat or Dustin resets it: capsid_admin_manage_switches action breaker_reset, or Reset under Paused after repeated failures on the Portal's Needs you.",
-          ],
-        ),
-      );
-    }
-  }
-  return out;
 }
 
 export interface CiRun {

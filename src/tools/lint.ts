@@ -318,8 +318,8 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
       }
       if (problems.length > 0)
         return fail(`finalize aborted, nothing archived:\n${problems.join("\n")}`);
-      // Archiving is a move: it asks what move asks (docs-lifecycle.ts), since a canon, policy or
-      // jobs/ document can carry an archivable type.
+      // Archiving is a move: it asks what move asks (docs-lifecycle.ts), since a canon or policy
+      // document can carry an archivable type.
       for (const consumedPath of paths) {
         for (const end of [consumedPath, `archive/${consumedPath}`]) {
           if (canonGuarded(ctx.agent, namespace, end))

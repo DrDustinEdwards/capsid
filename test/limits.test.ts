@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_PATH, pathProblem, resultRefProblem } from "../src/limits.ts";
+import { MAX_PATH, pathProblem } from "../src/limits.ts";
 import {} from "../src/github.ts";
 import { sourceFiles } from "./source-files.ts";
 
@@ -74,35 +74,3 @@ test("every tool argument is bounded: no bare z.string() anywhere in src/", () =
 
 // result_ref: a document key or a PR URL. `docPath` alone would refuse every URL on
 // the '//' after the scheme.
-
-test("result_ref takes the shapes the queue actually reports", () => {
-  for (const ref of [
-    "https://github.com/DrDustinEdwards/capsid-mcp/pull/13",
-    "https://github.com/DrDustinEdwards/capsid-mcp/pull/13#issuecomment-1",
-    "capsid/jobs/job_7d6aebd1e183.md",
-    "capsid-mcp/fe48a068efafca372fe1787e07810e4425549ab9",
-    "DrDustinEdwards/capsid-mcp/pull/13",
-  ]) {
-    assert.equal(resultRefProblem(ref), null, `${ref} was rejected`);
-  }
-});
-
-test("result_ref refuses a non-https scheme, credentials and the path grammar's escapes", () => {
-  const cases: Array<[string, RegExp]> = [
-    ["", /must not be empty/],
-    // The mirror document shows this value to a human who may click it.
-    ["javascript:alert(1)", /must not contain '\.\.'|https/],
-    ["http://github.com/a/b/pull/1", /https/],
-    // Credentials in a URL are a phishing shape, not a reference.
-    ["https://user:pass@github.com/a/b/pull/1", /credentials/],
-    ["https://", /not a valid URL|host/],
-    ["../secrets.md", /must not contain '\.\.'/],
-    ["a\nb.md", /control characters/],
-    [`https://github.com/${"x".repeat(MAX_PATH)}`, /longer than/],
-  ];
-  for (const ref of cases) {
-    const problem = resultRefProblem(ref[0]);
-    assert.ok(problem, `${JSON.stringify(ref[0])} was accepted`);
-    assert.match(problem, ref[1]);
-  }
-});

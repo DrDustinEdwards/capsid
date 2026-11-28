@@ -1,6 +1,5 @@
 import { onRoster } from "./roster";
-import { POLICY_PREFIX } from "./signed-docs";
-import { OPEN_JOB_STATUSES } from "./jobs-schema";
+import { POLICY_PREFIX } from "./policy-docs";
 import { D1_BATCH_STATEMENTS } from "./limits";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
@@ -29,11 +28,6 @@ export interface PlanCounts {
   document_versions: number;
   audit_log: number;
   document_links_removed: number;
-  jobs_open: number;
-  jobs_finished: number;
-  job_outcomes: number;
-  job_claims: number;
-  job_touches: number;
   agents_live: number;
   agents_revoked: number;
   policy_documents: number;
@@ -44,10 +38,8 @@ export interface DeletePlan {
   registered: boolean;
   on_roster: boolean;
   counts: PlanCounts;
-  jobs_by_status: Record<string, number>;
   ops_site: Record<string, unknown> | null;
   ops_site_revision: number | null;
-  open_jobs: Array<{ id: string; status: string; title: string }>;
   live_agents: string[];
   policy_paths: string[];
   // Every live path in path order, at most NAMESPACE_DELETE_MAX_DOCUMENTS + 1 of them: one more than
@@ -59,8 +51,8 @@ export interface DeletePlan {
 
 export interface DeleteOptions {
   cascade: boolean;
-  // allow_improve_paths keeps its name from the improve loop; it now covers only the signed policy
-  // documents (policyWriteRefusal in src/signed-docs.ts).
+  // allow_improve_paths keeps its name from the improve loop; it now covers only the policy
+  // documents (policyWriteRefusal in src/policy-docs.ts).
   allowImprovePaths: boolean;
 }
 
@@ -78,7 +70,6 @@ export function rows<T>(result: D1Result | undefined): T[] {
  * Writes nothing.
  */
 export async function readDeletePlan(db: D1Database, namespace: string): Promise<DeletePlan> {
-  const open = JSON.stringify(OPEN_JOB_STATUSES);
   const results = await db.batch([
     db.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(namespace),
     db
@@ -98,19 +89,6 @@ export async function readDeletePlan(db: D1Database, namespace: string): Promise
             OR (to_ns = ?1 AND to_path IN (SELECT path FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'))`,
       )
       .bind(namespace),
-    db
-      .prepare("SELECT status, COUNT(*) AS n FROM jobs WHERE namespace = ?1 GROUP BY status")
-      .bind(namespace),
-    db
-      .prepare(
-        `SELECT id, status, title FROM jobs
-         WHERE namespace = ?1 AND status IN (SELECT value FROM json_each(?2))
-         ORDER BY created_at, id LIMIT 20`,
-      )
-      .bind(namespace, open),
-    db.prepare("SELECT COUNT(*) AS n FROM job_outcomes WHERE namespace = ?1").bind(namespace),
-    db.prepare("SELECT COUNT(*) AS n FROM job_claims WHERE namespace = ?1").bind(namespace),
-    db.prepare("SELECT COUNT(*) AS n FROM job_touches WHERE namespace = ?1").bind(namespace),
     // The same reading of the scopes column as parseScopes (src/agents-schema.ts): a row that is not a
     // JSON object with a namespaces array names no namespace. The nested CASE fixes the evaluation
     // order, so json_type never sees malformed JSON.
@@ -124,7 +102,7 @@ export async function readDeletePlan(db: D1Database, namespace: string): Promise
          ORDER BY name`,
       )
       .bind(namespace),
-    // The signed policy documents (policyWriteRefusal in src/signed-docs.ts), matched case-exactly on
+    // The policy documents (policyWriteRefusal in src/policy-docs.ts), matched case-exactly on
     // the same prefix. Deleting one is a ruling, so it needs allow_improve_paths as a document delete
     // does.
     db
@@ -150,20 +128,11 @@ export async function readDeletePlan(db: D1Database, namespace: string): Promise
       .bind(namespace, NAMESPACE_DELETE_MAX_DOCUMENTS + 1),
   ]);
 
-  const jobsByStatus: Record<string, number> = {};
-  for (const row of rows<{ status: string; n: number }>(results[6]))
-    jobsByStatus[row.status] = Number(row.n);
-  let jobsOpen = 0;
-  let jobsFinished = 0;
-  for (const [status, n] of Object.entries(jobsByStatus)) {
-    if ((OPEN_JOB_STATUSES as readonly string[]).includes(status)) jobsOpen += n;
-    else jobsFinished += n;
-  }
-  const agents = rows<{ name: string; revoked_at: string | null }>(results[11]);
+  const agents = rows<{ name: string; revoked_at: string | null }>(results[6]);
   const live = agents.filter((a) => a.revoked_at === null).map((a) => a.name);
-  const site = rows<Record<string, unknown>>(results[14])[0] ?? null;
+  const site = rows<Record<string, unknown>>(results[9])[0] ?? null;
 
-  const livePaths = rows<{ path: string }>(results[15]).map((r) => r.path);
+  const livePaths = rows<{ path: string }>(results[10]).map((r) => r.path);
   return {
     namespace,
     registered: rows(results[0]).length > 0,
@@ -174,23 +143,16 @@ export async function readDeletePlan(db: D1Database, namespace: string): Promise
       document_versions: count(results[3]),
       audit_log: count(results[4]),
       document_links_removed: count(results[5]),
-      jobs_open: jobsOpen,
-      jobs_finished: jobsFinished,
-      job_outcomes: count(results[8]),
-      job_claims: count(results[9]),
-      job_touches: count(results[10]),
       agents_live: live.length,
       agents_revoked: agents.length - live.length,
-      policy_documents: count(results[12]),
+      policy_documents: count(results[7]),
     },
-    jobs_by_status: jobsByStatus,
     ops_site: site,
     ops_site_revision: site ? Number(site.revision) : null,
-    open_jobs: rows<{ id: string; status: string; title: string }>(results[7]),
     live_agents: live,
     live_paths: livePaths,
     live_paths_sha256: await sha256Hex(JSON.stringify(livePaths)),
-    policy_paths: rows<{ path: string }>(results[13]).map((r) => r.path),
+    policy_paths: rows<{ path: string }>(results[8]).map((r) => r.path),
   };
 }
 
@@ -214,13 +176,6 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
       `${ns} is on the roster (ROSTER in src/roster.ts), which the watcher and maintenance iterate by name. Remove it from the roster in code first; this tool will not.`,
     );
   }
-  if (plan.counts.jobs_open > 0) {
-    const jobs = plan.open_jobs.map((j) => `${j.id} (${j.status}, '${j.title}')`);
-    refusals.push(
-      `${ns} has ${plural(plan.counts.jobs_open, "open job")}: ${named(jobs, plan.counts.jobs_open)}. ` +
-        `cascade never reaches jobs. End each with the capsid_work_jobs tool: action 'supersede' for a queued job, action 'fail' for a claimed or blocked one (the admin may fail a job another credential holds), or 'release' then 'supersede'.`,
-    );
-  }
   if (plan.counts.agents_live > 0) {
     refusals.push(
       `${plan.counts.agents_live} live agent${plan.counts.agents_live === 1 ? " names" : "s name"} ${ns} in its scopes: ${named(plan.live_agents, plan.counts.agents_live)}. ` +
@@ -241,7 +196,7 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
   }
   if (plan.counts.policy_documents > 0 && !opts.allowImprovePaths) {
     refusals.push(
-      `${ns} holds ${plural(plan.counts.policy_documents, "signed policy document")} (${named(plan.policy_paths, plan.counts.policy_documents)}). ` +
+      `${ns} holds ${plural(plan.counts.policy_documents, "policy document")} (${named(plan.policy_paths, plan.counts.policy_documents)}). ` +
         `Deleting one is a ruling, so it needs allow_improve_paths: true, which needs the can_touch_protected flag and is audit-logged.`,
     );
   }
@@ -252,11 +207,8 @@ export function planFingerprint(plan: DeletePlan): string {
   const counts: Record<string, number> = {};
   for (const key of Object.keys(plan.counts).sort())
     counts[key] = plan.counts[key as keyof PlanCounts];
-  const jobs: Record<string, number> = {};
-  for (const key of Object.keys(plan.jobs_by_status).sort()) jobs[key] = plan.jobs_by_status[key];
   return JSON.stringify({
     counts,
-    jobs_by_status: jobs,
     ops_site_revision: plan.ops_site_revision,
     live_paths_sha256: plan.live_paths_sha256,
   });
@@ -302,7 +254,6 @@ export function summarize(plan: DeletePlan): { will_delete: string[]; will_keep:
     will_keep: [
       `${c.documents_archived} archived document(s) under archive/, still readable by this namespace name; write, delete, move and restore refuse there until the namespace is registered again`,
       `${c.document_versions} document_versions row(s) and ${c.audit_log} audit_log row(s)`,
-      `${c.jobs_finished} finished job(s), ${c.job_outcomes} job_outcomes, ${c.job_claims} job_claims, ${c.job_touches} job_touches row(s)`,
       `${c.agents_revoked} revoked agent(s) that name it`,
       "the nightly backup objects",
     ],

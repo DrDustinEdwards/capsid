@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { policyWriteRefusal } from "../src/signed-docs.ts";
+import { policyWriteRefusal } from "../src/policy-docs.ts";
 import { fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 import { operationBlocks } from "./source-files.ts";
 import { servedAs } from "./served.ts";

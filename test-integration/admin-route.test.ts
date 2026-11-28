@@ -134,23 +134,21 @@ describe("/ops/mcp serves Capsid and no Capsid Admin tool", () => {
   it("PLANT: lists exactly Capsid's 11 to a key, and no capsid_admin_ tool", async () => {
     const { server, tools } = await listTools("/ops/mcp", DRIVER_KEY);
     expect(server).toBe("capsid");
-    expect(tools).toHaveLength(11);
+    expect(tools).toHaveLength(10);
     expect(sorted(tools)).toEqual(sorted(CAPSID_TOOLS));
     expect(tools.filter((t) => t.startsWith("capsid_admin_"))).toEqual([]);
   });
 
   it("PLANT: an admin tool called on /ops/mcp does not run", async () => {
-    const answer = await callTool("/ops/mcp", DRIVER_KEY, "capsid_admin_read_claims", {
-      namespace: "sample",
-    });
+    const answer = await callTool("/ops/mcp", DRIVER_KEY, "capsid_admin_whats_next", {});
     const result = answer.message?.result as
       | { isError?: boolean; content?: Array<{ text: string }> }
       | undefined;
     const refused = answer.message?.error !== undefined || result?.isError === true;
-    expect(refused, `capsid_admin_read_claims ran on /ops/mcp: ${answer.text.slice(0, 300)}`).toBe(
+    expect(refused, `capsid_admin_whats_next ran on /ops/mcp: ${answer.text.slice(0, 300)}`).toBe(
       true,
     );
-    expect(answer.text).toMatch(/capsid_admin_read_claims/);
+    expect(answer.text).toMatch(/capsid_admin_whats_next/);
   });
 });
 
@@ -246,12 +244,12 @@ describe(`${ADMIN_MCP_ROUTE}, for the administrator's OAuth session`, () => {
     const token = await adminToken();
     const admin = await listTools(ADMIN_MCP_ROUTE, token);
     expect(admin.server).toBe("capsid-admin");
-    expect(admin.tools).toHaveLength(7);
+    expect(admin.tools).toHaveLength(5);
     expect(sorted(admin.tools)).toEqual(sorted(CAPSID_ADMIN_TOOLS));
 
     const capsid = await listTools("/mcp", token);
     expect(capsid.server).toBe("capsid");
-    expect(capsid.tools).toHaveLength(11);
+    expect(capsid.tools).toHaveLength(10);
     expect(sorted(capsid.tools)).toEqual(sorted(CAPSID_TOOLS));
     expect(capsid.tools.filter((t) => t.startsWith("capsid_admin_"))).toEqual([]);
   });

@@ -252,13 +252,10 @@ test("every tool named in ACTION_ARG serves an argument by that name", async () 
   // allowsToolAction sees undefined and refuses the narrowed tool outright.
   const wired = [
     "capsid_admin_manage_agents",
-    "capsid_admin_read_claims",
     "capsid_admin_read_ops",
     "capsid_admin_manage_namespaces",
-    "capsid_admin_manage_switches",
     "capsid_admin_run_controls",
     "capsid_read_status",
-    "capsid_work_jobs",
     "capsid_lint_namespace",
     "capsid_close_pr",
     "capsid_find_docs",

@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ROLES } from "../scripts/roles.ts";
-import { checkScope } from "../src/scope.ts";
 import { fakeFindingMemory } from "./fakes.ts";
 import {
   MAX_EVIDENCE,
@@ -13,14 +11,8 @@ import {
   type EvidenceEntry,
   type FindingRow,
 } from "../src/watcher-findings.ts";
-import {
-  DEFAULT_CADENCE_MINUTES,
-  WATCHER_ACTOR,
-  cadenceMinutes,
-  passDue,
-  watcherAgent,
-} from "../src/watcher.ts";
-import { MAX_FINDINGS_PER_PASS, runPass } from "../src/watcher-pass.ts";
+import { DEFAULT_CADENCE_MINUTES, cadenceMinutes, passDue } from "../src/watcher.ts";
+import { runPass } from "../src/watcher-pass.ts";
 import { readHealth } from "../src/site-watch.ts";
 import { MAX_HEALTH_BYTES } from "../src/ops-snapshot.ts";
 import { newestMigration } from "../src/watcher-gather-platform.ts";
@@ -31,7 +23,6 @@ import {
   deployVerdict,
   ciFindings,
   healthFindings,
-  statusFindings,
   type Finding,
   CI_RED_HOURS,
 } from "../src/watcher-detect.ts";
@@ -45,7 +36,7 @@ import {
 //
 // The checks are pure functions of what a surface said, so each is driven here
 // without a Worker, a database or GitHub. The most important property is the negative
-// one: a healthy surface posts nothing, or the watcher gets muted while the queue
+// one: a healthy surface records nothing, or the watcher gets muted while the surface
 // still looks watched.
 
 const NOW = new Date("2026-09-12T12:00:00Z");
@@ -59,54 +50,6 @@ const HEALTHY = {
   bindings: { media: "ok", app_kv: "ok" },
   backup: { last_ok: hoursAgo(2), age_hours: 2 },
 };
-
-// the identity
-
-test("the in-Worker watcher is the SAME authority as the mintable role, not a convenient one", () => {
-  // The role a person mints and the identity the tick uses must not drift.
-  const role = ROLES.find((r: (typeof ROLES)[number]) => r.name === "watcher");
-  assert.ok(role);
-  const agent = watcherAgent();
-  assert.deepEqual(agent.scopes.tools, role.tools);
-  assert.deepEqual(
-    Object.entries(agent.scopes.flags).filter(([, on]) => on),
-    [],
-    "the watcher must hold no flag",
-  );
-  assert.equal(agent.actor, WATCHER_ACTOR);
-});
-
-test("the watcher can post a job and cannot claim, complete or resume one", () => {
-  const agent = watcherAgent();
-  assert.equal(
-    checkScope(agent, {
-      tool: "capsid_work_jobs",
-      action: "post",
-      namespace: "capsid",
-      grant: "write",
-    }),
-    null,
-  );
-  for (const action of ["claim", "complete", "fail", "block", "resume"]) {
-    assert.match(
-      String(
-        checkScope(agent, {
-          tool: "capsid_work_jobs",
-          action,
-          namespace: "capsid",
-          grant: "write",
-        }),
-      ),
-      new RegExp(`'capsid_work_jobs\\.${action}'`),
-      `the watcher was allowed to ${action} a job`,
-    );
-  }
-  // And nothing outside the queue at all.
-  assert.match(
-    String(checkScope(agent, { tool: "capsid_write_doc", namespace: "capsid", grant: "write" })),
-    /not scoped to the 'capsid_write_doc' tool/,
-  );
-});
 
 // the cadence
 
@@ -157,7 +100,11 @@ test("a degraded store is a finding", () => {
   );
   assert.equal(found.length, 1);
   assert.equal(found[0].fingerprint, "health-degraded");
-  assert.match(found[0].body, /d1 error/, "a finding with no evidence is a rumour");
+  assert.match(
+    (found[0].evidence ?? []).join(" "),
+    /d1 error/,
+    "a finding with no evidence is a rumour",
+  );
 });
 
 // Master head's own CI run deploys it. Drift is judged only once that run has had its
@@ -225,7 +172,7 @@ test("master head's CI run failed, canceled, never started, unreadable or long g
       ["deploy-drift-0360787"],
       JSON.stringify(runs),
     );
-    assert.match(found[0].body, evidence);
+    assert.match((found[0].evidence ?? []).join(" "), evidence);
   }
 });
 
@@ -271,33 +218,6 @@ test("a live schema behind the newest migration, or ahead of master, is its own 
   ]);
 });
 
-test("an OPEN queue breaker is a finding the status check owns, and a closed one is not", () => {
-  const report = (open: boolean) =>
-    statusFindings({
-      namespaces: [
-        {
-          namespace: "sample",
-          breaker: {
-            namespace: "sample",
-            open,
-            failed: open ? 3 : 2,
-            threshold: 3,
-            since: "2026-09-29 06:00:00",
-            reset_at: null,
-          },
-        },
-      ],
-    } as never);
-  const found = report(true);
-  assert.deepEqual(
-    found.map((f) => f.fingerprint),
-    ["breaker-open-sample"],
-  );
-  assert.equal(owningCheck("breaker-open-sample"), "status");
-  assert.match(found[0].body, /3, threshold 3/);
-  assert.deepEqual(report(false), []);
-});
-
 test("CI red for longer than a flake is a finding; a fresh red or a run in flight is not", () => {
   const run = (status: string, conclusion: string | null, hours: number) => [
     { head_sha: "deadbee1234", status, conclusion, created_at: hoursAgo(hours) },
@@ -314,75 +234,65 @@ test("CI red for longer than a flake is a finding; a fresh red or a run in fligh
 
 // the pass
 
-function fakeFinding(fingerprint: string, namespace = "capsid"): Finding {
-  return { fingerprint, namespace, title: `Watcher: something [${fingerprint}]`, body: "evidence" };
-}
+const HOUR = 3_600_000;
+const later = (hours: number) => new Date(NOW.getTime() + hours * HOUR);
 
-function harness(
-  found: Finding[],
-  open: Map<string, string>,
-  ran: ReadonlySet<WatcherCheck> = new Set(WATCHER_CHECKS),
-) {
-  const posted: Finding[] = [];
-  const cleared: string[] = [];
+function findingRow(fingerprint: string, over: Partial<FindingRow> = {}): FindingRow {
   return {
-    posted,
-    cleared,
-    readers: {
-      findings: async () => ({ findings: found, ran }),
-      open: async () => open,
-      clear: async (id: string) => {
-        cleared.push(id);
-        return true;
-      },
-      post: async (f: Finding) => {
-        posted.push(f);
-        return { ok: true as const, jobId: `job_${f.fingerprint}` };
-      },
-      memory: fakeFindingMemory().memory,
-    },
+    fingerprint,
+    namespace: "sample",
+    title: `Watcher: something [${fingerprint}]`,
+    state: "open",
+    first_seen_at: hoursAgo(10),
+    last_seen_at: hoursAgo(1),
+    seen_count: 3,
+    cleared_at: null,
+    reopen_after: null,
+    evidence: "[]",
+    updated_at: hoursAgo(1),
+    ...over,
   };
 }
 
-test("EACH FINDING POSTS EXACTLY ONCE, and a second pass posts nothing", async () => {
-  const first = harness([fakeFinding("ci-red-abc")], new Map());
-  const one = await runPass(first.readers, NOW);
-  assert.deepEqual(one.posted, ["ci-red-abc"]);
-  assert.equal(first.posted.length, 1);
+function fakeFinding(fingerprint: string, namespace = "capsid"): Finding {
+  return { fingerprint, namespace, title: `Watcher: something [${fingerprint}]` };
+}
 
-  // The same finding, now with its job open. The queue's own duplicate rule would
-  // refuse it; the pass does not even ask, so the log does not fill with refusals.
-  const second = harness([fakeFinding("ci-red-abc")], new Map([["ci-red-abc", "job_1"]]));
-  const two = await runPass(second.readers, NOW);
-  assert.deepEqual(two.posted, []);
-  assert.equal(second.posted.length, 0, "a finding already open must not be posted again");
+function pass(
+  found: Finding[],
+  memory: ReturnType<typeof fakeFindingMemory>,
+  now: Date,
+  ran: ReadonlySet<WatcherCheck> = new Set(WATCHER_CHECKS),
+) {
+  return runPass({ findings: async () => ({ findings: found, ran }), memory: memory.memory }, now);
+}
+
+test("EACH FINDING IS ONE ROW: the first pass records it, and a second pass counts a sighting", async () => {
+  const mem = fakeFindingMemory();
+  const one = await pass([fakeFinding("ci-red-abc")], mem, NOW);
+  assert.deepEqual(one.recorded, ["ci-red-abc"]);
+  const two = await pass([fakeFinding("ci-red-abc")], mem, later(1));
+  assert.deepEqual(two.recorded, ["ci-red-abc"]);
+  assert.equal(mem.rows.size, 1);
+  assert.equal(mem.rows.get("ci-red-abc")?.seen_count, 2);
+  assert.deepEqual(mem.writes, ["insert:ci-red-abc", "sight:ci-red-abc"]);
 });
 
-test("A CLEARED FINDING CLOSES ITS JOB, and a finding still being found does not", async () => {
-  const h = harness(
-    [fakeFinding("still-broken")],
-    new Map([
-      ["still-broken", "job_1"],
-      ["went-away", "job_2"],
-    ]),
-  );
-  const result = await runPass(h.readers, NOW);
+test("A FINDING NO LONGER FOUND IS CLEARED, and one still being found is not", async () => {
+  const mem = fakeFindingMemory([findingRow("still-broken"), findingRow("went-away")]);
+  const result = await pass([fakeFinding("still-broken")], mem, NOW);
   assert.deepEqual(result.cleared, ["went-away"]);
-  assert.deepEqual(h.cleared, ["job_2"], "a finding that is still being found must keep its job");
+  assert.equal(mem.rows.get("still-broken")?.state, "open");
+  assert.equal(mem.rows.get("went-away")?.state, "cleared");
 });
 
-test("A FAILED READ DOES NOT CLEAR THE JOBS ITS CHECK OWNS", async () => {
-  // The status and roster CI reads failed this pass, so their findings are
-  // absent. That says nothing about whether the problems went away.
-  const open = new Map([
-    ["ci-red-abc1234", "job_1"],
-    ["breaker-open-sample", "job_2"],
-    ["backup-stale", "job_3"],
-  ]);
-  const h = harness([], open, new Set(WATCHER_CHECKS.filter((c) => c !== "ci" && c !== "status")));
-  const result = await runPass(h.readers, NOW);
-  assert.deepEqual(result.cleared, ["backup-stale"], "only a job whose check ran may be cleared");
-  assert.deepEqual(h.cleared, ["job_3"]);
+test("A FAILED READ DOES NOT CLEAR THE FINDINGS ITS CHECK OWNS", async () => {
+  // The roster CI reads failed this pass, so their findings are absent. That says nothing about
+  // whether the problems went away.
+  const mem = fakeFindingMemory([findingRow("ci-red-abc1234"), findingRow("backup-stale")]);
+  const result = await pass([], mem, NOW, new Set(WATCHER_CHECKS.filter((c) => c !== "ci")));
+  assert.deepEqual(result.cleared, ["backup-stale"], "only a finding whose check ran is cleared");
+  assert.equal(mem.rows.get("ci-red-abc1234")?.state, "open");
 });
 
 test("every fingerprint the checks produce has an owning check", () => {
@@ -406,21 +316,6 @@ test("every fingerprint the checks produce has an owning check", () => {
       ],
       NOW,
     ),
-    ...statusFindings({
-      namespaces: [
-        {
-          namespace: "sample",
-          breaker: {
-            namespace: "sample",
-            open: true,
-            failed: 3,
-            threshold: 3,
-            since: "2026-09-29 06:00:00",
-            reset_at: null,
-          },
-        },
-      ],
-    } as never),
     ...offaccountFindings("capsid", ["lorem"], null, null, NOW),
     ...offaccountFindings(
       "capsid",
@@ -457,7 +352,7 @@ test("every fingerprint the checks produce has an owning check", () => {
   ];
   assert.equal(
     all.length,
-    15,
+    14,
     `the scan produced ${all.length} findings: ${all.map((f) => f.fingerprint).join(", ")}`,
   );
   for (const f of all)
@@ -467,130 +362,32 @@ test("every fingerprint the checks produce has an owning check", () => {
     );
 });
 
-test("clearing runs BEFORE posting, so a finding that flickers is not refused as its own duplicate", async () => {
-  // If the post ran first, a finding whose job was about to be closed would be
-  // refused as a duplicate of it.
-  const order: string[] = [];
-  await runPass(
-    {
-      findings: async () => ({ findings: [fakeFinding("b")], ran: new Set(WATCHER_CHECKS) }),
-      open: async () => new Map([["a", "job_a"]]),
-      clear: async (id) => {
-        order.push(`clear:${id}`);
-        return true;
-      },
-      post: async (f) => {
-        order.push(`post:${f.fingerprint}`);
-        return { ok: true as const, jobId: "job_b" };
-      },
-      memory: fakeFindingMemory().memory,
-    },
-    NOW,
-  );
-  assert.deepEqual(order, ["clear:job_a", "post:b"]);
+test("clearing runs BEFORE recording, so a finding that flickers starts its quiet period first", async () => {
+  const mem = fakeFindingMemory([findingRow("a")]);
+  await pass([fakeFinding("b")], mem, NOW);
+  assert.deepEqual(mem.writes, ["clear:a", "insert:b"]);
 });
 
-test("a refused post is logged and does not stop the rest of the pass", async () => {
-  const posted: string[] = [];
-  const result = await runPass(
-    {
-      findings: async () => ({
-        findings: [fakeFinding("first"), fakeFinding("second")],
-        ran: new Set(WATCHER_CHECKS),
-      }),
-      open: async () => new Map(),
-      clear: async () => true,
-      post: async (f) => {
-        posted.push(f.fingerprint);
-        return f.fingerprint === "first"
-          ? { ok: false as const, refusal: "a duplicate is already open" }
-          : { ok: true as const, jobId: "job_second" };
-      },
-      memory: fakeFindingMemory().memory,
-    },
-    NOW,
-  );
-  assert.deepEqual(
-    posted,
-    ["first", "second"],
-    "a refusal on one finding must not abandon the others",
-  );
-  assert.deepEqual(result.posted, ["second"], "only what actually posted is reported as posted");
-});
-
-// The watcher's memory of a finding across jobs (src/watcher-findings.ts). The
+// The watcher's memory of a finding across passes (src/watcher-findings.ts). The
 // decision is pure and driven here; the D1 statements run in
 // test-integration/watcher-findings.test.ts.
 
-const HOUR = 3_600_000;
-const later = (hours: number) => new Date(NOW.getTime() + hours * HOUR);
-
-function findingRow(fingerprint: string, over: Partial<FindingRow> = {}): FindingRow {
-  return {
-    fingerprint,
-    namespace: "sample",
-    title: `Watcher: something [${fingerprint}]`,
-    state: "open",
-    job_id: "job_1",
-    first_seen_at: hoursAgo(10),
-    last_seen_at: hoursAgo(1),
-    seen_count: 3,
-    cleared_at: null,
-    reopen_after: null,
-    evidence: "[]",
-    updated_at: hoursAgo(1),
-    ...over,
-  };
-}
-
 test("a sighting's verdict, for every state a row can be in", () => {
-  const job = (status: string, summary: string, hours = 1) => ({
-    status,
-    result_summary: summary,
-    updated_at: hoursAgo(hours),
-  });
   const row = (over: Partial<FindingRow> = {}) => findingRow("a", over);
   const cleared = (reopen_after: string) => row({ state: "cleared", reopen_after });
   const cases: Array<[string, ReturnType<typeof onSighting>["do"], ReturnType<typeof onSighting>]> =
     [
-      ["no row, no job", "post", onSighting(null, null, null, NOW)],
-      ["its job open", "bump", onSighting(row(), "job_1", null, NOW)],
-      ["an open job with no row", "adopt", onSighting(null, "job_9", null, NOW)],
-      [
-        "an open job on a cleared row",
-        "adopt",
-        onSighting(row({ state: "cleared", job_id: null }), "job_9", null, NOW),
-      ],
-      [
-        "job superseded by a person",
-        "dismiss",
-        onSighting(row(), null, job("superseded", "withdrawn"), NOW),
-      ],
-      ["job gone", "dismiss", onSighting(row(), null, null, NOW)],
-      [
-        "cleared by the watcher an hour ago",
-        "quiet",
-        onSighting(row(), null, job("failed", "cleared"), NOW),
-      ],
-      [
-        "cleared by the watcher seven hours ago",
-        "post",
-        onSighting(row(), null, job("failed", "cleared", 7), NOW),
-      ],
-      ["open row, refused post", "post", onSighting(row({ job_id: null }), null, null, NOW)],
-      ["dismissed", "quiet", onSighting(row({ state: "dismissed" }), null, null, NOW)],
+      ["no row", "record", onSighting(null, NOW)],
+      ["open", "record", onSighting(row(), NOW)],
+      ["dismissed", "quiet", onSighting(row({ state: "dismissed" }), NOW)],
       [
         "cleared, inside the quiet period",
         "quiet",
-        onSighting(cleared(later(1).toISOString()), null, null, NOW),
+        onSighting(cleared(later(1).toISOString()), NOW),
       ],
-      ["cleared, past the quiet period", "post", onSighting(cleared(hoursAgo(1)), null, null, NOW)],
-      [
-        "cleared, reopen_after exactly now",
-        "post",
-        onSighting(cleared(NOW.toISOString()), null, null, NOW),
-      ],
-      ["cleared, reopen_after unreadable", "post", onSighting(cleared("garbage"), null, null, NOW)],
+      ["cleared, past the quiet period", "record", onSighting(cleared(hoursAgo(1)), NOW)],
+      ["cleared, reopen_after exactly now", "record", onSighting(cleared(NOW.toISOString()), NOW)],
+      ["cleared, reopen_after unreadable", "record", onSighting(cleared("garbage"), NOW)],
     ];
   for (const [name, want, got] of cases) assert.equal(got.do, want, name);
 });
@@ -628,82 +425,43 @@ test("ci-red is one incident per namespace: a new head sha is the same finding, 
   const [b] = ciFindings("sample", red("bbbbbbb2222222"), NOW);
   assert.equal(a.fingerprint, "ci-red-sample");
   assert.equal(a.fingerprint, b.fingerprint);
-  assert.equal(a.title, b.title, "the title is the queue's duplicate key");
+  assert.equal(a.title, b.title, "the title stays the same");
   assert.ok(
     b.evidence?.includes("head sha: bbbbbbb2222222"),
     `the sha is not in the evidence: ${b.evidence?.join("; ")}`,
   );
 });
 
-function memoryPass(
-  found: Finding[],
-  open: Map<string, string>,
-  memory: ReturnType<typeof fakeFindingMemory>,
-  now: Date,
-  ran: ReadonlySet<WatcherCheck> = new Set(WATCHER_CHECKS),
-) {
-  const posted: string[] = [];
-  const closed: string[] = [];
-  const result = runPass(
-    {
-      findings: async () => ({ findings: found, ran }),
-      open: async () => open,
-      clear: async (id) => {
-        closed.push(id);
-        return true;
-      },
-      post: async (f) => {
-        posted.push(f.fingerprint);
-        return { ok: true as const, jobId: `job_new_${f.fingerprint}` };
-      },
-      memory: memory.memory,
-    },
-    now,
-  );
-  return { result, posted, closed };
-}
-
-test("A FINDING A PERSON ENDED IS NOT FILED AGAIN until it has cleared and stayed quiet", async () => {
+test("A CLEARED FINDING IS NOT RECORDED AGAIN until it has stayed quiet", async () => {
   const fp = "site-map-drift-add-sample";
-  const mem = fakeFindingMemory([findingRow(fp, { job_id: "job_1" })], {
-    job_1: { status: "superseded", result_summary: "withdrawn", updated_at: hoursAgo(1) },
-  });
-
-  // Still seen after the seat superseded its job: dismissed, not posted.
-  const one = memoryPass([fakeFinding(fp)], new Map(), mem, NOW);
-  assert.deepEqual((await one.result).posted, []);
-  assert.deepEqual((await one.result).held, [fp]);
-  assert.equal(mem.rows.get(fp)?.state, "dismissed");
-  assert.equal(mem.rows.get(fp)?.seen_count, 4, "the sighting is counted");
-
-  // Seen again: still dismissed, still not posted.
-  assert.deepEqual(
-    (await memoryPass([fakeFinding(fp)], new Map(), mem, later(1)).result).posted,
-    [],
-  );
+  const mem = fakeFindingMemory([findingRow(fp)]);
 
   // The drift is fixed: cleared, quiet for six hours from now.
-  await memoryPass([], new Map(), mem, later(2)).result;
+  await pass([], mem, later(2));
   assert.equal(mem.rows.get(fp)?.state, "cleared");
   assert.equal(
     mem.rows.get(fp)?.reopen_after,
     new Date(later(2).getTime() + REOPEN_QUIET_MS).toISOString(),
   );
 
-  // It flaps back inside the quiet period: counted, not posted.
-  assert.deepEqual(
-    (await memoryPass([fakeFinding(fp)], new Map(), mem, later(3)).result).posted,
-    [],
-  );
+  // It flaps back inside the quiet period: counted, not opened.
+  const flap = await pass([fakeFinding(fp)], mem, later(3));
+  assert.deepEqual([flap.recorded, flap.held], [[], [fp]]);
   assert.equal(mem.rows.get(fp)?.state, "cleared");
 
-  // Seen after the quiet period: a recurrence, filed once, and the row is open on the new job.
-  assert.deepEqual((await memoryPass([fakeFinding(fp)], new Map(), mem, later(9)).result).posted, [
-    fp,
-  ]);
+  // Seen after the quiet period: a recurrence, and the row is open again.
+  assert.deepEqual((await pass([fakeFinding(fp)], mem, later(9))).recorded, [fp]);
   assert.equal(mem.rows.get(fp)?.state, "open");
-  assert.equal(mem.rows.get(fp)?.job_id, `job_new_${fp}`);
   assert.equal(mem.rows.get(fp)?.reopen_after, null);
+});
+
+test("a dismissed finding stays dismissed while it is seen", async () => {
+  const fp = "ci-red-sample";
+  const mem = fakeFindingMemory([findingRow(fp, { state: "dismissed" })]);
+  const result = await pass([fakeFinding(fp)], mem, NOW);
+  assert.deepEqual([result.recorded, result.held], [[], [fp]]);
+  assert.equal(mem.rows.get(fp)?.state, "dismissed");
+  assert.equal(mem.rows.get(fp)?.seen_count, 4, "the sighting is counted");
 });
 
 test("a cleared row is not cleared again each pass, so its quiet period does not slide forever", async () => {
@@ -711,43 +469,23 @@ test("a cleared row is not cleared again each pass, so its quiet period does not
   const mem = fakeFindingMemory([
     findingRow(fp, { state: "cleared", cleared_at: hoursAgo(7), reopen_after: hoursAgo(1) }),
   ]);
-  await memoryPass([], new Map(), mem, NOW).result;
+  await pass([], mem, NOW);
   assert.deepEqual(mem.writes, [], "a cleared row that is still clear was written");
-  assert.deepEqual((await memoryPass([fakeFinding(fp)], new Map(), mem, NOW).result).posted, [fp]);
+  assert.deepEqual((await pass([fakeFinding(fp)], mem, NOW)).recorded, [fp]);
 });
 
-test("a finding whose check did not run is neither cleared nor dismissed", async () => {
+test("a finding whose check did not run is not cleared", async () => {
   const mem = fakeFindingMemory([
     findingRow("ci-red-sample", { state: "dismissed" }),
-    findingRow("backup-stale", { job_id: "job_2" }),
+    findingRow("backup-stale"),
   ]);
-  const pass = memoryPass(
-    [],
-    new Map([["backup-stale", "job_2"]]),
-    mem,
-    NOW,
-    new Set(WATCHER_CHECKS.filter((c) => c !== "ci")),
-  );
-  await pass.result;
+  await pass([], mem, NOW, new Set(WATCHER_CHECKS.filter((c) => c !== "ci")));
   assert.equal(
     mem.rows.get("ci-red-sample")?.state,
     "dismissed",
     "a failed CI read cleared a dismissed incident",
   );
   assert.equal(mem.rows.get("backup-stale")?.state, "cleared");
-  assert.deepEqual(pass.closed, ["job_2"]);
-});
-
-test("the bound counts posts, so findings already open do not use it up", async () => {
-  const already = Array.from({ length: MAX_FINDINGS_PER_PASS }, (_, i) => fakeFinding(`old-${i}`));
-  const open = new Map(already.map((f, i) => [f.fingerprint, `job_${i}`]));
-  const pass = memoryPass(
-    [...already, fakeFinding("new-a"), fakeFinding("new-b")],
-    open,
-    fakeFindingMemory(),
-    NOW,
-  );
-  assert.deepEqual((await pass.result).posted, ["new-a", "new-b"]);
 });
 
 // The pieces the pass is built from, exported because they carry rules worth
@@ -784,6 +522,3 @@ test("newestMigration takes the last by name, and ignores what is not a migratio
   assert.equal(newestMigration(["README.md"]), null);
   assert.equal(newestMigration([]), null);
 });
-
-// openWatcherFingerprints and clearFinding are driven against seeded
-// jobs rows on a real D1 in test-integration/watcher.test.ts.

@@ -1,25 +1,16 @@
-import { overnightState, type OvernightState } from "./overnight";
 import type { Env } from "./env";
 import { APP_ROSTER } from "./roster";
 import { servedCanonPaths } from "./canon";
-import { loadGatePolicy } from "./gate-policy";
-import { breakerState, type BreakerState } from "./job-breaker";
 import { SCOPE_FLAGS, parseScopes } from "./agents-schema";
-import { loadAgentRecords, type AgentRecord } from "./agent-record";
-import { jobsSummary, type JobsSummary } from "./jobs";
 import { integrityOf, REPORTS_PREFIX } from "./truth-report";
 import { gatherInbox, type InboxApp } from "./inbox";
 import { externalFence } from "./provenance";
 import { readMaintenance, type MaintenanceItem } from "./maintenance";
 
-import { errorMessage } from "@dustinedwards/site-runtime/log";
-
 interface NamespaceStatus {
   namespace: string;
-  breaker: BreakerState;
   // null means no report was ever run, which is not an integrity of zero.
   latest_report: { path: string; integrity: number | null; generated: string } | null;
-  jobs: JobsSummary;
   maintenance: MaintenanceItem[];
   // null when the pass did not read them, so an empty list can be told from nothing read.
   maintenance_prs_read: number | null;
@@ -29,9 +20,6 @@ interface NamespaceStatus {
 
 export interface StatusReport {
   canon_paths: ReturnType<typeof servedCanonPaths>;
-  // Served here because a namespace-scoped driver cannot read the capsid namespace.
-  policies: PolicyVersions;
-  overnight: OvernightState;
   // Revoked rows are included so "revoked" and "never existed" differ. Absent, not empty, for a scoped
   // caller: an empty list would read as "no agents exist".
   agents?: AgentSummary[];
@@ -48,7 +36,6 @@ export interface AgentSummary {
   revoked_at: string | null;
   pending: boolean;
   archived_at: string | null;
-  record: AgentRecord;
 }
 
 // Exported for the Watch Floor feed (src/ops-feed.ts), which lists the same inventory. The archive
@@ -77,7 +64,7 @@ export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
   const rows = [...(results ?? [])].sort(
     (a, b) => rank(a) - rank(b) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
   );
-  const inventory = rows.map((row) => {
+  return rows.map((row) => {
     const scopes = parseScopes(row.scopes);
     return {
       name: row.name,
@@ -91,35 +78,6 @@ export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
       archived_at: row.archived_at,
     };
   });
-  const records = await loadAgentRecords(db, inventory);
-  return inventory.map((agent) => ({ ...agent, record: records[agent.name] }));
-}
-
-type ServedPolicy = { version: string; enabled: boolean } | { reason: string };
-
-interface PolicyVersions {
-  gates: ServedPolicy;
-}
-
-async function servedPolicies(env: Env): Promise<PolicyVersions> {
-  // A throw is reported, not raised: a policy being re-signed should not fail status.
-  const one = async (
-    load: () => Promise<{ policy: { version: string; enabled: boolean } } | { error: string }>,
-  ): Promise<ServedPolicy> => {
-    try {
-      const loaded = await load();
-      return "error" in loaded
-        ? { reason: loaded.error }
-        : { version: loaded.policy.version, enabled: loaded.policy.enabled };
-    } catch (err) {
-      return {
-        reason: `the policy could not be read: ${errorMessage(err)}`,
-      };
-    }
-  };
-  return {
-    gates: await one(() => loadGatePolicy(env)),
-  };
 }
 
 // An app's own words, relayed inside an external fence (src/provenance.ts, OWASP item 1).
@@ -161,7 +119,6 @@ export async function capsidStatus(
 
     out.push({
       namespace,
-      breaker: await breakerState(env, namespace, new Date()),
       // ORDER BY path gives the newest ISO date; updated_at would give the latest rewrite.
       latest_report: report
         ? {
@@ -170,7 +127,6 @@ export async function capsidStatus(
             generated: report.updated_at,
           }
         : null,
-      jobs: await jobsSummary(env.DB, namespace, new Date(), env.IMPROVE_SCORE_SECRET),
       maintenance: maintenanceAll.filter((m) => m.namespace === namespace),
       maintenance_prs_read: maintenanceList?.prs_read[namespace] ?? null,
       maintenance_branches_read: maintenanceList?.branches_read[namespace] ?? null,
@@ -188,8 +144,6 @@ export async function capsidStatus(
 
   return {
     canon_paths: servedCanonPaths(),
-    policies: await servedPolicies(env),
-    overnight: await overnightState(env),
     // Admin only: the inventory is the map an agent looking to widen itself would want.
     ...(scope && !scope.admin ? {} : { agents: await agentSummaries(env.DB) }),
     namespaces: out,

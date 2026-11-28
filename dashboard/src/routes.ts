@@ -4,7 +4,6 @@ import { type RouteConfig, index, layout, prefix, route } from "@react-router/de
 const VIEWS = [
   "health",
   "prs",
-  "queue",
   "projects",
   "activity",
   "agents",

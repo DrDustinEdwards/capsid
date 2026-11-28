@@ -56,14 +56,6 @@ async function plantAgent(
   return key;
 }
 
-function plantJob(raw: DatabaseSync, id: string, status: string, by: string): void {
-  raw
-    .prepare(
-      "INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by) VALUES (?, 'sample', ?, 'b', ?, 'access:dustin@example.com', ?)",
-    )
-    .run(id, `t ${id}`, status, by);
-}
-
 const names = (raw: DatabaseSync, where = "archived_at IS NULL") =>
   raw
     .prepare(`SELECT name FROM agents WHERE ${where} ORDER BY name`)
@@ -71,7 +63,7 @@ const names = (raw: DatabaseSync, where = "archived_at IS NULL") =>
     .map((r) => r.name);
 const archivedNames = (raw: DatabaseSync) => names(raw, "archived_at IS NOT NULL");
 
-test("a revoked agent moves 7 days after revocation with its counts and an audit row; a live one and a recent one stay", async () => {
+test("a revoked agent moves 7 days after revocation with its audit count and an audit row; a live one and a recent one stay", async () => {
   const { raw, db } = fresh();
   await plantAgent(raw, "live", null);
   await plantAgent(raw, "recent", daysAgo(ARCHIVE_AFTER_DAYS - 1));
@@ -82,8 +74,6 @@ test("a revoked agent moves 7 days after revocation with its counts and an audit
         "INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('agent:old', 'write', 'sample', 'p', '{}')",
       )
       .run();
-  plantJob(raw, "job_aaaaaaaaaaaa", "done", "agent:old");
-  plantJob(raw, "job_bbbbbbbbbbbb", "queued", "agent:live");
   assert.equal(names(raw).length, 3, "the plant did not land");
 
   const pass = await archiveRevokedAgents(db, ACTOR, NOW);
@@ -91,7 +81,6 @@ test("a revoked agent moves 7 days after revocation with its counts and an audit
   assert.deepEqual(names(raw), ["live", "recent"]);
   const row = raw.prepare("SELECT * FROM agents WHERE name = 'old'").get()!;
   assert.equal(row.audit_rows, 3);
-  assert.equal(row.jobs, 1);
   assert.equal(row.archive_reason, "revoked-7-days");
   assert.equal(row.revoked_at, daysAgo(ARCHIVE_AFTER_DAYS + 1), "revoked_at is not re-stamped");
   const audit = raw
@@ -112,7 +101,7 @@ test("PLANT: an archived key is refused and its name is never minted again", asy
   const request = new Request("https://capsid.example.com/ops/mcp", {
     headers: { Authorization: `Bearer ${key}` },
   });
-  assert.equal(await resolveAgent(request, { DB: db }, NOW), null);
+  assert.equal(await resolveAgent(request, { DB: db }), null);
   const minted = await mintAgent(db, "access:dustin@example.com", {
     name: "gone",
     kind: "driver",

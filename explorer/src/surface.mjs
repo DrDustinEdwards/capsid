@@ -2,11 +2,9 @@
 // handler is ever called here. The source is public, so the tools page says no more than the repo does.
 import { defineAdminOperations } from "../../src/tools/admin.ts";
 import { defineAgentOperations } from "../../src/tools/agents.ts";
-import { defineClaimsOperations } from "../../src/tools/claims.ts";
 import { defineCloudflareOperations } from "../../src/tools/cloudflare.ts";
 import { defineControlOperations } from "../../src/tools/controls.ts";
 import { defineDocOperations } from "../../src/tools/docs.ts";
-import { defineJobOperations } from "../../src/tools/jobs.ts";
 import { defineLintOperations } from "../../src/tools/lint.ts";
 import { Operations } from "../../src/tools/operations.ts";
 import { defineOpsSnapshotOperations } from "../../src/tools/ops.ts";
@@ -95,9 +93,7 @@ export function servedTools() {
     defineSiteReportOperations,
     defineStatusOperations,
     defineSystemOperations,
-    defineJobOperations,
     defineAgentOperations,
-    defineClaimsOperations,
     defineOpsSnapshotOperations,
     defineCloudflareOperations,
     defineControlOperations,

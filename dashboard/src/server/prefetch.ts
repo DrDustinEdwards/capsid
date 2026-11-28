@@ -1,12 +1,11 @@
 import { QueryClient, dehydrate, type DehydratedState } from "@tanstack/react-query";
 import { createContext, type RouterContextProvider } from "react-router";
 import { answerOf, ask, type Answer } from "capsomer/react/data";
-import { FEED_KEY, LIVE, digestSince } from "../lib/api";
-import { DAY } from "../lib/format";
+import { FEED_KEY, LIVE } from "../lib/api";
 import { pageBase } from "../lib/router";
 import type { OpsFeed } from "../types";
 import type { ViewId } from "../app/ctx";
-import { FILTER_KEYS, PUSH_KEY, parseDocParam } from "../lib/keys";
+import { PUSH_KEY, parseDocParam } from "../lib/keys";
 
 // A new QueryClient per request, dehydrated into the HTML so the first render carries every read.
 // Keys must match the views' useAnswer calls, or the view will not find the prefetched read.
@@ -61,7 +60,6 @@ function specsFor(
   const p = url.searchParams;
   const trends: Spec = { key: [LIVE, "trends"], path: "/trends" };
   const namespaces: Spec = { key: [LIVE, "namespaces"], path: "/namespaces" };
-  const generated = feed ? Date.parse(feed.live.generated) : Date.now();
   const out: Spec[] = [];
   switch (view) {
     case "needs":
@@ -102,26 +100,6 @@ function specsFor(
     case "prs":
       out.push(trends);
       break;
-    case "queue":
-      if (p.get("tab") === "checks") {
-        const filter = Object.fromEntries(FILTER_KEYS.map((k) => [k, p.get(k) ?? ""])) as Record<
-          (typeof FILTER_KEYS)[number],
-          string
-        >;
-        out.push(trends, {
-          key: ["claims", FILTER_KEYS.map((k) => filter[k]).join("\u0000")],
-          path: `/claims${qs(filter)}`,
-        });
-        const job = p.get("job") ?? "";
-        if (job) out.push({ key: ["claims", "job", job], path: `/claims${qs({ job })}` });
-        break;
-      }
-      out.push(
-        trends,
-        { key: [LIVE, "stale"], path: "/stale" },
-        { key: [LIVE, "plan"], path: "/plan" },
-      );
-      break;
     case "activity": {
       const namespace = p.get("namespace") ?? "";
       const actor = p.get("actor") ?? "";
@@ -131,14 +109,6 @@ function specsFor(
           path: `/activity${qs({ namespace, actor })}`,
         },
         trends,
-        {
-          key: ["claims", "waits"],
-          path: `/claims${qs({ since: new Date(generated - 14 * DAY).toISOString() })}`,
-        },
-        {
-          key: [LIVE, "digest", digestSince(generated)],
-          path: `/digest${qs({ since: digestSince(generated) })}`,
-        },
       );
       break;
     }

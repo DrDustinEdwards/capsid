@@ -1,31 +1,19 @@
 import type { Env } from "./env";
 import { ghFetch, parseReposList } from "./github/client";
-import { ciVerdict, jobIdFromBody, readAllPages, readCheckRuns } from "./github/pr-files";
-import { commandFromSummary, isQuestionSummary } from "./jobs-holder-block";
+import { ciVerdict, readAllPages, readCheckRuns } from "./github/pr-files";
 import { readSnapshot } from "./ops-snapshot";
 import { externalFence } from "./provenance";
-import { appliedMigrations, blockSettled } from "./inbox";
-import { readStaleCache, staleJobs } from "./stale-jobs";
 import { board } from "./board";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
 // WHAT NEEDS ME (capsid/research/design-mcp-servers.md, section 3: "the ruling's 'what needs me'":
 // all open PRs across repos with CI and conflicts).
 
-const JOBS_LIMIT = 50;
 const PRS_PER_REPO = 30;
 const PRS_TOTAL = 120;
 const REPOS_MAX = 60;
 const LIST_MAX_PAGES = 1;
 const CHECKS_MAX_PAGES = 5;
-
-interface BlockedRow {
-  id: string;
-  namespace: string;
-  title: string;
-  result_summary: string | null;
-  updated_at: string;
-}
 
 interface RawPr {
   number: number;
@@ -33,7 +21,6 @@ interface RawPr {
   title: string;
   draft?: boolean;
   created_at: string;
-  body: string | null;
   user?: { login?: string } | null;
   head: { sha: string; ref: string };
 }
@@ -47,7 +34,6 @@ export interface WhatsNextPr {
   author: string | null;
   draft: boolean;
   created_at: string;
-  job: string | null;
   ci: string | null;
   ci_note: string;
   conflict: boolean | null;
@@ -115,7 +101,6 @@ async function openPrs(
       await one.body?.cancel();
       notChecked.push(`${full}#${pr.number} mergeability: ${one.status}`);
     }
-    const job = jobIdFromBody(pr.body ?? "");
     out.push({
       repo: full,
       namespace,
@@ -126,12 +111,10 @@ async function openPrs(
       author: pr.user?.login ?? null,
       draft: pr.draft === true,
       created_at: pr.created_at,
-      job,
       ci: verdict.conclusion,
       ci_note: verdict.note,
       conflict,
-      waiting_on_seat:
-        job !== null && pr.draft !== true && verdict.conclusion === "success" && conflict === false,
+      waiting_on_seat: pr.draft !== true && verdict.conclusion === "success" && conflict === false,
     });
   }
   return out;
@@ -139,49 +122,6 @@ async function openPrs(
 
 export async function whatsNext(env: Env, now: Date = new Date()) {
   const notChecked: string[] = [];
-
-  const { results: blockedRows } = await env.DB.prepare(
-    "SELECT id, namespace, title, result_summary, updated_at FROM jobs WHERE status = 'blocked' ORDER BY updated_at LIMIT ?1",
-  )
-    .bind(JOBS_LIMIT + 1)
-    .all<BlockedRow>();
-  // A block already answered (its pull requests merged, its migrations applied) is left
-  // out, as the inbox leaves it out; the stale view below still lists it to close.
-  const staleCache = (await readStaleCache(env.APP_KV).catch(() => ({ cache: {} }))).cache;
-  const applied = await appliedMigrations(env.DB);
-  const blocked = (blockedRows ?? [])
-    .slice(0, JOBS_LIMIT)
-    .filter((j) => !blockSettled(j, staleCache, applied));
-  if ((blockedRows ?? []).length > JOBS_LIMIT)
-    notChecked.push(`more than ${JOBS_LIMIT} blocked jobs; the oldest ${JOBS_LIMIT} are listed`);
-  // A block's summary is the driver's text: its question and command are relayed fenced.
-  const fenced = (id: string, text: string | null) =>
-    text === null ? null : externalFence("job-summary", id, text);
-  const questions = blocked
-    .filter((j) => isQuestionSummary(j.result_summary))
-    .map((j) => ({
-      id: j.id,
-      namespace: j.namespace,
-      title: j.title,
-      question: fenced(j.id, j.result_summary),
-      since: j.updated_at,
-    }));
-  const waiting = blocked
-    .filter((j) => !isQuestionSummary(j.result_summary))
-    .map((j) => ({
-      id: j.id,
-      namespace: j.namespace,
-      title: j.title,
-      command: fenced(j.id, commandFromSummary(j.result_summary)),
-      since: j.updated_at,
-    }));
-
-  let stale: unknown[] = [];
-  try {
-    stale = (await staleJobs(env, now)).rows;
-  } catch (err) {
-    notChecked.push(`stale jobs: ${errorMessage(err)}`);
-  }
 
   const prs: WhatsNextPr[] = [];
   let repos: Array<{ namespace: string; repo: string }> = [];
@@ -222,9 +162,6 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
   return {
     as_of: now.toISOString(),
     ...coordinator,
-    questions,
-    blocked: waiting,
-    stale,
     pull_requests: {
       waiting_on_seat: prs.filter((p) => p.waiting_on_seat),
       red: prs.filter((p) => p.ci === "failure"),

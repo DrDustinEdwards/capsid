@@ -14,12 +14,6 @@ export interface ActivityFilter {
   id: number | null;
 }
 
-// What an audit row records, where the row says. A job transition writes two rows with
-// one action, actor and path: one for the job (params carry job_id) and one for its
-// mirror document (params carry the body's sha256, as every document write does).
-// null when the params name neither, or are not JSON.
-type ActivityTarget = "job" | "document";
-
 export interface ActivityRow {
   id: number;
   at: string;
@@ -28,7 +22,6 @@ export interface ActivityRow {
   action: string | null;
   namespace: string | null;
   path: string | null;
-  target: ActivityTarget | null;
   detail: AuditDetail;
 }
 
@@ -56,13 +49,6 @@ export function activityFilterFrom(
   };
 }
 
-// json_valid first: json_extract on a params value that is not JSON would fail the
-// whole read, and rows written before params were always JSON exist.
-const TARGET_SQL = `CASE WHEN NOT json_valid(params) THEN NULL
-  WHEN json_extract(params, '$.job_id') IS NOT NULL THEN 'job'
-  WHEN json_extract(params, '$.sha256') IS NOT NULL THEN 'document'
-  ELSE NULL END`;
-
 export async function loadActivity(db: D1Database, filter: ActivityFilter): Promise<ActivityRow[]> {
   const where: string[] = [];
   const binds: unknown[] = [];
@@ -83,7 +69,7 @@ export async function loadActivity(db: D1Database, filter: ActivityFilter): Prom
   // autoincrement id is what orders rows as they happened.
   const { results } = await db
     .prepare(
-      `SELECT id, at, actor, client, action, namespace, path, ${TARGET_SQL} AS target, params FROM audit_log ${clause} ORDER BY id DESC LIMIT ?${binds.length}`,
+      `SELECT id, at, actor, client, action, namespace, path, params FROM audit_log ${clause} ORDER BY id DESC LIMIT ?${binds.length}`,
     )
     .bind(...binds)
     .all<Omit<ActivityRow, "detail"> & { params: string | null }>();

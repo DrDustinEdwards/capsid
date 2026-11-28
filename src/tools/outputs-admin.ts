@@ -14,9 +14,6 @@ const agentResult: Shape = {
 export const ADMIN_OUTPUTS: Record<string, Shape> = {
   whats_next: {
     as_of: str,
-    questions: rows,
-    blocked: rows,
-    stale: rows,
     pull_requests: obj,
     checks: obj,
     not_checked: strs,
@@ -57,19 +54,6 @@ export const ADMIN_OUTPUTS: Record<string, Shape> = {
     note: str.optional(),
   },
   agents: mergeOutputs([agentResult, { ok: bool, action: str, archived: rows }]),
-  claims: mergeOutputs([
-    { filter: obj, groups: rows, waits: rows, usage: rows, truncated: strs },
-    {
-      job: obj,
-      outcome: nullable(obj),
-      claims: rows,
-      evaluations: rows,
-      touches: rows,
-      limit: num,
-      truncated: strs,
-    },
-    { table: str, after: num, limit: num, rows, next_after: nullable(num), provenance: obj },
-  ]),
   cloudflare_config: mergeOutputs([
     { action: str, count: num, apps: rows },
     { action: str, count: num, policies: rows },

@@ -23,10 +23,6 @@ export type PerformContext = {
   now: Date;
   params: ActionParams;
   surface: Surface;
-  switchReason: string | null;
-  undo: boolean;
-  click: string;
   state: { committed: boolean; summary: string; warning: string | null };
   auditClick: (namespace: string | null, detail: object, name?: string) => Promise<void>;
-  switchDetail: (result: object) => object;
 };

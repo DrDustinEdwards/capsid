@@ -1,5 +1,3 @@
-import { actorKind } from "./job-touches";
-
 // PROVENANCE TAGS (OWASP hardening item 1).
 
 const FENCE = "~~~";
@@ -22,33 +20,4 @@ export function externalFence(source: string, ref: string, text: string, maxText
     (_match, indent: string, tildes: string) => `${indent}\\${tildes}`,
   );
   return `${OPEN} source=${source} ref=${cleanRef}\n${body}\n${FENCE}`;
-}
-
-// Why a body's external fences are malformed, or null when they are well formed or there are none.
-// A fence needs a `source=<kind>`, may not open inside another, and must close. A bare `~~~`
-// outside an external fence is an ordinary code fence and is left alone.
-export function externalFenceProblem(text: string): string | null {
-  let openedAt = 0;
-  const lines = text.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.startsWith(OPEN)) {
-      if (openedAt)
-        return `line ${i + 1} opens an external fence inside the one opened at line ${openedAt}`;
-      const source = /(?:^|\s)source=(\S+)/.exec(line)?.[1];
-      if (!source || !SOURCE.test(source))
-        return `the external fence at line ${i + 1} has no valid source=<kind> (lowercase letters, digits and hyphens)`;
-      openedAt = i + 1;
-    } else if (openedAt && /^~{3,}\s*$/.test(line)) {
-      openedAt = 0;
-    }
-  }
-  return openedAt ? `the external fence opened at line ${openedAt} is never closed` : null;
-}
-
-// Who a posted job came from: the actor's kind from the one mapping every touch uses, with the
-// watcher named, since it is the one automatic poster. Recorded in the post's audit row, not
-// asserted by the caller.
-export function jobOrigin(actor: string): string {
-  return actor === "agent:watcher" ? "watcher" : actorKind(actor);
 }

@@ -201,11 +201,6 @@ test("a broken map keeps the last code document and is reported, and the model i
       })),
     }),
     statsRows: async (_e, _n, systems): Promise<StatsRows> => ({
-      finished: [],
-      open: [],
-      outcomes: [],
-      evaluations: [],
-      waits: [],
       rings: [],
       documents: 0,
       namespaces: 0,
@@ -256,11 +251,6 @@ test("later the same day the code maps alone are rebuilt hourly, and the model i
       };
     },
     statsRows: async (_e, _n, systems): Promise<StatsRows> => ({
-      finished: [],
-      open: [],
-      outcomes: [],
-      evaluations: [],
-      waits: [],
       rings: [],
       documents: 0,
       namespaces: 0,

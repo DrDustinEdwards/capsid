@@ -14,7 +14,7 @@ The schema is Zod, in `src/system-model.ts`. `system/model.schema.json` is gener
 
 A flow (design section 4) is an ordered walk over the model, drawn by the explorer: `flows[]` with an `id`, a `name`, an optional `description` and two to twenty `steps`. A step names one relationship already in the model by its `from`, `kind` and `to`, goes `toward` one of its two ends, says what happens in `text`, and may `lights` up to eight containers it touches. The schema refuses a step on a relationship the model does not have, one toward neither end, and a light that is not a container, so a flow can never show a connection the map does not. In the public document a step is `{relationship, toward, text, lights?}`, the relationship by its derived id.
 
-The first flow is `job-life`, a job from posted to its claims checked against GitHub. It runs over Capsid's containers and two `external` ones, Agents and GitHub (Dustin, 2026-10-11: external boxes with ordinary edges, drawn outside the dashed boundary). The explorer lists them under "Outside it", apart from Capsid's own parts. Capsomer's map draws them inside the boundary until its release that places `external` boxes outside it; the explorer and dustinedwards.info take that release.
+A flow over Capsid can run over two `external` containers, Agents and GitHub (Dustin, 2026-10-11: external boxes with ordinary edges, drawn outside the dashed boundary). The explorer lists them under "Outside it", apart from Capsid's own parts. Capsomer's map draws them inside the boundary until its release that places `external` boxes outside it; the explorer and dustinedwards.info take that release.
 
 ## The filter
 
@@ -29,32 +29,21 @@ Proven in `test/system-model.test.ts`: a private system published whole without 
 
 ## The drift check
 
-The model is written by hand, so the daily maintenance pass compares it with what Capsid and GitHub know (`src/model-drift.ts`; rules `model-drift` and `model-not-checked` in the Portal's Maintenance list, docs/work-queue.md). It lists and never edits: the model changes by pull request. A repo is left off only when the model's `left_off` list names it (Dustin keeps bsw, Recova, its MCP and the old Foxing admin off, 2026-10-23); that list is never published, and a repo in it that GitHub stops listing is named so the entry goes.
+The model is written by hand, so the daily maintenance pass compares it with what Capsid and GitHub know (`src/model-drift.ts`; rules `model-drift` and `model-not-checked` in the Portal's Maintenance list). It lists and never edits: the model changes by pull request. A repo is left off only when the model's `left_off` list names it (Dustin keeps bsw, Recova, its MCP and the old Foxing admin off, 2026-10-23); that list is never published, and a repo in it that GitHub stops listing is named so the entry goes.
 
 ## The aggregate numbers
 
 `src/public-stats.ts` computes them in the same daily build. Every window is whole UTC days ending at midnight, so a day's activity appears only the next day and nothing in the document says when anything happened. A rate or median over fewer than ten rows (`FLOOR`) is null. The only strings are `as_of` (a date) and `capsid.sha7` (already public on /health).
 
-| Field                                                                                                                                 | From                                                                      | Why it cannot leak                               |
-| ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------ |
-| `jobs.completed_7d`, `completed_30d`, `failed_30d` (not counting `cleared`, below), `completed_by_week` (8 whole weeks, oldest first) | `jobs` by status and `updated_at`                                         | counts across every namespace and agent          |
-| `jobs.failed_by_week`, `gates.waits_by_week` (the same 8 weeks)                                                                       | `jobs` by status, `job_touches` that ended a wait                         | counts across every namespace, agent and command |
-| `jobs.cleared_30d`, `cleared_by_week`                                                                                                 | `jobs` failed with the watcher's summary `cleared`                        | counts across every namespace, agent and command |
-| `verification.agreement_by_week` (the same 8 weeks)                                                                                   | `job_evaluations` by `recorded_at`                                        | a rate per week, null for a week under ten       |
-| `jobs.open`, `jobs.blocked`                                                                                                           | `jobs` by status, read once a day (answer 5)                              | one daily count, attributable to nothing         |
-| `jobs.median_duration_minutes_30d`                                                                                                    | `job_outcomes.duration_minutes`                                           | a median, null under ten                         |
-| `verification.evaluations_90d`, `agreement_rate_90d`                                                                                  | `job_evaluations.agreement`: agree over agree plus disagree               | a count and a rate over every agent              |
-| `verification.pr_merge_rate_90d`, `ci_green_rate_90d`                                                                                 | `job_outcomes`, verified fields only, as `src/agent-record.ts` reads them | rates over every agent, null under ten           |
-| `gates.waits_30d`, `median_wait_minutes_30d`, `share_ended_by_policy_30d`                                                             | `job_touches` that ended a wait                                           | no command, class or actor                       |
-| `sites.watched`, `uptime_7d`, `slots_measured_7d`                                                                                     | the watcher snapshot's half-hour rings, measured slots only               | one number across sites, no site or error text   |
-| `store.documents`, `store.namespaces`                                                                                                 | row counts                                                                | no names                                         |
-| `systems.public`, `systems.private`                                                                                                   | the filtered model's counts                                               | counts                                           |
-
-The three weekly series are optional in the schema only so a document written before them (2026-10-23) still parses.
+| Field                                             | From                                                        | Why it cannot leak                             |
+| ------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------- |
+| `sites.watched`, `uptime_7d`, `slots_measured_7d` | the watcher snapshot's half-hour rings, measured slots only | one number across sites, no site or error text |
+| `store.documents`, `store.namespaces`             | row counts                                                  | no names                                       |
+| `systems.public`, `systems.private`               | the filtered model's counts                                 | counts                                         |
 
 Deploy counts are left out: the snapshot keeps each site's newest ten deploys only, so a 30-day count would be wrong.
 
-`test/public-stats.test.ts` walks the document's keys against this list both ways, checks that the only strings are the date and the sha, and covers the windows, the floor and the verified-only rates.
+`test/public-stats.test.ts` walks the document's keys against this list both ways, checks that the only strings are the date and the sha, and covers the windows and the floor.
 
 ## The code maps
 

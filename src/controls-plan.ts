@@ -1,12 +1,7 @@
 import { adminAgentForEmail } from "./agents";
 import { archivedAgentByName } from "./agents-archive";
-import { agentActor, parseScopes, SCOPE_FLAGS } from "./agents-schema";
-import {
-  type Surface,
-  clickAuditAction,
-  deleteOptionsFrom,
-  switchReasonRefusal,
-} from "./controls-base";
+import { parseScopes, SCOPE_FLAGS } from "./agents-schema";
+import { type Surface, clickAuditAction, deleteOptionsFrom } from "./controls-base";
 import {
   ALREADY_REGISTERED,
   namespaceNameRefusal,
@@ -18,35 +13,14 @@ import {
 } from "./namespace-admin";
 import { deleteRefusals, planFingerprint, readDeletePlan, summarize } from "./namespace-delete";
 import { type Plan, refused } from "./controls-plan-base";
-import { planJobAction } from "./controls-plan-jobs";
 import { planSiteAction } from "./controls-plan-sites";
 import type { Env } from "./env";
 import { resolveRepo } from "./github";
-import { breakerState } from "./job-breaker";
 import type { PortalAction } from "./ops-types/portal";
-import {
-  overnightValueRefusal,
-  overnightState,
-  type OvernightMode,
-  decisionFor,
-  OVERNIGHT_MODE_KEY,
-} from "./overnight";
-import { APP_ROSTER } from "./roster";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-import { plural } from "@drdustinedwards/site-helpers/text";
 // A control's preview (src/controls.ts is the core): reads the current state, writes nothing, and
 // returns what will change and the audit rows it will write.
-
-function rosterRefusal(action: "reset_breaker", namespace: string | undefined): string | null {
-  if (!namespace) return `${action} needs a namespace.`;
-  if (namespace === "all") {
-    return `the Portal acts on one namespace at a time, so "all" is refused here. Do each of ${APP_ROSTER.join(", ")} in turn.`;
-  }
-  if (!(APP_ROSTER as readonly string[]).includes(namespace))
-    return `'${namespace}' is not on the roster (${APP_ROSTER.join(", ")}).`;
-  return null;
-}
 
 /**
  * What the action will change, read from the state now. Reads only: no D1 write and no KV put,
@@ -60,61 +34,8 @@ export async function planAction(
   surface: Surface = "portal",
 ): Promise<Plan> {
   const actor = adminAgentForEmail(email).actor;
-  const click = `${clickAuditAction(action, p, surface)} by ${actor}`;
-  if (p.undo !== undefined && p.undo !== "true")
-    return refused(`${action}'s undo is "true" or absent; got '${p.undo}'.`);
+  const click = `${clickAuditAction(action, surface)} by ${actor}`;
   switch (action) {
-    case "reset_breaker": {
-      const bad = rosterRefusal(action, p.namespace);
-      if (bad) return refused(bad);
-      const state = await breakerState(env, p.namespace, new Date());
-      return {
-        ok: true,
-        changes: [
-          state.open
-            ? `The breaker for ${p.namespace} is OPEN: ${state.failed} holder fails since ${state.since} UTC, at or over the threshold of ${state.threshold}. After the reset only failures from now count, and ${p.namespace} hands out work again.`
-            : `The breaker for ${p.namespace} is closed (${state.failed} of ${state.threshold} holder fails since ${state.since} UTC). The reset moves its window to now.`,
-        ],
-        audit: [`job-breaker-reset by ${actor}`, click],
-      };
-    }
-    case "overnight": {
-      const bad = overnightValueRefusal(p.value);
-      if (bad) return refused(bad);
-      if (!p.reason) return refused(switchReasonRefusal(action));
-      const state = await overnightState(env);
-      const value = p.value as OvernightMode;
-      const decision = decisionFor(value, actor, new Date(), p.reason);
-      return {
-        ok: true,
-        changes: [
-          state.mode === value
-            ? `${OVERNIGHT_MODE_KEY} is already ${value}; it is written again unchanged.`
-            : `${OVERNIGHT_MODE_KEY}: ${state.mode} -> ${value}.`,
-          ...(decision
-            ? [
-                `Recorded with the switch: the decision of ${decision.decided_by} on ${decision.decided_on}, "${decision.ruling}".`,
-                `Reasoning recorded: ${decision.reasoning}`,
-                "Hand-started VS Code tabs are unaffected and stay the default.",
-              ]
-            : value === "api"
-              ? [
-                  "The scheduler will refuse to start a run unless it authenticates with ANTHROPIC_API_KEY and no subscription token is in use.",
-                ]
-              : ["No scheduled run starts. Hand-started VS Code tabs are unaffected."]),
-        ],
-        audit: [`overnight-set by ${actor}`, click],
-      };
-    }
-    case "resume_job":
-    case "release_job":
-    case "fail_job":
-    case "close_shipped":
-    case "supersede_job":
-    case "park_job":
-    case "unpark_job":
-    case "run_job":
-      return planJobAction(env, action, p, actor, click);
     case "namespace_add": {
       const bad = namespaceNameRefusal(p.namespace);
       if (bad) return refused(bad);
@@ -179,6 +100,7 @@ export async function planAction(
     case "package_remove":
     case "site_repair":
     case "site_backup":
+    case "run_job":
       return planSiteAction(env, action, p, actor, click);
     case "pr_close": {
       if (!p.namespace)
@@ -221,22 +143,10 @@ export async function planAction(
       }
       if (agent.revoked_at)
         return refused(`'${p.name}' was already revoked at ${agent.revoked_at}.`);
-      // Bounded: the limit is a guard, not a page.
-      const { results } = await env.DB.prepare(
-        `SELECT id, title, namespace, status FROM jobs WHERE claimed_by = ?1 AND status IN ('claimed', 'blocked') ORDER BY id LIMIT 50`,
-      )
-        .bind(agentActor(p.name))
-        .all<{ id: string; title: string; namespace: string; status: string }>();
-      const held = results ?? [];
       return {
         ok: true,
         changes: [
           `agent ${p.name} (${agent.kind}): live -> revoked. Its key stops resolving on the next request, and the name can never be minted again.`,
-          held.length === 0
-            ? `It holds no claimed or blocked job.`
-            : `It holds ${plural(held.length, "job")}, which stay as they are until released or failed: ${held
-                .map((j) => `${j.id} (${j.status}, '${j.title}' in ${j.namespace})`)
-                .join("; ")}.`,
         ],
         audit: [`agent-revoked by ${actor}`, click],
       };

@@ -41,7 +41,7 @@ const pills = (t) =>
     )
     .join("");
 
-// A run of lines each opened by an action's name ("post: queue a job") is a list; a long paragraph breaks where a
+// A run of lines each opened by an action's name ("read: show a document") is a list; a long paragraph breaks where a
 // sentence turns to the next action or mode.
 /** @param {string} para */
 function said(para) {

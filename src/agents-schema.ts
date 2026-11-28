@@ -13,15 +13,6 @@ export type AgentGrant = (typeof AGENT_GRANTS)[number];
 export const SCOPE_FLAGS = ["can_merge", "can_touch_protected"] as const;
 export type ScopeFlag = (typeof SCOPE_FLAGS)[number];
 
-// Flags that gated only since-removed tools; stored rows and queued jobs may still name them, so readers skip them.
-export const RETIRED_FLAGS: readonly string[] = [
-  "can_direct_write",
-  "can_dispatch",
-  "can_write_workflows",
-  "money_paths",
-  "can_comment_pr",
-];
-
 // "*" inside a list is not a wildcard, so a typo in a mint command cannot grant everything.
 export type ScopeList = "*" | string[];
 
@@ -121,8 +112,8 @@ export function allowsScope(list: ScopeList, value: string): boolean {
   return list === "*" ? true : list.includes(value);
 }
 
-// Like allowsScope for a tool whose action decides what it does (jobs: post vs claim). An entry may be qualified,
-// `jobs.post`: a list naming any action of this tool narrows it to those; a bare name with no qualified sibling is the whole tool.
+// Like allowsScope for a tool whose action decides what it does (capsid_write_doc: write vs move). An entry may be
+// qualified, `capsid_write_doc.write`: a list naming any action of this tool narrows it to those; a bare name with no qualified sibling is the whole tool.
 export function allowsToolAction(
   list: ScopeList,
   tool: string,
@@ -134,7 +125,7 @@ export function allowsToolAction(
   const qualified = list.some((entry) => entry.startsWith(prefix));
   if (!qualified) return true;
   // An unknown action on a narrowed tool is refused, not read as the whole tool: otherwise a path naming no action
-  // could change the queue. Opt-in: a list with no qualified sibling for this tool is untouched.
+  // could reach every action. Opt-in: a list with no qualified sibling for this tool is untouched.
   if (action === undefined) return false;
   return list.includes(`${prefix}${action}`);
 }
@@ -153,7 +144,7 @@ export function mintAgentKey(): string {
   return `capsid_agent_${toHex(crypto.getRandomValues(new Uint8Array(32)))}`;
 }
 
-// The audit identity, in the vocabulary audit_log.actor and jobs.claimed_by speak; the name is UNIQUE.
+// The audit identity, in the vocabulary audit_log.actor speaks; the name is UNIQUE.
 export function agentActor(name: string): string {
   return `agent:${name}`;
 }

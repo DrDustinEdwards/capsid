@@ -22,7 +22,7 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 //
 // WHAT TO CHECK IS A DOCUMENT, NOT CODE. Which pages carry a beacon is a cross-repo rule, so
 // it lives at capsid/policy/live-checks.md and is read each pass. No document means no check:
-// nothing is probed on a guess. It can only post a job, like every watcher finding. See
+// nothing is probed on a guess. It can only record a finding, like every watcher check. See
 // docs/live-checks.md.
 //
 // Reads only: each page is one GET of the site's own configured origin plus a path the
@@ -78,7 +78,7 @@ export function parseLiveConfig(body: string): LiveConfig {
     if (kind === "sha") {
       if (path !== undefined) return { error: `${where}: sha takes no path` };
       // Capsid's own deploy is the "master head" check; a second finding about the same
-      // thing would be two jobs for one problem.
+      // thing would be two findings for one problem.
       if (namespace === "capsid")
         return {
           error: `${where}: capsid's deployed sha is already checked by the master head check`,
@@ -347,7 +347,7 @@ export async function liveChecks(
     summary.shas_read === summary.shas_expected &&
     summary.analytics_read === summary.analytics_expected;
   // One finding per fingerprint: two rules for one unknown site, or the same page named
-  // twice, are one problem, and the queue refuses a second job under the same title.
+  // twice, are one problem.
   const unique = [...new Map(findings.map((f) => [f.fingerprint, f])).values()];
   return { findings: unique, ran, summary };
 }

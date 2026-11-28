@@ -19,6 +19,7 @@ import {
 } from "../src/ops-snapshot.ts";
 import type { SiteCloudflare } from "../src/ops-types/sites.ts";
 import { runPass } from "../src/watcher-pass.ts";
+import type { FindingRow } from "../src/watcher-findings.ts";
 import { gatherFindings } from "../src/watcher-gather.ts";
 import { owningCheck } from "../src/watcher-checks.ts";
 import { siteDownFindings, siteErrorFindings, siteCpuFindings } from "../src/watcher-detect.ts";
@@ -391,7 +392,7 @@ test("a site is down only on two failed probes in a row", () => {
     found.map((f) => [f.namespace, f.fingerprint]),
     [["a", "site-down-a"]],
   );
-  assert.match(found[0].body, /root answered 522/);
+  assert.match((found[0].evidence ?? []).join("\n"), /answered 522/);
   assert.deepEqual(
     siteDownFindings(null, [probe("a", "down")]),
     [],
@@ -463,37 +464,39 @@ test("site-down is owned by the probes and site-errors by the cloudflare check, 
   assert.equal(owningCheck("site-down-sample"), "site probes");
   assert.equal(owningCheck("site-errors-sample"), "cloudflare");
   assert.equal(owningCheck("site-map-drift-add-sample"), "site map");
-  const open = new Map([
-    ["site-errors-sample", "j1"],
-    ["site-down-sample", "j2"],
-  ]);
-  const cleared: string[] = [];
-  const pass = (ran: Set<"site probes" | "cloudflare">) =>
-    runPass(
+  const openRow = (fingerprint: string): FindingRow => ({
+    fingerprint,
+    namespace: "sample",
+    title: `Watcher: x [${fingerprint}]`,
+    state: "open",
+    first_seen_at: "2026-09-01T00:00:00.000Z",
+    last_seen_at: "2026-09-01T00:00:00.000Z",
+    seen_count: 1,
+    cleared_at: null,
+    reopen_after: null,
+    evidence: "[]",
+    updated_at: "2026-09-01T00:00:00.000Z",
+  });
+  const pass = async (ran: Set<"site probes" | "cloudflare">) => {
+    const mem = fakeFindingMemory([openRow("site-errors-sample"), openRow("site-down-sample")]);
+    const result = await runPass(
       {
         findings: async () => ({ findings: [] as Finding[], ran }),
-        open: async () => open,
-        clear: async (id) => {
-          cleared.push(id);
-          return true;
-        },
-        post: async () => ({ ok: true as const, jobId: "job_new" }),
-        memory: fakeFindingMemory().memory,
+        memory: mem.memory,
       },
       NOW,
     );
-  await pass(new Set(["site probes"]));
+    return result.cleared;
+  };
   assert.deepEqual(
-    cleared,
-    ["j2"],
-    "a site-errors job was cleared on a pass where the cloudflare check did not run",
+    await pass(new Set(["site probes"])),
+    ["site-down-sample"],
+    "a site-errors finding was cleared on a pass where the cloudflare check did not run",
   );
-  cleared.length = 0;
-  await pass(new Set(["cloudflare"]));
   assert.deepEqual(
-    cleared,
-    ["j1"],
-    "a site-down job was cleared on a pass where the probes did not run",
+    await pass(new Set(["cloudflare"])),
+    ["site-errors-sample"],
+    "a site-down finding was cleared on a pass where the probes did not run",
   );
 });
 

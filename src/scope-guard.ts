@@ -16,7 +16,6 @@ import { withCallSignal } from "./call-signal";
 import {
   checkScope,
   declaredScope,
-  JOBS_TOOL,
   needFor,
   needsStepUp,
   recordStepUp,
@@ -78,14 +77,11 @@ const ACTION_ARG: Record<string, string> = {
   capsid_read_repo: "action",
   capsid_inspect_repo: "action",
   capsid_close_pr: "action",
-  capsid_work_jobs: "action",
   capsid_read_status: "action",
   capsid_admin_manage_namespaces: "action",
   capsid_admin_manage_agents: "action",
-  capsid_admin_read_claims: "action",
   capsid_admin_read_ops: "action",
   capsid_admin_run_controls: "action",
-  capsid_admin_manage_switches: "action",
 };
 
 const DEFAULT_ACTION: Record<string, string> = {
@@ -94,7 +90,6 @@ const DEFAULT_ACTION: Record<string, string> = {
   capsid_write_doc: "write",
   capsid_lint_namespace: "gather",
   capsid_read_status: "status",
-  capsid_admin_read_claims: "aggregate",
 };
 
 export function defaultActionFor(tool: string): string | undefined {
@@ -202,23 +197,12 @@ export function guardRegistrations(
         path: typeof args.path === "string" ? args.path : undefined,
         action,
         stepUp: needsStepUp(name, action),
-        ...(name === JOBS_TOOL
-          ? {
-              call: {
-                jobId: typeof args.id === "string" ? args.id : undefined,
-                filtered:
-                  args.view !== undefined || args.stale !== undefined || args.status !== undefined,
-              },
-            }
-          : {}),
         // An "action" tool outside TOOL_ACTION_GRANTS is checked by its handler, where the
         // namespace is known.
         ...needFor(requiredForAction(name, action)),
       });
       if (refusal) return refusal;
-      // A run key's call has already passed benchRunRefusal, which binds it to its one
-      // job in bench, so an omitted namespace asks for nothing wider.
-      if (takesNamespace(action) && namespace === undefined && !agent.benchRun) {
+      if (takesNamespace(action) && namespace === undefined) {
         const missing = namespaceRefusal(agent, name);
         if (missing) return missing;
       }

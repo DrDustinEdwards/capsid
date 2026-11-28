@@ -17,10 +17,6 @@ export const MAX_REF = 255;
 export const MAX_REPO_SELECTOR = 256;
 export const MAX_SHA = 128;
 export const MAX_CI_NAME = 512;
-// The seat's note on a capsid_work_jobs resume: rulings and a plan, longer than `reason` allows.
-// Not MAX_BODY: the note is stored in an audit row and rendered into the job's mirror document
-// beside the signed prompt, which can already be MAX_BODY on its own.
-export const MAX_RESUME_NOTE = 16_384;
 export const MAX_CONFIRM_TOKEN = 8192;
 
 export const MAX_ROWS = 500;
@@ -105,30 +101,3 @@ export const gitSha = bounded(MAX_SHA).regex(
   "a sha is 7 to 64 hex characters",
 );
 export const dayParam = bounded(10).regex(/^\d{4}-\d{2}-\d{2}$/, "a day is YYYY-MM-DD");
-
-// A job's result_ref is where the work landed: a document key inside the store, or a pull request
-// URL outside it. The URL is rendered as a link a human may click, so the scheme is pinned to
-// https and embedded credentials are refused.
-export function resultRefProblem(value: string): string | null {
-  if (value.length === 0) return "result ref must not be empty";
-  if (value.length > MAX_PATH) return `result ref is longer than ${MAX_PATH} characters`;
-  if (hasControlChar(value))
-    return "result ref must not contain control characters (including newlines and tabs)";
-  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) return pathProblem(value);
-
-  if (!value.startsWith("https://")) return "a result ref URL must use https";
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return "result ref is not a valid URL";
-  }
-  if (url.username || url.password) return "a result ref URL must not carry credentials";
-  if (!url.hostname) return "a result ref URL must name a host";
-  return null;
-}
-
-export const resultRef = bounded(MAX_PATH).superRefine((value, ctx) => {
-  const problem = resultRefProblem(value);
-  if (problem) ctx.addIssue({ code: "custom", message: problem });
-});

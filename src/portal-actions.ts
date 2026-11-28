@@ -208,22 +208,9 @@ export const handlePortalNamespaces = behindGate(async (_request, env, now) => {
     generated: now.toISOString(),
     namespaces: status.namespaces.map((ns) => ({
       namespace: ns.namespace,
-      breaker: {
-        open: ns.breaker.open,
-        failed: ns.breaker.failed,
-        threshold: ns.breaker.threshold,
-        since: ns.breaker.since,
-        reset_at: ns.breaker.reset_at,
-      },
       latest_report: ns.latest_report
         ? { integrity: ns.latest_report.integrity, generated: ns.latest_report.generated }
         : null,
-      jobs: {
-        queued: ns.jobs.queued,
-        claimed: ns.jobs.claimed,
-        blocked: ns.jobs.blocked,
-        done_today: ns.jobs.done_today,
-      },
       repos: reposOf.get(ns.namespace) ?? [],
     })),
   };
