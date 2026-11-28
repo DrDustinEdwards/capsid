@@ -3,13 +3,7 @@ import { test } from "node:test";
 import { handleHealth } from "../src/health.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// /health is site-runtime's healthResponse: the store (D1 and the FTS probe) is the fail
-// level, so only it can make a 503; the backup, the bindings and the task ledger warn and
-// leave it 200, because health is about whether the store answers. The deploy gate's
-// fields (sha, store, schema_version) ride beside the family ones.
-//
-// That schema_version names the newest applied migration is asserted against a real
-// D1 in test-integration/health.test.ts, which applies every file in migrations/.
+// Only the store can make /health a 503; the 503 itself and schema_version are test-integration/health.test.ts on a real D1.
 
 function healthEnv(parts: Record<string, unknown>) {
   return fakeEnv({ BUILD_SHA: "abc123", ...parts });
@@ -35,7 +29,7 @@ async function read(
   };
 }
 
-test("a stale or unreadable backup and a failing binding warn, never fail", async () => {
+test("a stale, unparseable or unreadable backup and a failing binding warn, never fail", async () => {
   const stale = await read(
     healthEnv({
       DB: fakeD1({ migrations: ["0001_init.sql"] }).db,
@@ -66,20 +60,13 @@ test("a stale or unreadable backup and a failing binding warn, never fail", asyn
   assert.equal(unparseable.code, 200);
   assert.equal(unparseable.byName.backup, "warn");
   assert.match(String(unparseable.body.backup?.warning), /not a parseable time/i);
-});
 
-test("a store whose FTS probe finds nothing fails with a 503, and the backup read failing does not mask it", async () => {
-  const { code, body } = await read(
+  const unread = await read(
     healthEnv({
-      DB: fakeD1({ ftsHit: false, migrations: ["0001_init.sql"] }).db,
+      DB: fakeD1({ migrations: ["0001_init.sql"] }).db,
       APP_KV: fakeKv({ failGet: true }).kv,
     }),
   );
-  assert.equal(code, 503);
-  assert.equal(body.status, "fail");
-  assert.notEqual(body.store?.fts, "ok");
-  assert.ok(
-    body.backup?.warning,
-    "the KV failure is contained: backup carries a warning, it does not throw",
-  );
+  assert.equal(unread.code, 200);
+  assert.ok(unread.body.backup?.warning, "a KV failure is a backup warning, not a throw");
 });

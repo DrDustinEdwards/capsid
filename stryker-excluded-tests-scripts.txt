@@ -9,10 +9,6 @@
 #   canary                scripts/verify-live.mjs (gate 2b is wired)
 #   cloudflare-platform   scripts/bindings.mjs
 #   counts                scripts/verify-live.mjs (the live gate count)
-#   deploy-pipeline       scripts/deploy.mjs
-#   integration-layer     scripts/bindings.mjs
 canary.test.ts
 cloudflare-platform.test.ts
 counts.test.ts
-deploy-pipeline.test.ts
-integration-layer.test.ts

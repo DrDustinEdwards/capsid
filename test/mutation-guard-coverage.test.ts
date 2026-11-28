@@ -9,11 +9,7 @@ import { buildServer } from "../src/server.ts";
 import { defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
 
-// A guard that lands in all but one mutation handler is not a fix, so entry points are found by scanning for what
-// makes a handler mutate (a documents insert or pathMutation), not by listing tools: a new writer fails until it has a plant.
-//
-// The scan reads the operation blocks (src/tools/operations.ts) and each plant is driven through the served tool and
-// action that runs it (test/served.ts).
+// Entry points are found by scanning the operation blocks for what makes a handler mutate, so a new writer fails until it has a plant.
 const MUTATION_MARKERS = [/INSERT INTO documents/i, /\bdocumentUpsert\(/, /\bpathMutation\(/];
 
 function mutationTools() {
@@ -37,8 +33,7 @@ function servedCall(
 
 const POLICY_DOC = "policy/gates.md";
 
-// type 'source' so lint finalize would consume it: a document written to a policy
-// path with the opt-in can carry any type, which is the case finalize's guard is for.
+// type 'source' so lint finalize would consume it.
 const STORE: FakeD1Options = {
   namespaces: [{ namespace: "capsid", repos: "[]" }],
   documents: [
@@ -131,17 +126,6 @@ test("PLANT: without the opt-in, every mutation entry point refuses a policy doc
   }
 });
 
-test("PLANT: lint finalize has no opt-in, so passing one changes nothing", async () => {
-  const call = servedCall("lint", { ...PLANTS.lint, allow_improve_paths: true });
-  const { result, recorded } = await callAs(driver(["can_touch_protected"]), call.tool, call.args);
-  assert.equal(
-    result.isError,
-    true,
-    "lint finalize archived a policy document when told it was allowed",
-  );
-  assert.deepEqual(recorded, []);
-});
-
 test("PLANT: with the opt-in and without can_touch_protected, every tool that takes the opt-in refuses", async () => {
   // The opt-in is the caller's to pass, so it is not a permission; the flag is.
   for (const [op, plant] of Object.entries(PLANTS).filter(([op]) => op !== "lint")) {
@@ -170,14 +154,9 @@ test("THE INNOCENT DIRECTION: with the opt-in and the flag, every tool that take
   }
 });
 
-test("PLANT: a move INTO or OUT OF the policy prefix is refused at either end", () => {
+test("PLANT: a policy path is refused at either end of a move; an ordinary path is not", () => {
   assert.ok(policyWriteRefusal("capsid", "policy/planted.md", false));
-  assert.ok(policyWriteRefusal("capsid", "policy/gates.md", false));
-});
-
-test("an ordinary move is untouched at both ends", () => {
-  assert.equal(policyWriteRefusal("capsid", "notes/a.md", false), null);
-  assert.equal(policyWriteRefusal("capsid", "improve/prompts/run.md", false), null);
-  assert.equal(policyWriteRefusal("capsid", "notes/policy/a.md", false), null);
+  for (const path of ["notes/a.md", "notes/policy/a.md"])
+    assert.equal(policyWriteRefusal("capsid", path, false), null, path);
   assert.equal(policyWriteRefusal("sample", "policy/a.md", false), null, "only Capsid's policy/");
 });

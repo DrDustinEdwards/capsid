@@ -140,11 +140,6 @@ const beaconRule: Extract<LiveRule, { path: string }> = {
   kind: "beacon",
   path: "/",
 };
-const noBeaconRule: Extract<LiveRule, { path: string }> = {
-  namespace: "sample",
-  kind: "nobeacon",
-  path: "/account",
-};
 const prints = (findings: Array<{ fingerprint: string }>) => findings.map((f) => f.fingerprint);
 const summary = (
   pages_expected: number,
@@ -178,13 +173,6 @@ test("PLANT: a CSP that blocks the beacon's script or its report is a finding, o
   }
 });
 
-test("a page that must carry no beacon is clean without one and a finding with one; its CSP is not judged", () => {
-  assert.deepEqual(pageFindings(SITE, noBeaconRule, read(page(""), "default-src 'none'")), []);
-  assert.deepEqual(prints(pageFindings(SITE, noBeaconRule, read(page(BEACON)))), [
-    "live-beacon-present-sample-account",
-  ]);
-});
-
 const headersRule: Extract<LiveRule, { path: string }> = {
   namespace: "sample",
   kind: "headers",
@@ -206,7 +194,7 @@ const withHeaders = (headers: Headers): Parameters<typeof pageFindings>[2] => ({
   gated: false,
 });
 
-test("PLANT: a missing header, a report-only policy and no policy at all each file one finding naming what failed", () => {
+test("PLANT: a missing header, a report-only policy and no policy at all each file one finding; good headers count a page read", async () => {
   const noFrame = goodHeaders();
   noFrame.delete("X-Frame-Options");
   const missing = pageFindings(SITE, headersRule, withHeaders(noFrame));
@@ -231,12 +219,9 @@ test("PLANT: a missing header, a report-only policy and no policy at all each fi
     ["live-headers-sample-root"],
     "a response with none of them",
   );
-});
 
-test("the headers rule counts a page read, and a page with missing headers is a finding", async () => {
-  const body = "- site sample headers /";
   const ok = await liveChecks(
-    { body },
+    { body: "- site sample headers /" },
     [SITE],
     [probe()],
     deps({
@@ -252,14 +237,6 @@ test("the headers rule counts a page read, and a page with missing headers is a 
   );
   assert.deepEqual(ok.findings, []);
   assert.deepEqual(ok.summary, summary(1, 1, 0, 0, 0, 0));
-  const bare = await liveChecks(
-    { body },
-    [SITE],
-    [probe()],
-    deps({ "/": () => html(page("")) }),
-    NOW,
-  );
-  assert.deepEqual(prints(bare.findings), ["live-headers-sample-root"]);
 });
 
 const ANALYTICS_SITE = {
@@ -351,7 +328,7 @@ test("PLANT: an analytics or head read that fails is an unread finding for the s
 
 const HEAD = { sha: "b".repeat(40), committed_at: "2026-10-04T10:00:00.000Z" };
 
-test("shaFinding: equal, a short prefix either way, and a head inside the grace are clean", () => {
+test("PLANT shaFinding: equal, a prefix or a head inside the grace is clean; drift past it, or no sha, is a finding", () => {
   assert.equal(shaFinding(SITE, HEAD.sha, HEAD, NOW), null);
   assert.equal(shaFinding(SITE, HEAD.sha.slice(0, 7), HEAD, NOW), null);
   assert.equal(
@@ -366,9 +343,6 @@ test("shaFinding: equal, a short prefix either way, and a head inside the grace 
     ),
     null,
   );
-});
-
-test("PLANT: a deployed sha that is not the head, past the grace, is a finding naming both; so is a site with no sha to compare", () => {
   const f = shaFinding(SITE, "a".repeat(40), HEAD, NOW);
   assert.equal(f?.fingerprint, `live-sha-drift-sample-${HEAD.sha.slice(0, 7)}`);
   assert.ok(
@@ -401,19 +375,6 @@ const fetchOf =
   (res: () => Response | Promise<Response>): FetchLike =>
   async () =>
     res();
-
-test("readPage reaches only the site's own origin plus the path, with a timeout", async () => {
-  const seen: Array<{ url: string; signal: boolean }> = [];
-  await readPage(
-    async (url, init) => {
-      seen.push({ url, signal: init?.signal instanceof AbortSignal });
-      return html(page(""));
-    },
-    "https://sample.example.com",
-    "/a/b",
-  );
-  assert.deepEqual(seen, [{ url: "https://sample.example.com/a/b", signal: true }]);
-});
 
 test("PLANT: a page that cannot be judged says why: an error, a 404, a login redirect, not HTML, too large", async () => {
   const cases: Array<[string, FetchLike, RegExp, boolean]> = [

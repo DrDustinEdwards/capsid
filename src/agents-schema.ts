@@ -163,7 +163,7 @@ export function driverMintInstruction(namespace: string): string {
     `Mint its driver agent as the admin: capsid_admin_manage_agents action mint with name ${driverAgentName(namespace)}, kind driver, ` +
     `namespaces ["${namespace}"] and grants read and write; its repos come from this mapping. ` +
     `The key is returned once: save it to ${driverKeyPath(namespace)} at mode 0600. ` +
-    // Cannot import TOOL_GRANTS (src/scope.ts imports this module); test/audit-2026-09-16.test.ts keeps them together.
+    // Cannot import TOOL_GRANTS (src/scope.ts imports this module); test/admin-only.test.ts keeps this true.
     `capsid_admin_manage_namespaces action register does not mint it: minting is admin only, and capsid_admin_manage_namespaces action register is itself admin only.`
   );
 }

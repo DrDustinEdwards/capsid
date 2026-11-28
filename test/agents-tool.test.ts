@@ -4,14 +4,11 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildAdminServer } from "../src/server.ts";
 
 import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
-import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, type FakeD1 } from "./fakes.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// Minting, over a real MCP connection. The property is who may call it: a minted
-// agent that can mint another could mint itself a seat scoped to everything. So
-// `admin` is not a flag (update_scopes could set a flag) and it is true only for the
-// two identities that predate the table.
+// Who may call the tool at all is test/admin-only.test.ts.
 
 interface ToolResult {
   isError?: boolean;
@@ -40,10 +37,7 @@ async function connect(caller: Agent, rows: Array<Record<string, unknown>> = [])
 
 const parse = (result: ToolResult) => JSON.parse(result.content[0].text) as Record<string, unknown>;
 
-// Two shapes of refusal. An authorization refusal is an MCP error (isError), because
-// the caller asked for something it may never have. A domain refusal (name taken, no
-// such agent) is an ordinary result with ok:false and a refusal string, as the queue
-// uses: the call was legitimate and the answer is no.
+// A domain refusal (name taken, no such agent) is an ordinary result with ok:false, not an MCP error.
 const refusalOf = (result: ToolResult) => String(parse(result).refusal ?? "");
 const statements = (d1: FakeD1) => [...d1.reads, ...d1.recorded];
 
@@ -101,111 +95,24 @@ test("mint returns the key ONCE and stores only its hash", async () => {
   );
 });
 
-test("PLANT: a mint that names no repos gets the NAMESPACE MAPPING, not the wildcard", async () => {
-  // defaultScopes has repos "*", so the handler must derive repos from the namespace mapping (driven through a real capsid_admin_manage_agents call).
+test("PLANT: a mint that names no repos gets the namespace's mapping, not the wildcard; a named list is kept as asked; an unmapped namespace is refused", async () => {
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const body = parse(
-    await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }),
-  );
-  await close();
-  const scopes = body.scopes as { repos: string[] | "*" };
-  assert.notEqual(
-    scopes.repos,
-    "*",
-    "an agent minted through the tool was born reaching every repo",
-  );
-  assert.deepEqual(
-    scopes.repos,
-    ["owner/repo"],
-    "the derived axis is not the namespace's live mapping",
-  );
-});
-
-test("AN EXPLICIT repos LIST IS STILL EXACTLY WHAT THE CALLER ASKED FOR, wildcard included", async () => {
-  // Derivation applies only when the caller named nothing; an admin that means every
-  // repo passes the single entry "*".
-  const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const narrow = parse(
-    await call({
-      action: "mint",
-      name: "one-repo",
-      kind: "session",
-      namespaces: ["capsid"],
-      repos: ["o/other"],
-    }),
-  );
-  const wide = parse(
-    await call({
-      action: "mint",
-      name: "every-repo",
-      kind: "seat",
-      namespaces: ["capsid"],
-      repos: ["*"],
-    }),
-  );
-  await close();
-  assert.deepEqual((narrow.scopes as { repos: string[] }).repos, ["o/other"]);
-  assert.equal((wide.scopes as { repos: string }).repos, "*");
-});
-
-test("PLANT: a mint for a namespace that maps no repos is REFUSED rather than widened", async () => {
-  const { call, close } = await connect(adminAgentForEmail("admin@example.com"), []);
-  const result = await call({
+  const mint = (name: string, extra: Record<string, unknown>) =>
+    call({ action: "mint", name, kind: "driver", namespaces: ["capsid"], ...extra }).then(parse);
+  const derived = await mint("capsid-driver", {});
+  const narrow = await mint("one-repo", { repos: ["o/other"] });
+  const wide = await mint("every-repo", { repos: ["*"] });
+  const ghost = await call({
     action: "mint",
     name: "ghost-driver",
     kind: "driver",
     namespaces: ["not-registered"],
   });
   await close();
-  assert.match(
-    refusalOf(result),
-    /not registered/,
-    `expected a refusal naming the namespace: ${result.content[0].text}`,
-  );
-});
-
-test("A MINTED AGENT CANNOT MINT, REVOKE OR RE-SCOPE ANOTHER", async () => {
-  // The caller holds write on its own namespace, more than a driver needs and still
-  // not enough for this.
-  const scopes = defaultScopes(["capsid"]);
-  scopes.grants = ["read", "write"];
-  const minted: Agent = {
-    id: "agent_0123456789ab",
-    name: "capsid-driver",
-    kind: "driver",
-    actor: "agent:capsid-driver",
-    scopes,
-    admin: false,
-    row: null,
-  };
-  const { d1, call, close } = await connect(minted, [await liveRow()]);
-  for (const args of [
-    { action: "mint", name: "a-second-agent", kind: "driver", namespaces: ["capsid"] },
-    { action: "revoke", name: "capsid-driver" },
-    { action: "update_scopes", name: "capsid-driver", grants: ["read", "write"] },
-    { action: "list" },
-  ]) {
-    const result = await call(args);
-    assert.equal(
-      result.isError,
-      true,
-      `a minted agent reached capsid_admin_manage_agents action '${args.action}'`,
-    );
-    assert.match(
-      result.content[0].text,
-      /admin/i,
-      `the refusal for '${args.action}' does not say what is missing`,
-    );
-  }
-  await close();
-  assert.equal(d1.recorded.length, 0, "a refused call wrote something");
-});
-
-test("a read-only caller is never served the agents tool, so the admin check is never reached", async () => {
-  // The tool needs the write grant, so it is not registered for a read grant (src/scope.ts toolListed) and the call is refused by the protocol.
-  const { call, close } = await connect(grantAgent("read", "opkey:0123456789ab"));
-  await assert.rejects(call({ action: "list" }), /not found/i);
-  await close();
+  assert.deepEqual((derived.scopes as { repos: string[] }).repos, ["owner/repo"]);
+  assert.deepEqual((narrow.scopes as { repos: string[] }).repos, ["o/other"]);
+  assert.equal((wide.scopes as { repos: string }).repos, "*");
+  assert.match(refusalOf(ghost), /not registered/);
 });
 
 test("list shows the inventory and last_seen, and never the verifier", async () => {

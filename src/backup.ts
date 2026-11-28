@@ -42,9 +42,9 @@ const PAGED = {
 export const EXCLUDED = ["d1_migrations", "push_subscriptions"] as const;
 
 // Columns that match d1-dump's credential pattern by name but hold no token. None since 0072 dropped bench_runs.
-export const CREDENTIAL_ALLOW: Record<string, string> = {};
+const CREDENTIAL_ALLOW: Record<string, string> = {};
 
-// Every real table; test/backup.test.ts derives this list from migrations/. Excluded: documents_fts and
+// Every real table; test-integration/backup-package.test.ts checks it against the migrated schema. Excluded: documents_fts and
 // its shadow tables (rebuilt by triggers) and sqlite_sequence.
 export const TABLES = [
   "documents",

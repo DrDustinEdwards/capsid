@@ -6,20 +6,7 @@ import { auditDetail } from "../src/audit-detail.ts";
 
 const MARKER = "PLANTED-SECRET-5b1e";
 
-test("a click row reads as its reason and its named fields", () => {
-  const d = auditDetail(
-    JSON.stringify({ name: "sample-driver", reason: "The key leaked.", enabled: true }),
-  );
-  assert.equal(d.reason, "The key leaked.");
-  assert.equal(d.changes, null);
-  assert.deepEqual(d.fields, [
-    { name: "Name", value: "sample-driver" },
-    { name: "On", value: "yes" },
-  ]);
-  assert.equal(d.withheld, 0);
-});
-
-test("PLANT: an edit lists only the fields that changed, the old value beside the new", () => {
+test("PLANT: an edit reads as its reason and the fields that changed, the old value beside the new", () => {
   const before = {
     namespace: "sample",
     origin: "https://sample.example.com",
@@ -34,7 +21,8 @@ test("PLANT: an edit lists only the fields that changed, the old value beside th
     revision: 4,
     platform: "cloudflare",
   };
-  const d = auditDetail(JSON.stringify({ before, after }));
+  const d = auditDetail(JSON.stringify({ reason: "The host moved.", before, after }));
+  assert.equal(d.reason, "The host moved.");
   assert.deepEqual(d.changes, [
     {
       field: "Origin",
@@ -58,11 +46,11 @@ test("PLANT: a hash, a signature, a token or a nested value is never shown, only
     list: [{ inner: MARKER }],
     before: { origin: "a", content_hash: MARKER },
     after: { origin: "b", content_hash: MARKER + "2" },
-    merge_sha: "abc1234",
+    commit: "abc1234",
   };
   const d = auditDetail(JSON.stringify(params));
   assert.doesNotMatch(JSON.stringify(d), new RegExp(MARKER), "a withheld value reached the detail");
-  assert.deepEqual(d.fields, [{ name: "Merge sha", value: "abc1234" }]);
+  assert.deepEqual(d.fields, [{ name: "Commit", value: "abc1234" }]);
   assert.deepEqual(d.changes, [{ field: "Origin", before: "a", after: "b" }]);
   assert.equal(d.withheld, 8);
 });

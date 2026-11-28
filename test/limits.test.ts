@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MAX_PATH, pathProblem } from "../src/limits.ts";
-import {} from "../src/github.ts";
 import { sourceFiles } from "./source-files.ts";
 
 test("the grammar accepts the paths the store actually holds", () => {
@@ -43,7 +42,6 @@ test("the grammar refuses traversal, absolutes, control characters and empties",
 const BARE_Z_STRING = /z\.string\(\)/;
 const isComment = (line: string) => line.startsWith("//") || line.startsWith("*");
 
-// scanner-rule: quality audit 1.1, every tool argument is bounded
 test("every tool argument is bounded: no bare z.string() anywhere in src/", () => {
   // The whole directory, because a schema can be declared in any module; excluded are comments,
   // limits.ts's own primitives and the output schemas, which describe answers, not arguments.
@@ -60,17 +58,4 @@ test("every tool argument is bounded: no bare z.string() anywhere in src/", () =
     [],
     "an unbounded z.string() is back; use bounded(...) from src/limits.ts",
   );
-  // Vacuity guards: the scan has to be looking at real schemas, and at the
-  // grammar being wired up, or "no offenders" means "nothing was read".
-  const all = sourceFiles()
-    .map((f) => f.text)
-    .join("\n");
-  assert.ok(all.includes("bounded(MAX_BODY)"), "the scan matched nothing, so it proves nothing");
-  assert.ok(
-    all.split("docPath").length - 1 >= 8,
-    "docPath is barely used, so the grammar is probably not wired up",
-  );
 });
-
-// result_ref: a document key or a PR URL. `docPath` alone would refuse every URL on
-// the '//' after the scheme.

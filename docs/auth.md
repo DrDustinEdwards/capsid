@@ -103,7 +103,7 @@ On 2026-07-28 the cacheable results carry `ttlMs` and `cacheScope`, set by the S
 
 What the clients do with them, as of 2026-09-29:
 
-- **Claude Code**, verified: it refreshes its tool list on `notifications/tools/list_changed`. On protocol 2026-07-28 it rejects a `tools/list` result that lacks `ttlMs` or `cacheScope` (anthropics/claude-code#88128). capsid serves both on 2026-07-28 (`test/cache-hints.test.ts`). Nothing shows Claude Code caching by `ttlMs`.
+- **Claude Code**, verified: it refreshes its tool list on `notifications/tools/list_changed`. On protocol 2026-07-28 it rejects a `tools/list` result that lacks `ttlMs` or `cacheScope` (anthropics/claude-code#88128). capsid serves both on 2026-07-28 (the live probe refuses a deploy that does not, `test/live-gate-mcp.test.ts`). Nothing shows Claude Code caching by `ttlMs`.
 - **claude.ai**, unknown: nothing observed shows whether it reads the annotations, the cache fields, or either. It is known to cache the tool list from connect time, so a deploy still needs a reconnect (docs/bootstrap.md, "Verifying a deploy").
 
 ## Co-owner

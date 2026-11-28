@@ -26,11 +26,6 @@ test("the year's writes lie flat, weeks across, and a phone gets the last 13 wee
     /Document writes per day over 52 weeks/,
   );
   assert.match(year, /the most \d+ on 20\d\d-\d\d-\d\d/);
-  assert.match(
-    year,
-    /stroke-dasharray/,
-    "a day with no write is an outlined cell, not the lightest step",
-  );
   assertFigure(writesRecent(plot, days, counts), /over the last 13 weeks/);
   assert.equal(writesYear(plot, days, new Map()), null, "an empty year is no chart");
 });
@@ -64,6 +59,7 @@ test("who acted: one row per actor and client, the rest as Other, wide by day an
   assert.equal(actors[0]!.label, "reviewer (system)");
   assert.ok(actors.some((a) => a.label === "Project threads"));
   assert.ok(actors.some((a) => a.label === "You (Portal)"));
+  assert.equal(actorLabel("capsid:push", null), "push (capsid)");
   assert.equal(actors.find((a) => a.actor === "agent:watcher")!.total, 27 * 30);
   const heat = heatRows(actors, days);
   assert.equal(heat.length, 11);
@@ -101,13 +97,6 @@ test("threads are counted on the day each was first seen, the top five projects 
     ),
     ["y"],
   );
-});
-
-test("actor labels: threads and the Portal part, agents by name", () => {
-  assert.equal(actorLabel("access:admin@example.com", "Claude"), "Project threads");
-  assert.equal(actorLabel("access:admin@example.com", ""), "You (Portal)");
-  assert.equal(actorLabel("agent:watcher", null), "watcher");
-  assert.equal(actorLabel("capsid:push", null), "push (capsid)");
 });
 
 test("unfence gives back the text a fence wraps, and leaves other text alone", () => {

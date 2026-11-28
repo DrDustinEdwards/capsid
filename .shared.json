@@ -22,6 +22,6 @@
   },
   "spelling": {
     "contracts": ["[\"']cancelled[\"']", "cancelled\\(\\)", "ended cancelled"],
-    "skip": ["docs/policy/gates.md", "migrations/**", "test/adversarial/corpus/**"]
+    "skip": ["docs/policy/gates.md", "migrations/**"]
   }
 }

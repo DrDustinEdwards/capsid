@@ -1,86 +1,18 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
-import { DatabaseSync } from "node:sqlite";
-import { credentialProblems } from "@dustinedwards/d1-dump";
-import { CREDENTIAL_ALLOW, EXCLUDED, runBackup, TABLES } from "../src/backup.ts";
+import { runBackup, TABLES } from "../src/backup.ts";
 import { BACKUP_LAST_OK_KEY } from "../src/health.ts";
-import { dumpJson, fakeD1, fakeEnv, fakeKv, fakeR2, type FakeD1Options } from "./fakes.ts";
+import {
+  captureErrors,
+  dumpJson,
+  fakeD1,
+  fakeEnv,
+  fakeKv,
+  fakeR2,
+  type FakeD1Options,
+} from "./fakes.ts";
 
-// FTS5 derives documents_fts from documents and the sync triggers rebuild it on
-// import, so the virtual table and its shadow tables are never exported.
-const DERIVED = /^(documents_fts|sqlite_)/;
-
-function tablesInMigrations(): string[] {
-  const dir = join(import.meta.dirname, "..", "migrations");
-  const names = new Set<string>();
-  for (const file of readdirSync(dir)
-    .filter((f) => f.endsWith(".sql"))
-    .sort()) {
-    // Statements in file order, comment lines skipped. A table rebuild creates a scratch
-    // table, drops the original and renames the scratch over it; a dropped table is gone.
-    const sql = readFileSync(join(dir, file), "utf8")
-      .split("\n")
-      .filter((l) => !l.trim().startsWith("--"))
-      .join("\n");
-    // CREATE VIRTUAL TABLE does not match, which keeps documents_fts out.
-    for (const m of sql.matchAll(
-      /CREATE TABLE(?: IF NOT EXISTS)?\s+(\w+)|DROP TABLE(?: IF EXISTS)?\s+(\w+)|ALTER TABLE\s+(\w+)\s+RENAME TO\s+(\w+)/gi,
-    )) {
-      if (m[1] && !DERIVED.test(m[1])) names.add(m[1]);
-      if (m[2]) names.delete(m[2]);
-      if (m[3]) {
-        names.delete(m[3]);
-        names.add(m[4]);
-      }
-    }
-  }
-  return [...names].sort();
-}
-
-test("every table the migrations create is backed up, or excluded by name", () => {
-  const tables = tablesInMigrations();
-  // Guards the parser: one that matches nothing would make every assertion here pass vacuously.
-  assert.ok(tables.length >= 5);
-  const covered = new Set<string>([...TABLES, ...EXCLUDED]);
-  const missing = tables.filter((t) => !covered.has(t));
-  assert.deepEqual(
-    missing,
-    [],
-    `migrations create tables that src/backup.ts does not export: ${missing.join(", ")}`,
-  );
-});
-
-// The nightly run refuses a dump with a credential-looking column (d1-dump `credentials`), so a new column named for a token would leave
-// every night incomplete. Read off the real schema: every migration applied in order, as D1 would.
-test("the migrated schema passes the credential-column check with CREDENTIAL_ALLOW", () => {
-  const db = new DatabaseSync(":memory:");
-  const dir = join(import.meta.dirname, "..", "migrations");
-  for (const file of readdirSync(dir)
-    .filter((f) => f.endsWith(".sql"))
-    .sort())
-    db.exec(readFileSync(join(dir, file), "utf8"));
-  const schema = db
-    .prepare(
-      "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type = 'table' AND sql IS NOT NULL",
-    )
-    .all() as Array<{ type: "table"; name: string; tbl_name: string; sql: string }>;
-  const tables = schema
-    .filter((t) => !(EXCLUDED as readonly string[]).includes(t.name))
-    .map((t) => ({ name: t.name, rows: 1, key: `${t.name}.json` }));
-  assert.deepEqual(credentialProblems({ tables }, schema, { allow: CREDENTIAL_ALLOW }), []);
-});
-
-test("every backed-up table exists in the migrations", () => {
-  const inMigrations = tablesInMigrations();
-  const unknown = TABLES.filter((t) => !inMigrations.includes(t));
-  assert.deepEqual(
-    unknown,
-    [],
-    `src/backup.ts exports tables no migration creates: ${unknown.join(", ")}`,
-  );
-});
+// The schema against TABLES, the credential-column check and the dump's file set are test-integration/backup-package on a migrated D1.
 
 // The fake R2 holds real state and records every delete, so "refuses to delete the mirror" cannot pass vacuously. The fake D1's prune batch
 // reports an inflated meta.changes, as the FTS5 triggers inflate it on real D1; the run must not read it.
@@ -96,19 +28,6 @@ function makeEnv(
   return { env: fakeEnv({ DB: db, MEDIA: r2.bucket, APP_KV: kv.kv }), r2, kv, batches };
 }
 
-// Captures console.error so a test can assert the run was LOUD, not just that it
-// returned a field.
-async function captureErrors<T>(fn: () => Promise<T>): Promise<{ result: T; logged: string[] }> {
-  const original = console.error;
-  const logged: string[] = [];
-  console.error = (...args: unknown[]) => logged.push(args.map(String).join(" "));
-  try {
-    return { result: await fn(), logged };
-  } finally {
-    console.error = original;
-  }
-}
-
 const DOCS = [
   { namespace: "capsid", path: "core.md", body: "core" },
   { namespace: "capsid", path: "conventions.md", body: "conventions" },
@@ -118,30 +37,6 @@ const MIRROR = {
   "backups/markdown/capsid/conventions.md": "conventions",
   "backups/markdown/capsid/deleted-yesterday.md": "gone",
 };
-
-test("a healthy run dumps one object per table, keyed by TABLES", async () => {
-  const { env, r2 } = makeEnv({ documents: DOCS }, MIRROR);
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-
-  // Derived from TABLES in both directions. The underscore-prefixed sidecars are named
-  // explicitly rather than matched by shape, so dropping one fails here too.
-  const expected = [
-    ...TABLES.map((t) => `${result.json_prefix}${t}.json.gz`),
-    `${result.json_prefix}_kv.json`,
-    `${result.json_prefix}_schema.json`,
-    `${result.json_prefix}_complete.json`,
-  ].sort();
-  assert.deepEqual([...result.json_keys].sort(), expected);
-  assert.deepEqual(
-    [...r2.objects.keys()].filter((k) => k.startsWith(result.json_prefix)).sort(),
-    expected,
-  );
-  const dumped = dumpJson(r2, `${result.json_prefix}documents.json.gz`);
-  assert.equal(dumped.table, "documents");
-  assert.equal(dumped.rows.length, 2);
-});
 
 test("a healthy run prunes genuinely stale markdown and keeps the current mirror", async () => {
   const { env, r2 } = makeEnv({ documents: DOCS }, MIRROR);
@@ -159,7 +54,7 @@ test("a healthy run prunes genuinely stale markdown and keeps the current mirror
 test("an empty documents read refuses the prune, loudly, deletes nothing and does not stamp last-ok", async () => {
   // The SELECT succeeds and returns no rows, so every mirror object looks stale.
   const { env, r2, kv } = makeEnv({ documents: [] }, MIRROR);
-  const { result, logged } = await captureErrors(() => runBackup(env));
+  const { result, errors: logged } = await captureErrors(() => runBackup(env));
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
@@ -190,7 +85,7 @@ test("an empty documents read refuses the prune, loudly, deletes nothing and doe
 
 test("a failing FTS probe refuses the prune even when documents has rows", async () => {
   const { env, r2 } = makeEnv({ documents: DOCS, ftsHit: false }, MIRROR);
-  const { result, logged } = await captureErrors(() => runBackup(env));
+  const { result, errors: logged } = await captureErrors(() => runBackup(env));
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
@@ -204,7 +99,7 @@ test("a failing FTS probe refuses the prune even when documents has rows", async
 // is refused, never marked complete.
 test("a live table TABLES does not list refuses the run, keeps the dumps, and marks nothing", async () => {
   const { env, r2, kv } = makeEnv({ documents: DOCS, extraTables: ["stray"] }, MIRROR);
-  const { result, logged } = await captureErrors(() => runBackup(env));
+  const { result, errors: logged } = await captureErrors(() => runBackup(env));
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
@@ -227,7 +122,7 @@ test("a second concurrent runner exits named and touches nothing", async () => {
   const { env, r2, kv, batches } = makeEnv({ documents: DOCS }, MIRROR, {
     "backup:lease": "2026-08-17T09:00:00.000Z",
   });
-  const { result, logged } = await captureErrors(() => runBackup(env));
+  const { result, errors: logged } = await captureErrors(() => runBackup(env));
   assert.equal(result.ran, false);
   if (result.ran) return;
 
@@ -609,54 +504,39 @@ function survivingRuns(r2: { objects: Map<string, string | Uint8Array> }, ids: s
 const day = (month: number, d: number) =>
   `2020-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}T00-00-00-000Z`;
 
-// The policy is tested in d1-dump, where pruneDumps lives; this holds the wiring: the pruned prefix is the dump prefix, a run goes whole,
-// and an old run is pruned whatever its shape.
-test("dump retention is d1-dump's graduated policy (DUMP_RETENTION) over the backups/json prefix, deleting runs whole", async () => {
+// The policy is d1-dump's (pruneDumps); this holds the wiring: the dump prefix, whole runs, any run shape, and a bucket lock (R2 10069)
+// counted as locked without stopping the success stamp.
+test("dump retention is d1-dump's policy over the backups/json prefix, deleting runs whole, and a locked run still stamps last-ok", async () => {
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().replace(/[:.]/g, "-");
   const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().replace(/[:.]/g, "-");
   const seed: Record<string, string> = { ...MIRROR };
   seedRun(seed, day(1, 1), "marked");
   seedRun(seed, day(1, 2), "partial");
+  seedRun(seed, day(1, 3), "marked");
   seedRun(seed, monthAgo, "legacy");
   seedRun(seed, yesterday, "marked");
-  const { env, r2 } = makeEnv({ documents: DOCS }, seed);
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-
-  // Today's run and yesterday's are inside the daily window; the other three are outside
-  // every window, so they go, each with all of its objects.
-  assert.equal(result.json_backups_kept, 2);
-  assert.equal(result.json_backups_pruned, 3);
-  assert.equal(result.json_backups_locked, 0);
-  assert.deepEqual(survivingRuns(r2, [day(1, 1), day(1, 2), monthAgo, yesterday]), [yesterday]);
-  for (const table of TABLES) assert.ok(r2.objects.has(`backups/json/${yesterday}/${table}.json`));
-});
-
-// A bucket lock (docs/backups.md) refuses a delete with R2 error 10069. The run must
-// finish, count the refused run as locked, and still stamp the last clean success.
-test("a stale run a bucket lock refuses is counted as locked and the run still succeeds", async () => {
-  const seed: Record<string, string> = { ...MIRROR };
-  seedRun(seed, day(1, 1), "marked");
-  seedRun(seed, day(1, 2), "marked");
   const { env, r2, kv } = makeEnv({ documents: DOCS }, seed);
   const realDelete = r2.bucket.delete.bind(r2.bucket);
   r2.bucket.delete = async (keys: string | string[]) => {
     const list = Array.isArray(keys) ? keys : [keys];
-    if (list.some((k) => k.startsWith(`backups/json/${day(1, 1)}/`))) {
+    if (list.some((k) => k.startsWith(`backups/json/${day(1, 3)}/`)))
       throw new Error(
         "delete: This object is subject to an object lock and cannot be deleted (10069)",
       );
-    }
     return realDelete(keys);
   };
   const result = await runBackup(env);
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
+  assert.equal(result.json_backups_kept, 2);
+  assert.equal(result.json_backups_pruned, 3);
   assert.equal(result.json_backups_locked, 1);
-  assert.equal(result.json_backups_pruned, 1);
-  assert.deepEqual(survivingRuns(r2, [day(1, 1), day(1, 2)]), [day(1, 1)]);
+  assert.deepEqual(survivingRuns(r2, [day(1, 1), day(1, 2), day(1, 3), monthAgo, yesterday]), [
+    day(1, 3),
+    yesterday,
+  ]);
+  for (const table of TABLES) assert.ok(r2.objects.has(`backups/json/${yesterday}/${table}.json`));
   assert.ok(await kv.kv.get(BACKUP_LAST_OK_KEY), "a locked run must not stop the success stamp");
 });
 
@@ -678,7 +558,7 @@ test("a run whose lease was taken over prunes nothing and does not release the n
     return batch(statements);
   }) as typeof batch;
   const env = fakeEnv({ DB: d1.db, MEDIA: r2.bucket, APP_KV: kv.kv });
-  const { result, logged } = await captureErrors(() => runBackup(env));
+  const { result, errors: logged } = await captureErrors(() => runBackup(env));
   assert.equal(result.ran, true);
   if (!result.ran) return;
   // The lease is get-then-put (no CAS): the run whose lease was overwritten re-reads it

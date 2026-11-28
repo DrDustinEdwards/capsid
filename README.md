@@ -183,17 +183,17 @@ An installation requires a Cloudflare account and a GitHub App. The procedure is
 
 ## Development
 
-| Command                                | Purpose                                                           |
-| -------------------------------------- | ----------------------------------------------------------------- |
-| `npm run check`                        | Type-check the Worker.                                            |
-| `npm test`                             | Unit tests.                                                       |
-| `npm run test:integration`             | Integration tests in workerd.                                     |
-| `npm run lint`                         | The shared Oxlint config, type-aware (dashboard included).        |
-| `npm run lint:repo`                    | The repository's own lints: dead exports and documentation drift. |
-| `npm run build:dashboard`              | Build the Portal and enforce its size budget.                     |
-| `npm run test:browser`                 | Portal browser tests (Playwright).                                |
-| `npm --prefix dashboard run dev`       | Serve the Portal locally against sample data.                     |
-| `EXPECT_SHA=<sha> npm run verify:live` | Verify the deployed Worker.                                       |
+| Command                                | Purpose                                                    |
+| -------------------------------------- | ---------------------------------------------------------- |
+| `npm run check`                        | Type-check the Worker.                                     |
+| `npm test`                             | Unit tests.                                                |
+| `npm run test:integration`             | Integration tests in workerd.                              |
+| `npm run lint`                         | The shared Oxlint config, type-aware (dashboard included). |
+| `npm run lint:repo`                    | The repository's own lint: documentation drift.            |
+| `npm run build:dashboard`              | Build the Portal and enforce its size budget.              |
+| `npm run test:browser`                 | Portal browser tests (Playwright).                         |
+| `npm --prefix dashboard run dev`       | Serve the Portal locally against sample data.              |
+| `EXPECT_SHA=<sha> npm run verify:live` | Verify the deployed Worker.                                |
 
 The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#10-checks-before-a-push). Continuous integration runs these checks on every pull request, and a merge to `master` deploys to production.
 

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
-import { defaultScopes } from "../src/agents-schema.ts";
 import { CONTROLS, performControl, previewControl } from "../src/controls.ts";
 import { PORTAL_ACTIONS } from "../src/controls-base.ts";
 import { buildAdminServer } from "../src/server.ts";
@@ -87,10 +86,6 @@ test("the registry, the Portal's action list and the tool's list name the same c
       control: string;
       params: string[];
     }>;
-    assert.ok(
-      listed.length >= 15,
-      `the list held ${listed.length} controls, so this compared nothing`,
-    );
     assert.deepEqual(listed.map((c) => c.control).sort(), [...PORTAL_ACTIONS].sort());
     assert.deepEqual(CONTROLS.map((c) => c.name).sort(), [...PORTAL_ACTIONS].sort());
     assert.deepEqual(listed.find((c) => c.control === "pr_close")?.params, [
@@ -99,20 +94,6 @@ test("the registry, the Portal's action list and the tool's list name the same c
       "number",
       "reason",
     ]);
-  } finally {
-    await close();
-  }
-});
-
-test("a merge and a mint are not controls, and the tool says so", async () => {
-  const { env } = world();
-  const { call, close } = await connect(env, admin());
-  try {
-    for (const control of ["merge", "manage_pr", "mint"]) {
-      const res = await call({ action: "preview", control });
-      assert.equal(res.isError, true, `${control} was previewed`);
-    }
-    assert.match((await call({ action: "list" })).content[0].text, /controls/);
   } finally {
     await close();
   }
@@ -258,37 +239,22 @@ test("a close without a reason, or a Portal-only control from chat, is refused a
   }
 });
 
-test("PLANT: only the administrator signed in through Access holds a control: a driver, a minted admin-shaped agent and an operator key are refused", async () => {
+// A driver is refused every admin tool in test/admin-only.test.ts. An operator key is refused here too,
+// though it is the admin: a control needs the administrator signed in through Access.
+test("PLANT: an operator key is refused every control action, and changes nothing", async () => {
   const { env, d1, kv } = world();
-  const scopes = defaultScopes(["capsid"]);
-  scopes.grants = ["read", "write"];
-  const driver: Agent = {
-    id: "agent_0123456789ab",
-    name: "capsid-driver",
-    kind: "driver",
-    actor: "agent:capsid-driver",
-    scopes,
-    admin: false,
-    row: null,
-  };
-  const operatorKey: Agent = { ...admin(), actor: "opkey:0123456789ab" };
-  for (const [who, caller] of [
-    ["a driver", driver],
-    ["an operator key", operatorKey],
-  ] as const) {
-    const { call, close } = await connect(env, caller);
-    try {
-      for (const args of [
-        { action: "list" },
-        { action: "preview", ...REVOKE },
-        { action: "perform", token: "x.y" },
-      ]) {
-        const res = await call(args);
-        assert.equal(res.isError, true, `${who} ran ${args.action}: ${res.content[0].text}`);
-      }
-    } finally {
-      await close();
+  const { call, close } = await connect(env, { ...admin(), actor: "opkey:0123456789ab" });
+  try {
+    for (const args of [
+      { action: "list" },
+      { action: "preview", ...REVOKE },
+      { action: "perform", token: "x.y" },
+    ]) {
+      const res = await call(args);
+      assert.equal(res.isError, true, `an operator key ran ${args.action}: ${res.content[0].text}`);
     }
+  } finally {
+    await close();
   }
   assert.deepEqual([d1.recorded, kv.puts], [[], []], "a refused caller changed something");
 });

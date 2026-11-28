@@ -17,44 +17,29 @@ import {
 import { checkStates, watcherTick, WATCHER_LAST_KEY, type Gathered } from "../src/watcher.ts";
 import { WATCHER_CHECKS } from "../src/watcher-checks.ts";
 import { type Finding } from "../src/watcher-detect.ts";
-import { fakeEnv, fakeKv } from "./fakes.ts";
+import { captureErrors, fakeEnv, fakeKv } from "./fakes.ts";
 
 const NOW = new Date("2026-09-28T12:10:00.000Z");
 const SLOT = ringSlot(NOW);
 
-test("the ring starts with this pass and advances one slot per half hour", () => {
-  const first = advanceRing(undefined, SLOT, true);
-  assert.deepEqual(first, { ring: "1", ring_slot: SLOT });
-  assert.deepEqual(advanceRing(first, SLOT + 1, false), {
-    ring: "10",
-    ring_slot: SLOT + 1,
-  });
-});
-
-test("slots no pass reached are marked as no data, not as up", () => {
-  assert.deepEqual(advanceRing({ ring: "11", ring_slot: SLOT }, SLOT + 3, true), {
-    ring: "11--1",
-    ring_slot: SLOT + 3,
-  });
-});
-
-test("two passes in one slot keep the worse result, so a success does not hide a failure", () => {
-  assert.equal(advanceRing({ ring: "10", ring_slot: SLOT }, SLOT, true).ring, "10");
-  assert.equal(advanceRing({ ring: "11", ring_slot: SLOT }, SLOT, false).ring, "10");
-  // A clock that steps back folds into the last slot rather than rewriting history.
-  assert.deepEqual(advanceRing({ ring: "11", ring_slot: SLOT }, SLOT - 4, false), {
-    ring: "10",
-    ring_slot: SLOT,
-  });
-});
-
-test("the ring holds 7 days of half-hour slots and no more, even after a long gap", () => {
+test("the ring advances a slot per half hour, marks skipped slots as no data, keeps the worse of one slot, and holds 7 days", () => {
   const full = { ring: "1".repeat(RING_SLOTS), ring_slot: SLOT };
-  const next = advanceRing(full, SLOT + 1, false);
-  assert.equal(next.ring.length, RING_SLOTS);
-  assert.equal(next.ring.slice(-2), "10");
-  const afterGap = advanceRing(full, SLOT + 10_000, true);
-  assert.equal(afterGap.ring, "-".repeat(RING_SLOTS - 1) + "1");
+  const cases: Array<[Parameters<typeof advanceRing>, { ring: string; ring_slot: number }]> = [
+    [[undefined, SLOT, true], { ring: "1", ring_slot: SLOT }],
+    [[{ ring: "1", ring_slot: SLOT }, SLOT + 1, false], { ring: "10", ring_slot: SLOT + 1 }],
+    [[{ ring: "11", ring_slot: SLOT }, SLOT + 3, true], { ring: "11--1", ring_slot: SLOT + 3 }],
+    [[{ ring: "10", ring_slot: SLOT }, SLOT, true], { ring: "10", ring_slot: SLOT }],
+    [[{ ring: "11", ring_slot: SLOT }, SLOT, false], { ring: "10", ring_slot: SLOT }],
+    // A clock that steps back folds into the last slot rather than rewriting history.
+    [[{ ring: "11", ring_slot: SLOT }, SLOT - 4, false], { ring: "10", ring_slot: SLOT }],
+    [[full, SLOT + 1, false], { ring: "1".repeat(RING_SLOTS - 1) + "0", ring_slot: SLOT + 1 }],
+    [
+      [full, SLOT + 10_000, true],
+      { ring: "-".repeat(RING_SLOTS - 1) + "1", ring_slot: SLOT + 10_000 },
+    ],
+  ];
+  for (const [args, want] of cases)
+    assert.deepEqual(advanceRing(...args), want, JSON.stringify(args.slice(0, 2)));
 });
 
 type Answer = number | "throw" | { status: number; body: string };
@@ -86,35 +71,78 @@ const HEALTH: HealthReport = {
   backup: { last_ok: null, age_hours: null },
 };
 
-test("a health route that answers 2xx is ok, with the sha it reports", async () => {
-  const f = fetchFor({
-    "https://sample.example.com/health": {
-      status: 200,
-      body: JSON.stringify({ status: "ok", sha: "deadbee" }),
-    },
-    "https://sample.example.com/": 404,
-  });
-  const p = await probeSite(site({}), f.impl, NOW, null);
-  assert.equal(p.state, "ok", "an API host's 404 at its root is not a failure");
-  assert.equal(p.sha, "deadbee");
-  assert.equal(p.http_status, 200);
-  assert.deepEqual(f.asked.sort(), [
-    "https://sample.example.com/",
-    "https://sample.example.com/health",
-  ]);
+const H = "https://sample.example.com/health";
+const ROOT = "https://sample.example.com/";
+const FAIL_BODY = JSON.stringify({
+  status: "fail",
+  ok: false,
+  checks: [{ name: "db", status: "fail" }],
 });
 
-test("U1: the home page is read every pass, so a 5xx there degrades a site whose health passes", async () => {
-  const f = fetchFor({
-    "https://sample.example.com/health": {
-      status: 200,
-      body: JSON.stringify({ status: "ok", sha: "deadbee" }),
-    },
-    "https://sample.example.com/": 500,
-  });
-  const p = await probeSite(site({}), f.impl, NOW, null);
-  assert.equal(p.state, "degraded");
-  assert.match(String(p.error), /home page answered 500/);
+test("a probe's state, from what the health route and the root answer", async () => {
+  const okBody = { status: 200, body: JSON.stringify({ status: "ok", sha: "deadbee" }) };
+  const cases: Array<
+    [string, Partial<OpsSite>, Record<string, Answer>, SiteProbe["state"], RegExp | null]
+  > = [
+    // An API host's 404 at its root is not a failure.
+    ["health ok, root 404", {}, { [H]: okBody, [ROOT]: 404 }, "ok", null],
+    [
+      "health ok, home page 5xx",
+      {},
+      { [H]: okBody, [ROOT]: 500 },
+      "degraded",
+      /home page answered 500/,
+    ],
+    ["health 404, root up", {}, { [H]: 404, [ROOT]: 200 }, "degraded", /health route answered 404/],
+    ["nothing 2xx", {}, { [H]: 404, [ROOT]: 522 }, "down", /answered 404; root answered 522/],
+    [
+      "a 2xx body that admits a problem",
+      {},
+      {
+        [H]: {
+          status: 200,
+          body: JSON.stringify({ ok: true, backup: { warning: "last backup 38h ago" } }),
+        },
+        [ROOT]: 200,
+      },
+      "degraded",
+      /^backup: last backup 38h ago$/,
+    ],
+    [
+      "a fail body",
+      {},
+      { [H]: { status: 503, body: FAIL_BODY }, [ROOT]: 503 },
+      "down",
+      /answered 503 fail \(db\); root answered 503/,
+    ],
+    ["no health route, root up", { healthPath: null }, { [ROOT]: 200 }, "liveness", null],
+    ["no health route, root 503", { healthPath: null }, { [ROOT]: 503 }, "down", null],
+    ["no health route, root throws", { healthPath: null }, {}, "down", /connect failed/],
+  ];
+  for (const [name, over, answers, state, error] of cases) {
+    const p = await probeSite(site(over), fetchFor(answers).impl, NOW, null);
+    assert.equal(p.state, state, name);
+    if (error) assert.match(String(p.error), error, name);
+  }
+
+  const f = fetchFor({ [H]: okBody, [ROOT]: 404 });
+  const ok = await probeSite(site({}), f.impl, NOW, null);
+  assert.equal(ok.sha, "deadbee");
+  assert.equal(ok.http_status, 200);
+  assert.deepEqual(f.asked.sort(), [ROOT, H]);
+
+  const elsewhere = fetchFor({ "https://health.example.com/health": 404, [ROOT]: 200 });
+  await probeSite(
+    site({ healthPath: "https://health.example.com/health" }),
+    elsewhere.impl,
+    NOW,
+    null,
+  );
+  assert.deepEqual(
+    elsewhere.asked,
+    ["https://health.example.com/health", ROOT],
+    "the root fallback stays on the origin",
+  );
 });
 
 test("PLANT: a health body past the cap is not read whole and yields no sha", async () => {
@@ -151,100 +179,6 @@ test("a root that redirects to the Access sign-in is up, and a health route behi
   };
   assert.equal((await probeSite(site({ healthPath: null }), signIn, NOW, null)).state, "liveness");
   assert.equal((await probeSite(site({}), signIn, NOW, null)).state, "degraded");
-});
-
-test("a failing health route on a site whose root answers is degraded, not down", async () => {
-  const f = fetchFor({
-    "https://sample.example.com/health": 404,
-    "https://sample.example.com/": 200,
-  });
-  const p = await probeSite(site({}), f.impl, NOW, null);
-  assert.equal(p.state, "degraded");
-  assert.equal(p.http_status, 404);
-  assert.match(String(p.error), /health route answered 404/);
-});
-
-test("a site where nothing answers 2xx is down, with both reasons", async () => {
-  const f = fetchFor({
-    "https://sample.example.com/health": 404,
-    "https://sample.example.com/": 522,
-  });
-  const p = await probeSite(site({}), f.impl, NOW, null);
-  assert.equal(p.state, "down");
-  assert.match(String(p.error), /answered 404; root answered 522/);
-});
-
-test("a 2xx health body that admits a problem is degraded and names it; a fail body is a failed route", async () => {
-  const warn = fetchFor({
-    "https://sample.example.com/health": {
-      status: 200,
-      body: JSON.stringify({
-        ok: true,
-        backup: { warning: "last backup 38h ago" },
-      }),
-    },
-    "https://sample.example.com/": 200,
-  });
-  const degraded = await probeSite(site({}), warn.impl, NOW, null);
-  assert.equal(degraded.state, "degraded");
-  assert.equal(degraded.error, "backup: last backup 38h ago");
-  const body = JSON.stringify({
-    status: "fail",
-    ok: false,
-    checks: [{ name: "db", status: "fail" }],
-  });
-  const down = await probeSite(
-    site({}),
-    fetchFor({
-      "https://sample.example.com/health": { status: 503, body },
-      "https://sample.example.com/": 503,
-    }).impl,
-    NOW,
-    null,
-  );
-  assert.equal(down.state, "down");
-  assert.match(String(down.error), /answered 503 fail \(db\); root answered 503/);
-});
-
-test("a health path on another host is read there, and the root fallback stays on the origin", async () => {
-  const f = fetchFor({
-    "https://health.example.com/health": 404,
-    "https://sample.example.com/": 200,
-  });
-  assert.equal(
-    (await probeSite(site({ healthPath: "https://health.example.com/health" }), f.impl, NOW, null))
-      .state,
-    "degraded",
-  );
-  assert.deepEqual(f.asked, ["https://health.example.com/health", "https://sample.example.com/"]);
-});
-
-test("a site with no health route is liveness at best", async () => {
-  assert.equal(
-    (
-      await probeSite(
-        site({ healthPath: null }),
-        fetchFor({ "https://sample.example.com/": 200 }).impl,
-        NOW,
-        null,
-      )
-    ).state,
-    "liveness",
-  );
-  assert.equal(
-    (
-      await probeSite(
-        site({ healthPath: null }),
-        fetchFor({ "https://sample.example.com/": 503 }).impl,
-        NOW,
-        null,
-      )
-    ).state,
-    "down",
-  );
-  const thrown = await probeSite(site({ healthPath: null }), fetchFor({}).impl, NOW, null);
-  assert.equal(thrown.state, "down");
-  assert.match(String(thrown.error), /connect failed/);
 });
 
 test("Capsid itself is read in-process, never fetched", async () => {
@@ -344,14 +278,8 @@ test("a pass whose probes could not run keeps each site and marks the slot as no
 
 test("an unreadable snapshot is logged and the rings start again", async () => {
   const kv = fakeKv({ seed: { [OPS_SNAPSHOT_KEY]: "{not json" } });
-  const errors: string[] = [];
-  const original = console.error;
-  console.error = (...a: unknown[]) => void errors.push(a.map(String).join(" "));
-  try {
-    assert.equal(await readSnapshot(fakeEnv({ APP_KV: kv.kv })), null);
-  } finally {
-    console.error = original;
-  }
+  const { result, errors } = await captureErrors(() => readSnapshot(fakeEnv({ APP_KV: kv.kv })));
+  assert.equal(result, null);
   assert.equal(errors.length, 1);
   assert.match(errors[0], /OPS_SNAPSHOT_UNREADABLE/);
 });

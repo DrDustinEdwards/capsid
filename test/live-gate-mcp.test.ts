@@ -4,8 +4,7 @@ import { test } from "node:test";
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 // oxfmt-ignore
-// @ts-expect-error scripts/ is plain .mjs with no declarations, deliberately: it
-// runs in the live CI job with no npm ci and no build step.
+// @ts-expect-error scripts/ is plain .mjs with no declarations: the live job runs it with no npm ci.
 import { EXPECTED_TOOLS, eraSteps, stepProblem } from "../scripts/mcp-probe-lib.mjs";
 import { ROLES } from "../scripts/roles.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
@@ -154,62 +153,52 @@ async function refused(serve: Serve, pattern: RegExp, extraEnv: Record<string, s
   );
 }
 
-test("PLANT: a handler that answers 500 to every call is refused", async () => {
-  await refused(
-    async () =>
-      new Response(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          error: { code: -32603, message: "Internal server error" },
-          id: null,
-        }),
-        { status: 500, headers: { "content-type": "application/json" } },
-      ),
-    /2025-11-25 initialize: HTTP 500.*2026-07-28 server\/discover: HTTP 500/,
-  );
-});
-
-test("PLANT: a deploy whose store lost the document is refused at the read", async () => {
-  await refused(
-    realHandler(probeEnv([])),
-    /2025-11-25 tools\/call capsid_read_doc: the tool refused/,
-  );
-});
-
-test("PLANT: a deploy that dropped the legacy shim is refused for 2025-11-25 clients", async () => {
-  const env = probeEnv();
-  // src/mcp-handler.ts without isLegacyRequest: the modern handler alone.
-  const modernOnly: Serve = (request) =>
+// src/mcp-handler.ts without isLegacyRequest: the modern handler alone.
+const modernOnly =
+  (env = probeEnv()): Serve =>
+  (request) =>
     createMcpHandler(() => buildServer(env, probeAgent()), { route: "/ops/mcp", legacy: "reject" })(
       request,
       env,
       ctx(),
     );
-  await refused(modernOnly, /2025-11-25 initialize: /);
-});
 
-test("PLANT: a deploy that lost a tool is refused at tools/list", async () => {
-  const env = probeEnv();
+function dropInspectRepo(env = probeEnv()) {
   const original = McpServer.prototype.registerTool;
-  const dropOne = () => {
-    McpServer.prototype.registerTool = function (this: McpServer, ...args: unknown[]) {
-      if (args[0] === "capsid_inspect_repo") return undefined as never;
-      return (original as (...a: unknown[]) => unknown).apply(this, args);
-    } as unknown as typeof original;
-    try {
-      return buildServer(env, probeAgent());
-    } finally {
-      McpServer.prototype.registerTool = original;
-    }
-  };
-  await refused(
-    realHandler(env, dropOne),
-    new RegExp(`tools/list: ${EXPECTED_TOOLS - 1} tools, expected ${EXPECTED_TOOLS}`),
-  );
-});
+  McpServer.prototype.registerTool = function (this: McpServer, ...args: unknown[]) {
+    if (args[0] === "capsid_inspect_repo") return undefined as never;
+    return (original as (...a: unknown[]) => unknown).apply(this, args);
+  } as unknown as typeof original;
+  try {
+    return buildServer(env, probeAgent());
+  } finally {
+    McpServer.prototype.registerTool = original;
+  }
+}
 
-test("PLANT: a key the deploy no longer resolves is refused, naming the key", async () => {
-  await refused(realHandler(), /probe key was refused/, { CAPSID_LIVE_PROBE_KEY: "not-the-key" });
+test("PLANT: a 500, a lost document, a dropped legacy shim, a lost tool and an unresolved key are each refused", async () => {
+  const cases: Array<[Serve, RegExp, Record<string, string>?]> = [
+    [
+      async () =>
+        new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            error: { code: -32603, message: "Internal server error" },
+            id: null,
+          }),
+          { status: 500, headers: { "content-type": "application/json" } },
+        ),
+      /2025-11-25 initialize: HTTP 500.*2026-07-28 server\/discover: HTTP 500/,
+    ],
+    [realHandler(probeEnv([])), /2025-11-25 tools\/call capsid_read_doc: the tool refused/],
+    [modernOnly(), /2025-11-25 initialize: /],
+    [
+      realHandler(probeEnv(), () => dropInspectRepo()),
+      new RegExp(`tools/list: ${EXPECTED_TOOLS - 1} tools, expected ${EXPECTED_TOOLS}`),
+    ],
+    [realHandler(), /probe key was refused/, { CAPSID_LIVE_PROBE_KEY: "not-the-key" }],
+  ];
+  for (const [serve, pattern, env] of cases) await refused(serve, pattern, env);
 });
 
 test("an /ops/mcp that never answers is could-not-run (exit 3), not a refusal", async () => {

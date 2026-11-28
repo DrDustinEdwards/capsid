@@ -7,7 +7,7 @@ import { isCanonPath } from "../src/canon.ts";
 test("canon paths match, and their near misses do not", () => {
   const canon: Array<[string, string]> = [
     ["capsid", "conventions.md"],
-    ["capsid", "conventions-improve.md"],
+    ["capsid", "conventions-verification.md"],
     ["capsid", "core.md"],
     ["sample", "core.md"],
     ["capsid", "decisions.md"],
@@ -27,7 +27,6 @@ test("canon paths match, and their near misses do not", () => {
     ["capsid", "archive/decisions.md.old"],
     ["capsid", "rulings/testing-2026-10-04.md"],
     ["capsid", "policy/gates.md"],
-    ["capsid", "jobs/job_0123456789ab.md"],
   ];
   for (const [ns, path] of canon) assert.ok(isCanonPath(ns, path), `${ns}/${path} is not canon`);
   for (const [ns, path] of not) assert.ok(!isCanonPath(ns, path), `${ns}/${path} is canon`);

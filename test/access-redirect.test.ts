@@ -3,8 +3,7 @@ import { test } from "node:test";
 // @ts-expect-error scripts/ is plain .mjs with no declarations, deliberately: it
 // runs in the live CI job with no npm ci and no build step.
 import { accessRedirectProblem } from "../scripts/access-redirect-lib.mjs";
-// @ts-expect-error scripts/ is plain .mjs with no declarations, deliberately: it
-// runs in the live CI job with no npm ci and no build step.
+// @ts-expect-error as above
 import { ACCESS_SAAS } from "../scripts/bindings.mjs";
 
 // verify-live gate 5: approving the consent form must redirect to the MCP login's Access for SaaS app, in the URL shape production answered.

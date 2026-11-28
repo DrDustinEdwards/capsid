@@ -5,8 +5,7 @@ import { buildServer } from "../src/server.ts";
 import { BRIEF_BUDGET } from "../src/limits.ts";
 import { type DocRow, fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 
-// Open tasks come back as stubs and every open handoff stays whole while the packet fits; nothing is cut when the documents it never
-// trims are over budget on their own, since no trim could help.
+// Which actor each document carries is test-integration/brief on real SQLite.
 
 async function brief(opts: FakeD1Options) {
   const fake = fakeD1(opts);
@@ -67,7 +66,7 @@ test("a floor over budget with no tasks reports the floor, not a trim of nothing
   });
 });
 
-test("open tasks come back as stubs whatever the budget, and keep their provenance fields", async () => {
+test("open tasks come back as stubs whatever the budget", async () => {
   const { out } = await brief({ documents: [...floor(100), task(0, 5000), task(1, 5000)] });
   assert.equal(out.trimmed, undefined);
   for (const t of out.open_tasks as Array<{ body: string; path: string; title: unknown }>) {
@@ -78,8 +77,7 @@ test("open tasks come back as stubs whatever the budget, and keep their provenan
 });
 
 test("every open handoff comes back, newest first, whole while the packet fits and a stub after", async () => {
-  // 2026-11-28: start_session returned the 3 newest episodics, so a fourth area's handoff was
-  // invisible to the next thread. Five open handoffs, one closed, one archived, one plain note.
+  // Five open handoffs, one closed, one archived, one plain note.
   const docs = [
     ...floor(5000),
     ...[0, 1, 2, 3, 4].map((i) => handoff(i, 3000)),
@@ -148,25 +146,9 @@ test("provenance costs ONE audit_log query however many documents the brief carr
     reads.length <= 9,
     `brief issued ${reads.length} queries, more than 2 documents, the portfolio list, 4 section reads, 1 provenance and the working_here read`,
   );
-  // And the answer is still right per document: the newest actor wins, and a
-  // document with no audit row reads null rather than borrowing a neighbor's.
-  assert.equal(out.core.last_actor, "agent:capsid-driver");
-  assert.equal(out.conventions.last_actor, null);
-  const byPath = new Map(
-    out.open_tasks.map((t: { path: string; last_actor: string | null }) => [t.path, t.last_actor]),
-  );
-  assert.equal(byPath.get("TASK-2.md"), "agent:seat");
-  assert.equal(byPath.get("TASK-0.md"), null);
-  const ep = new Map(
-    out.open_handoffs.map((t: { path: string; last_actor: string | null }) => [
-      t.path,
-      t.last_actor,
-    ]),
-  );
-  assert.equal(ep.get("handoff/area-1.md"), "agent:other");
 });
 
-test("a namespace with no core.md still resolves provenance for what it has", async () => {
+test("a namespace with no core.md still resolves provenance in one query", async () => {
   const { out, reads } = await brief({
     documents: [{ namespace: "capsid", path: "conventions.md", body: "c" }],
     auditLog: [{ namespace: "capsid", path: "conventions.md", actor: "agent:seat" }],

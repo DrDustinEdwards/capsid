@@ -87,17 +87,7 @@ test("brief leaves a closed task out of its open tasks, and keeps an open one", 
   );
 });
 
-// An unvalidated status would be stored silently, with no error anywhere.
-test("an off-schema status is rejected and the message lists the valid set", () => {
-  const error = validateDocStatus("in-progress");
-  assert.ok(error, "expected 'in-progress' to be rejected");
-  assert.match(error, /unknown status 'in-progress'/);
-  assert.match(error, /published/);
-});
-
-test("an off-schema type is rejected and the message names episodic", () => {
-  const error = validateDocType("session");
-  assert.ok(error, "expected 'session' to be rejected");
-  assert.match(error, /unknown type 'session'/);
-  assert.match(error, /episodic/);
+test("an off-schema status or type is rejected, naming the valid set", () => {
+  assert.match(validateDocStatus("in-progress") ?? "", /unknown status 'in-progress'.*published/s);
+  assert.match(validateDocType("session") ?? "", /unknown type 'session'.*episodic/s);
 });

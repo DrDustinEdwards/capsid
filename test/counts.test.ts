@@ -3,23 +3,18 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { join } from "node:path";
 import { AUTHORITATIVE, scanCountClaims } from "../src/counts.ts";
-
-const CAPSID = AUTHORITATIVE.capsid;
 import { consentDialogHeaders, securityHeadersFor } from "../src/security-headers.ts";
 import { MCP_HOST } from "../src/mcp-host.ts";
-// Fixtures derive the tool count rather than spelling it, so a surface change does
-// not break tests that check something else.
-const TOOLS = String(CAPSID.tools);
-// Deliberately not the current count, for the stale-claim fixtures. Derived, so it
-// can never accidentally become correct.
-const STALE_TOOLS = String(CAPSID.tools - 5);
-// A stale count above the current one, for the transition fixtures, where the resulting
-// state must be told from the pre-state.
-const AFTER_TOOLS = String(CAPSID.tools + 3);
+import { buildTruthReport, integrityOf, renderTruthReport } from "../src/truth-report.ts";
 
-// src/counts.ts caches numbers that live elsewhere, so these tests derive each one
-// from the artifact itself and fail when the two drift. The tool count is not cached:
-// counts.ts derives it from TOOL_GRANTS.
+const CAPSID = AUTHORITATIVE.capsid;
+// Derived from the live count, so a surface change never makes a stale fixture correct.
+const TOOLS = String(CAPSID.tools);
+const STALE_TOOLS = String(CAPSID.tools - 5);
+const AFTER_TOOLS = String(CAPSID.tools + 3);
+const GATES = CAPSID.liveGates;
+
+// src/counts.ts caches the gate and header counts, so these two fail when the cache drifts from the artifact.
 
 const read = (p: string) => readFileSync(join(import.meta.dirname, p), "utf8");
 
@@ -54,259 +49,118 @@ test("the header count matches what the header layer and the consent dialog emit
   );
 });
 
-test("scan flags a stale tool count in a standing doc", () => {
-  const claims = scanCountClaims(
-    [{ path: "core.md", type: "core", body: `The server exposes ${STALE_TOOLS} tools today.` }],
-    "capsid",
-  );
-  assert.equal(claims.length, 1);
-  assert.equal(claims[0].noun, "tools");
-  assert.equal(claims[0].states, STALE_TOOLS);
-  assert.equal(claims[0].authoritative, TOOLS);
-});
+type Doc = { path: string; type: string; body: string };
+const core = (body: string): Doc => ({ path: "core.md", type: "core", body });
+const concept = (body: string): Doc => ({ path: "x.md", type: "concept", body });
 
-test("episodics are exempt because their numbers are history, not claims", () => {
-  // A session doc saying "6 of 6 gates passed" is an accurate record of a run.
-  // Flagging it would bury the real findings in noise.
-  const claims = scanCountClaims(
+test("scanCountClaims leaves history, other namespaces, subsets, years, correct totals and unrelated prose alone", () => {
+  const cases: Array<[string, Doc, string?]> = [
     [
+      "an episodic",
       {
         path: "session-2026-08-09.md",
         type: "episodic",
         body: "6 of 6 gates passed. The surface had 19 tools.",
       },
     ],
-    "capsid",
-  );
-  assert.deepEqual(claims, []);
-});
-
-test("archived documents are exempt", () => {
-  const claims = scanCountClaims(
-    [{ path: "archive/old-core.md", type: "core", body: "16 tools." }],
-    "capsid",
-  );
-  assert.deepEqual(claims, []);
-});
-
-test("the 'N of M gates' form is judged on the TOTAL, not the numerator", () => {
-  // "6 of 8 gates" states the artifact has 8 gates, which is correct, and that 6
-  // passed, which is a run result and none of this lint's business.
-  // The total is derived from counts.ts, so adding a gate does not break this test.
-  const total = CAPSID.liveGates;
-  assert.deepEqual(
-    scanCountClaims(
-      [{ path: "core.md", type: "core", body: `6 of ${total} gates passed` }],
-      "capsid",
-    ),
-    [],
-  );
-  const stale = scanCountClaims(
-    [{ path: "core.md", type: "core", body: "6 of 6 gates passed" }],
-    "capsid",
-  );
-  assert.equal(stale.length, 1);
-  assert.equal(stale[0].states, "6");
-  assert.equal(stale[0].authoritative, String(total));
-});
-
-test("'all seven' is flagged when it is about headers", () => {
-  const claims = scanCountClaims(
+    ["an archived document", { path: "archive/old-core.md", type: "core", body: "16 tools." }],
     [
+      "a decisions log",
       {
-        path: "security-headers.md",
-        type: "concept",
-        body: "Propose HTML gets all seven, JSON gets nosniff.",
+        path: "decisions.md",
+        type: "decision",
+        body: "2026-07-17: the surface went from 16 tools to 19 tools.\n\nThe server exposes 11 tools.",
       },
     ],
-    "capsid",
-  );
-  assert.equal(claims.length, 1);
-  assert.equal(claims[0].noun, "security headers");
-  assert.match(
-    claims[0].authoritative,
-    new RegExp(`^${AUTHORITATIVE.capsid.htmlEnforcedHeaders} enforced$`),
-  );
-});
-
-test("'all seven' about anything else is NOT flagged", () => {
-  // "all seven" is common prose about other things; an unscoped match flags them all.
-  const decoys = [
-    "PARITY-ROWS split seven ways. All seven written BEFORE the index cited them.",
-    "buildNotificationSettingsUpdate exists with all seven fields and a passing unit test.",
-    "All seven migrations were applied and the schema is reproduced.",
-    "Zero pixel change on all seven, the classes moved unaltered.",
+    ["another namespace", core("TWENTY-FOUR gates. The wrapper exposes 5 tools."), "dustinedwards"],
+    ["N of M with the right total", core(`6 of ${GATES} gates passed`)],
+    [
+      "N of M tools with the right total",
+      concept(`Gated tools (12 of ${TOOLS}), all failing with DENIED.`),
+    ],
+    [
+      "a transition to the current count",
+      core(`the surface went ${AFTER_TOOLS} to ${TOOLS} tools`),
+    ],
+    [
+      "a year beside tool surface",
+      core("The tool surface is reviewed against the 2026-07-28 spec migration."),
+    ],
+    ["a year beside gates", core("Reviewed in 2026, 1997 gates ran.")],
+    ...[
+      "The other 12 tools are read-open: list, read, brief.",
+      "The remaining 12 tools are read-open.",
+      "Only 12 tools are gated.",
+      "Of those 12 tools, none are gated.",
+    ].map((b): [string, Doc] => [`a subset: ${b}`, concept(b)]),
+    ...[
+      "PARITY-ROWS split seven ways. All seven written BEFORE the index cited them.",
+      "buildNotificationSettingsUpdate exists with all seven fields and a passing unit test.",
+      "All seven migrations were applied and the schema is reproduced.",
+      "Zero pixel change on all seven, the classes moved unaltered.",
+    ].map((b): [string, Doc] => [`'all seven' about something else: ${b}`, concept(b)]),
   ];
-  for (const body of decoys) {
-    assert.deepEqual(
-      scanCountClaims([{ path: "parity/notes.md", type: "reference", body }], "capsid"),
-      [],
-      `false positive on: ${body}`,
-    );
-  }
+  for (const [label, doc, namespace = "capsid"] of cases)
+    assert.deepEqual(scanCountClaims([doc], namespace), [], label);
 });
 
-// False-positive classes. Each is a regression test: a lint with a high
-// false-positive rate gets turned off.
-
-test("a namespace with no authoritative numbers gets NO claims", () => {
-  // Other namespaces have their own gate suites and tool counts; comparing them
-  // against capsid's numbers is meaningless.
-  const docs = [
-    {
-      path: "core.md",
-      type: "core",
-      body: "TWENTY-FOUR gates, MINIMUM_GATES 24. check:head covers 20 gates in extraction.",
-    },
-    { path: "operator-mcp-wrapper.md", type: "concept", body: "The wrapper exposes 5 tools." },
+test("scanCountClaims flags a stale count in a standing document, by the number it states", () => {
+  const cases: Array<[string, Doc, string[]]> = [
+    ["a stale tool count", core(`The server exposes ${STALE_TOOLS} tools today.`), [STALE_TOOLS]],
+    ["N of M gates is judged on the total", core("6 of 6 gates passed"), ["6"]],
+    ["a wrong N of M gates, once", core(`3 of ${GATES + 5} gates are live.`), [String(GATES + 5)]],
+    [
+      "N of M tools with a stale total",
+      concept(`Gated tools (11 of ${AFTER_TOOLS}).`),
+      [AFTER_TOOLS],
+    ],
+    [
+      "a transition states the resulting count",
+      core(`Expansion layer, tool surface 19 to ${AFTER_TOOLS}.`),
+      [AFTER_TOOLS],
+    ],
+    ["each claim in a standing doc", core("It had 16 tools then, and 16 tools now."), ["16", "16"]],
+    ["capsid's own numbers", core("The wrapper exposes 5 tools."), ["5"]],
+    ["a real gate count", core("The suite has 7 gates."), ["7"]],
+    [
+      "'all seven' about headers",
+      concept("Propose HTML gets all seven, JSON gets nosniff."),
+      ["all seven"],
+    ],
   ];
-  assert.deepEqual(scanCountClaims(docs, "dustinedwards"), []);
-  assert.deepEqual(scanCountClaims(docs, "recova"), []);
-  // The same prose IS capsid's business when it is capsid's document.
-  assert.ok(
-    scanCountClaims(docs, "capsid").length > 0,
-    "capsid's own numbers must still be checked",
-  );
-});
-
-test("a decisions log is EXEMPT outright: it is history by construction", () => {
-  // A ruling log states what was true on a date, never what is true now.
-  const log = {
-    path: "decisions.md",
-    type: "decision",
-    body: [
-      "2026-07-17: the surface went from 16 tools to 19 tools.",
-      "2026-07-18: Expansion layer, tool surface 19 to 22.",
-      "core.md said 19 tools when server.ts registers 22.",
-      "The server exposes 11 tools.",
-    ].join("\n\n"),
-  };
-  assert.deepEqual(scanCountClaims([log], "capsid"), [], "a decision doc produced claims");
-});
-
-test("every claim is checked in a document that is not an append-only log", () => {
-  // The exemption is keyed on type `decision` and must not leak to core or concept
-  // docs, which state current fact throughout.
-  const doc = { path: "core.md", type: "core", body: "It had 16 tools then, and 16 tools now." };
-  assert.equal(scanCountClaims([doc], "capsid").length, 2);
-});
-
-test("a four-digit year is never a tool count", () => {
-  // `tool surface[^.\n]*?\b(\d+)\b` would otherwise match the year in a date.
-  const doc = {
-    path: "core.md",
-    type: "core",
-    body: "The tool surface is reviewed against the 2026-07-28 spec migration.",
-  };
-  assert.deepEqual(scanCountClaims([doc], "capsid"), []);
-  // The same exclusion applies to the gate patterns.
-  const gates = { path: "core.md", type: "core", body: "Reviewed in 2026, 1997 gates ran." };
-  assert.deepEqual(scanCountClaims([gates], "capsid"), []);
-  // A real count in the same shape still fires.
-  const real = { path: "core.md", type: "core", body: "The suite has 7 gates." };
-  assert.deepEqual(
-    scanCountClaims([real], "capsid").map((c) => c.states),
-    ["7"],
-  );
-});
-
-test("a transition states the RESULTING count, not the pre-state", () => {
-  // "19 to N" says the surface stopped being 19.
-  const doc = {
-    path: "core.md",
-    type: "core",
-    body: `Expansion layer, tool surface 19 to ${AFTER_TOOLS} (links, brief, ci_status).`,
-  };
-  const claims = scanCountClaims([doc], "capsid");
-  assert.equal(claims.length, 1);
-  assert.equal(
-    claims[0].states,
-    AFTER_TOOLS,
-    "the pre-state was reported instead of the resulting state",
-  );
-
-  // And when the resulting state is current, nothing fires.
-  assert.deepEqual(
-    scanCountClaims(
-      [{ ...doc, body: `the surface went ${AFTER_TOOLS} to ${TOOLS} tools` }],
-      "capsid",
-    ),
-    [],
-  );
-});
-
-test("a subset count is not a total", () => {
-  const doc = {
-    path: "concept-build-operations.md",
-    type: "concept",
-    body: "The other 12 tools are read-open: list, read, brief.",
-  };
-  assert.deepEqual(scanCountClaims([doc], "capsid"), []);
-  for (const phrase of [
-    "The remaining 12 tools are read-open.",
-    "Only 12 tools are gated.",
-    "Of those 12 tools, none are gated.",
-  ]) {
+  for (const [label, doc, states] of cases)
     assert.deepEqual(
-      scanCountClaims([{ path: "x.md", type: "concept", body: phrase }], "capsid"),
-      [],
-      `subset not exempted: ${phrase}`,
+      scanCountClaims([doc], "capsid").map((c) => c.states),
+      states,
+      label,
     );
-  }
-  // An unqualified total in the same document still fires.
-  assert.equal(
-    scanCountClaims(
-      [{ path: "x.md", type: "concept", body: "The server exposes 16 tools." }],
-      "capsid",
-    ).length,
-    1,
-  );
-});
 
-test("N of M: M is checked as the total, N is exempt", () => {
-  // Correct pair: M matches the authoritative total, so nothing fires.
-  assert.deepEqual(
-    scanCountClaims(
-      [
-        {
-          path: "x.md",
-          type: "concept",
-          body: `Gated tools (12 of ${TOOLS}), all failing with DENIED.`,
-        },
-      ],
-      "capsid",
-    ),
-    [],
-  );
-  // Stale M fires, and reports M rather than N.
-  const claims = scanCountClaims(
-    [{ path: "x.md", type: "concept", body: `Gated tools (11 of ${AFTER_TOOLS}).` }],
+  const [stale] = scanCountClaims([core(`The server exposes ${STALE_TOOLS} tools.`)], "capsid");
+  assert.equal(stale.authoritative, TOOLS);
+  const [headers] = scanCountClaims(
+    [concept("Propose HTML gets all seven, JSON gets nosniff.")],
     "capsid",
   );
-  assert.equal(claims.length, 1);
-  assert.equal(claims[0].states, AFTER_TOOLS);
-});
-
-test("N of M is checked for internal consistency even when M is right", () => {
-  // A subset larger than its total is wrong without reference to any artifact.
-  // The total is the authoritative one (derived, not spelled), so the only finding
-  // is the contradiction.
-  const claims = scanCountClaims(
-    [{ path: "x.md", type: "concept", body: `Gated tools (${CAPSID.tools + 6} of ${TOOLS}).` }],
+  assert.equal(headers.authoritative, `${CAPSID.htmlEnforcedHeaders} enforced`);
+  const [contradiction] = scanCountClaims(
+    [concept(`Gated tools (${CAPSID.tools + 6} of ${TOOLS}).`)],
     "capsid",
   );
-  assert.equal(claims.length, 1);
-  assert.match(claims[0].authoritative, /cannot exceed/);
-  assert.match(claims[0].note ?? "", /internal contradiction/);
+  assert.match(contradiction.authoritative, /cannot exceed/);
 });
 
-// "3 of 12 gates" must not be flagged by both the of-form pass and the plain-form
-// pass reading "12 gates".
-test("a wrong 'N of M gates' claim is flagged once, not by both gate passes", () => {
-  const wrong = CAPSID.liveGates + 5;
-  const claims = scanCountClaims(
-    [{ path: "core.md", type: "core", body: `3 of ${wrong} gates are live.` }],
-    "capsid",
-  );
-  assert.equal(claims.filter((c) => c.noun === "live gates").length, 1, JSON.stringify(claims));
+test("PLANT: an unmeasured integrity renders as unmeasured, never as 0%", () => {
+  const report = buildTruthReport({
+    namespace: "empty",
+    now: new Date("2026-09-16T12:00:00Z"),
+    docs: [],
+    edges: [],
+    danglingEdges: [],
+    countClaims: [],
+    repoPaths: undefined,
+  });
+  assert.equal(report.integrity, null);
+  const body = renderTruthReport(report);
+  assert.match(body, /^integrity: not measured$/m);
+  assert.equal(integrityOf(body), null);
 });

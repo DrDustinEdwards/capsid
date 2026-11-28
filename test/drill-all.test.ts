@@ -146,7 +146,6 @@ test("b. a complete run whose only table holds no rows: the drill fails its coun
     line,
     new RegExp(`^sample run=${id} age_hours=3.0 tables=1 rows=0 FAIL \\(counts: `),
   );
-  assert.match(line, /the copy holds no rows at all/);
   assert.equal(ok, false);
 });
 

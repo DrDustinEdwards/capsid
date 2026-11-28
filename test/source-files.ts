@@ -49,35 +49,10 @@ export function sourceFiles(): SourceFile[] {
   return files;
 }
 
-// Every source file concatenated with a per-file banner; use sourceFiles() when a finding has to name its file.
-export function allSourceText(): string {
-  return sourceFiles()
-    .map((f) => `// ===== ${f.name} =====\n${f.text}`)
-    .join("\n");
-}
-
 export function sourceFile(name: string): string {
   const found = sourceFiles().find((f) => f.name === name);
   if (!found) throw new Error(`src/${name} not found by the source walk`);
   return found.text;
-}
-
-export interface SourceExport {
-  file: string;
-  name: string;
-}
-
-// Every exported binding in src/, by name; types are excluded because a type has no runtime caller and removing one is a compile error.
-export function exportsOfSrc(): SourceExport[] {
-  const out: SourceExport[] = [];
-  for (const file of sourceFiles()) {
-    for (const m of file.text.matchAll(
-      /^export (?:async )?(?:function|const|class) ([A-Za-z0-9_]+)/gm,
-    )) {
-      out.push({ file: file.name, name: m[1] });
-    }
-  }
-  return out;
 }
 
 export interface ToolBlock {

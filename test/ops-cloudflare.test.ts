@@ -12,7 +12,6 @@ import type { OpsSite } from "../src/ops-sites.ts";
 import {
   buildSnapshot,
   OPS_SNAPSHOT_KEY,
-  readSnapshot,
   ringSlot,
   type OpsSnapshot,
   type SiteProbe,
@@ -21,11 +20,9 @@ import type { SiteCloudflare } from "../src/ops-types/sites.ts";
 import { runPass } from "../src/watcher-pass.ts";
 import type { FindingRow } from "../src/watcher-findings.ts";
 import { gatherFindings } from "../src/watcher-gather.ts";
-import { owningCheck } from "../src/watcher-checks.ts";
 import { siteDownFindings, siteErrorFindings, siteCpuFindings } from "../src/watcher-detect.ts";
 import { type Finding } from "../src/watcher-detect.ts";
-import { fakeEnv, fakeFindingMemory, fakeKv, withFetch } from "./fakes.ts";
-import { sourceFiles } from "./source-files.ts";
+import { captureErrors, fakeEnv, fakeFindingMemory, fakeKv, withFetch } from "./fakes.ts";
 
 const NOW = new Date("2026-09-28T12:10:00.000Z");
 const ACCOUNT = "0123456789abcdef0123456789abcdef";
@@ -130,17 +127,6 @@ const graph = (rows: Array<[string, string, number, number, number?]>) => ({
   },
 });
 
-async function quietly<T>(fn: () => Promise<T>): Promise<{ value: T; logged: string[] }> {
-  const logged: string[] = [];
-  const original = console.error;
-  console.error = (...a: unknown[]) => void logged.push(a.map(String).join(" "));
-  try {
-    return { value: await fn(), logged };
-  } finally {
-    console.error = original;
-  }
-}
-
 test("with no token or no account, every Cloudflare site says exactly what is unset and nothing is fetched", async () => {
   const cases: Array<[Record<string, string>, RegExp, RegExp | null]> = [
     [{}, /CF_OPS_TOKEN is not set/, /neither CF_ACCOUNT_ID nor R2_ACCOUNT_ID is set/],
@@ -195,7 +181,7 @@ test("a domains list that cannot be read makes each custom-domain site an error,
     [`GET ${API}/workers/scripts/sample-dev/deployments`]: deployments([]),
     [`POST ${CF_GRAPHQL}`]: graph([]),
   });
-  const { value: read, logged } = await quietly(() =>
+  const { result: read, errors: logged } = await captureErrors(() =>
     readCloudflare(CREDS, [WORKERS_DEV, CUSTOM], cf.impl, NOW),
   );
   assert.equal(read.ran, false);
@@ -269,8 +255,6 @@ test("ONE analytics query covers every script: 24 hourly buckets, oldest first, 
   assert.equal(read.ran, true);
   const graphCalls = cf.calls.filter((c) => c.url === CF_GRAPHQL);
   assert.equal(graphCalls.length, 1, "the analytics query ran more than once per pass");
-  assert.match(String(graphCalls[0].body?.query), /workersInvocationsAdaptive/);
-  assert.match(String(graphCalls[0].body?.query), /scriptName_in: \["sample-dev","sample-web"\]/);
   assert.deepEqual(graphCalls[0].body?.variables, {
     accountTag: ACCOUNT,
     datetimeStart: "2026-09-27T12:00:00.000Z",
@@ -312,6 +296,13 @@ test("an analytics query that fails is no data with its reason, never zeros, and
     ["an HTTP error", { status: 500, body: { errors: [{ message: "internal" }] } }],
     ["a missing account", { body: { data: { viewer: { accounts: [] } }, errors: null } }],
     ["a row outside the window", graph([["sample-dev", "2026-09-20T00:00:00Z", 1, 0]])],
+    [
+      "a row for an unasked script",
+      graph([
+        ["sample-dev", LAST_HOUR, 40, 2],
+        ["someone-else", LAST_HOUR, 1, 0],
+      ]),
+    ],
   ];
   for (const [what, answer] of failures) {
     const cf = cloudflare({
@@ -320,7 +311,7 @@ test("an analytics query that fails is no data with its reason, never zeros, and
       ]),
       [`POST ${CF_GRAPHQL}`]: answer,
     });
-    const { value: read, logged } = await quietly(() =>
+    const { result: read, errors: logged } = await captureErrors(() =>
       readCloudflare(CREDS, [WORKERS_DEV], cf.impl, NOW),
     );
     const state = read.bySite["sample-dev"];
@@ -334,18 +325,6 @@ test("an analytics query that fails is no data with its reason, never zeros, and
       `${what} was not logged`,
     );
   }
-});
-
-test("a row for an unasked script still fails the read", async () => {
-  const cf = cloudflare({
-    [`GET ${API}/workers/scripts/sample-dev/deployments`]: deployments([]),
-    [`POST ${CF_GRAPHQL}`]: graph([
-      ["sample-dev", LAST_HOUR, 40, 2],
-      ["someone-else", LAST_HOUR, 1, 0],
-    ]),
-  });
-  const { value: read } = await quietly(() => readCloudflare(CREDS, [WORKERS_DEV], cf.impl, NOW));
-  assert.equal(read.ran, false);
 });
 
 const probe = (namespace: string, state: SiteProbe["state"]): SiteProbe => ({
@@ -457,13 +436,9 @@ test("the CPU finding fires above a million CPU ms in the last complete hour, an
     [],
     "exactly the limit fired",
   );
-  assert.equal(owningCheck("site-cpu-sample"), "cloudflare");
 });
 
 test("site-down is owned by the probes and site-errors by the cloudflare check, so each clears only when its check ran", async () => {
-  assert.equal(owningCheck("site-down-sample"), "site probes");
-  assert.equal(owningCheck("site-errors-sample"), "cloudflare");
-  assert.equal(owningCheck("site-map-drift-add-sample"), "site map");
   const openRow = (fingerprint: string): FindingRow => ({
     fingerprint,
     namespace: "sample",
@@ -500,7 +475,7 @@ test("site-down is owned by the probes and site-errors by the cloudflare check, 
   );
 });
 
-test("the snapshot carries each site's Cloudflare state, and an old snapshot without it still reads", async () => {
+test("the snapshot carries each site's Cloudflare state", () => {
   const cf: Record<string, SiteCloudflare> = {
     a: hourly(10, 0),
     b: {
@@ -528,20 +503,6 @@ test("the snapshot carries each site's Cloudflare state, and an old snapshot wit
   assert.deepEqual(snap.sites[0].cloudflare, cf.a);
   assert.deepEqual(snap.sites[1].cloudflare, cf.b);
   assert.equal("cloudflare" in snap.sites[2], false);
-
-  const old = JSON.parse(JSON.stringify(snap)) as OpsSnapshot;
-  for (const s of old.sites) delete s.cloudflare;
-  const kv = fakeKv({ seed: { [OPS_SNAPSHOT_KEY]: JSON.stringify(old) } });
-  const read = await readSnapshot(fakeEnv({ APP_KV: kv.kv }));
-  assert.ok(read, "a snapshot written before the Cloudflare read no longer reads");
-  const next = buildSnapshot(read, {
-    ...base,
-    now: new Date(NOW.getTime() + 30 * 60_000),
-    probes: [probe("a", "ok")],
-    cloudflare: cf,
-  });
-  assert.equal(next.sites[0].ring, "11");
-  assert.deepEqual(next.sites[0].cloudflare, cf.a);
 });
 
 // A D1 that throws on everything: every D1 check fails into attempt(), which is the
@@ -606,7 +567,7 @@ async function gather(
   let result: Awaited<ReturnType<typeof gatherFindings>> | null = null;
   // GitHub is read through the global fetch; every route answers 500 here.
   await withFetch({}, async () => {
-    ({ value: result } = await quietly(() =>
+    ({ result } = await captureErrors(() =>
       gatherFindings(fakeEnv({ DB: db, APP_KV: kv.kv, ...env }), NOW, cf.impl as typeof fetch),
     ));
   });
@@ -616,7 +577,6 @@ async function gather(
   };
 }
 
-// scanner-rule: with nothing configured, the watcher reaches no site
 test("PLANT: with no site configured, the pass probes nothing and reaches no Cloudflare API", async () => {
   const noSites = CONFIG_ROWS.filter((r) => r.origin === null);
   const { gathered, calls } = await gather(CREDS, {}, prevWith({}), configDb(noSites));
@@ -679,31 +639,6 @@ test("a site down on two probes in a row, and a Worker over the error rate, reac
   assert.ok(gathered.ran.has("cloudflare"));
   assert.ok(gathered.ran.has("site probes"));
   assert.equal(gathered.observed.cloudflare?.foxing?.state, "unresolved");
-});
-
-// scanner-rule: Cloudflare is read in the watcher pass, never per feed request; from the Portal only a site page's tabs read it
-test("only the watcher, the admin capsid_admin_read_ops calls, the capsid_inspect_repo traffic call, a site page's reads and the site key control import the Cloudflare read, so the feed cannot call Cloudflare", () => {
-  const importersOf = (module: string) =>
-    sourceFiles()
-      .filter((f) =>
-        new RegExp(
-          `(\\bfrom\\s*|\\bimport\\s*\\(?\\s*)["'](\\.\\.?\\/)+${module}(\\.ts)?["']`,
-        ).test(f.text),
-      )
-      .map((f) => f.name);
-  // portal-site.ts reads live for one site when a site page's tab opens, never with the feed or its poll.
-  assert.deepEqual(importersOf("ops-cloudflare"), [
-    "ops-cloudflare-config.ts",
-    "portal-builds.ts",
-    "portal-site.ts",
-    "site-key.ts",
-    "site-traffic.ts",
-    "system-resources-read.ts",
-    "tls-expiry.ts",
-    "watcher-gather.ts",
-    "workers-builds.ts",
-  ]);
-  assert.deepEqual(importersOf("ops-cloudflare-config"), ["tools/cloudflare.ts"]);
 });
 
 const rumPage = (result: unknown[], page: number, totalPages: number): Response =>

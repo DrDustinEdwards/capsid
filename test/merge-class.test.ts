@@ -11,7 +11,6 @@ test("each file's path class", () => {
     ["package-lock.json", "deps-other"],
     ["src/inbox.ts", "src-routine"],
     ["src/store-guards.ts", "src-worth"],
-    ["src/protected-paths.ts", "src-worth"],
     [".github/workflows/ci.yml", "workflow"],
     ["migrations/0036_shared_packages.sql", "migration"],
     ["src/billing/invoice.ts", "money"],
