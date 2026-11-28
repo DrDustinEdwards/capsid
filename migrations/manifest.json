@@ -72,6 +72,7 @@
     "0068_deploy_outcomes_indexes.sql": "bd7274a3dd3c878aa8f40b2e019dd726a50f8efe0eb977236185641426b6fb74",
     "0069_drop_job_claims_columns.sql": "3f1127c1411ab917ea362e784fe5bebf312e87d6bd66e8e97be74bec27971f63",
     "0070_query_indexes.sql": "0116ad7eb2e258d659c2d7ad99016f61f6ed6b33aff23f76b8622b7663ff1a11",
-    "0071_drop_audit_log_at.sql": "aa9d7169d9e5ff1b2dcbf4b04bb525615f424b2966f0db4658940af78a754207"
+    "0071_drop_audit_log_at.sql": "aa9d7169d9e5ff1b2dcbf4b04bb525615f424b2966f0db4658940af78a754207",
+    "0072_drop_job_and_bench_tables.sql": "ac198d4120c8307bb86f03dff5f256ace746e3bd92581befdd2e1f8fa077410c"
   }
 }

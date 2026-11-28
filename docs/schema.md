@@ -238,14 +238,12 @@ document is a series.
 
 ## Retired job tables
 
-The job queue was retired on 2026-11-28 with no migration: its tables stay, and nothing
-reads or writes them except the nightly backup, which still dumps them. They are `jobs`
-(migrations/0006), `job_outcomes` (0011), `job_outcome_prs` (0015), `job_claims`,
-`job_evaluations` and `job_touches` (0023, `job_touches` rebuilt by 0031), `job_versions`
-(0033), and the capsid-bench tables `bench_tasks` and `bench_runs` (0047) and
-`bench_registration` and `bench_draw` (0049). The columns `watcher_findings.job_id` (0024)
-and `agents.jobs` (0066) are no longer written. Dropping any of them is a migration of its
-own.
+The job queue retired on 2026-11-28 (capsid #1113), and migrations/0072 dropped its tables
+with Dustin's approval: `jobs`, `job_outcomes`, `job_outcome_prs`, `job_claims`,
+`job_evaluations`, `job_touches`, `job_versions`, `pr_approvals`, and the capsid-bench tables
+`bench_tasks`, `bench_runs`, `bench_registration` and `bench_draw`. The nightly backup of
+2026-11-28 09:00 UTC holds their last rows. The columns `watcher_findings.job_id` (0024) and
+`agents.jobs` (0066) are no longer written.
 
 ## Roles, and what each one cannot do
 

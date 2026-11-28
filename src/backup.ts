@@ -36,19 +36,13 @@ export async function backupLeaseHeld(env: Env): Promise<boolean> {
 const PAGED = {
   document_versions: { idColumn: "id", pageRows: 100 },
   audit_log: { idColumn: "id", pageRows: 1000 },
-  job_claims: { idColumn: "id", pageRows: 200 },
 };
 // wrangler's migration ledger; a restore builds the schema from migrations/. push_subscriptions (0041) is
 // left out: rows are push credentials and a dump leaves the account. A restore leaves it empty.
 export const EXCLUDED = ["d1_migrations", "push_subscriptions"] as const;
 
-// These columns match d1-dump's credential pattern by name but hold counts, not tokens.
-export const CREDENTIAL_ALLOW: Record<string, string> = {
-  "bench_runs.input_tokens": "a model token count",
-  "bench_runs.output_tokens": "a model token count",
-  "bench_runs.cache_read_tokens": "a model token count",
-  "bench_runs.cache_creation_tokens": "a model token count",
-};
+// Columns that match d1-dump's credential pattern by name but hold no token. None since 0072 dropped bench_runs.
+export const CREDENTIAL_ALLOW: Record<string, string> = {};
 
 // Every real table; test/backup.test.ts derives this list from migrations/. Excluded: documents_fts and
 // its shadow tables (rebuilt by triggers) and sqlite_sequence.
@@ -58,32 +52,18 @@ export const TABLES = [
   "document_versions",
   "audit_log",
   "document_links",
-  // Never pruned (except task_runs), so a dump is the only copy outside D1. Outcome counts are verified
-  // against PRs GitHub can delete; revoked agents keep their row so audit entries still resolve.
-  "jobs",
-  "job_outcomes",
+  // Never pruned (except task_runs), so a dump is the only copy outside D1. Revoked agents keep their row so
+  // audit entries still resolve.
   "agents",
-  "job_outcome_prs",
   "ops_sites",
   // Hand-edited configuration and weekly rows kept nowhere else (migrations/0028).
   "ops_packages",
   "ops_package_weeks",
-  "job_claims",
-  "job_evaluations",
-  "job_touches",
   "watcher_findings",
   "task_runs",
-  "job_versions",
   // Seeded by its migration, so a restore empties it before importing (0036).
   "shared_packages",
-  "pr_approvals",
   "deploy_outcomes",
-  // Insert-only and close-once by trigger (0047).
-  "bench_tasks",
-  "bench_runs",
-  // Insert-only by trigger (0049).
-  "bench_registration",
-  "bench_draw",
   // Pruned below: a jti matters only inside the signature window.
   "improve_jti",
   "page_404_daily",
