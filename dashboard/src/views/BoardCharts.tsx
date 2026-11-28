@@ -4,6 +4,7 @@ import { ChartFrame } from "capsomer/react/chart-frame";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { parse } from "capsomer/behavior/time";
 import { statusHtml } from "capsomer/behavior/status";
+import { markup } from "capsomer/behavior/trusted-html";
 import { useApp } from "../app/ctx";
 import { agentState, nsList, rosterAgents } from "../lib/agents";
 import { DAY, ago } from "../lib/format";
@@ -85,7 +86,7 @@ export function HandoffsRing({ board }: { board: PortalBoard }) {
   return (
     <span className="ring-head">
       {ring && (
-        <span className="enarratio" aria-hidden="true" dangerouslySetInnerHTML={{ __html: ring }} />
+        <span className="enarratio" aria-hidden="true" dangerouslySetInnerHTML={markup(ring)} />
       )}
       {words}
     </span>

@@ -49,8 +49,7 @@ export async function requireRegisteredNamespace(
   );
 }
 
-// allow_improve_paths is itself scoped: the document-side twin of the repo-side protected-path flag
-// (IMPROVE_OVERRIDE_FLAGS in src/scope.ts).
+// allow_improve_paths is itself scoped (IMPROVE_OVERRIDE_FLAGS in src/scope.ts).
 export function policyPathsRefusal(
   ctx: ToolCtx,
   tool: "write" | "restore" | "delete" | "move",
@@ -348,18 +347,25 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       const snapshotted = Boolean(prior) && snapshotTaken(committed.results[0]);
       // Warn, do not reject, on a dangling edge: rejecting would block asserting an edge before its
       // target is written.
+      // Only targets the caller may read are checked, so the warning reveals nothing about others.
       let danglingTargets: string[] = [];
-      if (parsedLinks && "edges" in parsedLinks && parsedLinks.edges.length > 0) {
+      const checked =
+        parsedLinks && "edges" in parsedLinks
+          ? parsedLinks.edges.filter(
+              (edge) => ctx.scope({ ...toolSurfaceOf("read"), namespace: edge.to_ns }) === null,
+            )
+          : [];
+      if (checked.length > 0) {
         // Runs after the commit, so a failure here must not be reported as a failed write.
         try {
           const checks = await db.batch(
-            parsedLinks.edges.map((edge) =>
+            checked.map((edge) =>
               db
                 .prepare("SELECT 1 AS ok FROM documents WHERE namespace = ?1 AND path = ?2")
                 .bind(edge.to_ns, edge.to_path),
             ),
           );
-          danglingTargets = parsedLinks.edges
+          danglingTargets = checked
             .filter((_, i) => (checks[i].results?.length ?? 0) === 0)
             .map((edge) => `${edge.to_ns}/${edge.to_path}`);
         } catch {}

@@ -79,8 +79,7 @@ async function probeBindings(env: Env): Promise<{ media: string; app_kv: string 
 }
 
 export interface HealthReport extends HealthSnapshot {
-  // Capsid's own hybrid searches this month against its cap (design-hybrid-search 3.5).
-  // Informational; null when KV cannot be read, absent from snapshots taken before it.
+  // Capsid's hybrid searches this month against its cap; null when KV cannot be read.
   ai_search?: { month: string; hybrid: number; cap: number } | null;
 }
 
@@ -135,11 +134,8 @@ export async function healthReport(env: Env): Promise<HealthReport> {
   };
 }
 
-/**
- * The runTask ledger as one warn check (src/task-runs.ts): a task whose newest run threw or was
- * refused, or one with a period that has gone quiet past two periods or never ran, as the Portal's
- * task list flags them. Tasks without a period count only on failure.
- */
+// The runTask ledger as one warn check: a task whose newest run failed, or a periodic one gone
+// quiet past two periods or never run. Tasks without a period count only on failure.
 function taskCheck(env: Env, now: () => Date = () => new Date()): HealthCheck {
   return {
     name: "cron",
@@ -162,11 +158,8 @@ function taskCheck(env: Env, now: () => Date = () => new Date()): HealthCheck {
   };
 }
 
-/**
- * /health in the family shape: site-runtime's healthResponse (status pass, warn or fail, a check
- * list, no-store, noindex). The store is the fail level (D1 and the FTS probe, so a Worker bound
- * to the wrong database is a 503).
- */
+// /health through site-runtime's healthResponse. The store is the fail level (D1 and the FTS probe),
+// so a Worker bound to the wrong database is a 503.
 export async function handleHealth(env: Env): Promise<Response> {
   const store = { d1: "unbound", fts: "skipped" };
   let schemaVersion: string | null = null;
@@ -186,18 +179,17 @@ export async function handleHealth(env: Env): Promise<Response> {
   if (env.APP_KV) checks.push({ ...kvCheck("app_kv", env.APP_KV), level: "warn" });
   if (env.OAUTH_KV) checks.push({ ...kvCheck("oauth_kv", env.OAUTH_KV), level: "warn" });
   // Without RATE_LIMITER the limited routes refuse, and without TOOL_CALL_LOG a tool call goes
-  // unlogged; the store still answers, so neither is a 503. Left out: AI_SEARCH, because every read
-  // of it is a billed query and the hybrid search falls back to FTS5 without it;
+  // unlogged; the store still answers, so neither is a 503. AI_SEARCH is left out: every read of it
+  // is billed, and search falls back to FTS5 without it.
   checks.push(
     durableObjectCheck("rate_limiter", env.RATE_LIMITER),
     durableObjectCheck("tool_call_log", env.TOOL_CALL_LOG),
   );
-  // The watcher's send_email binding, warn: without it a red or green mail is not sent and the
-  // finding still opens in Incidents.
+  // The send_email binding, warn: without it the digest and the push's email fallback are not sent.
   checks.push(emailCheck("email", env.EMAIL));
   // What is in the log, warn: a call started and never finished, a spike in calls, or rows not
-  // copied to AUDIT_BUCKET for two days.
-  if (env.TOOL_CALL_LOG) checks.push(auditLogCheck(env));
+  // copied to AUDIT_BUCKET for two days. Normal traffic is about 900 calls an hour.
+  if (env.TOOL_CALL_LOG) checks.push(auditLogCheck(env, { spikePerHour: 3000 }));
   const response = await healthResponse({
     ping: async () => {
       const read = await readStore(env);

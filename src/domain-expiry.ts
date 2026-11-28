@@ -17,11 +17,8 @@ const EARLY_DAYS = 30;
 const LATE_DAYS = 7;
 const FETCH_TIMEOUT_MS = 8000;
 
-/**
- * It reads the Public Suffix List (tldts), so a name under a multi-label suffix such as co.uk
- * keeps its third label, and a host under a suffix in the list's private section (workers.dev,
- * pages.dev, vercel.app, github.io and the like) is a host's, not a registration of ours.
- */
+// By the Public Suffix List (tldts): co.uk keeps its third label, and a host under a private suffix
+// (workers.dev, github.io and the like) is no registration of ours.
 export function registrableDomain(origin: string): string | null {
   let host: string;
   try {
@@ -91,11 +88,8 @@ export function expiryFindings(
   return out;
 }
 
-/**
- * The pushes the last read stands behind (U5): each domain once at 30 days out and once at 7,
- * keyed by the date, so a renewal that moves it clears the alert and a new near date alerts again.
- * The findings above stay; this is the phone line beside them.
- */
+// The pushes: each domain once at 30 days out and once at 7, keyed by the date, so a renewal clears
+// the alert and a new near date alerts again.
 export function domainAlerts(
   read:
     | { read_at: string; domains: ReadonlyArray<{ domain: string; expires: string }> }
@@ -130,10 +124,7 @@ async function fetchJson(fetchImpl: typeof fetch, url: string): Promise<unknown>
   return resp.json();
 }
 
-/**
- * Each domain's expiry, from KV when read in the last day, otherwise from RDAP. Returns the
- * expiries it has and the domains it could not read, with why.
- */
+/** Each domain's expiry, from KV when read in the last day, otherwise from RDAP. */
 export async function readExpiries(
   kv: KVNamespace,
   domains: readonly string[],
@@ -147,14 +138,15 @@ export async function readExpiries(
   const failed: Array<{ domain: string; error: string }> = [];
   let bootstrap: unknown = null;
   for (const domain of domains) {
-    const cached = (await kv.get(expiryKey(domain), "json")) as Cached | null;
+    // A corrupt value is read as missing, so it is fetched again and overwritten.
+    const cached = (await kv.get(expiryKey(domain), "json").catch(() => null)) as Cached | null;
     if (cached?.expires) {
       expiries.push({ domain, expires: cached.expires });
       continue;
     }
     try {
       if (bootstrap === null) {
-        bootstrap = await kv.get(BOOTSTRAP_KEY, "json");
+        bootstrap = await kv.get(BOOTSTRAP_KEY, "json").catch(() => null);
         if (!bootstrap) {
           bootstrap = await fetchJson(fetchImpl, BOOTSTRAP_URL);
           await kv.put(BOOTSTRAP_KEY, JSON.stringify(bootstrap), {

@@ -64,17 +64,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
         state: "closed",
         html_url: "https://github.com/example/capsid/pull/41",
       });
-    if (url === GITHUB_PR)
-      return Response.json({
-        head: { ref: "feat/sample", sha: "c".repeat(40), repo: { full_name: "example/capsid" } },
-        base: { ref: "main" },
-        state: "open",
-        merged: false,
-      });
-    if (url === "https://api.github.com/repos/example/capsid")
-      return Response.json({ default_branch: "main" });
-    if (url.endsWith("/git/refs/heads/feat/sample") && method === "DELETE")
-      return new Response(null, { status: 204 });
     return new Response("not stubbed", { status: 404 });
   }
   if (url !== "https://dustinedwards.info/api/operator") return passThrough(input, init);

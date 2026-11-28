@@ -179,4 +179,5 @@ test("an ordinary move is untouched at both ends", () => {
   assert.equal(policyWriteRefusal("capsid", "notes/a.md", false), null);
   assert.equal(policyWriteRefusal("capsid", "improve/prompts/run.md", false), null);
   assert.equal(policyWriteRefusal("capsid", "notes/policy/a.md", false), null);
+  assert.equal(policyWriteRefusal("sample", "policy/a.md", false), null, "only Capsid's policy/");
 });

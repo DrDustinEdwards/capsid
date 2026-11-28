@@ -8,15 +8,11 @@ import { attempt, countedRead, none, noSite } from "./portal-site";
 import { BUILDS_DEFAULT, BUILDS_MAX, buildLogs, listBuilds } from "./workers-builds";
 
 // A site page's Deploys tab: its Workers Builds and one build's log, read live.
-//   GET /portal/api/workers-builds?namespace=&limit=   listBuilds
-//   GET /portal/api/build-log?build=          buildLogs (capsid_admin_read_ops actions workers_builds and workers_build_logs)
 
 export const PORTAL_WORKERS_BUILDS_PATH = "/portal/api/workers-builds";
 export const PORTAL_BUILD_LOG_PATH = "/portal/api/build-log";
 
 const BUILD_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-// Workers Builds and one build's log.
 
 /** The deploys tab's builds: the Worker its site row names, newest first. */
 export async function readWorkersBuilds(
@@ -85,7 +81,7 @@ export async function readBuildLog(
     truncated: boolean;
     note: string | null;
   }>(async () => {
-    const read = await buildLogs(env, { build_uuid: buildUuid }, fetchImpl);
+    const read = await buildLogs(env, { build_uuid: buildUuid }, fetchImpl, false);
     if (read.line_count === 0) return none("empty", `The log of build ${buildUuid} has no lines.`);
     return {
       ok: true,

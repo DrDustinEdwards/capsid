@@ -10,57 +10,54 @@ import {
 } from "./client";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// The head branch is deleted on close or merge, except the default branch, and a failed delete
-// never fails the PR action (the merge already succeeded); the outcome is head_branch_deleted.
-async function deleteHeadBranchAfterPr(
+
+// After a merge the head branch is deleted only while its tip is the commit that merged, so work
+// pushed during the merge survives; the tip goes into the result and so into the audit row. The
+// default branch and a fork's branch are never deleted, and a failed delete never fails the merge.
+async function deleteMergedHead(
   env: Env,
   owner: string,
   repo: string,
   number: number,
 ): Promise<{
   head_branch: string | null;
+  head_branch_sha?: string;
   head_branch_deleted: boolean;
   head_branch_note?: string;
 }> {
+  const kept = (head_branch: string | null, head_branch_note: string) => ({
+    head_branch,
+    head_branch_deleted: false,
+    head_branch_note,
+  });
   try {
     const prResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${number}`);
-    if (!prResp.ok) {
-      return {
-        head_branch: null,
-        head_branch_deleted: false,
-        head_branch_note: `could not read the PR to find its head branch (${prResp.status})`,
-      };
-    }
+    if (!prResp.ok)
+      return kept(null, `could not read the PR to find its head branch (${prResp.status})`);
     const pr = (await prResp.json()) as {
-      head: { ref: string; repo?: { full_name?: string } | null };
+      head: { ref: string; sha?: string; repo?: { full_name?: string } | null };
       base: { ref: string };
     };
     const branch = pr.head.ref;
-
-    // A head branch on a FORK is not this App's to delete; compared by full_name.
     const headRepo = pr.head.repo?.full_name;
-    if (headRepo && headRepo !== `${owner}/${repo}`) {
-      return {
-        head_branch: branch,
-        head_branch_deleted: false,
-        head_branch_note: `head is on ${headRepo}, not this repo, so it was left alone`,
-      };
-    }
-    if (branch === pr.base.ref) {
-      return {
-        head_branch: branch,
-        head_branch_deleted: false,
-        head_branch_note: "head and base are the same branch, so nothing was deleted",
-      };
-    }
-    const defaultBranch = await getDefaultBranch(env, owner, repo);
-    if (branch === defaultBranch) {
-      return {
-        head_branch: branch,
-        head_branch_deleted: false,
-        head_branch_note: "head is the default branch, which is never deleted",
-      };
-    }
+    if (headRepo && headRepo !== `${owner}/${repo}`)
+      return kept(branch, `head is on ${headRepo}, not this repo, so it was left alone`);
+    if (branch === pr.base.ref)
+      return kept(branch, "head and base are the same branch, so nothing was deleted");
+    if (branch === (await getDefaultBranch(env, owner, repo)))
+      return kept(branch, "head is the default branch, which is never deleted");
+    const ref = `/repos/${owner}/${repo}/git/ref/heads/${encodePath(branch)}`;
+    const tipResp = await ghFetch(env, owner, repo, ref);
+    const tip = tipResp.ok
+      ? ((await tipResp.json()) as { object?: { sha?: string } }).object?.sha
+      : undefined;
+    if (!tip || tip !== pr.head.sha)
+      return kept(
+        branch,
+        tip
+          ? `the branch has commits after the merged head ${pr.head.sha}, so it was kept`
+          : `could not read the branch tip (${tipResp.status}), so it was kept`,
+      );
     const del = await ghFetch(
       env,
       owner,
@@ -68,20 +65,10 @@ async function deleteHeadBranchAfterPr(
       `/repos/${owner}/${repo}/git/refs/heads/${encodePath(branch)}`,
       { method: "DELETE" },
     );
-    if (!del.ok) {
-      return {
-        head_branch: branch,
-        head_branch_deleted: false,
-        head_branch_note: `delete failed (${del.status}); the PR action itself succeeded`,
-      };
-    }
-    return { head_branch: branch, head_branch_deleted: true };
+    if (!del.ok) return kept(branch, `delete failed (${del.status}); the merge itself succeeded`);
+    return { head_branch: branch, head_branch_sha: tip, head_branch_deleted: true };
   } catch (err) {
-    return {
-      head_branch: null,
-      head_branch_deleted: false,
-      head_branch_note: `branch cleanup errored: ${errorMessage(err)}; the PR action itself succeeded`,
-    };
+    return kept(null, `branch cleanup errored: ${errorMessage(err)}; the merge itself succeeded`);
   }
 }
 
@@ -120,10 +107,9 @@ export async function managePr(
       throw new HeadMovedError(expectedSha, await resp.text());
     if (!resp.ok) throw new Error(`merge failed (${resp.status}): ${await resp.text()}`);
     const data = (await resp.json()) as { sha: string; merged: boolean; message: string };
-    // A merge writes every path the PR touched; those are unknown here, hence the repo-prefix
-    // sweep.
+    // A merge writes every path the PR touched, so the whole repo's reads go.
     await invalidateRepoReads(env, owner, repo);
-    const cleanup = await deleteHeadBranchAfterPr(env, owner, repo, number);
+    const cleanup = await deleteMergedHead(env, owner, repo, number);
     return {
       repo: `${owner}/${repo}`,
       number,
@@ -141,14 +127,12 @@ export async function managePr(
   });
   if (!resp.ok) throw new Error(`close failed (${resp.status}): ${await resp.text()}`);
   const data = (await resp.json()) as { number: number; state: string; html_url: string };
-  const cleanup = await deleteHeadBranchAfterPr(env, owner, repo, number);
   return {
     repo: `${owner}/${repo}`,
     number: data.number,
     action: "close",
     state: data.state,
     url: data.html_url,
-    ...cleanup,
   };
 }
 

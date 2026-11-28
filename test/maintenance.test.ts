@@ -145,6 +145,7 @@ const BRANCHES = [
   { name: "feat/open-old", commit: { sha: "o1" } },
   { name: "feat/old-orphan", commit: { sha: "n1" } },
   { name: "feat/new-orphan", commit: { sha: "n2" } },
+  { name: "feat/more-after", commit: { sha: "q2" } },
 ];
 // feat/reopened merged as #3 and was opened again as #4 from the same tip: its newest pull
 // request is open, so it is not pruned even though a merged one names its tip.
@@ -153,6 +154,7 @@ const CLOSED = [
   ghPr(1, "feat/merged-clean", "a1"),
   ghPr(2, "review/grok", "k1"),
   ghPr(3, "feat/reopened", "z1"),
+  ghPr(6, "feat/more-after", "q1"),
 ];
 const COMMITTED: Record<string, string> = {
   m1: "2026-10-08T00:00:00Z",
@@ -163,6 +165,7 @@ const COMMITTED: Record<string, string> = {
   o1: "2026-08-01T00:00:00Z",
   n1: "2026-08-30T12:00:00Z",
   n2: "2026-10-01T00:00:00Z",
+  q2: "2026-08-01T00:00:00Z",
 };
 const KEEP = JSON.stringify({ sample: ["review/grok", "review/color-audit"] });
 
@@ -214,10 +217,11 @@ test("with the auto-prune set off, a merged branch is listed with a count and no
     assert.deepEqual(deletes(calls), [], "the switch is off: nothing is deleted");
     assert.equal(audits.length, 0);
     const merged = lines(got.items, "branch-merged");
-    assert.equal(merged.length, 2);
-    assert.match(merged[0], /branch feat\/merged-clean is merged \(pull request #1, tip a1\)/);
+    assert.equal(merged.length, 3);
+    assert.match(merged[0], /branch feat\/more-after has commits after pull request #6 merged/);
+    assert.match(merged[1], /branch feat\/merged-clean is merged \(pull request #1, tip a1\)/);
     assert.match(
-      merged[1],
+      merged[2],
       /^1 merged branch in o\/r would be pruned; the auto-prune, on by default, is turned off/,
     );
     // Old, with no open pull request, not merged by the rule: listed with its age. A
@@ -228,34 +232,29 @@ test("with the auto-prune set off, a merged branch is listed with a count and no
       stale[0],
       /branch feat\/old-orphan has had no commit for 39 days \(no pull request\)/,
     );
-    assert.deepEqual(got.read, { sample: 8 });
-    assert.equal(got.items.length, 3);
+    assert.deepEqual(got.read, { sample: 9 });
+    assert.equal(got.items.length, 4);
   });
 });
 
-test("with no switch set the auto-prune is on: the merged branch is deleted and audit-logged, and a keep-listed or open one is not", async () => {
+test("with no switch set the auto-prune is on: a merged branch and an unmerged one 14 days quiet are deleted and audit-logged, and nothing else", async () => {
   await withFetch(branchRoutes(), async (calls) => {
     const { env, audits } = branchEnv({ [BRANCH_KEEP_KEY]: KEEP });
     const got = await gatherBranchItems(env, ["sample"], githubBranchReaders(env), NOW);
     assert.deepEqual(
       deletes(calls),
-      ["feat/merged-clean", "feat/old-orphan", "feat/new-orphan"],
-      "never the default, a keep-listed branch, or one whose newest pull request is open",
+      ["feat/merged-clean", "feat/old-orphan"],
+      "never the default, a keep-listed branch, an open one, one 7 days quiet, or one with commits after its merge",
     );
-    assert.equal(got.pruned, 3);
-    assert.equal(audits.length, 3);
+    assert.equal(got.pruned, 2);
+    assert.equal(audits.length, 2);
     assert.equal(audits[0][1], PRUNE_AUDIT_ACTION);
-    assert.deepEqual(JSON.parse(audits[0][4] as string), {
-      repo: "o/r",
-      branch: "feat/merged-clean",
-      sha: "a1",
-      pr: 1,
-    });
     assert.deepEqual(JSON.parse(audits[1][4] as string), {
       repo: "o/r",
       branch: "feat/old-orphan",
       sha: "n1",
       pr: null,
+      restore: "git push origin n1:refs/heads/feat/old-orphan",
     });
     const pruned = lines(got.items, "branch-pruned");
     assert.match(pruned[0], /git push origin a1:refs\/heads\/feat\/merged-clean/);
@@ -263,7 +262,7 @@ test("with no switch set the auto-prune is on: the merged branch is deleted and 
       pruned[1],
       /branch feat\/old-orphan was deleted: no open pull request and no commit for 39 days \(no pull request\)\. Put it back with git push origin n1:refs\/heads\/feat\/old-orphan/,
     );
-    assert.deepEqual(lines(got.items, "branch-merged"), []);
+    assert.equal(lines(got.items, "branch-merged").length, 1, "the branch with later commits");
     assert.deepEqual(
       lines(got.items, "branch-stale"),
       [],
@@ -272,7 +271,7 @@ test("with no switch set the auto-prune is on: the merged branch is deleted and 
   });
 });
 
-test("PLANT: with the auto-prune on, a branch under 2 days old and a screenshot branch an open pull request shows are kept", async () => {
+test("PLANT: with the auto-prune on, a branch under 14 days old and a screenshot branch an open pull request shows are kept", async () => {
   const branches = [
     { name: "main", commit: { sha: "m1" } },
     { name: "feat/fresh", commit: { sha: "f1" } },
@@ -354,9 +353,9 @@ test("the pass deletes at most 25 merged branches per repo per run and says how 
   const fake: BranchReaders = {
     plan: async () => plan,
     committedAt: async () => "2026-10-08T00:00:00Z",
-    prune: async (p, cap, onDeleted) => {
+    prune: async (p, cap, record) => {
       caps.push(cap);
-      for (const c of p.prune.slice(0, cap)) await onDeleted(c);
+      for (const c of p.prune.slice(0, cap)) await record(c);
       return { deleted: p.prune.slice(0, cap), skipped: [], remaining: p.prune.length - cap };
     },
   };

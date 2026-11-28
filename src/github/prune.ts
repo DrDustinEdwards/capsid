@@ -2,9 +2,9 @@ import { readAllPages } from "@dustinedwards/site-runtime/github";
 import type { RepoEnv as Env } from "../env";
 import { encodePath, getDefaultBranch, ghFetch, invalidateRepoReads, resolveRepo } from "./client";
 
-// Reads are live (ghFetch), not cached: a stale list is how a branch with new work gets deleted. A
-// branch is pruned only when its latest pull request merged and its tip is the merged commit;
-// anything uncertain is kept.
+// Reads are live, not cached: a stale list is how a branch with new work gets deleted. A branch is
+// pruned only when its latest pull request merged and its tip is the merged commit; anything
+// uncertain is kept.
 
 const PAGE_SIZE = 100;
 const PAGE_CAP = 10;
@@ -54,7 +54,11 @@ function shotsInUse(
   return used ? used.number : null;
 }
 
-type PruneVerdict = { prune: true; pr: number } | { prune: false; reason: string; orphan: boolean };
+// orphan: no open pull request and nothing merged, so the daily pass may delete it once it is old.
+// afterMerge: the merged pull request whose head the branch has moved past; never deleted.
+type PruneVerdict =
+  | { prune: true; pr: number }
+  | { prune: false; reason: string; orphan: boolean; afterMerge?: number };
 
 export function pruneVerdict(
   branch: { name: string; sha: string; protected: boolean },
@@ -96,7 +100,8 @@ export function pruneVerdict(
     return {
       prune: false,
       reason: `commits after pull request #${latest.number} merged`,
-      orphan: true,
+      orphan: false,
+      afterMerge: latest.number,
     };
   // A list not read whole may hide a newer open pull request on the same head, so a
   // delete waits until it can be read whole.
@@ -143,6 +148,7 @@ export interface PrunePlan {
 interface PruneKeptRow extends PruneKept {
   sha: string;
   orphan: boolean;
+  afterMerge?: number;
 }
 
 export async function readPrunePlan(
@@ -223,6 +229,7 @@ export async function readPrunePlan(
         reason: verdict.reason,
         sha: b.commit.sha,
         orphan: verdict.orphan,
+        ...(verdict.afterMerge ? { afterMerge: verdict.afterMerge } : {}),
       });
   }
   return {
@@ -238,15 +245,13 @@ export async function readPrunePlan(
   };
 }
 
-/**
- * Each tip is re-read before its delete; a branch that moved since the plan is skipped. If onDeleted
- * throws, nothing more is deleted.
- */
+// Each tip is re-read and a moved branch skipped; `record` runs before each delete, and a throw
+// stops the rest.
 export async function deletePruneCandidates(
   env: Env,
   plan: PrunePlan,
   cap: number,
-  onDeleted?: (c: PruneCandidate) => Promise<void>,
+  record?: (c: PruneCandidate) => Promise<void>,
 ) {
   const { owner, name: repo } = plan;
   const base = `/repos/${owner}/${repo}`;
@@ -275,17 +280,14 @@ export async function deletePruneCandidates(
       });
       continue;
     }
+    await record?.(c);
     const resp = await ghFetch(env, owner, repo, `${base}/git/refs/heads/${encodePath(c.branch)}`, {
       method: "DELETE",
     });
-    if (resp.ok || resp.status === 404 || resp.status === 422) {
-      if (resp.ok) {
-        deleted.push(c);
-        await onDeleted?.(c);
-      } else skipped.push({ branch: c.branch, reason: `already gone (${resp.status})` });
-    } else {
-      skipped.push({ branch: c.branch, reason: `GitHub refused the delete (${resp.status})` });
-    }
+    if (resp.ok) deleted.push(c);
+    else if (resp.status === 404 || resp.status === 422)
+      skipped.push({ branch: c.branch, reason: `already gone (${resp.status})` });
+    else skipped.push({ branch: c.branch, reason: `GitHub refused the delete (${resp.status})` });
   }
   if (batch.length > 0) await invalidateRepoReads(env, owner, repo);
   return { deleted, skipped, remaining: plan.prune.length - batch.length };

@@ -35,18 +35,15 @@ async function issuerKeys(): Promise<KeySource> {
   return keys;
 }
 
-// THE AUTOMATIC PR REVIEWER (D5). A reviewer that did not build the work reads a pull request and
-// says whether it does what it claims. It catches what CI and the claim checks cannot: work that
-// passes and is still wrong (a misread description, a skipped requirement, a weak test). The
-// reviewer sees the diff, the description and the repository's CLAUDE.md at the BASE, so a pull request cannot rewrite the rules it is judged by.
+// The automatic PR reviewer: a model reads the diff, the description and CLAUDE.md at the base (so
+// a pull request cannot rewrite its own rules) and says whether the change does what it claims.
 
 export const REVIEW_RUN_PATH = "/review/run";
 const REVIEW_MODEL = "@cf/deepseek-ai/deepseek-v4.1-flash-1017";
 const REVIEW_GATEWAY = "default";
 const REVIEW_ACTION = "pr-review";
 const REVIEW_AUDIENCE = "capsid-review";
-// The workflows allowed to ask, at any ref of devkit, in any repository Dustin owns: review.yml on its own, and pr.yml,
-// which runs every pull request check in one job (devkit 0.26.0), the reviewer among them.
+// The devkit workflows allowed to ask, at any ref, in any repository Dustin owns.
 const REVIEW_WORKFLOWS = [
   "drdustinedwards/devkit/.github/workflows/review.yml@",
   "drdustinedwards/devkit/.github/workflows/pr.yml@",
@@ -54,8 +51,7 @@ const REVIEW_WORKFLOWS = [
 // Dustin's GitHub account id. Owner ids never change; a login can be renamed and reused.
 export const REVIEW_OWNER_ID = "204601333";
 const RENOVATE = /^renovate(\[bot\])?$/i;
-// One verdict per pull request, kept for its life: a later push gets the first verdict (its head_sha names the commit
-// it read) and asks the model nothing, since reviewing every push cost too many Workers AI neurons.
+// One verdict per head commit, so a re-run of the same push asks the model nothing.
 const CACHE_TTL_S = 14 * 24 * 3600;
 // The diff the model reads, at most. About 75,000 tokens, under a cent of input.
 const MAX_DIFF_CHARS = 300_000;
@@ -218,7 +214,8 @@ async function readRules(env: Env, who: ReviewCaller, base: string): Promise<str
 // The diff as the model reads it: each file's patch under its name, lockfiles left out, cut at the
 // cap with a line that says so.
 function diffText(files: readonly PullFile[]): string {
-  let out = "";
+  let out =
+    files.length >= MAX_FILES ? `[only the first ${MAX_FILES} changed files were read]\n` : "";
   for (const f of files) {
     if (pathClassOf(f.filename) === "deps-other" && !/package\.json$/i.test(f.filename)) {
       out += `--- ${f.filename} (${f.status ?? "modified"}; a lockfile, not shown)\n`;
@@ -273,11 +270,10 @@ async function record(
   }).run();
 }
 
-/**
- * Whether a review is kept for the pull request's later pushes. An error and a BLOCK are not kept,
- * so the next push or a re-run asks again: a BLOCK fails a required check, and a cached one would
- * hold the pull request after its fix.
- */
+export const reviewKey = (who: ReviewCaller, head: string): string =>
+  `review:${who.owner}/${who.repo}:${who.pr}:${head}`.toLowerCase();
+
+/** An error and a BLOCK are not kept, so a re-run of the same commit asks again. */
 export function keepReview(r: ReviewResult): boolean {
   return r.status !== "error" && !(r.status === "reviewed" && r.verdict === "BLOCK");
 }
@@ -294,7 +290,7 @@ export async function handleReviewRun(request: Request, env: Env): Promise<Respo
   }
   const result = await kvCached(
     env.APP_KV,
-    `review:${full.toLowerCase()}:${who.pr}`,
+    reviewKey(who, pull.head),
     { ttl: CACHE_TTL_S, keep: keepReview },
     () => reviewPull(env, who, pull, full),
   );

@@ -153,20 +153,19 @@ test("requireSinglePrimary demands exactly one primary", () => {
   );
 });
 
-// Routes manage_pr needs for its branch cleanup; PR_ROUTES(head) names the head branch of PR 5.
-const PR_ROUTES = (head: string, base = "main") => ({
+// The routes a merge's branch cleanup reads: PR 5 merged `head` at h1, and the branch tip is `tip`.
+const PR_ROUTES = (head: string, base = "main", tip = "h1") => ({
+  "PUT /repos/o/r/pulls/5/merge": { body: { sha: "merged-sha", merged: true, message: "merged" } },
   "GET /repos/o/r/pulls/5": {
-    body: { head: { ref: head, repo: { full_name: "o/r" } }, base: { ref: base } },
+    body: { head: { ref: head, sha: "h1", repo: { full_name: "o/r" } }, base: { ref: base } },
   },
   "GET /repos/o/r": { body: { default_branch: base } },
+  [`GET /repos/o/r/git/ref/heads/${head}`]: { body: { object: { sha: tip } } },
 });
 
 test("manage_pr merge calls the merge endpoint and returns the merged sha", async () => {
   await withFetch(
     {
-      "PUT /repos/o/r/pulls/5/merge": {
-        body: { sha: "merged-sha", merged: true, message: "merged" },
-      },
       ...PR_ROUTES("feature/x"),
       "DELETE /repos/o/r/git/refs/heads/feature/x": { status: 204 },
     },
@@ -186,11 +185,26 @@ test("manage_pr merge calls the merge endpoint and returns the merged sha", asyn
         sha: "merged-sha",
         message: "merged",
         head_branch: "feature/x",
+        head_branch_sha: "h1",
         head_branch_deleted: true,
       });
       assert.equal((calls[0].body as { merge_method: string }).merge_method, "squash");
     },
   );
+});
+
+test("PLANT: a merge keeps a head branch that gained a commit after the merged head", async () => {
+  await withFetch(PR_ROUTES("feature/x", "main", "h2"), async (calls) => {
+    const result = (await managePr(makeEnv(ONE_REPO), "ns", 5, "merge")) as {
+      merged: boolean;
+      head_branch_deleted: boolean;
+      head_branch_note?: string;
+    };
+    assert.equal(result.merged, true);
+    assert.equal(result.head_branch_deleted, false);
+    assert.match(result.head_branch_note ?? "", /commits after the merged head h1/);
+    assert.equal(calls.filter((c) => c.method === "DELETE").length, 0);
+  });
 });
 
 const ONE_REPO = [{ repo: "o/r", label: "primary" }];
@@ -591,100 +605,66 @@ test("ci_status names the case where a failed run has no failed job", async () =
   );
 });
 
-test("manage_pr close patches the PR state to closed, and deletes the head branch", async () => {
+test("manage_pr close closes the PR and leaves its branch for the daily prune", async () => {
   await withFetch(
     {
       "PATCH /repos/o/r/pulls/5": { body: { number: 5, state: "closed", html_url: "https://pr" } },
-      ...PR_ROUTES("capsid/content-projects-json-mtkyt0ds"),
-      "DELETE /repos/o/r/git/refs/heads/capsid/content-projects-json-mtkyt0ds": { status: 204 },
     },
     async (calls) => {
-      const result = await managePr(makeEnv([{ repo: "o/r", label: "primary" }]), "ns", 5, "close");
+      const result = await managePr(makeEnv(ONE_REPO), "ns", 5, "close");
       assert.deepEqual(result, {
         repo: "o/r",
         number: 5,
         action: "close",
         state: "closed",
         url: "https://pr",
-        head_branch: "capsid/content-projects-json-mtkyt0ds",
-        head_branch_deleted: true,
       });
       assert.equal((calls[0].body as { state: string }).state, "closed");
-      assert.ok(
-        calls.some((c) => c.method === "DELETE" && c.path.includes("capsid/content-projects-json")),
-        "the Capsid PR-mode branch was not cleaned up",
-      );
+      assert.equal(calls.length, 1, "a close touched the branch");
     },
   );
 });
 
-test("manage_pr NEVER deletes the default branch, whatever the PR says", async () => {
-  await withFetch(
-    {
-      "PATCH /repos/o/r/pulls/5": { body: { number: 5, state: "closed", html_url: "https://pr" } },
-      ...PR_ROUTES("main"),
-    },
-    async (calls) => {
-      const result = (await managePr(
-        makeEnv([{ repo: "o/r", label: "primary" }]),
-        "ns",
-        5,
-        "close",
-      )) as {
-        head_branch_deleted: boolean;
-        head_branch_note?: string;
-      };
-      assert.equal(result.head_branch_deleted, false);
-      assert.match(result.head_branch_note ?? "", /same branch|default branch/);
-      assert.equal(
-        calls.some((c) => c.method === "DELETE"),
-        false,
-        "it issued a DELETE against the default branch",
-      );
-    },
-  );
-});
-
-test("manage_pr leaves a FORK's head branch alone", async () => {
-  await withFetch(
-    {
-      "PATCH /repos/o/r/pulls/5": { body: { number: 5, state: "closed", html_url: "https://pr" } },
-      "GET /repos/o/r/pulls/5": {
-        body: {
-          head: { ref: "patch-1", repo: { full_name: "someone/fork" } },
-          base: { ref: "main" },
+test("a merge never deletes the default branch, a fork's branch or one it could not read, and says why", async () => {
+  const cases: Array<[string, Record<string, unknown>, RegExp]> = [
+    ["default branch", PR_ROUTES("main"), /same branch|default branch/],
+    [
+      "fork",
+      {
+        ...PR_ROUTES("patch-1"),
+        "GET /repos/o/r/pulls/5": {
+          body: {
+            head: { ref: "patch-1", repo: { full_name: "someone/fork" } },
+            base: { ref: "main" },
+          },
         },
       },
-      "GET /repos/o/r": { body: { default_branch: "main" } },
-    },
-    async (calls) => {
-      const result = (await managePr(
-        makeEnv([{ repo: "o/r", label: "primary" }]),
-        "ns",
-        5,
-        "close",
-      )) as {
+      /someone\/fork/,
+    ],
+    [
+      "unreadable PR",
+      { ...PR_ROUTES("feature/x"), "GET /repos/o/r/pulls/5": { status: 404, text: "Not Found" } },
+      /could not read the PR/,
+    ],
+  ];
+  for (const [name, routes, note] of cases) {
+    await withFetch(routes as never, async (calls) => {
+      const result = (await managePr(makeEnv(ONE_REPO), "ns", 5, "merge")) as {
+        merged: boolean;
         head_branch_deleted: boolean;
         head_branch_note?: string;
       };
-      assert.equal(result.head_branch_deleted, false);
-      assert.match(result.head_branch_note ?? "", /someone\/fork/);
-      assert.equal(
-        calls.some((c) => c.method === "DELETE"),
-        false,
-      );
-    },
-  );
+      assert.equal(result.merged, true, name);
+      assert.equal(result.head_branch_deleted, false, name);
+      assert.match(result.head_branch_note ?? "", note, name);
+      assert.equal(calls.filter((c) => c.method === "DELETE").length, 0, name);
+    });
+  }
 });
 
 test("A FAILED BRANCH DELETE DOES NOT FAIL THE MERGE, because the merge already landed", async () => {
-  // Reporting the whole call as failed because a cleanup step failed would misreport the
-  // merge.
   await withFetch(
     {
-      "PUT /repos/o/r/pulls/5/merge": {
-        body: { sha: "merged-sha", merged: true, message: "merged" },
-      },
       ...PR_ROUTES("feature/x"),
       "DELETE /repos/o/r/git/refs/heads/feature/x": {
         status: 403,
@@ -692,12 +672,7 @@ test("A FAILED BRANCH DELETE DOES NOT FAIL THE MERGE, because the merge already 
       },
     },
     async () => {
-      const result = (await managePr(
-        makeEnv([{ repo: "o/r", label: "primary" }]),
-        "ns",
-        5,
-        "merge",
-      )) as {
+      const result = (await managePr(makeEnv(ONE_REPO), "ns", 5, "merge")) as {
         merged: boolean;
         sha: string;
         head_branch_deleted: boolean;
@@ -706,37 +681,9 @@ test("A FAILED BRANCH DELETE DOES NOT FAIL THE MERGE, because the merge already 
       assert.equal(result.merged, true, "a cleanup failure was reported as a failed merge");
       assert.equal(result.sha, "merged-sha");
       assert.equal(result.head_branch_deleted, false);
-      assert.match(result.head_branch_note ?? "", /403/);
-      assert.match(result.head_branch_note ?? "", /PR action itself succeeded/);
-    },
-  );
-});
-
-test("an unreadable PR leaves the branch alone and says why, without failing the close", async () => {
-  await withFetch(
-    {
-      "PATCH /repos/o/r/pulls/5": { body: { number: 5, state: "closed", html_url: "https://pr" } },
-      "GET /repos/o/r/pulls/5": { status: 404, text: "Not Found" },
-    },
-    async (calls) => {
-      const result = (await managePr(
-        makeEnv([{ repo: "o/r", label: "primary" }]),
-        "ns",
-        5,
-        "close",
-      )) as {
-        state: string;
-        head_branch: string | null;
-        head_branch_deleted: boolean;
-        head_branch_note?: string;
-      };
-      assert.equal(result.state, "closed", "the close was reported as failed");
-      assert.equal(result.head_branch, null);
-      assert.equal(result.head_branch_deleted, false);
-      assert.match(result.head_branch_note ?? "", /could not read the PR/);
-      assert.equal(
-        calls.some((c) => c.method === "DELETE"),
-        false,
+      assert.match(
+        result.head_branch_note ?? "",
+        /delete failed \(403\); the merge itself succeeded/,
       );
     },
   );

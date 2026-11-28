@@ -298,7 +298,9 @@ test("a rate with too few cases is said so, and has no picture", () => {
   const thin = structuredClone(stats);
   thin.sites.uptime_7d = null;
   const section = numbersHtml(thin);
-  assert.doesNotMatch(section, /id="uptime-title"/);
+  assert.doesNotMatch(section, /enarratio-progress-ring/);
+  assert.match(section, /No data.*fewer than ten half-hours/s);
+  assert.match(numbersHtml(stats), /enarratio-progress-ring/, "the full stats draw the ring");
 });
 
 test("the map's script is under 25 KB gzip and all the explorer's script under 105 KB", () => {

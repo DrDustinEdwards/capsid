@@ -101,4 +101,7 @@ test("PLANT: an expiry read in the last day is served from KV, with no RDAP call
   const second = await readExpiries(kv, ["sample.example"], fetchImpl, NOW);
   assert.deepEqual(second.expiries, first.expiries);
   assert.deepEqual(calls, [], "the day's cached answer was fetched again");
+  await kv.put(expiryKey("sample.example"), "{not json");
+  const corrupt = await readExpiries(kv, ["sample.example"], fetchImpl, NOW);
+  assert.deepEqual(corrupt.expiries, first.expiries, "a corrupt cached value is read again");
 });

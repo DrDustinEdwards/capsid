@@ -15,18 +15,9 @@ import {
 } from "./live-findings";
 
 import { errorMessage } from "@dustinedwards/site-runtime/log";
-// THE WATCHER'S LIVE CHECKS (capsid/research/design-automation-for-speed.md, D5). Four checks
-// after a deploy: the deployed sha against the default branch, the Web Analytics beacon on
-// public pages, a CSP that lets it load and report, and no beacon on pages that must not
-// carry one.
-//
-// WHAT TO CHECK IS A DOCUMENT, NOT CODE. Which pages carry a beacon is a cross-repo rule, so
-// it lives at capsid/policy/live-checks.md and is read each pass. No document means no check:
-// nothing is probed on a guess. It can only record a finding, like every watcher check. See
-// docs/live-checks.md.
-//
-// Reads only: each page is one GET of the site's own configured origin plus a path the
-// document names, so a document cannot point the watcher at another host.
+// The watcher's live checks, as capsid/policy/live-checks.md lists them (docs/live-checks.md); no
+// document, no check. Reads only: each page is one GET of the site's own origin plus a path, so the
+// document cannot point the watcher at another host.
 
 const LIVE_CHECKS_NAMESPACE = "capsid";
 const LIVE_CHECKS_PATH = "policy/live-checks.md";
@@ -50,9 +41,8 @@ export type LiveRule =
 export type LiveConfig = { rules: LiveRule[] } | { error: string };
 
 /**
- * The rules in the document. Only lines that begin `- site ` are read; everything else
- * is prose. A `- site` line that does not parse refuses the whole document, because a
- * rule that silently did not apply reads as a page that was checked and found fine.
+ * Only `- site ` lines are read. One that does not parse refuses the whole document: a rule that
+ * silently did not apply reads as a page checked and found fine.
  *
  *   - site <namespace> beacon <path>     a CSP on this page that lets the beacon load and report
  *   - site <namespace> nobeacon <path>   no beacon on this page
@@ -115,9 +105,7 @@ export function redirectedOffSite(res: Response, origin: string): string | null 
     : `redirected off the site to ${finalOrigin}`;
 }
 
-/** One GET of a site's page. A page that cannot be judged says why in `problem`: an
- *  error, a non-2xx answer, a redirect off the site (a login), a body that is not HTML,
- *  or one past the size bound. None of those is evidence about the beacon. */
+/** One GET of a site's page; one that cannot be judged says why in `problem`. */
 export async function readPage(
   fetchImpl: FetchLike,
   origin: string,
@@ -164,7 +152,6 @@ export async function readPage(
   return { status: res.status, headers: res.headers, html: text, problem: null, gated: false };
 }
 
-/** The default branch's head sha and when it was committed. */
 export async function defaultBranchHead(
   env: Env,
   namespace: string,
@@ -228,11 +215,8 @@ export interface LiveDeps {
   analytics: () => Promise<WebAnalyticsSite[]>;
 }
 
-/**
- * Run every rule in the document. `probes` are this pass's site probes, which carry the
- * deployed sha. A site down on this pass is the site-down check's finding, so its pages
- * and sha are skipped here and the run is not complete.
- */
+// `probes` carry the deployed sha. A site down this pass is the site-down check's finding, so its
+// rules are skipped and the run is not complete.
 export async function liveChecks(
   config: { body: string } | null,
   sites: readonly OpsSite[],
@@ -315,7 +299,16 @@ export async function liveChecks(
       continue;
     }
     if (rule.kind === "sha") {
-      const head = await deps.head(rule.namespace);
+      const head = await deps.head(rule.namespace).catch((err: unknown) => errorMessage(err));
+      if (typeof head === "string") {
+        findings.push({
+          namespace: site.namespace,
+          fingerprint: `live-sha-unread-${site.namespace}`,
+          headline: `${site.name}'s default branch head could not be read for the live checks`,
+          evidence: [head.slice(0, 400), "Not read is not clean: the deployed sha was not judged."],
+        });
+        continue;
+      }
       summary.shas_read += 1;
       const f = shaFinding(site, probe.sha, head, now);
       if (f) findings.push(f);

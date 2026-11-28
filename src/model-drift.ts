@@ -1,12 +1,11 @@
 import type { Env } from "./env";
 import type { OpsMaintenanceItem } from "./ops-types/views";
-import { listInstalledRepos, parseReposList, type InstalledRepo } from "./github/client";
+import { listInstalledRepos, parseMappedRepos, type InstalledRepo } from "./github/client";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { readSiteConfig, sitesFrom } from "./ops-sites";
 import type { SystemModel } from "./system-model";
 
-// The model's drift check, the daily half (design capsid/research/design-system-explorer.md,
-// section 1; The check lists and never edits: the model changes by pull request.
+// The model's daily drift check. It lists and never edits: the model changes by pull request.
 
 const MAX_ITEMS = 50;
 
@@ -98,7 +97,7 @@ export async function gatherModelDriftItems(
   const mapped: DriftFacts["mapped"] = [];
   const unreadable: OpsMaintenanceItem[] = [];
   for (const row of rows.results ?? []) {
-    const parsed = parseReposList(row.repos);
+    const parsed = parseMappedRepos(row.repos);
     if ("list" in parsed)
       for (const r of parsed.list) mapped.push({ namespace: row.namespace, repo: r.repo });
     else

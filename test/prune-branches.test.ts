@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { pruneMergedBranches, pruneVerdict } from "../src/github.ts";
+import { deletePruneCandidates, readPrunePlan } from "../src/github/prune.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // A branch is pruned only when its latest pull request merged AND its tip is the commit it merged from;
@@ -146,6 +147,20 @@ test("a branch that gained a commit between the preview and the delete is skippe
     assert.deepEqual(out.deleted, []);
     assert.equal(out.skipped.length, 1);
     assert.match(out.skipped[0].reason, /moved since the preview/);
+    assert.equal(calls.filter((c) => c.method === "DELETE").length, 0);
+  });
+});
+
+test("the sha is recorded before the delete: a record that fails deletes nothing", async () => {
+  await withFetch(routes(), async (calls) => {
+    const env = makeEnv();
+    const plan = await readPrunePlan(env, "ns");
+    await assert.rejects(
+      deletePruneCandidates(env, plan, 10, async () => {
+        throw new Error("audit write failed");
+      }),
+      /audit write failed/,
+    );
     assert.equal(calls.filter((c) => c.method === "DELETE").length, 0);
   });
 });

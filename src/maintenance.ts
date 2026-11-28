@@ -11,13 +11,12 @@ import { gatherRuleDocItems } from "./rule-docs";
 
 const MAINTENANCE_KEY = "maintenance:list";
 export const MAINTENANCE_LAST_KEY = "maintenance:last";
+// Set for an hour after a pass throws, so a failing pass is not retried on every tick.
+export const MAINTENANCE_RETRY_KEY = "maintenance:retry";
 
-// The pass runs once per UTC day, after this hour, so the list is fresh when the seat starts a
-// session in the morning (06:00 in Chicago is 11:00 or 12:00 UTC).
+// Once per UTC day after this hour, so the list is fresh for the morning (06:00 in Chicago).
 const DAILY_AFTER_UTC_HOUR = 11;
 
-// The item is the Portal's contract too (GET /portal/api/maintenance), so it lives with the other
-// Portal types in src/ops-types/.
 /** The model drift check, injected so a test can run the pass without GitHub. */
 export type DriftReader = (env: Env) => Promise<{ items: MaintenanceItem[]; read: number }>;
 
@@ -30,7 +29,6 @@ interface MaintenanceList {
   branches_read: Record<string, number>;
   deploys_read: Record<string, number>;
   model_read: number;
-  /** Rule documents checked for their cap and for stale tool names (src/rule-docs.ts). */
   rule_docs_read: number;
 }
 
@@ -64,11 +62,9 @@ async function gatherMaintenance(
   const deploys = await gatherDeployItems(deployReaders, now);
   items.push(...deploys.items);
 
-  // system/model.json against what Capsid and GitHub know (src/model-drift.ts).
   const drift = await driftReader(env);
   items.push(...drift.items);
 
-  // A rule document over its cap or naming a tool the Worker does not serve.
   const ruleDocs = await gatherRuleDocItems(env.DB);
   items.push(...ruleDocs.items);
 
@@ -85,8 +81,8 @@ async function gatherMaintenance(
 
 /**
  * The daily pass. Not due returns a note and records nothing; due gathers the list, keeps it in KV
- * for capsid_read_status action status, and stamps the day. The stamp is written after the list,
- * so a pass that threw runs again on the next tick.
+ * for capsid_read_status action status, and stamps the day. A pass that threw runs again an hour
+ * later.
  */
 export async function maintenanceTick(
   env: Env,
@@ -101,6 +97,8 @@ export async function maintenanceTick(
     return { ran: false, note: `before ${DAILY_AFTER_UTC_HOUR}:00 UTC` };
   const last = await env.APP_KV.get(MAINTENANCE_LAST_KEY).catch(() => null);
   if (last && last.slice(0, 10) === today) return { ran: false, note: `already ran ${last}` };
+  if (await env.APP_KV.get(MAINTENANCE_RETRY_KEY))
+    return { ran: false, note: "the last pass threw; it runs again within the hour" };
   const list = await gatherMaintenance(
     env,
     now,
@@ -108,7 +106,10 @@ export async function maintenanceTick(
     branchReaders,
     deployReaders,
     driftReader,
-  );
+  ).catch(async (err: unknown) => {
+    await env.APP_KV.put(MAINTENANCE_RETRY_KEY, "1", { expirationTtl: 3600 });
+    throw err;
+  });
   await env.APP_KV.put(MAINTENANCE_KEY, JSON.stringify(list));
   await env.APP_KV.put(MAINTENANCE_LAST_KEY, now.toISOString());
   const prsRead = Object.values(list.prs_read).reduce((a, b) => a + b, 0);

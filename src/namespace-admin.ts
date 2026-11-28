@@ -2,11 +2,9 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { parseReposList, repoTokenOk, requireSinglePrimary } from "./github";
 import type { RepoEntry } from "./github/client";
 import { MAX_NAMESPACE, MAX_REPO_SELECTOR, MAX_REPOS_JSON } from "./limits";
-import { auditStatement } from "./store-guards";
+import { auditStatement, isMissingRowAbort } from "./store-guards";
 
-// Two doors share it: capsid_admin_manage_namespaces actions register and update
-// (src/tools/namespaces.ts), and the namespace_add and namespace_edit controls (src/controls.ts),
-// so the rules and the audit rows are written once.
+// Shared by capsid_admin_manage_namespaces and the namespace_add and namespace_edit controls.
 
 const NAMESPACE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -17,10 +15,7 @@ export function namespaceNameRefusal(namespace: string | undefined): string | nu
   return null;
 }
 
-/**
- * A register's repo mapping: one repo as 'owner/name' with an optional label (default 'primary'),
- * or a repos JSON array, with exactly one entry labeled primary.
- */
+/** One repo with an optional label (default primary), or a repos JSON array with one primary. */
 export function registerRepos(input: {
   repo?: string;
   label?: string;
@@ -72,10 +67,7 @@ export async function namespaceRepos(db: D1Database, namespace: string): Promise
   return row ? row.repos : null;
 }
 
-/**
- * A digest of a stored mapping, which a preview binds so the perform refuses an edit made in
- * between (the mapping itself could outgrow the confirmation token).
- */
+// A preview binds the digest, not the mapping, which could outgrow the confirmation token.
 export function reposDigest(repos: string): Promise<string> {
   return sha256Hex(repos);
 }
@@ -85,10 +77,7 @@ export const ALREADY_REGISTERED = (namespace: string) =>
 export const NOT_REGISTERED = (namespace: string) =>
   `namespace not found: ${namespace}. Use capsid_admin_manage_namespaces action register to create it.`;
 
-/**
- * Register: create-only, refused if the namespace exists. One batch, the row and its audit row
- * 'register_namespace'.
- */
+/** Create-only: refused if the namespace exists. The row and its audit row in one batch. */
 export async function registerNamespace(
   db: D1Database,
   actor: string,
@@ -107,9 +96,8 @@ export async function registerNamespace(
 }
 
 /**
- * Update: remap an existing namespace's repos, recording the prior mapping in the audit row
- * 'update_namespace'. It does not rename the namespace or move its documents. With
- * `expectedDigest`, the mapping must still be the one a preview read.
+ * Remaps a namespace's repos, the prior mapping in the audit row. With `expectedDigest`, the
+ * mapping must still be the one a preview read.
  */
 export async function updateNamespace(
   db: D1Database,
@@ -127,12 +115,31 @@ export async function updateNamespace(
     };
   }
   const reposJson = JSON.stringify(list);
-  await db.batch([
-    db.prepare("UPDATE namespaces SET repos = ?2 WHERE namespace = ?1").bind(namespace, reposJson),
-    auditStatement(db, actor, "update_namespace", namespace, null, {
-      old: previous,
-      new: reposJson,
-    }),
-  ]);
+  // The guard aborts the batch when the mapping is no longer the one read, so a second admin's edit
+  // in between is never overwritten.
+  const guard = db
+    .prepare(
+      `INSERT INTO document_versions (document_id, namespace, path)
+       SELECT NULL, ?1, '' WHERE NOT EXISTS (SELECT 1 FROM namespaces WHERE namespace = ?1 AND repos IS ?2)`,
+    )
+    .bind(namespace, previous);
+  try {
+    await db.batch([
+      guard,
+      db
+        .prepare("UPDATE namespaces SET repos = ?2 WHERE namespace = ?1")
+        .bind(namespace, reposJson),
+      auditStatement(db, actor, "update_namespace", namespace, null, {
+        old: previous,
+        new: reposJson,
+      }),
+    ]);
+  } catch (err) {
+    if (!isMissingRowAbort(err)) throw err;
+    return {
+      ok: false,
+      refusal: `${namespace}'s repo mapping changed while it was written. Try again.`,
+    };
+  }
   return { ok: true, previous };
 }

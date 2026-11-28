@@ -181,7 +181,8 @@ export async function repoHistory(
       ahead_by: c.ahead_by,
       behind_by: c.behind_by,
       total_commits: c.total_commits,
-      commits: c.commits.slice(0, limit).map(summarizeCommit),
+      // GitHub lists the range oldest first; the newest are kept.
+      commits: c.commits.slice(-limit).map(summarizeCommit),
       files: filesWithBudget(c.files ?? [], args.patch === true),
     };
   }

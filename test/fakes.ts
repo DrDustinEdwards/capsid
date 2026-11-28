@@ -288,14 +288,11 @@ export interface FakeD1 {
   db: D1Database;
 }
 
-// The three commit-time guards, evaluated against the ROWS rather than assumed to pass.
-// Each is an INSERT ... SELECT NULL guarded by an EXISTS clause, and each aborts the
-// batch with the same NOT NULL violation, which is what D1 does.
+// The commit-time guards, evaluated against the rows: each aborts the batch with the NOT NULL
+// violation D1 raises.
 const GUARD_ERROR = "NOT NULL constraint failed: document_versions.document_id";
 
-// Column projection, so `SELECT *` and a named column list are distinguishable.
-// Applied only to a plain identifier list; a SELECT with a function call or an alias
-// is returned whole.
+// Column projection for a plain identifier list; `SELECT *`, a function call or an alias is whole.
 function project(sql: string, row: Record<string, unknown>): Record<string, unknown> {
   const list = sql.replace(/\s+/g, " ").match(/^SELECT (.+?) FROM /i)?.[1];
   if (!list || list.trim() === "*" || /[(*]/.test(list)) return row;
@@ -326,6 +323,8 @@ function guardFires(sql: string, params: unknown[], rows: FakeD1Rows): boolean {
   const flat = sql.replace(/\s+/g, " ");
   if (!/INSERT INTO document_versions \(document_id, namespace, path\) SELECT NULL/i.test(flat))
     return false;
+  if (/FROM namespaces/i.test(flat))
+    return rows.namespaces.find((n) => n.namespace === params[0])?.repos !== params[1];
   const [namespace, path] = params as [string, string];
   const row = rows.documents.find((d) => d.namespace === namespace && d.path === path);
   if (/AND body IS \?3/i.test(flat)) return !(row && row.body === params[2]);

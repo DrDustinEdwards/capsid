@@ -1,6 +1,6 @@
 import { Alert, Banner } from "capsomer/react/banner";
 import { boardChart, trendChart } from "./charts";
-import { Fragment, Suspense } from "react";
+import { Fragment } from "react";
 import { useApp } from "../app/ctx";
 import { HOUR, ago } from "../lib/format";
 import { formatBytes } from "capsomer/behavior/format";
@@ -256,9 +256,9 @@ export function Backups() {
         </Panel>
       </div>
       <SiteBackups />
-      <Suspense fallback={null}>
+      <ChartSlot>
         <BackupSlots />
-      </Suspense>
+      </ChartSlot>
     </div>
   );
 }
