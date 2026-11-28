@@ -11,12 +11,7 @@ import {
 } from "../src/inbox-report.ts";
 import { fakeKv } from "./fakes.ts";
 
-// The pure parts of "what needs Dustin, per app". The queries that feed
-// them, and the route, run against a real D1 and the whole Worker in
-// test-integration/inbox.test.ts.
-
-// refusal is a case the route stores nothing for; the route itself, with its scope check and
-// rate limit, runs through the whole Worker in test-integration/inbox.test.ts.
+// The pure parts of the inbox report; the queries and the route are test-integration/inbox.test.ts.
 
 const ORIGIN = "https://sample.example.com";
 const AT = new Date("2026-10-10T06:00:00.000Z");

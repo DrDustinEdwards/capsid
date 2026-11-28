@@ -67,7 +67,7 @@ function world(
   return { env, sent, kv, bound };
 }
 
-test("Email Routing not on: nothing is read or sent, and the reason names it", async () => {
+test("Email Routing not on, or an address or the binding missing: nothing is sent, and the reason names it", async () => {
   for (const routing of ["", "off", "yes"]) {
     const w = world({ routing });
     const report = await digestTick(w.env, NOON);
@@ -76,30 +76,18 @@ test("Email Routing not on: nothing is read or sent, and the reason names it", a
     assert.equal(w.sent.length, 0);
     assert.deepEqual(w.kv.puts, [], "the digest wrote state while off");
   }
-});
-
-test("routing on but an address or the binding missing: still nothing, and it says which", () => {
+  const on = {
+    EMAIL_ROUTING: "on",
+    EMAIL: {},
+    ALERT_EMAIL: "a@example.com",
+    ALERT_FROM: "b@example.com",
+  };
+  assert.match(digestProblem({ ...on, ALERT_FROM: undefined } as never)!, /ALERT_FROM is not set/);
   assert.match(
-    digestProblem({ EMAIL_ROUTING: "on", EMAIL: {}, ALERT_EMAIL: "a@example.com" } as never)!,
-    /ALERT_FROM is not set/,
-  );
-  assert.match(
-    digestProblem({
-      EMAIL_ROUTING: "on",
-      ALERT_EMAIL: "a@example.com",
-      ALERT_FROM: "b@example.com",
-    } as never)!,
+    digestProblem({ ...on, EMAIL: undefined } as never)!,
     /the send_email binding EMAIL/,
   );
-  assert.equal(
-    digestProblem({
-      EMAIL_ROUTING: "on",
-      EMAIL: {},
-      ALERT_EMAIL: "a@example.com",
-      ALERT_FROM: "b@example.com",
-    } as never),
-    null,
-  );
+  assert.equal(digestProblem(on as never), null);
 });
 
 test("nothing before 12:00 UTC; then one mail, and none again that day", async () => {

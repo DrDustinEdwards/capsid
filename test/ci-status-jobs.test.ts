@@ -160,85 +160,66 @@ test("job picks one job by name or by id; step returns that step's log cut by ti
   });
 });
 
-test("PLANT: a token in a step log never reaches the caller", async () => {
-  await withFetch(routes(), async () => {
-    const out = (await ciStatus(makeEnv(), "ns", undefined, {
-      runId: 42,
-      job: "deploy",
-      step: "Deploy",
-      logTail: true,
-    })) as Out;
-    const text = JSON.stringify(out);
-    assert.equal(text.includes(FAKE_TOKEN), false, "the planted token reached the caller");
-    assert.equal(
-      text.includes("Sample0Fake1Token"),
-      false,
-      "part of the planted token reached the caller",
-    );
-    assert.match(out.log ?? "", /GITHUB_TOKEN=\[REDACTED:github-token\]/);
-    assert.match(out.log ?? "", /Authorization: Bearer \[REDACTED:/);
-    assert.equal(out.log_redactions?.["github-token"], 2);
-  });
-});
-
-test("PLANT: a token in the failed-run tail never reaches the caller either", async () => {
+test("PLANT: a token never reaches the caller from a step log, the failed-run tail, the fallback region, or across the budget cut", async () => {
   const failedStep = { ...STEPS[2], conclusion: "failure" };
-  await withFetch(
-    {
-      "GET /repos/o/r/actions/runs": { body: { workflow_runs: [RUN({ conclusion: "failure" })] } },
-      "GET /repos/o/r/actions/runs/42/jobs": {
-        body: { jobs: [JOB({ conclusion: "failure", steps: [failedStep] })] },
-      },
-      "GET /repos/o/r/actions/jobs/9/logs": { text: JOB_LOG },
-    },
-    async () => {
-      const out = await ciStatus(makeEnv(), "ns", undefined, { logTail: true });
-      const failed = out.failed_run as { log?: string; log_redactions?: Record<string, number> };
-      assert.equal(
-        JSON.stringify(out).includes(FAKE_TOKEN),
-        false,
-        "the planted token reached the caller",
-      );
-      assert.match(failed.log ?? "", /\[REDACTED:github-token\]/);
-      assert.deepEqual(failed.log_redactions, { "github-token": 2 });
-    },
-  );
-});
-
-test("PLANT: a token in the fallback region (no usable window) is redacted too", async () => {
   const noWindow = STEPS.map((s) =>
     s.number === 3 ? { number: 3, name: "Deploy", status: "in_progress", conclusion: null } : s,
   );
-  await withFetch(routes(JOB_LOG, [JOB({ steps: noWindow })]), async () => {
-    const out = (await ciStatus(makeEnv(), "ns", undefined, {
-      runId: 42,
-      job: "deploy",
-      step: "Deploy",
-      logTail: true,
-    })) as Out;
-    assert.match(out.log_region ?? "", /no usable timestamp window/);
-    assert.equal((out.log ?? "").includes(FAKE_TOKEN), false);
-  });
-});
-
-test("PLANT: a secret split by the budget cut is still redacted, because redaction runs first", async () => {
-  // The token sits right at the cut: cut first, its tail would no longer match a pattern.
+  // The token sits right at the budget cut: cut before redacting, its tail would no longer match.
   const filler = Array.from({ length: 8000 }, () => "2026-09-06T01:00:00.0Z filler line").join(
     "\n",
   );
   const tail = `2026-09-06T01:01:50.0Z ${"z".repeat(CI_LOG_BUDGET - 60)}`;
-  const log = `2026-09-06T00:58:31.0Z start\n${filler}\n2026-09-06T01:00:59.0Z token ${FAKE_TOKEN}\n${tail}`;
-  await withFetch(routes(log), async () => {
-    const out = (await ciStatus(makeEnv(), "ns", undefined, {
-      runId: 42,
-      job: "deploy",
-      step: "Deploy",
-      logTail: true,
-    })) as Out;
-    const body = out.log ?? "";
-    assert.ok(body.length <= CI_LOG_BUDGET, `log was ${body.length} bytes, over the budget`);
-    assert.equal(body.includes("Value5Xy"), false, "the token's tail survived the cut");
-  });
+  const atCut = `2026-09-06T00:58:31.0Z start\n${filler}\n2026-09-06T01:00:59.0Z token ${FAKE_TOKEN}\n${tail}`;
+  const step = { runId: 42, job: "deploy", step: "Deploy", logTail: true };
+  const cases: Array<
+    [string, Record<string, unknown>, Record<string, unknown>, (out: Out) => void]
+  > = [
+    [
+      "step log",
+      routes(),
+      step,
+      (out) => {
+        assert.match(out.log ?? "", /GITHUB_TOKEN=\[REDACTED:github-token\]/);
+        assert.match(out.log ?? "", /Authorization: Bearer \[REDACTED:/);
+        assert.equal(out.log_redactions?.["github-token"], 2);
+      },
+    ],
+    [
+      "failed-run tail",
+      {
+        "GET /repos/o/r/actions/runs": {
+          body: { workflow_runs: [RUN({ conclusion: "failure" })] },
+        },
+        "GET /repos/o/r/actions/runs/42/jobs": {
+          body: { jobs: [JOB({ conclusion: "failure", steps: [failedStep] })] },
+        },
+        "GET /repos/o/r/actions/jobs/9/logs": { text: JOB_LOG },
+      },
+      { logTail: true },
+      (out) => assert.deepEqual((out.failed_run as Out).log_redactions, { "github-token": 2 }),
+    ],
+    [
+      "fallback region",
+      routes(JOB_LOG, [JOB({ steps: noWindow })]),
+      step,
+      (out) => assert.match(out.log_region ?? "", /no usable timestamp window/),
+    ],
+    [
+      "budget cut",
+      routes(atCut),
+      step,
+      (out) => assert.ok((out.log ?? "").length <= CI_LOG_BUDGET),
+    ],
+  ];
+  for (const [label, fetchRoutes, opts, check] of cases) {
+    await withFetch(fetchRoutes as never, async () => {
+      const out = (await ciStatus(makeEnv(), "ns", undefined, opts)) as Out;
+      const text = JSON.stringify(out);
+      assert.equal(text.includes("Value5Xy") || text.includes("Sample0Fake1Token"), false, label);
+      check(out);
+    });
+  }
 });
 
 test("an unavailable step log is named, and its error body is redacted", async () => {
@@ -331,7 +312,7 @@ async function callCiStatus(grants: Array<"read" | "write">, args: Record<string
   }
 }
 
-test("PLANT: through the tool, a read-only key gets no step log and the log is never fetched", async () => {
+test("PLANT: through the tool, a read-only key gets no step log and the log is never fetched; a write-grant driver gets it", async () => {
   await withFetch(routes(), async (calls) => {
     const out = await callCiStatus(["read"], { run_id: 42, job: "deploy", step: "Deploy" });
     assert.equal(out.step?.name, "Deploy");
@@ -339,12 +320,8 @@ test("PLANT: through the tool, a read-only key gets no step log and the log is n
     assert.equal(
       calls.some((c) => c.path.includes("/logs")),
       false,
-      "the log was fetched for a read-only key",
     );
   });
-});
-
-test("through the tool, the namespace's write-grant driver gets the step log, redacted", async () => {
   await withFetch(routes(), async (calls) => {
     const out = await callCiStatus(["read", "write"], {
       run_id: 42,

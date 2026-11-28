@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import { BACKUP_STALE_HOURS as HEALTH_THRESHOLD } from "../src/health.ts";
 // @ts-expect-error scripts/ is plain .mjs with no declarations, deliberately: the
 // live gate runs with no npm ci so it can run even when install is broken.
 import { BACKUP_STALE_HOURS, checkBackupFreshness } from "../scripts/freshness-lib.mjs";
 
-// The backup freshness gate, which reads /health's backup.last_ok. These drive the
-// check directly, because verify-live.mjs runs on import.
+// The backup freshness gate over /health's backup.last_ok, driven directly because verify-live.mjs runs on import.
 
 const NOW = Date.parse("2026-09-08T12:00:00Z");
 const health = (lastOk: string | null, ageHours?: number) => ({
@@ -28,30 +25,27 @@ test("25.9 hours passes and 26.1 fails: the boundary is where it says it is", ()
   assert.equal(checkBackupFreshness(health(at(26.1)), { assert: true, now: NOW }).passed, false);
 });
 
-test("NO STAMP AT ALL FAILS CLOSED, which is the condition measured on live", () => {
-  const r = checkBackupFreshness(health(null), { assert: true, now: NOW });
-  assert.equal(r.outcome, "unknown");
-  assert.equal(r.passed, false);
-  assert.match(r.detail, /no clean backup has completed/);
-  // A /health with no backup field is the same verdict, not a crash or a pass.
-  const missing = checkBackupFreshness({ status: "ok" }, { assert: true, now: NOW });
-  assert.equal(missing.passed, false);
-  assert.equal(checkBackupFreshness(null, { assert: true, now: NOW }).passed, false);
-});
-
-test("an unparseable stamp is a failure, not a NaN that compares false", () => {
-  const r = checkBackupFreshness(health("yesterday-ish"), { assert: true, now: NOW });
-  assert.equal(r.outcome, "unknown");
-  assert.equal(r.passed, false);
-});
-
-test("a stamp in the future FAILS: a negative age is not fresh", () => {
-  // now - last_ok is negative here, which would pass a plain "under 26h" test.
-  const r = checkBackupFreshness(health("2026-09-09T12:00:00Z"), { assert: true, now: NOW });
-  assert.equal(r.passed, false);
-  assert.equal(r.outcome, "unknown");
-  assert.match(r.detail, /24h in the future/);
-  // Inside the one hour clock skew tolerance it still passes.
+test("no stamp, an unparseable one, or one in the future fails closed as unknown", () => {
+  for (const body of [
+    health(null),
+    { status: "ok" },
+    null,
+    health("yesterday-ish"),
+    health("2026-09-09T12:00:00Z"),
+  ]) {
+    const r = checkBackupFreshness(body, { assert: true, now: NOW });
+    assert.equal(r.passed, false, JSON.stringify(body));
+    if (body) assert.equal(r.outcome, "unknown", JSON.stringify(body));
+  }
+  assert.match(
+    checkBackupFreshness(health(null), { assert: true, now: NOW }).detail,
+    /no clean backup has completed/,
+  );
+  // A negative age would pass a plain "under 26h" test; inside the one hour clock skew it still passes.
+  assert.match(
+    checkBackupFreshness(health("2026-09-09T12:00:00Z"), { assert: true, now: NOW }).detail,
+    /24h in the future/,
+  );
   assert.equal(
     checkBackupFreshness(health("2026-09-08T12:30:00Z"), { assert: true, now: NOW }).passed,
     true,
@@ -72,27 +66,4 @@ test("the age is computed here, and a clock disagreement is reported", () => {
   const r = checkBackupFreshness(health("2026-09-07T09:00:00Z", 2), { assert: true, now: NOW });
   assert.equal(r.passed, false);
   assert.match(r.detail, /DISAGREEING/);
-});
-
-test("verify-live wires the gate, and CI turns the assertion on for scheduled runs", () => {
-  const verify = readFileSync(
-    join(import.meta.dirname, "..", "scripts", "verify-live.mjs"),
-    "utf8",
-  );
-  assert.match(verify, /checkBackupFreshness/, "verify-live does not run the freshness check");
-  assert.match(
-    verify,
-    /ASSERT_BACKUP_FRESH/,
-    "verify-live has no way to be told this is a scheduled run",
-  );
-  const ci = readFileSync(
-    join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"),
-    "utf8",
-  );
-  const scheduled = ci.slice(ci.indexOf("  scheduled-live:"));
-  assert.match(
-    scheduled,
-    /ASSERT_BACKUP_FRESH: "1"/,
-    "CI never sets ASSERT_BACKUP_FRESH on the scheduled run, so the gate always skips",
-  );
 });

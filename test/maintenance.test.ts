@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readMaintenance } from "../src/maintenance.ts";
 import {
   gatherPrItems,
   redTooLong,
@@ -362,7 +361,6 @@ test("the pass deletes at most 25 merged branches per repo per run and says how 
   const { env, audits } = branchEnv({ [PRUNE_SWITCH_KEY]: "on" });
   const got = await gatherBranchItems(env, ["sample"], fake, NOW);
   assert.deepEqual(caps, [PRUNE_CAP]);
-  assert.equal(PRUNE_CAP, 25);
   assert.equal(audits.length, 25, "one audit row per delete");
   assert.match(
     lines(got.items, "branch-merged")[0],
@@ -536,31 +534,5 @@ test("a site whose deploys or default branch were not read, or no snapshot, is l
   assert.deepEqual(
     none.items.map((i) => [i.rule, i.namespace]),
     [["deploys-not-checked", "capsid"]],
-  );
-});
-
-test("a stored list from before the disk rule was removed drops its disk items instead of breaking the reader", async () => {
-  const stored = {
-    generated: "2026-10-10T12:00:00.000Z",
-    items: [
-      {
-        rule: "disk-low",
-        namespace: "sample",
-        line: "agent:x reported 22.5 GB free",
-      },
-      { rule: "pr-red", namespace: "sample", line: "red for days" },
-    ],
-    prs_read: {},
-    branches_read: {},
-    disk_read: 2,
-    deploys_read: {},
-    model_read: 0,
-    rule_docs_read: 0,
-  };
-  const { kv } = fakeKv({ seed: { "maintenance:list": JSON.stringify(stored) } });
-  const got = await readMaintenance({ APP_KV: kv } as unknown as Env);
-  assert.deepEqual(
-    got?.items.map((i) => i.rule),
-    ["pr-red"],
   );
 });

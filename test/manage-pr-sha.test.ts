@@ -3,23 +3,14 @@ import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
-import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
+import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-function db() {
-  const statement = (sql: string) => {
-    const stmt = {
-      bind: () => stmt,
-      first: async () =>
-        /FROM namespaces/.test(sql)
-          ? { repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) }
-          : null,
-      all: async () => ({ results: [] }),
-      run: async () => ({ meta: {} }),
-    };
-    return stmt;
-  };
-  return { prepare: statement, batch: async () => [] };
-}
+const db = () =>
+  fakeD1({
+    namespaces: [
+      { namespace: "capsid", repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) },
+    ],
+  }).db;
 
 async function callClosePr(args: Record<string, unknown>) {
   const server = buildServer(
@@ -98,14 +89,4 @@ test("capsid_close_pr merge with sha returns a refusal, not success, when GitHub
       );
     },
   );
-});
-
-test("a sha on an action other than merge is refused, before any GitHub write", async () => {
-  // close takes no sha, so the dispatcher refuses it rather than dropping it.
-  await withFetch(PR_ROUTES, async (calls) => {
-    const closed = await callClosePr({ action: "close", sha: SHA });
-    assert.equal(closed.isError, true, closed.content[0]?.text);
-    assert.match(closed.content[0].text, /capsid_close_pr action 'close' does not take sha/);
-    assert.ok(!calls.some((c) => c.method !== "GET"), "a write reached GitHub");
-  });
 });

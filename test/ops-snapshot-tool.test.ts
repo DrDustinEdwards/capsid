@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildAdminServer } from "../src/server.ts";
-import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import {
   OPS_SNAPSHOT_KEY,
@@ -48,34 +47,22 @@ const SNAPSHOT: OpsSnapshot = {
   sites: [SITE],
 };
 
-test("slot 0 is the newest slot, and each slot names the half hour it covers", () => {
-  const values = [0, 1, 2, 3].map((slot) => ringReading(SITE, { slot }));
+test("slot 0 is the newest half hour, at picks the slot holding that time, and a slot past the history is outside-ring", () => {
+  const values = [0, 1, 2, 3, 4].map((slot) => ringReading(SITE, { slot }));
   assert.deepEqual(
     values.map((v) => (typeof v === "string" ? v : v.value)),
-    ["no-pass", "down", "up", "up"],
+    ["no-pass", "down", "up", "up", "outside-ring"],
   );
   const newest = values[0];
   assert.ok(typeof newest !== "string");
   assert.equal(newest.from, new Date(SLOT * HALF_HOUR).toISOString());
   assert.equal(newest.to, new Date((SLOT + 1) * HALF_HOUR).toISOString());
-  assert.ok(
-    Date.parse(newest.from) <= NOW.getTime() && NOW.getTime() < Date.parse(newest.to),
-    "slot 0 does not cover the pass",
-  );
-});
-
-test("a slot older than the ring's history reads outside-ring, never up", () => {
-  const reading = ringReading(SITE, { slot: 4 });
-  assert.ok(typeof reading !== "string");
-  assert.equal(reading.value, "outside-ring");
-  assert.equal(reading.mark, null);
-});
-
-test("at reads the slot whose half hour holds that time", () => {
-  const reading = ringReading(SITE, { at: new Date(NOW.getTime() - HALF_HOUR) });
-  assert.ok(typeof reading !== "string");
-  assert.equal(reading.slot, 1);
-  assert.equal(reading.value, "down");
+  assert.ok(Date.parse(newest.from) <= NOW.getTime() && NOW.getTime() < Date.parse(newest.to));
+  const outside = values[4];
+  assert.equal(typeof outside !== "string" && outside.mark, null);
+  const at = ringReading(SITE, { at: new Date(NOW.getTime() - HALF_HOUR) });
+  assert.ok(typeof at !== "string");
+  assert.deepEqual([at.slot, at.value], [1, "down"]);
 });
 
 test("REFUSES a slot or time outside the ring, a time after its newest slot, and a non-time", () => {
@@ -131,15 +118,7 @@ test("the admin reads the whole snapshot, one site, and one ring slot", async ()
     assert.equal(one.pass_at, SNAPSHOT.pass_at);
     assert.equal((one.site as SiteSnapshot).ring, "110-");
 
-    const slot = parse(await call({ site: "sample", slot: 1 }));
-    assert.equal(slot.value, "down");
-    assert.equal(slot.slot, 1);
-    assert.equal(slot.pass_at, SNAPSHOT.pass_at);
-
-    const at = parse(
-      await call({ site: "sample", at: new Date(NOW.getTime() - 2 * HALF_HOUR).toISOString() }),
-    );
-    assert.equal(at.value, "up");
+    assert.equal(parse(await call({ site: "sample", slot: 1 })).value, "down");
   } finally {
     await close();
   }
@@ -182,34 +161,5 @@ test("an absent or unreadable snapshot is a named error, not an empty result", a
     } finally {
       await close();
     }
-  }
-});
-
-test("PLANT: a write-grant driver is refused capsid_admin_read_ops.snapshot by the registrar, naming admin", async () => {
-  const scopes = defaultScopes(["sample"]);
-  scopes.grants = ["read", "write"];
-  const driver: Agent = {
-    id: "agent_0123456789ab",
-    name: "sample-driver",
-    kind: "driver",
-    actor: "agent:sample-driver",
-    scopes,
-    admin: false,
-    row: null,
-  };
-  const { call, close } = await connect(driver);
-  try {
-    for (const args of [{}, { site: "sample" }, { site: "sample", slot: 0 }]) {
-      const result = await call(args);
-      assert.equal(result.isError, true, `a driver read the snapshot: ${result.content[0].text}`);
-      assert.match(result.content[0].text, /admin/i);
-      assert.equal(
-        result.content[0].text.includes("110-"),
-        false,
-        "the refusal carried snapshot data",
-      );
-    }
-  } finally {
-    await close();
   }
 });

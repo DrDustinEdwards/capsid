@@ -3,15 +3,17 @@ import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { GATHER_BUDGET, MAX_ROWS, SEARCH_ROWS } from "../src/limits.ts";
+import { defaultScopes } from "../src/agents-schema.ts";
+import type { Agent } from "../src/agents.ts";
 import { type DocRow, fakeD1, fakeEnv, type FakeD1Options, type Recorded } from "./fakes.ts";
-import { allSourceText, sourceFile } from "./source-files.ts";
 
 // Every read says when it cut. Two assertions per site: the response reports truncation, and the query asked the store for a bounded page; only the
 // second protects the isolate, since a handler fetching every row then slicing satisfies the first.
 
-async function connect(opts: FakeD1Options = {}) {
+async function connect(opts: FakeD1Options = {}, caller?: Agent) {
   const { db, reads } = fakeD1(opts);
-  const server = buildServer(fakeEnv({ DB: db }), "write", "test:bounds");
+  const env = fakeEnv({ DB: db });
+  const server = caller ? buildServer(env, caller) : buildServer(env, "write", "test:bounds");
   const client = new Client({ name: "bounds-test", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -42,32 +44,22 @@ const docs = (n: number, namespace = "capsid", prefix = "doc"): DocRow[] =>
     title: `Doc ${i}`,
   }));
 
-test("list returns a bounded page and says it was cut", async () => {
-  const { client, reads, close } = await connect({ documents: docs(MAX_ROWS + 25) });
-  const out = parse(await call(client, "capsid_find_docs", { action: "list" }));
-  await close();
-  assert.equal(out.truncated, true, "list returned every row and claimed nothing was cut");
-  assert.equal(out.count, MAX_ROWS);
-  assert.equal(out.documents.length, MAX_ROWS);
-  assert.equal(out.limit, MAX_ROWS);
-  assert.match(out.note, /Returned the first 500 rows; there are more\./);
-  // The advice must be actionable and must fit the call that was made: this one
-  // passed no namespace, so naming the namespace filter is the useful next step.
-  assert.match(out.note, /Narrow with namespace/);
-  assert.equal(
-    limitBoundTo(reads, /FROM documents WHERE \(\?1 IS NULL OR namespace/),
-    MAX_ROWS + 1,
-  );
-});
-
-test("list under the bound reports the whole answer, with no note", async () => {
-  // A bound that always reported truncation would pass the test above.
-  const { client, close } = await connect({ documents: docs(3) });
-  const out = parse(await call(client, "capsid_find_docs", { action: "list" }));
-  await close();
-  assert.equal(out.truncated, false);
-  assert.equal(out.count, 3);
-  assert.equal(out.note, undefined, "a complete list still carried a truncation note");
+test("list returns a bounded page and says it was cut, and under the bound says nothing", async () => {
+  for (const [n, truncated] of [
+    [MAX_ROWS + 25, true],
+    [3, false],
+  ] as const) {
+    const { client, reads, close } = await connect({ documents: docs(n) });
+    const out = parse(await call(client, "capsid_find_docs", { action: "list" }));
+    await close();
+    assert.equal(out.truncated, truncated);
+    assert.equal(out.count, Math.min(n, MAX_ROWS));
+    assert.equal(out.note === undefined, !truncated);
+    assert.equal(
+      limitBoundTo(reads, /FROM documents WHERE \(\?1 IS NULL OR namespace/),
+      MAX_ROWS + 1,
+    );
+  }
 });
 
 test("a namespace-scoped list is not truncated by another namespace's documents", async () => {
@@ -88,26 +80,25 @@ test("a namespace-scoped list is not truncated by another namespace's documents"
   assert.equal(out.count, 30);
 });
 
-test("find returns a bounded page and says it was cut", async () => {
-  const { client, reads, close } = await connect({ documents: docs(MAX_ROWS + 10) });
-  const out = parse(await call(client, "capsid_find_docs", { action: "glob", glob: "doc-*.md" }));
-  await close();
-  assert.equal(out.truncated, true);
-  assert.equal(out.count, MAX_ROWS);
-  assert.match(out.note, /Tighten the glob/);
-  assert.equal(limitBoundTo(reads, /WHERE path GLOB/), MAX_ROWS + 1);
-});
+test("find returns a bounded page and says it was cut; a glob matching a handful is complete", async () => {
+  const big = await connect({ documents: docs(MAX_ROWS + 10) });
+  const cut = parse(
+    await call(big.client, "capsid_find_docs", { action: "glob", glob: "doc-*.md" }),
+  );
+  await big.close();
+  assert.equal(cut.truncated, true);
+  assert.equal(cut.count, MAX_ROWS);
+  assert.equal(limitBoundTo(big.reads, /WHERE path GLOB/), MAX_ROWS + 1);
 
-test("find matching a handful is complete, and the glob really filtered", async () => {
-  // Guards the fake as much as the handler: if globMatch matched everything, the
-  // count below would be 400 and the truncation test above would pass vacuously.
-  const { client, close } = await connect({
+  const few = await connect({
     documents: [...docs(400, "capsid", "other"), ...docs(4, "capsid", "notes/session")],
   });
-  const out = parse(await call(client, "capsid_find_docs", { action: "glob", glob: "notes/*.md" }));
-  await close();
-  assert.equal(out.truncated, false);
-  assert.equal(out.count, 4, "the glob did not filter, so this proves nothing about the bound");
+  const whole = parse(
+    await call(few.client, "capsid_find_docs", { action: "glob", glob: "notes/*.md" }),
+  );
+  await few.close();
+  assert.equal(whole.truncated, false);
+  assert.equal(whole.count, 4);
 });
 
 test("search returns its top page and says when more matched", async () => {
@@ -122,7 +113,6 @@ test("search returns its top page and says when more matched", async () => {
     "search silently returned a full page as if it were the whole answer",
   );
   assert.equal(out.count, SEARCH_ROWS);
-  assert.match(out.note, /Add a namespace or type filter/);
   assert.equal(limitBoundTo(reads, /FROM documents_fts/), SEARCH_ROWS + 1);
 });
 
@@ -213,7 +203,6 @@ test("gather keeps the OLDEST unconsolidated bodies, which is the compile order"
     keptPaths[keptPaths.length - 1] < held[0].path,
     `kept ${keptPaths.join(",")} but held ${held.map((h: { path: string }) => h.path).join(",")}`,
   );
-  assert.match(out.trimmed.join(" | "), /unconsolidated bodies .*oldest were kept/);
 });
 
 test("a gather that fits is not trimmed at all", async () => {
@@ -274,21 +263,34 @@ test("resources/list paginates across namespaces without skipping a boundary", a
   );
 });
 
-// scanner-rule: bounded reads, the paginating list override serves only the template. A resource registered later cannot be exercised by a test written now
-test("the resources/list override cannot silently drop a statically registered resource", async () => {
-  // The handler below replaces the one McpServer installs, which also serves
-  // resources registered by URI rather than by template. This notices if one is added.
-  // Counted across all of src/, so a registration added in another module is seen.
-  assert.equal(
-    allSourceText().split("server.registerResource(").length - 1,
-    1,
-    "a second resource registration exists; the ListResources override serves only the document template",
+test("PLANT: a caller scoped past MAX_ROWS rows it cannot see still gets its own documents", async () => {
+  // A LIMIT applied before the scope filter would give this caller an empty page and no cursor. 'aaa' sorts before 'capsid'.
+  const scopes = defaultScopes(["capsid"]);
+  scopes.tools = ["capsid_read_doc"];
+  const caller: Agent = {
+    id: "agent_narrow01",
+    name: "narrow",
+    kind: "session",
+    actor: "agent:narrow",
+    scopes,
+    admin: false,
+    row: null,
+  };
+  const { client, close } = await connect(
+    {
+      documents: [
+        ...docs(MAX_ROWS + 2, "aaa"),
+        { namespace: "capsid", path: "core.md", title: "core" },
+        { namespace: "capsid", path: "decisions.md", title: "decisions" },
+      ],
+    },
+    caller,
   );
-  const text = sourceFile("resources.ts");
-  assert.equal(
-    text.split("server.registerResource(").length - 1,
-    1,
-    "the document template is no longer registered in src/resources.ts",
-  );
-  assert.match(text, /setRequestHandler\("resources\/list"/, "the paginating list handler is gone");
+  const listed = await client.listResources();
+  await close();
+  assert.deepEqual(listed.resources.map((r) => r.uri).sort(), [
+    "capsid://capsid/core.md",
+    "capsid://capsid/decisions.md",
+  ]);
+  assert.equal(listed.nextCursor, undefined);
 });

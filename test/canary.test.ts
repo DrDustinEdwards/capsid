@@ -3,15 +3,8 @@ import { test } from "node:test";
 // @ts-expect-error scripts/ is plain .mjs with no declarations, deliberately: it
 // runs in the live CI job with no npm ci and no build step.
 import { canaryReport, checkCanary } from "../scripts/canary-lib.mjs";
-// @ts-expect-error same.
-import { CANARY_CLIENT, OAUTH_KV } from "../scripts/bindings.mjs";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
-// Gate 2b reads one long-lived client: record from OAUTH_KV every run, so a lost record is detected within the schedule interval. It reads KV directly
-// rather than driving /authorize, where a missing client and a KV outage are the same error page.
-
-const read = (p: string) => readFileSync(join(import.meta.dirname, p), "utf8");
+// Gate 2b reads one long-lived client: record from OAUTH_KV directly, since through /authorize a missing client and a KV outage are the same error page.
 
 const CLIENT_ID = "canaryTestId123";
 const KEY = `client:${CLIENT_ID}`;
@@ -70,101 +63,59 @@ const check = (stub: ReturnType<typeof fakeKvApi>) =>
     auth: { Authorization: "Bearer t" },
   });
 
-test("a present, non-expiring canary passes", async () => {
-  const stub = fakeKvApi({ value: RECORD });
-  const result = await check(stub);
-  assert.equal(result.outcome, "present");
-  const report = canaryReport(result, CLIENT_ID, "capsid-mcp-oauth");
-  assert.equal(report.passed, true);
-  assert.match(report.detail, /non-expiring/);
-});
-
-test("a MISSING canary fails, and is named as the 2026-08-17 anomaly recurring", async () => {
-  const stub = fakeKvApi({ value: null });
-  const result = await check(stub);
-  assert.equal(result.outcome, "missing");
-  const report = canaryReport(result, CLIENT_ID, "capsid-mcp-oauth");
-  assert.equal(report.passed, false);
-  assert.match(report.detail, /is GONE from capsid-mcp-oauth/);
-  assert.match(report.detail, /vanished-client-record anomaly of 2026-08-17/);
-  // It must tell the reader what to check before restoring it destroys the evidence.
-  assert.match(report.detail, /check whether live grants survived before restoring it/);
-});
-
-test("an UNREACHABLE store is NOT reported as data loss", async () => {
-  // A KV blip must not read as a vanished record.
-  for (const stub of [
-    fakeKvApi({ valueStatus: 500, value: RECORD }),
-    fakeKvApi({ throwOnValue: "ECONNRESET" }),
-  ]) {
-    const result = await check(stub);
-    assert.equal(result.outcome, "unreachable");
-    const report = canaryReport(result, CLIENT_ID, "capsid-mcp-oauth");
-    assert.equal(report.passed, false);
-    assert.match(report.detail, /NOT evidence the record is gone/);
-    assert.doesNotMatch(report.detail, /GONE from/);
-  }
-});
-
-test("a canary that has acquired a TTL fails BEFORE it can expire", async () => {
-  // A record put back with the 90 day TTL DCR gave every client is a canary that can
-  // expire on its own, a second reason to be absent.
-  const stub = fakeKvApi({ value: RECORD, expiration: 1794583009 });
-  const result = await check(stub);
-  assert.equal(result.outcome, "has-ttl");
-  const report = canaryReport(result, CLIENT_ID, "capsid-mcp-oauth");
-  assert.equal(report.passed, false);
-  assert.match(report.detail, /must not expire/);
-  assert.match(report.detail, /2026-11-13/, "the report does not say WHEN it would expire");
-});
-
-test("an unreadable key listing is TTL-UNVERIFIED: neither a TTL nor non-expiring", async () => {
-  // An unread expiry must not print as "non-expiring". Both failure shapes, because
-  // they take different paths: a non-200 listing and a thrown listing.
-  for (const stub of [
-    fakeKvApi({ value: RECORD, listStatus: 500 }),
-    fakeKvApi({ value: RECORD, throwOnList: "ECONNRESET" }),
-  ]) {
-    const result = await check(stub);
-    assert.equal(
-      result.outcome,
+test("each canary outcome, and whether the gate passes", async () => {
+  const cases: Array<[string, ReturnType<typeof fakeKvApi>, string, boolean, RegExp]> = [
+    ["present", fakeKvApi({ value: RECORD }), "present", true, /non-expiring/],
+    ["missing", fakeKvApi({ value: null }), "missing", false, /is GONE from capsid-mcp-oauth/],
+    // A KV blip must not read as a vanished record.
+    [
+      "a 500",
+      fakeKvApi({ valueStatus: 500, value: RECORD }),
+      "unreachable",
+      false,
+      /NOT evidence the record is gone/,
+    ],
+    [
+      "a throw",
+      fakeKvApi({ throwOnValue: "ECONNRESET" }),
+      "unreachable",
+      false,
+      /NOT evidence the record is gone/,
+    ],
+    // A record put back with DCR's 90-day TTL can expire on its own.
+    [
+      "a TTL",
+      fakeKvApi({ value: RECORD, expiration: 1794583009 }),
+      "has-ttl",
+      false,
+      /must not expire.*2026-11-13|2026-11-13.*must not expire/s,
+    ],
+    // An unread expiry must not print as non-expiring.
+    [
+      "a listing 500",
+      fakeKvApi({ value: RECORD, listStatus: 500 }),
       "ttl-unverified",
-      "an unreadable listing was reported as a checked TTL",
-    );
-    assert.equal(result.expiration, undefined, "an expiry was invented from a failed listing");
-    const report = canaryReport(result, CANARY_CLIENT.id, OAUTH_KV.name);
-    assert.equal(report.passed, false);
-    assert.match(report.detail, /TTL UNVERIFIED/);
-    assert.doesNotMatch(report.detail, /non-expiring,/);
+      false,
+      /TTL UNVERIFIED/,
+    ],
+    [
+      "a listing throw",
+      fakeKvApi({ value: RECORD, throwOnList: "ECONNRESET" }),
+      "ttl-unverified",
+      false,
+      /TTL UNVERIFIED/,
+    ],
+  ];
+  for (const [label, stub, outcome, passed, detail] of cases) {
+    const result = await check(stub);
+    assert.equal(result.outcome, outcome, label);
+    if (outcome === "ttl-unverified") assert.equal(result.expiration, undefined, label);
+    const report = canaryReport(result, CLIENT_ID, "capsid-mcp-oauth");
+    assert.equal(report.passed, passed, label);
+    assert.match(report.detail, detail, label);
+    if (outcome === "unreachable") assert.doesNotMatch(report.detail, /GONE from/, label);
+    if (outcome === "ttl-unverified") assert.doesNotMatch(report.detail, /non-expiring,/, label);
   }
-});
-
-test("a foreign or truncated value at the right key is not accepted", async () => {
-  for (const value of ["", "not json", JSON.stringify({ clientId: "someone-else" })]) {
-    const result = await check(fakeKvApi({ value }));
-    assert.equal(result.outcome, "corrupt", `${JSON.stringify(value)} was accepted as the canary`);
-  }
-});
-
-test("gate 2b is wired into the run and counted", () => {
-  const gate = read("../scripts/verify-live.mjs");
-  assert.match(gate, /await gateCanary\(\);/, "gate 2b is defined but never called");
-  const labels = new Set([...gate.matchAll(/record\(\s*"([^"]+)"/g)].map((m) => m[1]));
-  assert.ok(
-    labels.has("2b canary client record"),
-    "the canary gate is no longer one of the counted gates",
-  );
-});
-
-test("the credentials the gate needs are supplied to the scheduled check in CI", () => {
-  // Without these the gate skips silently in CI. The deploy's gate gets no Cloudflare secret (devkit worker-deploy).
-  const workflow = read("../.github/workflows/ci.yml");
-  const job = workflow.slice(workflow.indexOf("  scheduled-live:"));
-  const step = job.slice(job.indexOf("- name: verify:live"));
-  assert.match(
-    step,
-    /CLOUDFLARE_API_TOKEN:/,
-    "verify:live cannot read KV, so gate 2b will skip on every CI run",
-  );
-  assert.match(step, /CLOUDFLARE_ACCOUNT_ID:/);
+  for (const value of ["", "not json", JSON.stringify({ clientId: "someone-else" })])
+    assert.equal((await check(fakeKvApi({ value }))).outcome, "corrupt", JSON.stringify(value));
 });

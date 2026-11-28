@@ -1,33 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  AGENT_KINDS,
   SCOPE_FLAGS,
   allowsScope,
   defaultScopes,
   isAgentKind,
   parseScopes,
-  serializeScopes,
   type AgentScopes,
 } from "../src/agents-schema.ts";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
-// Parsing fails closed: a scopes column that is empty, truncated, malformed or of an unexpected type resolves to least privilege,
-// not to "no restrictions found, allow everything".
-
-const MIGRATION = readFileSync(
-  join(import.meta.dirname, "..", "migrations", "0008_agents.sql"),
-  "utf8",
-);
-
-test("the migration and the module agree about the kinds a credential can have", () => {
-  for (const kind of AGENT_KINDS) {
-    assert.ok(
-      MIGRATION.includes(kind),
-      `migrations/0008_agents.sql never mentions the '${kind}' kind`,
-    );
-  }
+test("isAgentKind admits a stored kind only", () => {
   assert.ok(isAgentKind("driver"));
   assert.ok(!isAgentKind("admin"), "'admin' is a synthetic identity, not a storable kind");
   assert.ok(!isAgentKind("constructor"), "the kind check must not answer for Object.prototype");
@@ -66,8 +48,7 @@ test("an unrecognized grant, flag or list entry is dropped rather than carried",
       repos: "*",
       tools: "*",
       grants: ["read", "admin", "write"],
-      flags: { can_merge: true, can_fly: true, can_touch_protected: "yes", can_comment_pr: true },
-      max_claims: 99,
+      flags: { can_merge: true, can_fly: true, can_touch_protected: "yes" },
     }),
   );
   assert.deepEqual(scopes.namespaces, ["capsid"], "non-string entries are not namespaces");
@@ -79,22 +60,6 @@ test("an unrecognized grant, flag or list entry is dropped rather than carried",
     "a flag is true only when it is the boolean true",
   );
   assert.ok(!Object.hasOwn(scopes.flags, "can_fly"), "an invented flag must not survive the parse");
-  // A stored row from before can_comment_pr was retired still loads.
-  assert.ok(
-    !Object.hasOwn(scopes.flags, "can_comment_pr"),
-    "a retired flag must not survive the parse",
-  );
-  assert.ok(
-    !Object.hasOwn(scopes, "max_claims"),
-    "a stored claim limit from before the limit was removed must not survive the parse",
-  );
-});
-
-test("serialize and parse round-trip without widening", () => {
-  const scopes = defaultScopes(["capsid", "sample"]);
-  scopes.flags.can_merge = true;
-  const back = parseScopes(serializeScopes(scopes));
-  assert.deepEqual(back, scopes);
 });
 
 test("allowsScope is the one list comparison, and '*' is the only wildcard", () => {

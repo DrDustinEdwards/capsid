@@ -3,19 +3,16 @@ import { test } from "node:test";
 import { MAX_NAMESPACE } from "../src/limits.ts";
 import { parseLinks } from "../src/links.ts";
 
-test("parseLinks accepts an edge and defaults to_ns to the source namespace", () => {
-  const result = parseLinks('[{"type":"references","to_path":"decisions.md"}]', "capsid");
-  assert.deepEqual(result, {
+test("parseLinks accepts an edge, defaults to_ns to the source namespace, and reads [] as clear", () => {
+  assert.deepEqual(parseLinks('[{"type":"references","to_path":"decisions.md"}]', "capsid"), {
     edges: [{ type: "references", to_ns: "capsid", to_path: "decisions.md" }],
   });
-});
-
-test("parseLinks keeps an explicit to_ns", () => {
-  const result = parseLinks('[{"type":"governs","to_path":"core.md","to_ns":"sample"}]', "capsid");
-  assert.deepEqual(result, { edges: [{ type: "governs", to_ns: "sample", to_path: "core.md" }] });
-});
-
-test("parseLinks treats an empty array as clear", () => {
+  assert.deepEqual(
+    parseLinks('[{"type":"governs","to_path":"core.md","to_ns":"sample"}]', "capsid"),
+    {
+      edges: [{ type: "governs", to_ns: "sample", to_path: "core.md" }],
+    },
+  );
   assert.deepEqual(parseLinks("[]", "capsid"), { edges: [] });
 });
 
@@ -34,18 +31,13 @@ test("parseLinks rejects a non-array, an unknown type, a missing to_path and inv
 });
 
 test("an edge endpoint is held to the document path grammar", () => {
-  const cases: Array<[string, RegExp]> = [
-    ["../escape.md", /must not contain '\.\.'/],
-    ["/etc/passwd", /must not start/],
-    ["a//b.md", /empty segment/],
-    ["notes/", /must not end/],
-  ];
-  for (const [to_path, expected] of cases) {
-    const result = parseLinks(JSON.stringify([{ type: "references", to_path }]), "capsid");
-    assert.ok("error" in result, `${to_path} was accepted as an edge endpoint`);
-    assert.match(result.error, /is not a document path/);
-    assert.match(result.error, expected);
-  }
+  // The grammar itself is test/limits.test.ts.
+  const result = parseLinks(
+    JSON.stringify([{ type: "references", to_path: "../escape.md" }]),
+    "capsid",
+  );
+  assert.ok("error" in result);
+  assert.match(result.error, /is not a document path.*must not contain '\.\.'/s);
 });
 
 test("an edge namespace is held to the SAME namespace rule the tools use", () => {

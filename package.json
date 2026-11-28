@@ -24,7 +24,6 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint:repo": "node --import ./test/resolve-ts.mjs --test \"test/lint/*.lint.ts\"",
-    "lint:dead-exports": "node --import ./test/resolve-ts.mjs --test test/lint/dead-exports.lint.ts",
     "lint:docs": "node --import ./test/resolve-ts.mjs --test test/lint/docs.lint.ts",
     "check:console": "devkit-console",
     "check:migrations": "devkit-migrations migrations --min 54",

@@ -74,8 +74,6 @@ test("a forbidden dispatch is a failure the ledger shows, tried again an hour la
 });
 
 test("an installation that leaves capsid-backups out is one refused run an hour, not a throw every tick", async () => {
-  // 2026-11-28: the App's installation was cut to six repos, the token mint answered 422 and the
-  // probe threw on every five-minute tick (85 runs) instead of waiting an hour.
   const kv = fakeKv({ seed: { "gh:install:v2:DrDustinEdwards": "144" } });
   const env = fakeEnv({
     APP_KV: kv.kv,

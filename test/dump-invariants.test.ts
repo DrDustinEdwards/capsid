@@ -37,10 +37,9 @@ function table(dir: string, name: string, rows: Record<string, unknown>[]): void
 function goodDump(): string {
   const dir = mkdtempSync(join(tmpdir(), "dump-invariants-"));
   for (const [name, rows] of Object.entries(ROWS)) table(dir, name, rows);
-  write(dir, "_kv.json", { exported_at: "2026-09-07T09:00:00Z", keys: { improve_mode: "off" } });
-  write(dir, "_holdout-manifests.json", {
+  write(dir, "_kv.json", {
     exported_at: "2026-09-07T09:00:00Z",
-    manifests: { capsid: { total: 30 } },
+    keys: { "backup:last-ok": "2026-09-07T02:00:00Z" },
   });
   seal(dir);
   return dir;
@@ -65,7 +64,7 @@ function withDump(fn: (dir: string) => void): void {
 test("a good dump passes, and the summary says what was read", () => {
   withDump((dir) => {
     assert.deepEqual(checkDump(dir), {
-      files: 6,
+      files: 5,
       tables: 3,
       rows: 2,
       documents: 2,
@@ -149,16 +148,13 @@ test("a shuffled table file, and a row that lost a column, are refused", () => {
   });
 });
 
-test("A TORN SNAPSHOT IS REFUSED: a version row for a document created after the documents read", () => {
+test("PLANT: a version row for a document created after the documents read is torn; one for a deleted document is an orphan", () => {
   withDump((dir) => {
     table(dir, "document_versions", [
       { id: 1, document_id: 99, namespace: "sample", path: "mid-dump.md" },
     ]);
     assert.throws(() => checkDump(dir), /TORN.*document_versions 1 snapshots document 99/);
   });
-});
-
-test("a version row for a DELETED document is not torn, and is counted as an orphan", () => {
   withDump((dir) => {
     table(dir, "document_versions", [
       { id: 1, document_id: 99, namespace: "sample", path: "gone.md" },
@@ -170,7 +166,7 @@ test("a version row for a DELETED document is not torn, and is counted as an orp
   });
 });
 
-test("A TORN SNAPSHOT IS REFUSED: a write audited at or after the newest document, for a path not in the dump", () => {
+test("PLANT: a write audited at or after the newest document, for a path not in the dump, is torn; an old one is an orphan", () => {
   for (const at of ["2026-09-02 00:00:00", "2026-09-01 00:00:05"]) {
     withDump((dir) => {
       table(dir, "audit_log", [
@@ -182,9 +178,6 @@ test("A TORN SNAPSHOT IS REFUSED: a write audited at or after the newest documen
       );
     });
   }
-});
-
-test("an OLD write to a since-archived path is not torn, and is counted as an orphan", () => {
   withDump((dir) => {
     table(dir, "audit_log", [
       {

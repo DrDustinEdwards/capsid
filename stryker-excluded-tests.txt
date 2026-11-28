@@ -5,7 +5,6 @@
 # under the audit's keep rules they are always kept, so none is a removal candidate.
 # Mutants only they would kill show as survivors in the report.
 blast-radius.test.ts
-deploy-pipeline.test.ts
 invariants.test.ts
 mutation-guard-coverage.test.ts
 route-gates.test.ts

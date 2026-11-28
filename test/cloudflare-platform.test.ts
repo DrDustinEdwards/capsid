@@ -1,55 +1,27 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
-// Each block guards one Cloudflare platform deadline or contract, so a regression is a failing test rather than an outage.
+const read = (p: string) => readFileSync(join(import.meta.dirname, "..", p), "utf8");
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-
-test("wrangler.jsonc.example and bindings.mjs agree on the compatibility date", () => {
-  const example = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");
-  const inExample = /"compatibility_date":\s*"(\d{4}-\d{2}-\d{2})"/.exec(example);
-  assert.ok(inExample, "wrangler.jsonc.example no longer sets compatibility_date");
-  const bindings = readFileSync(join(ROOT, "scripts", "bindings.mjs"), "utf8");
-  const inBindings = /export const COMPATIBILITY_DATE = "(\d{4}-\d{2}-\d{2})"/.exec(bindings);
-  assert.ok(inBindings, "scripts/bindings.mjs no longer exports COMPATIBILITY_DATE");
-  assert.equal(
-    inExample[1],
-    inBindings[1],
-    "the example and bindings.mjs disagree on the compatibility date",
-  );
-  // The date must stay at or past nodejs_compat's default-on threshold, so the
-  // explicit flag in the example stays redundant rather than required.
-  assert.ok(
-    inExample[1] >= "2026-08-04",
-    `compatibility date ${inExample[1]} fell behind the nodejs_compat default threshold`,
-  );
+// CI writes wrangler.jsonc from the example; the scripts read bindings.mjs. Two spellings of one number each.
+test("wrangler.jsonc.example and bindings.mjs agree on the compatibility date and limits.cpu_ms", () => {
+  const example = read("wrangler.jsonc.example");
+  const bindings = read("scripts/bindings.mjs");
+  const date = /"compatibility_date":\s*"(\d{4}-\d{2}-\d{2})"/.exec(example)?.[1];
+  assert.equal(date, /export const COMPATIBILITY_DATE = "([\d-]+)"/.exec(bindings)?.[1]);
+  // At or past nodejs_compat's default-on date, so the explicit flag stays redundant.
+  assert.ok(date && date >= "2026-08-04", `compatibility date ${date}`);
+  const cpu = /"limits":\s*\{\s*"cpu_ms":\s*(\d+)\s*\}/.exec(example)?.[1];
+  assert.equal(cpu, /export const LIMITS = \{ cpu_ms: (\d+) \}/.exec(bindings)?.[1]);
+  // The ceiling must clear the largest measured invocation (the 1390ms backup) with headroom.
+  assert.ok(Number(cpu) >= 1390 * 1.5, `cpu_ms ${cpu}`);
 });
 
-test("wrangler.jsonc.example and bindings.mjs agree on limits.cpu_ms", () => {
-  // CI writes wrangler.jsonc from the example; the scripts read bindings.mjs. Two
-  // spellings of one number, pinned textually (bindings.mjs is untyped .mjs) so a
-  // retune of one cannot silently leave the other.
-  const example = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");
-  const inExample = /"limits":\s*\{\s*"cpu_ms":\s*(\d+)\s*\}/.exec(example);
-  assert.ok(
-    inExample,
-    "wrangler.jsonc.example no longer sets limits.cpu_ms: the runaway guard is gone",
-  );
-  const bindings = readFileSync(join(ROOT, "scripts", "bindings.mjs"), "utf8");
-  const inBindings = /export const LIMITS = \{ cpu_ms: (\d+) \}/.exec(bindings);
-  assert.ok(inBindings, "scripts/bindings.mjs no longer exports LIMITS.cpu_ms");
-  assert.equal(
-    Number(inExample[1]),
-    Number(inBindings[1]),
-    "wrangler.jsonc.example and scripts/bindings.mjs disagree on cpu_ms",
-  );
-  // Sanity floor: the ceiling must clear the largest measured invocation (the
-  // 1390ms backup) or the guard kills the backup it exists to protect.
-  assert.ok(
-    Number(inBindings[1]) >= 1390 * 1.5,
-    `cpu_ms ${inBindings[1]} is under the measured backup ceiling plus headroom`,
-  );
+test("the integration compatibility date is not ahead of the deploy date", () => {
+  // The pool's workerd caps behind production; a later date would pass on behavior production does not have.
+  const integration = /INTEGRATION_COMPAT_DATE = "([\d-]+)"/.exec(read("vitest.config.ts"))?.[1];
+  const deployed = /COMPATIBILITY_DATE = "([\d-]+)"/.exec(read("scripts/bindings.mjs"))?.[1];
+  assert.ok(integration && deployed && integration <= deployed, `${integration} vs ${deployed}`);
 });

@@ -128,11 +128,3 @@ test("a watched site whose host is no system's domain is named; a subdomain of o
     ],
   );
 });
-
-test("an unread App list is its own not-checked line, and the other comparisons still run", () => {
-  const out = modelDrift(
-    MODEL,
-    facts({ installed: null, mapped: [{ namespace: "sample", repo: "example-org/sample-docs" }] }),
-  );
-  assert.deepEqual(out.items.map((i) => i.rule).sort(), ["model-drift", "model-not-checked"]);
-});

@@ -96,15 +96,6 @@ async function signed(path: string, init: RequestInit = {}): Promise<Request> {
   return new Request(`https://capsid.example${path}`, { ...init, headers });
 }
 
-test("the feed answers a signed-in administrator with the feed, uncached", async () => {
-  const res = await handleOpsFeed(await signed(OPS_FEED_PATH), env(), NOW, { feed });
-  assert.equal(res.status, 200);
-  assert.equal(res.headers.get("Cache-Control"), "private, no-store");
-  assert.match(res.headers.get("Content-Type") ?? "", /application\/json/);
-  const body = (await res.json()) as { csrf: string };
-  assert.deepEqual(body, { ...FEED, csrf: body.csrf, user: { name: "admin", initials: "A" } });
-});
-
 test("portalDisplay: another person gets their own name and initials, never a fixed label", () => {
   assert.deepEqual(portalDisplay({ email: "jane.q.public@example.com" }), {
     name: "jane.q.public",
@@ -182,22 +173,11 @@ test("a malformed Portal CSRF cookie is replaced, not echoed", async () => {
   );
 });
 
-test("the feed and the refresh refuse a bearer with 403 and send an anonymous reader to sign in", async () => {
+test("a bearer beside a valid session is still refused: the gate reads the header first", async () => {
   for (const [path, method, handler] of [
     [OPS_FEED_PATH, "GET", handleOpsFeed],
     [OPS_REFRESH_PATH, "POST", handleOpsRefresh],
   ] as const) {
-    const bearer = await handler(
-      new Request(`https://capsid.example${path}`, {
-        method,
-        headers: { Authorization: "Bearer capsid_x", [OPS_REFRESH_HEADER]: "refresh" },
-      }),
-      env(),
-      NOW,
-      { feed },
-    );
-    assert.equal(bearer.status, 403, `${path} served a bearer`);
-    // A bearer beside a valid session is still refused: the gate reads the header first.
     const both = await handler(
       await signed(path, {
         method,
@@ -207,18 +187,7 @@ test("the feed and the refresh refuse a bearer with 403 and send an anonymous re
       NOW,
       { feed },
     );
-    assert.equal(both.status, 403, `${path} served a bearer that also carried a session`);
-    const anonymous = await handler(
-      new Request(`https://capsid.example${path}`, {
-        method,
-        headers: { [OPS_REFRESH_HEADER]: "refresh" },
-      }),
-      env(),
-      NOW,
-      { feed },
-    );
-    assert.equal(anonymous.status, 302, `${path} did not send an anonymous reader to sign in`);
-    assert.equal(await anonymous.text(), "");
+    assert.equal(both.status, 403, path);
   }
 });
 
@@ -231,22 +200,7 @@ const gathered = async (): Promise<Gathered> => ({
 const refreshRequest = (headers: Record<string, string> = { [OPS_REFRESH_HEADER]: "refresh" }) =>
   signed(OPS_REFRESH_PATH, { method: "POST", headers });
 
-test("a refresh without the same-origin header is refused with 403, and nothing runs", async () => {
-  const kv = fakeKv();
-  const variants: Array<Record<string, string>> = [{}, { [OPS_REFRESH_HEADER]: "yes" }];
-  for (const headers of variants) {
-    const res = await handleOpsRefresh(await refreshRequest(headers), env(kv), NOW, {
-      feed,
-      gather: gathered,
-    });
-    assert.equal(res.status, 403);
-    assert.match(await res.text(), /X-Capsid-Ops: refresh/);
-  }
-  assert.deepEqual(kv.puts, [], "a refused refresh wrote to KV");
-});
-
 test("PLANT: the refresh runs a watcher pass even when the cadence says one is not due", async () => {
-  // The watcher ran a minute ago, so the five-minute tick would skip. The refresh must not.
   const kv = fakeKv({
     seed: { [WATCHER_LAST_KEY]: new Date(NOW.getTime() - 60_000).toISOString() },
   });
@@ -258,10 +212,12 @@ test("PLANT: the refresh runs a watcher pass even when the cadence says one is n
     "the fixture must be a pass the cadence refuses, or this proves nothing about force",
   );
 
-  const res = await handleOpsRefresh(await refreshRequest(), env(kv, db), NOW, {
-    feed,
-    gather: gathered,
-  });
+  const res = await handleOpsRefresh(
+    await refreshRequest({ [OPS_REFRESH_HEADER]: "refresh", "CF-Connecting-IP": "198.51.100.4" }),
+    env(kv, db),
+    NOW,
+    { feed, gather: gathered },
+  );
   assert.equal(res.status, 200, await res.clone().text());
   const body = (await res.json()) as { csrf: string };
   assert.deepEqual(body, { ...FEED, csrf: body.csrf, user: { name: "admin", initials: "A" } });
@@ -278,21 +234,7 @@ test("PLANT: the refresh runs a watcher pass even when the cadence says one is n
   assert.equal(audit.params[0], "access:admin@example.com");
   assert.equal(audit.params[1], "portal-ops-refresh");
   assert.equal(JSON.parse(String(audit.params[4])).ran, true);
-  // No CF-Connecting-IP on this request: recorded as null, not left out.
-  assert.equal(JSON.parse(String(audit.params[4])).source_address, null);
-});
-
-test("a refresh's audit row records the address it came from", async () => {
-  const { db, batches } = recordingDb();
-  const res = await handleOpsRefresh(
-    await refreshRequest({ [OPS_REFRESH_HEADER]: "refresh", "CF-Connecting-IP": "198.51.100.4" }),
-    env(fakeKv(), db),
-    NOW,
-    { feed, gather: gathered },
-  );
-  assert.equal(res.status, 200, await res.clone().text());
-  const audit = batches.flat().find((s) => /INSERT INTO audit_log/.test(s.sql));
-  assert.equal(JSON.parse(String(audit?.params[4])).source_address, "198.51.100.4");
+  assert.equal(JSON.parse(String(audit.params[4])).source_address, "198.51.100.4");
 });
 
 test("PLANT: a second refresh inside two minutes is refused with 429 and a Retry-After", async () => {

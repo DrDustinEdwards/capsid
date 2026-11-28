@@ -10,20 +10,15 @@ const hour = (hoursAgo: number) =>
 function steady(actor: string): ActionHour[] {
   const out: ActionHour[] = [];
   for (let h = 30; h < 14 * 24; h += 6)
-    for (const action of ["jobs-claimed", "read", "write"])
-      out.push({ actor, action, hour: hour(h), n: 3 });
+    for (const action of ["read", "write"]) out.push({ actor, action, hour: hour(h), n: 3 });
   return out;
 }
 
-test("an agent doing what it always does raises nothing, and the rows read are counted", () => {
+test("an agent doing what it always does raises nothing", () => {
   const rows = [
     ...steady("agent:sample-driver"),
     { actor: "agent:sample-driver", action: "write", hour: hour(2), n: 4 },
   ];
-  assert.ok(
-    rows.length > 100,
-    "the baseline read is not empty, so the silence below means something",
-  );
   assert.deepEqual(anomalyFindings(rows, NOW), []);
 });
 
@@ -61,7 +56,7 @@ test("PLANT: a new key first used at 03:00 Chicago is a finding; one first used 
   // 2026-10-10 is CDT (UTC-5): 08:00Z is 03:00 Chicago, 17:00Z is noon.
   assert.equal(chicagoHour("2026-10-10T08"), 3);
   const night = anomalyFindings(
-    [{ actor: "agent:sample-new", action: "jobs-claimed", hour: "2026-10-10T08", n: 2 }],
+    [{ actor: "agent:sample-new", action: "read", hour: "2026-10-10T08", n: 2 }],
     NOW,
   );
   assert.deepEqual(
@@ -70,7 +65,7 @@ test("PLANT: a new key first used at 03:00 Chicago is a finding; one first used 
   );
   assert.deepEqual(
     anomalyFindings(
-      [{ actor: "agent:sample-new", action: "jobs-claimed", hour: "2026-10-10T17", n: 2 }],
+      [{ actor: "agent:sample-new", action: "read", hour: "2026-10-10T17", n: 2 }],
       NOW,
     ),
     [],

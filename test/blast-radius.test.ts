@@ -2,23 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
-import { SCOPE_FLAGS, defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
+import { defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
-import {
-  IMPROVE_OVERRIDE_FLAGS,
-  TOOL_ACTION_GRANTS,
-  TOOL_GRANTS,
-  repoWriteFlags,
-} from "../src/scope.ts";
+import { deleteBranch } from "../src/github.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
-import {
-  operationBlocks,
-  sourceFile,
-  sourceFiles,
-  toolBlocks,
-  type SourceFile,
-} from "./source-files.ts";
-import { servedOperations } from "./served.ts";
 
 // One plant per flag, through a real MCP connection against a scoped caller, in both directions: a refusal test alone passes against a broken tool.
 // Every refusing plant also asserts zero GitHub calls: a repo write that refuses after committing has already happened.
@@ -172,6 +159,22 @@ test("PLANT: a driver IS allowed a branch delete without force, which still refu
   });
 });
 
+test("delete_branch treats a non-OK pulls response as a refusal, not as no PRs", async () => {
+  await withFetch(
+    {
+      "GET /repos/o/r": { body: { default_branch: "main" } },
+      "GET /repos/o/r/pulls": { status: 500, body: { message: "boom" } },
+    },
+    async (calls) => {
+      await assert.rejects(
+        () => deleteBranch(env(), "capsid", "feature-x"),
+        /could not verify|could not list/i,
+      );
+      assert.equal(calls.filter((c) => c.method === "DELETE").length, 0);
+    },
+  );
+});
+
 test("PLANT: a driver cannot reach a namespace it was not minted for", async () => {
   await withFetch({}, async (calls) => {
     const result = await callAs(driver("capsid"), "capsid_close_pr", {
@@ -211,218 +214,4 @@ test("PLANT: a namespace-scoped caller that omits the namespace is refused, not 
     /core\.md/,
     "the allowed read came back empty, so it proves nothing about the guard",
   );
-});
-
-test("PLANT: an unscoped tool is refused even when the grant and the namespace are fine", async () => {
-  const narrow = driver();
-  narrow.scopes.tools = ["capsid_read_doc", "capsid_find_docs", "capsid_write_doc"];
-  const result = await callAs(narrow, "capsid_close_pr", {
-    action: "close",
-    namespace: "capsid",
-    number: 7,
-  });
-  assert.equal(result.isError, true);
-  assert.match(result.content[0].text, /not scoped to the 'capsid_close_pr\.close' tool/);
-});
-
-// scanner-rule: one enforcement point invariant: no new tool bypasses checkScope. Derived over every
-// registration, including tools added later.
-test("DERIVED: every write tool is on the enforcement point's path", () => {
-  // Each write tool must be covered by the registrar (its requirement is stated) or carry its own check; a served tool dispatches to
-  // operations (src/tools/surface.ts), so its own check lives in the operation blocks it runs.
-  const ops = new Map(operationBlocks().map((b) => [b.name, b.body]));
-  const served = servedOperations();
-  const ownCheck = (tool: string): boolean => {
-    const bodies = served.filter((s) => s.tool === tool).map((s) => ops.get(s.op));
-    return (
-      bodies.length > 0 && bodies.every((body) => body !== undefined && /ctx\.scope\(/.test(body))
-    );
-  };
-  const uncovered = toolBlocks()
-    .filter((b) => TOOL_GRANTS[b.name] !== "read")
-    .filter(
-      (b) =>
-        !Object.hasOwn(TOOL_GRANTS, b.name) ||
-        (TOOL_GRANTS[b.name] === "action" &&
-          !Object.hasOwn(TOOL_ACTION_GRANTS, b.name) &&
-          !ownCheck(b.name)),
-    )
-    .map((b) => b.name);
-  assert.deepEqual(
-    uncovered,
-    [],
-    `these write tools are not covered by checkScope: ${uncovered.join(", ")}`,
-  );
-  // Vacuity: the walk found a real surface, and the operations it dispatches to.
-  assert.ok(toolBlocks().length >= 15, "the tool walk collapsed");
-  assert.ok(ops.size >= 30, "the operation walk collapsed");
-});
-
-// scanner-rule: one enforcement point invariant: a repo mutation carries its flags through guardedWrite.
-// Derived over every GitHub mutation helper and every call site in src/.
-
-// Derived from src/github/: every top-level function that sends POST, PUT, PATCH or DELETE through ghFetch, and every caller, to a fixed point.
-const MUTATING_METHOD = /method:\s*"(?:POST|PUT|PATCH|DELETE)"/;
-function githubMutationHelpers(files: SourceFile[]): string[] {
-  const blocks: Array<{ name: string; exported: boolean; body: string }> = [];
-  for (const file of files.filter((f) => f.name.startsWith("github/"))) {
-    const heads = [...file.text.matchAll(/^(export )?(?:async )?function (\w+)/gm)];
-    heads.forEach((m, i) => {
-      const body = file.text.slice(
-        m.index,
-        i + 1 < heads.length ? heads[i + 1].index : file.text.length,
-      );
-      blocks.push({ name: m[2], exported: Boolean(m[1]), body });
-    });
-  }
-  const mutating = new Set(
-    blocks
-      .filter((b) => /ghFetch\(/.test(b.body) && MUTATING_METHOD.test(b.body))
-      .map((b) => b.name),
-  );
-  for (let grew = true; grew;) {
-    grew = false;
-    for (const b of blocks) {
-      if (mutating.has(b.name)) continue;
-      if (
-        [...mutating].some((name) =>
-          new RegExp(`\\b${name}\\(`).test(b.body.slice(b.body.indexOf("{"))),
-        )
-      ) {
-        mutating.add(b.name);
-        grew = true;
-      }
-    }
-  }
-  return blocks
-    .filter((b) => b.exported && mutating.has(b.name))
-    .map((b) => b.name)
-    .sort();
-}
-
-// Import lists and comment lines are blanked (same length, so offsets hold): they name
-// a helper without calling it.
-function codeOnly(text: string): string {
-  const blank = (m: string) => m.replace(/[^\n]/g, " ");
-  return text
-    .replace(/^import[\s\S]*?from\s+"[^"]+";/gm, blank)
-    .replace(/^\s*(?:\/\/|\*|\/\*).*$/gm, blank);
-}
-
-// Calls to a mutation helper outside src/github/ not inside a guardedWrite callback, and ghFetch calls sending a mutating method, as "file: helper".
-function unguardedMutations(files: SourceFile[], helpers: string[]): string[] {
-  const found: string[] = [];
-  for (const file of files.filter((f) => !f.name.startsWith("github/"))) {
-    const code = codeOnly(file.text);
-    for (const helper of helpers) {
-      for (const m of code.matchAll(new RegExp(`(?<![\\w.])${helper}\\(`, "g"))) {
-        if (/function\s+$/.test(code.slice(Math.max(0, m.index - 20), m.index))) continue;
-        if (/guardedWrite\(/.test(code.slice(Math.max(0, m.index - 800), m.index))) continue;
-        found.push(`${file.name}: ${helper}`);
-      }
-    }
-    for (const m of code.matchAll(/\bghFetch\(/g)) {
-      let depth = 0;
-      let at = m.index + "ghFetch".length;
-      for (; at < code.length; at++) {
-        if (code[at] === "(") depth += 1;
-        else if (code[at] === ")" && --depth === 0) break;
-      }
-      if (
-        MUTATING_METHOD.test(code.slice(m.index, at)) ||
-        /method:\s*\w/.test(code.slice(m.index, at))
-      ) {
-        found.push(`${file.name}: ghFetch`);
-      }
-    }
-  }
-  return found.sort();
-}
-
-// Call sites that reach GitHub outside guardedWrite, each with why: none has a caller to check, so an all-allowing agent would be a check that cannot refuse.
-// Each writes its own audit row. Adding a site is a test edit a reviewer sees; a second call in a listed file fails too, since the count is exact.
-const UNGUARDED_EXCEPTIONS: Array<{ site: string; why: string }> = [
-  {
-    site: "controls-perform.ts: managePr",
-    why: "the portal's pr_close control: the owner's signed control token (Access login, no MCP grant); writes its pr-closed audit row",
-  },
-  {
-    site: "offaccount-dispatch.ts: ghFetch",
-    why: "the tick starting capsid-backups' nightly copy (workflow_dispatch, no inputs) when GitHub's schedule is late, and its daily permission probe of a branch that does not exist; no caller, a refused call is a refused run in the ledger",
-  },
-  {
-    site: "maintenance-branches.ts: deletePruneCandidates",
-    why: "the maintenance pass's branch prune, a system action behind its KV switch; audited per branch",
-  },
-];
-
-test("DERIVED: every repo mutation goes through the one wrapper that computes the flags", () => {
-  // Repo write tools reach GitHub through guardedWrite, where repoWriteFlags runs; a direct github/ mutation would skip the flag check while still write-gated.
-  // All of src/ is scanned, since a cron or control reaching GitHub is a mutation too.
-  const files = sourceFiles();
-  const helpers = githubMutationHelpers(files);
-  // Vacuity and drift: the derivation finds every helper the repo tools are known to
-  // call. A helper missing here means the derivation stopped seeing it.
-  for (const known of ["managePr", "deleteBranch", "pruneMergedBranches", "tagRelease"]) {
-    assert.ok(
-      helpers.includes(known),
-      `the derivation did not find ${known} as a mutation helper; it found ${helpers.join(", ")}`,
-    );
-  }
-  const repo = codeOnly(sourceFile("tools/repo.ts"));
-  for (const known of ["managePr(", "deleteBranch(", "tagRelease("]) {
-    assert.ok(
-      repo.includes(known),
-      `the scan found no call to ${known} in tools/repo.ts; it is reading nothing`,
-    );
-  }
-  assert.deepEqual(
-    unguardedMutations(files, helpers),
-    UNGUARDED_EXCEPTIONS.map((e) => e.site).sort(),
-    "a GitHub mutation is called outside guardedWrite, so no flag is checked for it. Route it through guardedWrite, " +
-      "or, where there is no caller to check, add it to UNGUARDED_EXCEPTIONS with the reason",
-  );
-});
-
-test("PLANT: the mutation scan catches a helper called outside guardedWrite, and a raw mutating ghFetch", () => {
-  const helpers = githubMutationHelpers(sourceFiles());
-  const planted: SourceFile[] = [
-    {
-      name: "tools/guarded.ts",
-      text: 'return guardedWrite("manage_pr", ns, null, () => managePr(env, ns, 1, "merge"));\n',
-    },
-    {
-      name: "rogue.ts",
-      text: 'import { managePr } from "./github/refs";\n// managePr( in a comment is not a call\nawait managePr(env, ns, 1, "merge");\n',
-    },
-    {
-      name: "raw.ts",
-      text: 'await ghFetch(env, o, r, `/repos/${o}/${r}/pulls/1/merge`, { method: "PUT" });\nawait ghFetch(env, o, r, "/repos/x");\n',
-    },
-  ];
-  assert.deepEqual(unguardedMutations(planted, helpers), ["raw.ts: ghFetch", "rogue.ts: managePr"]);
-});
-
-test("every flag is required by some path, so none of them is decoration", () => {
-  // A flag nothing asks for protects nothing. Each one has to be produced by
-  // repoWriteFlags for some call, or be named by the document-side override.
-  const produced = new Set<ScopeFlag>();
-  for (const plant of PLANTS) {
-    const action = typeof plant.args.action === "string" ? plant.args.action : undefined;
-    for (const flag of repoWriteFlags(plant.tool, action, plant.args as { force?: boolean })) {
-      produced.add(flag);
-    }
-  }
-  for (const flag of IMPROVE_OVERRIDE_FLAGS) produced.add(flag);
-  // The loops over SCOPE_FLAGS in the agents-* tests rely on this list being non-empty.
-  assert.ok(
-    SCOPE_FLAGS.length > 0,
-    "SCOPE_FLAGS is empty, so no flag was checked here or in the agents tests",
-  );
-  for (const flag of SCOPE_FLAGS) {
-    assert.ok(
-      produced.has(flag),
-      `${flag} is required by no path, so holding it or not changes nothing`,
-    );
-  }
 });

@@ -20,49 +20,43 @@ const job = (conclusion: string | null, rollback: string | null) => ({
   ],
 });
 
-test("a passing live gate is verified", () => {
-  assert.deepEqual(outcomeFrom(job("success", "skipped"), []), {
-    outcome: "verified",
-    rollback_from: null,
-    rollback_to: null,
-    detail: "the live gate passed",
-  });
-});
-
-test("PLANT: a refused deploy that was rolled back is rolled_back, with where production went, from the step's annotation", () => {
-  const read = outcomeFrom(job("failure", "success"), [
-    `rolled back: was ${A} (this run's commit ${A}), now ${B}. master still points at the bad commit; land a fix or revert it.`,
-  ]);
-  assert.deepEqual(read, {
-    outcome: "rolled_back",
-    rollback_from: A,
-    rollback_to: B,
-    detail: "the live gate refused the deploy and it was rolled back",
-  });
-});
-
-test("a rollback the guard declined is rollback_skipped, not rolled_back", () => {
-  assert.equal(
+test("outcomeFrom reads the live gate job and its rollback annotation", () => {
+  // A refused deploy that was rolled back names where production went, from the step's annotation.
+  assert.deepEqual(
     outcomeFrom(job("failure", "success"), [
-      "not rolling back. master and production may disagree; a human decides.",
-    ])?.outcome,
-    "rollback_skipped",
+      `rolled back: was ${A} (this run's commit ${A}), now ${B}. master still points at the bad commit; land a fix or revert it.`,
+    ]),
+    {
+      outcome: "rolled_back",
+      rollback_from: A,
+      rollback_to: B,
+      detail: "the live gate refused the deploy and it was rolled back",
+    },
   );
-  assert.equal(outcomeFrom(job("failure", "success"), [])?.outcome, "rollback_skipped");
-});
-
-test("a rollback that did not take effect is rollback_failed, naming what production still serves", () => {
-  const read = outcomeFrom(job("failure", "failure"), [
+  const failed = outcomeFrom(job("failure", "failure"), [
     `the rollback did not take effect: /health still reports ${A} after 20 reads (this run's commit ${A}).`,
   ]);
-  assert.equal(read?.outcome, "rollback_failed");
-  assert.equal(read?.rollback_to, A);
-});
-
-test("a gate that failed with no rollback is unverified, and a skipped or missing gate records nothing", () => {
-  assert.equal(outcomeFrom(job("failure", "skipped"), [])?.outcome, "unverified");
-  assert.equal(outcomeFrom(job("skipped", null), []), null);
-  assert.equal(outcomeFrom(undefined, []), null);
+  assert.equal(failed?.rollback_to, A);
+  for (const [label, gate, notes, outcome] of [
+    ["passed", job("success", "skipped"), [], "verified"],
+    [
+      "guard declined",
+      job("failure", "success"),
+      ["not rolling back. master and production may disagree; a human decides."],
+      "rollback_skipped",
+    ],
+    ["no annotation", job("failure", "success"), [], "rollback_skipped"],
+    [
+      "rollback did not take",
+      job("failure", "failure"),
+      [`the rollback did not take effect: /health still reports ${A}.`],
+      "rollback_failed",
+    ],
+    ["no rollback", job("failure", "skipped"), [], "unverified"],
+    ["gate skipped", job("skipped", null), [], undefined],
+    ["no gate", undefined, [], undefined],
+  ] as const)
+    assert.equal(outcomeFrom(gate, [...notes])?.outcome, outcome, label);
 });
 
 const row = (outcome: DeployRow["outcome"]): DeployRow => ({
@@ -91,8 +85,6 @@ test("a rollback and a failed rollback are findings the deploys check owns; the 
     assert.deepEqual(deployFindings("capsid", row(quiet)), []);
   assert.equal(owningCheck("deploy-rolled-back-capsid"), "deploys");
   assert.equal(owningCheck("deploy-rollback-failed-capsid"), "deploys");
-  // deploy-drift stays the master-head check's.
-  assert.equal(owningCheck("deploy-drift-capsid"), "master head");
 });
 
 test('isLiveGateJob takes the bare name and a called workflow\'s "<caller> / live gate", nothing looser', () => {

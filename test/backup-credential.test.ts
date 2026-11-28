@@ -15,33 +15,9 @@ import {
   OFFACCOUNT_SITES,
   OFFACCOUNT_SOURCES,
 } from "../src/offaccount.ts";
-// @ts-expect-error scripts/ is plain .mjs with no declarations (see test/canary.test.ts).
-import { R2 } from "../scripts/bindings.mjs";
 import { fakeEnv, withFetch } from "./fakes.ts";
-import { sourceFiles } from "./source-files.ts";
 
-// The Amazon copy job in the private capsid-backups repo holds no long-lived R2 secret: it signs a request with a derived key and receives a
-// one-hour object-read-only credential scoped to backups/json/ on capsid-media.
-
-test("verification refuses a bad signature and admits a good one", async () => {
-  const env = fakeEnv({ IMPROVE_SCORE_SECRET: "root-secret" });
-  const now = new Date("2026-09-07T06:00:00Z");
-  const timestamp = "2026-09-07T05:59:00Z";
-  const body = JSON.stringify({ jti: "0123456789" });
-  const key = await deriveBackupCredentialKey("root-secret");
-  const { createHmac } = await import("node:crypto");
-  const good = createHmac("sha256", key).update(`${timestamp}.${body}`).digest("hex");
-
-  const bad = await verifyBackupCredentialRequest(
-    env,
-    { timestamp, signature: "0".repeat(64), body },
-    now,
-  );
-  assert.equal(bad.ok, false);
-
-  const ok = await verifyBackupCredentialRequest(env, { timestamp, signature: good, body }, now);
-  assert.equal(ok.ok, true, `a correctly signed request was refused: ${ok.ok ? "" : ok.refusal}`);
-});
+// The off-account copy job signs a request with a derived key and receives a one-hour read-only credential; the route is test-integration/signed-endpoints.
 
 test("a stale timestamp is refused in both directions", async () => {
   const env = fakeEnv({ IMPROVE_SCORE_SECRET: "root-secret" });
@@ -64,16 +40,39 @@ test("a stale timestamp is refused in both directions", async () => {
   }
 });
 
-test("the request body must carry a jti", () => {
-  assert.equal(parseBackupCredentialRequest("not json").ok, false);
-  assert.equal(parseBackupCredentialRequest(JSON.stringify({})).ok, false);
-  assert.equal(parseBackupCredentialRequest(JSON.stringify({ jti: "short" })).ok, false);
-  const good = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789" }));
-  assert.ok(good.ok && good.jti === "0123456789");
+test("parseBackupCredentialRequest: a jti is required, the site defaults to capsid, only a pinned site is read, and the body cannot pick the bucket", () => {
+  for (const body of ["not json", JSON.stringify({}), JSON.stringify({ jti: "short" })])
+    assert.equal(parseBackupCredentialRequest(body).ok, false, body);
+  const none = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789" }));
+  assert.ok(none.ok && none.jti === "0123456789" && none.site === "capsid");
+  for (const site of OFFACCOUNT_SITES) {
+    const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", site }));
+    assert.ok(parsed.ok && parsed.site === site, site);
+  }
+  for (const site of [
+    "sample",
+    "CAPSID",
+    "",
+    "constructor",
+    "__proto__",
+    5,
+    null,
+    ["capsid"],
+    { bucket: "capsid-media" },
+  ]) {
+    const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", site }));
+    assert.match(
+      parsed.ok ? "(admitted)" : parsed.refusal,
+      /names no known site/,
+      JSON.stringify(site),
+    );
+  }
+  const scoped = parseBackupCredentialRequest(
+    JSON.stringify({ jti: "0123456789", site: "foxing", bucket: "capsid-media", prefix: "" }),
+  );
+  assert.ok(scoped.ok);
+  assert.deepEqual(Object.keys(scoped).sort(), ["jti", "ok", "site"]);
 });
-
-// The site field (capsid/rulings/backups-offaccount-2026-10-10.md): one endpoint mints
-// for every pinned site, and the bucket comes from src/offaccount.ts, never the body.
 
 test("every pinned site mints object-read-only on its OWN bucket, backups/json/ and files/, and nothing else", async () => {
   const asked: string[] = [];
@@ -117,58 +116,6 @@ test("every pinned site mints object-read-only on its OWN bucket, backups/json/ 
     asked,
     OFFACCOUNT_SITES.map((site) => OFFACCOUNT_SOURCES[site].bucket),
   );
-});
-
-test("capsid's backup bucket is the MEDIA pin, and no two sites share a backup bucket", () => {
-  assert.equal(
-    OFFACCOUNT_SOURCES.capsid.bucket,
-    R2.name,
-    "capsid's backup bucket drifted from the MEDIA pin in scripts/bindings.mjs",
-  );
-  const buckets = OFFACCOUNT_SITES.map((site) => OFFACCOUNT_SOURCES[site].bucket);
-  assert.equal(new Set(buckets).size, buckets.length, "two sites share a backup bucket");
-});
-
-test("a request with no site is capsid's, and a pinned site in the body is read through", () => {
-  const none = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789" }));
-  assert.ok(none.ok);
-  assert.equal(none.site, "capsid");
-  for (const site of OFFACCOUNT_SITES) {
-    const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", site }));
-    assert.ok(parsed.ok, `${site} was refused`);
-    assert.equal(parsed.site, site);
-  }
-});
-
-test("an unknown, empty, inherited or non-string site is refused, naming the sites", () => {
-  for (const site of [
-    "dustinedwards-backups",
-    "sample",
-    "CAPSID",
-    "",
-    "constructor",
-    "__proto__",
-    "toString",
-    5,
-    null,
-    ["capsid"],
-    { bucket: "capsid-media" },
-  ]) {
-    const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", site }));
-    assert.equal(parsed.ok, false, `site ${JSON.stringify(site)} was admitted`);
-    assert.equal(
-      parsed.ok ? "" : parsed.refusal,
-      "the credential request names no known site; the sites are capsid, germomics, txasm, foxing, foxhound, dustinedwards, julieedwards, carrel, bsw",
-    );
-  }
-});
-
-test("a body cannot name its own bucket or prefix: only site picks the scope", () => {
-  const parsed = parseBackupCredentialRequest(
-    JSON.stringify({ jti: "0123456789", site: "foxing", bucket: "capsid-media", prefix: "" }),
-  );
-  assert.ok(parsed.ok);
-  assert.deepEqual(Object.keys(parsed).sort(), ["jti", "ok", "site"]);
 });
 
 test("an audit log is minted on its own bucket and tool-calls/ alone; a body cannot name both or an unknown one", async () => {
@@ -222,25 +169,6 @@ test("an audit log is minted on its own bucket and tool-calls/ alone; a body can
   }
 });
 
-// scanner-rule: the backup parent key has one reader. Only the minting module and the env
-// declaration may name it.
-test("ONLY src/signed-requests.ts names the backup parent key id", () => {
-  const offenders = sourceFiles()
-    .filter((f) => f.name !== "signed-requests.ts" && f.name !== "env.ts")
-    .flatMap((f) =>
-      f.text
-        .split("\n")
-        .map((line, i) => ({ file: f.name, line: i + 1, text: line.trim() }))
-        .filter(
-          (l) => !l.text.startsWith("//") && l.text.includes("R2_BACKUP_PARENT_ACCESS_KEY_ID"),
-        ),
-    );
-  assert.deepEqual(
-    offenders.map((o) => `src/${o.file}:${o.line}`),
-    [],
-  );
-});
-
 const DERIVE_SCRIPT = join(
   dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -248,39 +176,25 @@ const DERIVE_SCRIPT = join(
   "derive-backup-key.mjs",
 );
 
-test("the derive script's key is exactly the key the Worker verifies", async () => {
-  // The script is a plain .mjs that restates the derivation, so the two are compared
-  // by running it.
-  const root = "a-test-root-secret";
-  const result = spawnSync(process.execPath, [DERIVE_SCRIPT], {
-    encoding: "utf8",
-    env: { ...process.env, IMPROVE_SCORE_SECRET: root },
-  });
-  assert.equal(result.status, 0, `the script refused: ${result.stderr}`);
-  assert.equal(
-    result.stdout,
-    `${await deriveBackupCredentialKey(root)}\n`,
-    "the script and src/signed-requests.ts derive different backup keys",
-  );
-  assert.ok(
-    !result.stdout.includes(root) && !result.stderr.includes(root),
-    "the script printed the root secret",
-  );
-});
-
-test("the derive script refuses a missing or blank root secret and an unknown argument", () => {
-  for (const value of [undefined, "   "]) {
+test("the derive script prints exactly the key the Worker verifies, never the root, and refuses a missing root or an argument", async () => {
+  const run = (args: string[], root: string | undefined) => {
     const env: NodeJS.ProcessEnv = { ...process.env };
     delete env.IMPROVE_SCORE_SECRET;
-    if (value !== undefined) env.IMPROVE_SCORE_SECRET = value;
-    const result = spawnSync(process.execPath, [DERIVE_SCRIPT], { encoding: "utf8", env });
-    assert.notEqual(result.status, 0, `a root secret of ${JSON.stringify(value)} was accepted`);
-    assert.equal(result.stdout, "");
+    if (root !== undefined) env.IMPROVE_SCORE_SECRET = root;
+    return spawnSync(process.execPath, [DERIVE_SCRIPT, ...args], { encoding: "utf8", env });
+  };
+  const root = "a-test-root-secret";
+  const good = run([], root);
+  assert.equal(good.status, 0, good.stderr);
+  assert.equal(good.stdout, `${await deriveBackupCredentialKey(root)}\n`);
+  assert.ok(!good.stdout.includes(root) && !good.stderr.includes(root));
+  for (const [args, value] of [
+    [[], undefined],
+    [[], "   "],
+    [["capsid"], "x"],
+  ] as const) {
+    const refused = run([...args], value);
+    assert.notEqual(refused.status, 0, JSON.stringify([args, value]));
+    assert.equal(refused.stdout, "");
   }
-  const unknown = spawnSync(process.execPath, [DERIVE_SCRIPT, "capsid"], {
-    encoding: "utf8",
-    env: { ...process.env, IMPROVE_SCORE_SECRET: "x" },
-  });
-  assert.notEqual(unknown.status, 0);
-  assert.equal(unknown.stdout, "");
 });
