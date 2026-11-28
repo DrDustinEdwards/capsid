@@ -22,3 +22,16 @@ for (const [path, charts] of [
     }
   });
 }
+
+// PLANT: the demo linked /favicon.ico and /icon.svg, which sit behind the sign-in, so every demo page logged two refused
+// image loads. On the Portal host only the hashed files under /assets/ are public (src/portal-app.ts portalAsset).
+test("PLANT: the demo's icons are hashed build files, the only files a visitor with no sign-in can load", async ({
+  page,
+}) => {
+  await page.goto("demos/");
+  const hrefs = await page
+    .locator("link[rel~='icon'], link[rel='apple-touch-icon']")
+    .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""));
+  expect(hrefs.length).toBeGreaterThan(0);
+  for (const href of hrefs) expect(href, href).toMatch(/^\/assets\//);
+});
