@@ -166,22 +166,15 @@ export async function performAction(
             refusal: "pr_close needs a reason: why the pull request is closed without merging.",
           };
         const repo = required(params, "repo") ?? undefined;
-        const result = (await managePr(env, namespace, number, "close", "squash", repo)) as {
-          repo: string;
-          head_branch: string | null;
-          head_branch_deleted: boolean;
-        };
+        const result = await managePr(env, namespace, number, "close", "squash", repo);
         state.committed = true;
-        state.summary = `Closed ${result.repo}#${number}${result.head_branch_deleted ? `; its branch ${result.head_branch} was deleted` : ""}.`;
-        // managePr writes no audit row of its own (the guardedWrite behind capsid_close_pr action close
-        // does), so the control writes the change's row beside the click row.
+        state.summary = `Closed ${result.repo}#${number}.`;
+        // managePr writes no audit row of its own, so the control writes the change's row.
         await env.DB.batch([
           auditStatement(env.DB, actor, "pr-closed", namespace, null, {
             repo: result.repo,
             number,
             reason,
-            head_branch: result.head_branch,
-            head_branch_deleted: result.head_branch_deleted,
           }),
         ]);
         await auditClick(namespace, {

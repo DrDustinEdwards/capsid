@@ -1,7 +1,12 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
-import { maintenanceTick, readMaintenance, MAINTENANCE_LAST_KEY } from "../src/maintenance";
+import {
+  maintenanceTick,
+  readMaintenance,
+  MAINTENANCE_LAST_KEY,
+  MAINTENANCE_RETRY_KEY,
+} from "../src/maintenance";
 import type { PrReaders } from "../src/maintenance-prs";
 import {
   PRUNE_AUDIT_ACTION,
@@ -70,6 +75,7 @@ beforeEach(async () => {
     .run();
   await env.APP_KV.delete("maintenance:list");
   await env.APP_KV.delete(MAINTENANCE_LAST_KEY);
+  await env.APP_KV.delete(MAINTENANCE_RETRY_KEY);
 });
 
 describe("gatherModelDriftItems", () => {
@@ -92,7 +98,7 @@ describe("gatherModelDriftItems", () => {
     relationships: [],
   };
 
-  it("names a mapped repo the model does not, and reports an unread App list", async () => {
+  it("names a mapped repo the model does not, reports an unread App list, and reads a namespace with no repos as none", async () => {
     await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
       .bind(
         "drift-sample",
@@ -102,11 +108,14 @@ describe("gatherModelDriftItems", () => {
         ]),
       )
       .run();
+    await env.DB.prepare(
+      "INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES ('drift-empty', '[]')",
+    ).run();
     const out = await gatherModelDriftItems(env as never, MODEL, async () => {
       throw new Error("no App key in tests");
     });
     const mine = out.items.filter(
-      (i) => i.namespace === "drift-sample" || i.rule === "model-not-checked",
+      (i) => i.namespace.startsWith("drift-") || i.rule === "model-not-checked",
     );
     expect(mine.map((i) => [i.rule, i.namespace])).toEqual([
       ["model-drift", "drift-sample"],
@@ -206,6 +215,28 @@ describe("maintenanceTick", () => {
     expect(nextDay.ran).toBe(true);
   });
 
+  it("a pass that throws waits an hour before it runs again", async () => {
+    let runs = 0;
+    const failing = async () => {
+      runs += 1;
+      throw new Error("GitHub answered 502");
+    };
+    const at = (minutes: number) => new Date(NOW.getTime() + minutes * 60_000);
+    await expect(
+      maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, failing),
+    ).rejects.toThrow(/502/);
+    const soon = await maintenanceTick(
+      env as never,
+      at(5),
+      NO_PRS,
+      NO_BRANCHES,
+      NO_DEPLOYS,
+      failing,
+    );
+    expect(soon.ran).toBe(false);
+    expect(runs).toBe(1);
+  });
+
   it("writes one audit_log row per branch the default-on prune deleted, with the sha to put it back", async () => {
     const ONE_MERGED: BranchReaders = {
       ...NO_BRANCHES,
@@ -213,8 +244,8 @@ describe("maintenanceTick", () => {
         ...(await NO_BRANCHES.plan(namespace, [])),
         prune: namespace === "capsid" ? [{ branch: "feat/done", sha: "a1", pr: 3 }] : [],
       }),
-      prune: async (plan, cap, onDeleted) => {
-        for (const c of plan.prune.slice(0, cap)) await onDeleted(c);
+      prune: async (plan, cap, record) => {
+        for (const c of plan.prune.slice(0, cap)) await record(c);
         return { deleted: plan.prune.slice(0, cap), skipped: [], remaining: 0 };
       },
     };
@@ -237,7 +268,13 @@ describe("maintenanceTick", () => {
         [
           "system:maintenance",
           "capsid",
-          { repo: "example-org/sample", branch: "feat/done", sha: "a1", pr: 3 },
+          {
+            repo: "example-org/sample",
+            branch: "feat/done",
+            sha: "a1",
+            pr: 3,
+            restore: "git push origin a1:refs/heads/feat/done",
+          },
         ],
       ]);
     } finally {

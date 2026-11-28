@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { keepReview, reviewCaller, reviewScope, REVIEW_OWNER_ID } from "../src/review.ts";
+import {
+  keepReview,
+  reviewCaller,
+  reviewKey,
+  reviewScope,
+  REVIEW_OWNER_ID,
+} from "../src/review.ts";
 import { parseVerdict, toolArguments } from "../src/review-answer.ts";
 
 test("reviewCaller admits devkit's review.yml or pr.yml on a pull request in Dustin's repository and nothing else", () => {
@@ -97,7 +103,12 @@ test("reviewScope skips documents, tests and lockfiles alone and reviews any cod
   assert.equal(reviewScope([]).review, false);
 });
 
-test("keepReview keeps an approval and a skip, and never an error or a BLOCK, so the next push asks again", () => {
+test("a verdict is kept per head commit, so a later push is reviewed again", () => {
+  const who = { owner: "Example", repo: "Sample", pr: 7 };
+  assert.notEqual(reviewKey(who, "a".repeat(40)), reviewKey(who, "b".repeat(40)));
+});
+
+test("keepReview keeps an approval and a skip, and never an error or a BLOCK, so a re-run asks again", () => {
   const reviewed = (verdict: "APPROVE" | "CHANGES" | "BLOCK") => ({
     status: "reviewed" as const,
     verdict,

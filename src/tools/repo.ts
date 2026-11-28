@@ -194,7 +194,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     "manage_pr",
     {
       description:
-        "Merge or close an open pull request in a namespace's repo. action 'merge' uses merge_method (default 'squash') and needs the can_merge flag; with `sha`, it merges only if the head is still that commit and is otherwise refused with nothing merged. action 'close' closes it and needs the can_merge flag. Merge and close delete the head branch and return head_branch and head_branch_deleted, plus head_branch_note when the delete was declined: the default branch and a fork's branch are never deleted, and a failed delete does not fail the merge or close. A merge can trigger a deploy workflow. Needs the write grant.",
+        "Merge or close an open pull request in a namespace's repo. action 'merge' uses merge_method (default 'squash') and needs the can_merge flag; with `sha`, it merges only if the head is still that commit and is otherwise refused with nothing merged. action 'close' closes it and needs the can_merge flag. A merge deletes the head branch while its tip is still the merged head (head_branch, head_branch_sha, head_branch_deleted, and head_branch_note when it was kept); the default branch and a fork's branch are never deleted, and a failed delete does not fail the merge. A close leaves the branch for the daily prune. A merge can trigger a deploy workflow. Needs the write grant.",
       inputSchema: {
         namespace: nsName,
         number: z.number().int().positive(),
@@ -284,8 +284,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       ),
   );
 
-  // A ruled exception to the tool surface rule (CLAUDE.md): refs and history stay open to ro: keys;
-  // delete_branch needs the write grant, since it destroys refs.
+  // refs and history stay open to ro: keys; delete_branch needs the write grant.
 
   ctx.ops.define(
     "repo_refs",

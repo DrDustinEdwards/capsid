@@ -119,7 +119,7 @@ const SEARCHES = [
     retired: 2,
     rows: [
       ["Decisions", "sample/decisions.md", false, true, true],
-      ["The signed merge policy", "sample/specs/merge-policy.md", true, true, false],
+      ["Who merges, and the can_merge flag", "sample/specs/merging.md", true, true, false],
       ["Grants and flags", "sample/specs/grants.md", false, true, false],
       ["Session: who may merge", "sample/sessions/2026-10-18.md", true, false, false],
     ],

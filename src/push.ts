@@ -23,7 +23,7 @@ const MAX_PER_TICK = 3;
 export const MAX_DEVICES = 10;
 export const PORTAL_URL = `https://${PORTAL_HOST}/`;
 
-// Where a tap lands: the item itself on the Portal, not its home page (the UX audit's M2).
+// Where a tap lands: the item itself on the Portal, not its home page.
 const portalPath = (path: string) => `https://${PORTAL_HOST}${path}`;
 // A site's own page (/sites/<namespace>), at a tab when one is named.
 const siteUrl = (namespace: string, tab?: "deploys") =>
@@ -54,10 +54,12 @@ export interface PushPayload {
   tag: string;
 }
 
+// A corrupt state reads as empty: an alert may go twice, but alerts never stop.
 async function readState(env: Env): Promise<PushState> {
-  const raw = await env.APP_KV.get(STATE_KEY);
-  const parsed = raw ? (JSON.parse(raw) as Partial<PushState>) : {};
-  return { sent: parsed.sent ?? {} };
+  const parsed = (await env.APP_KV.get(STATE_KEY, "json").catch(
+    () => null,
+  )) as Partial<PushState> | null;
+  return { sent: parsed?.sent ?? {} };
 }
 
 // The triggers, from what the watcher already keeps. Reads only.
@@ -107,8 +109,7 @@ async function gatherUrgent(env: Env, now: Date): Promise<Urgent[]> {
     });
   }
 
-  // 3. A TLS certificate 21 or 3 days from expiry (src/tls-expiry.ts), from the watcher's
-  // last read, and a domain registration 30 or 7 days out, from the last snapshot. One
+  // 3. A TLS certificate 21 or 3 days from expiry, and a domain registration 30 or 7 days out. One
   // that cannot be read alerts nothing.
   for (const a of tlsAlerts(await readStoredTls(env).catch(() => null), now))
     out.push({ ...a, kind: "tls", namespace: "capsid", url: SITES_URL });
@@ -213,10 +214,8 @@ export async function pushTick(
   };
 }
 
-// THE EMAIL FALLBACK. With no device subscribed an alert reached nobody, so the same urgent items
-// go by email instead, through the path the daily digest already uses (src/digest.ts): the
-// send_email binding EMAIL, from ALERT_FROM to ALERT_EMAIL, and only once Email Routing is on
-// (digestProblem).
+// With no device subscribed, the same urgent items go by email the way the digest does, and only
+// once Email Routing is on.
 async function emailFallback(env: Env, now: Date, why: string): Promise<PushReport> {
   const off = digestProblem(env);
   if (off) return { ran: false, note: `${why}, and the email fallback is off: ${off}`, sent: [] };

@@ -10,7 +10,7 @@ import { readSiteBackups, runSiteBackups } from "../src/site-backup";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { PortalConvergence } from "../src/ops-types/views";
 
-// Real D1 and KV with every migration applied: the watcher's repair step, its rate limit and mail, and the control refusing what the Worker must never call.
+// Real D1 and KV with every migration applied: the watcher's repair step, its rate limit, and the control refusing what the Worker must never call.
 // The site's operator API and health route are a fake fetch; no request leaves the test.
 
 const EMAIL = "admin@example.com";
@@ -81,7 +81,7 @@ async function config(): Promise<OpsSiteConfig[]> {
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM audit_log").run();
   await env.DB.prepare("DELETE FROM task_runs").run();
-  for (const prefix of ["site-repair-limit:", "site-weekly:", "site-alert:"]) {
+  for (const prefix of ["site-repair-limit:", "site-weekly:"]) {
     for (const key of (await env.APP_KV.list({ prefix })).keys) await env.APP_KV.delete(key.name);
   }
 });
@@ -116,7 +116,7 @@ describe("the watcher's site repairs", () => {
     expect(runs.results).toEqual([{ task: "site-repair", outcome: "ok" }]);
   });
 
-  it("repairs nothing when a failing check maps to no repair, opens the incident, and mails once on the change", async () => {
+  it("repairs nothing when a failing check maps to no repair, and opens the incident without a mail of its own", async () => {
     const { env: e, mails } = siteEnv();
     await env.APP_KV.put("site-weekly:dustinedwards:refresh_citations", NOW.toISOString());
     const site = fakeSite({ drift: ["pages-drift", "media-backup-drift"] });
@@ -124,20 +124,7 @@ describe("the watcher's site repairs", () => {
     expect(site.calls).toEqual(["health"]);
     expect(first.findings.map((f) => f.fingerprint)).toEqual(["site-health-dustinedwards"]);
     expect(first.findings[0].evidence.join(" ")).toMatch(/media-backup-drift maps to no repair/);
-    expect(mails.map((m) => m.subject)).toEqual([
-      "dustinedwards.info is unhealthy and self-repair did not settle it",
-    ]);
-
-    await watchSites(e, await config(), "agent:watcher", site.impl, later(30));
-    expect(mails).toHaveLength(1);
-    const green = fakeSite({ drift: [] });
-    expect(
-      (await watchSites(e, await config(), "agent:watcher", green.impl, later(60))).findings,
-    ).toEqual([]);
-    expect(mails.map((m) => m.subject)).toEqual([
-      "dustinedwards.info is unhealthy and self-repair did not settle it",
-      "dustinedwards.info recovered",
-    ]);
+    expect(mails, "the push is the alert").toEqual([]);
   });
 
   it("stops repairing a stuck check after its daily limit, keeps the incident open, and says why", async () => {
@@ -153,19 +140,16 @@ describe("the watcher's site repairs", () => {
     );
   });
 
-  it("runs the weekly tool once a week, and says it was not mailed when no binding is set", async () => {
-    const { env: e } = siteEnv({ EMAIL: undefined });
+  it("runs the weekly tool once a week", async () => {
+    const { env: e } = siteEnv();
     const site = fakeSite({ drift: [] });
     await watchSites(e, await config(), "agent:watcher", site.impl, NOW);
     await watchSites(e, await config(), "agent:watcher", site.impl, later(60));
     expect(site.calls.filter((c) => c === "refresh_citations")).toHaveLength(1);
-    const red = fakeSite({ drift: ["media-backup-drift"] });
-    const report = await watchSites(e, await config(), "agent:watcher", red.impl, later(90));
-    expect(report.lines.join(" ")).toMatch(/was not mailed: no send_email binding/);
   });
 
-  it("reads a site with no operator API too, and a sign-in spike alert under ok: true opens the incident and mails", async () => {
-    const { env: e, mails } = siteEnv();
+  it("reads a site with no operator API too, and a sign-in spike alert under ok: true opens the incident", async () => {
+    const { env: e } = siteEnv();
     const plain = (await config()).map((c) => ({ ...c, operator: null }));
     const calls: string[] = [];
     const spike = async (url: string) => {
@@ -186,7 +170,6 @@ describe("the watcher's site repairs", () => {
       ["site-health-dustinedwards", "dustinedwards.info raised an alert: auth-spike"],
     ]);
     expect(report.findings[0].evidence.join(" ")).toMatch(/failing: auth-spike/);
-    expect(mails.map((m) => m.subject)).toEqual(["dustinedwards.info raised an alert: auth-spike"]);
   });
 
   it("with the token unset, calls nothing and says so in the incident", async () => {

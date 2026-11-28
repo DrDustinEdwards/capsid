@@ -6,8 +6,8 @@ import type { SiteProbe } from "./ops-types/sites";
 import { DAY_MS, utcDay } from "./time";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
-// THE FIVE-MINUTE PULSE The watcher probes the sites half-hourly for the Portal's rings and
-// findings; this tells Dustin when a site goes down.
+// The five-minute pulse: it tells Dustin when a site goes down (the watcher's half-hourly probe
+// feeds the Portal's rings).
 
 export const SITE_PULSE_KEY = "site-pulse:state";
 const DOWN_AFTER = 2;
@@ -122,9 +122,11 @@ function uptimeCount(
     .bind(namespace, day, up ? 1 : 0);
 }
 
+// A corrupt state reads as empty, so the next pass starts over instead of stopping.
 export async function readPulse(env: Pick<Env, "APP_KV">): Promise<PulseState> {
-  const raw = await env.APP_KV.get(SITE_PULSE_KEY);
-  return raw ? (JSON.parse(raw) as PulseState) : {};
+  return (
+    ((await env.APP_KV.get(SITE_PULSE_KEY, "json").catch(() => null)) as PulseState | null) ?? {}
+  );
 }
 
 // One pass: every configured site probed, the state written back. A site no longer configured drops

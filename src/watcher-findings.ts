@@ -2,8 +2,8 @@ import type { Env } from "./env";
 import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 
-// THE WATCHER'S MEMORY OF A FINDING, one watcher_findings row per fingerprint
-// (migrations/0024_watcher_findings.sql), so a condition seen on every pass is one finding.
+// The watcher's memory: one watcher_findings row per fingerprint, so a condition seen on every pass
+// is one finding.
 
 // THE QUIET PERIOD: six hours. A finding that cleared is opened again only when it is seen at least
 // six hours after it cleared.
@@ -133,21 +133,15 @@ export function d1FindingMemory(env: Env): FindingMemory {
   const db = env.DB;
   return {
     async load(fingerprints) {
-      const rows = new Map<string, FindingRow>();
-      // Keyed reads for what was seen: the primary key, one row each.
-      for (const fp of fingerprints) {
-        const row = await db
-          .prepare("SELECT * FROM watcher_findings WHERE fingerprint = ?1")
-          .bind(fp)
-          .first<FindingRow>();
-        if (row) rows.set(fp, row);
-      }
-      // The rows a pass may clear, over the (state, namespace) index.
+      // What was seen, by primary key, and the rows a pass may clear, in one read.
       const { results } = await db
-        .prepare("SELECT * FROM watcher_findings WHERE state IN ('open', 'dismissed')")
+        .prepare(
+          `SELECT * FROM watcher_findings
+           WHERE fingerprint IN (SELECT value FROM json_each(?1)) OR state IN ('open', 'dismissed')`,
+        )
+        .bind(JSON.stringify(fingerprints))
         .all<FindingRow>();
-      for (const row of results ?? []) rows.set(row.fingerprint, row);
-      return rows;
+      return new Map((results ?? []).map((row) => [row.fingerprint, row]));
     },
 
     async insert(f, now) {

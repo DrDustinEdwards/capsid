@@ -145,7 +145,6 @@ The router is `defaultHandler` in `src/routes.ts`. The principal routes are:
 | `POST /mcp`, `POST /mcp/admin`                                                                           | OAuth          | MCP over Streamable HTTP for the owner and co-owners.                   |
 | `POST /ops/mcp`                                                                                          | Bearer key     | MCP for agents and scheduled clients.                                   |
 | `/authorize`, `/callback`, `/token`, `/register`, `/.well-known/*`                                       | None           | OAuth sign-in and discovery.                                            |
-| `POST /ops/hooks`, `POST /ops/otlp/v1/*`                                                                 | Bearer key     | Claude Code hook events and telemetry.                                  |
 | `GET /ops/inbox`, `POST /ops/inbox/report`                                                               | Bearer key     | Items awaiting the owner, per application.                              |
 | `GET /health`                                                                                            | None           | Deploy provenance and a store probe; returns 503 when D1 or FTS5 fails. |
 | `GET /public/model/v1.json`, `/public/stats/v1.json`, `/public/code/v1.json`, `/public/versions/v1.json` | None           | Public system model, statistics, code maps and package versions.        |

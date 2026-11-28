@@ -8,6 +8,7 @@ import {
 } from "./ops-cloudflare";
 import { readSiteRow } from "./ops-sites";
 import { externalFence } from "./provenance";
+import { redactText } from "@dustinedwards/site-runtime/redact";
 
 // Cloudflare Workers Builds, read, served as capsid_admin_read_ops actions builds and build_logs.
 
@@ -128,10 +129,12 @@ export async function listBuilds(
   }
 }
 
+// Secrets a step echoed are redacted. `fenced` false is for the Portal, as for listBuilds.
 export async function buildLogs(
   env: Env,
   args: { build_uuid?: string },
   fetchImpl: FetchLike = fetch,
+  fenced = true,
 ) {
   if (!args.build_uuid || !BUILD_UUID.test(args.build_uuid))
     throw new Error("build_logs needs build_uuid, from action builds.");
@@ -151,10 +154,12 @@ export async function buildLogs(
     const lines = raw.map((l) =>
       Array.isArray(l) && l.length >= 2 ? `${String(l[0])} ${String(l[1])}` : String(l),
     );
-    const kept = lines.slice(-LOG_LINES_MAX);
+    const kept = lines.slice(-LOG_LINES_MAX).map(redactText);
     return {
       build_uuid: args.build_uuid,
-      lines: kept,
+      lines: fenced
+        ? externalFence("build-log", args.build_uuid, kept.join("\n"), Infinity).split("\n")
+        : kept,
       line_count: lines.length,
       truncated: lines.length > kept.length || result?.truncated === true,
       ...(lines.length > kept.length

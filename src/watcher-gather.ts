@@ -99,10 +99,8 @@ export async function gatherFindings(
         return mapLimit(sites, READ_CONCURRENCY, (site) => probeSite(site, fetchImpl, now, health));
       })
     : null;
-  // The previous pass's rings, for "down on two probes in a row". A snapshot that is
-  // absent or unreadable (readSnapshot logs it) has no previous probe to compare; a
-  // KV read that throws means the check cannot judge, so it does not count as run and
-  // an open site-down finding is not cleared on no evidence.
+  // The previous pass's rings, for "down on two probes in a row". A KV read that throws leaves the
+  // check un-run, so an open site-down finding is not cleared on no evidence.
   const prev = await attempt("previous snapshot", async () => ({
     snapshot: await readSnapshot(env),
   }));
@@ -114,10 +112,7 @@ export async function gatherFindings(
     }
   }
 
-  // The live checks (src/live-checks.ts): what capsid/policy/live-checks.md says to
-  // look at, read through the probes this pass just made. No document, no check. A site
-  // that could not be read this pass leaves the check un-run, so an open finding is not
-  // cleared on no evidence.
+  // The live checks, read through this pass's probes. A site not read leaves the check un-run.
   if (sites && probes) {
     const live = await attempt("live checks", async () => {
       const config = await readLiveConfig(env.DB);
@@ -145,8 +140,7 @@ export async function gatherFindings(
   }
 
   // Every site's health route, and for the sites that opted into Capsid calling their operator API,
-  // the repair each failing health check maps to and the weekly tools (src/site-watch.ts); then the
-  // red and green mail.
+  // the repair each failing health check maps to and the weekly tools (src/site-watch.ts).
   if (config && config.some((c) => c.origin && (c.operator || c.health_path))) {
     const repairs = await attempt("site repairs", () =>
       watchSites(env, config, WATCHER_ACTOR, fetchImpl, now),
@@ -166,9 +160,8 @@ export async function gatherFindings(
     ran.add("site repairs");
   }
 
-  // Cloudflare's view of each site: deploys, and hourly errors and CPU time (src/ops-cloudflare.ts).
-  // With no token nothing is fetched, each site says why, and the check is not run.
-  // With no site configured there is nothing to read, and nothing is fetched.
+  // Cloudflare's view of each site: deploys, hourly errors and CPU time. With no token each site
+  // says why and the check is not run.
   if (sites && sites.length > 0) {
     const cf = await attempt("cloudflare", () => readCloudflare(env, sites, fetchImpl, now));
     if (cf) {
@@ -245,8 +238,7 @@ export async function gatherFindings(
     );
   });
 
-  // Agents acting out of their usual pattern, from audit_log (src/anomaly.ts, OWASP item
-  // 6). A finding only, never a suspension.
+  // Agents acting out of their usual pattern, from audit_log: a finding only, never a suspension.
   const actionHours = await attempt("agent anomalies", () =>
     readActionHours(env.DB, now, WATCHER_ACTOR),
   );
@@ -283,16 +275,20 @@ export async function gatherFindings(
         );
     }
     // Each Cloudflare-hosted site's TLS certificate (src/tls-expiry.ts): kept in KV for the
-    // push, which alerts at 21 and 3 days, and shown in the snapshot. No finding. A host that could not be read keeps
-    // its last stored date, so a failed read never drops an expiry the push still needs.
-    const tls = await attempt("tls", () => readTlsExpiry(env, config, fetchImpl, now));
-    if (tls) {
+    // push, which alerts at 21 and 3 days, and shown in the snapshot. No finding. A host that could
+    // not be read keeps its last stored date, so a failed read never drops an expiry the push needs.
+    const tls = await attempt("tls", async () => {
+      const read = await readTlsExpiry(env, config, fetchImpl, now);
       const stored =
-        ((await env.APP_KV.get(TLS_EXPIRY_KEY, "json")) as typeof tls | null)?.hosts ?? [];
-      const kept = stored.filter((h) => tls.failed.some((f) => f.host === h.host));
-      const merged = { ...tls, hosts: [...tls.hosts, ...kept] };
+        ((await env.APP_KV.get(TLS_EXPIRY_KEY, "json").catch(() => null)) as typeof read | null)
+          ?.hosts ?? [];
+      const kept = stored.filter((h) => read.failed.some((f) => f.host === h.host));
+      const merged = { ...read, hosts: [...read.hosts, ...kept] };
       await env.APP_KV.put(TLS_EXPIRY_KEY, JSON.stringify(merged));
-      observed.expiry = { domains: null, ...observed.expiry, tls: merged };
+      return merged;
+    });
+    if (tls) {
+      observed.expiry = { domains: null, ...observed.expiry, tls };
       for (const f of tls.failed)
         logEvent("WATCHER_TLS_UNREAD", { message: `${f.host}: ${f.error}` }, { level: "warn" });
     }

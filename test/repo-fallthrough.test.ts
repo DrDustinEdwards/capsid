@@ -153,9 +153,14 @@ test("repo_history compare mode reports ahead/behind and changed files", async (
       },
     },
     async () => {
-      const out = (await repoHistory(makeEnv(), "ns", { base: "main", head: "topic" })) as {
+      const out = (await repoHistory(makeEnv(), "ns", {
+        base: "main",
+        head: "topic",
+        limit: 1,
+      })) as {
         mode: string;
         ahead_by: number;
+        commits: Array<{ sha: string }>;
         files: {
           count: number;
           entries: Array<{ path: string; additions: number; patch?: string }>;
@@ -163,6 +168,11 @@ test("repo_history compare mode reports ahead/behind and changed files", async (
       };
       assert.equal(out.mode, "compare");
       assert.equal(out.ahead_by, 2);
+      assert.deepEqual(
+        out.commits.map((c) => c.sha),
+        ["c2"],
+        "GitHub lists a range oldest first; the limit keeps the newest",
+      );
       assert.equal(out.files.count, 1);
       assert.equal(out.files.entries[0].path, "src/a.ts");
       assert.equal(out.files.entries[0].additions, 10);

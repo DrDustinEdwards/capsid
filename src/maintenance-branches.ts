@@ -15,21 +15,18 @@ import { errorMessage } from "@dustinedwards/site-runtime/log";
 
 const branches = (n: number, what = "") =>
   `${n} ${what ? `${what} ` : ""}${n === 1 ? "branch" : "branches"}`;
-// On, at most PRUNE_CAP per repo per run are deleted, each re-read just before and audit-logged
-// with the sha it pointed at so it can be put back. A keep list in APP_KV (empty default) names
-// branches never pruned and never listed.
+// The branch rule: a merged branch is deleted daily; an unmerged one only with no open pull request
+// and no commit for UNMERGED_DAYS; one with commits after its merge never, and it is listed. At most
+// PRUNE_CAP per repo per run, each tip re-read first and audit-logged with its sha and restore
+// command before the delete. A keep list in APP_KV names branches never pruned and never listed.
 
-/**
- * The auto-prune is on unless the seat sets this key to "off" (Dustin, 2026-11-28: threads leave
- * their merged branches to Capsid). A KV key rather than a control: a control would add to a
- * served tool's surface (CLAUDE.md, Tool surface).
- */
+/** The auto-prune is on unless the seat sets this key to "off". */
 export const PRUNE_SWITCH_KEY = "maintenance:prune-merged";
 export const BRANCH_KEEP_KEY = "maintenance:branch-keep";
 
 export const PRUNE_CAP = 25;
 const STALE_DAYS = 30;
-const ORPHAN_DAYS = 2;
+const UNMERGED_DAYS = 14;
 // Commit dates read per repo per run; more stale candidates are listed as not checked.
 const AGE_READS_PER_REPO = 30;
 const MAX_ITEMS_PER_RULE = 50;
@@ -42,20 +39,14 @@ interface BranchSettings {
 }
 
 export interface BranchReaders {
-  /**
-   * The prune rule's plan for the namespace's repo, with the keep list applied. Throws when a list
-   * could not be read.
-   */
+  /** The plan for the namespace's repo, keep list applied. Throws when a list could not be read. */
   plan(namespace: string, keep: string[]): Promise<PrunePlan>;
   committedAt(plan: PrunePlan, sha: string): Promise<string>;
-  /**
-   * Delete up to `cap` of the plan's candidates, each tip re-read first, calling `onDeleted` after
-   * each delete and before the next.
-   */
+  /** Delete up to `cap` candidates, each tip re-read first and `record`ed before its delete. */
   prune(
     plan: PrunePlan,
     cap: number,
-    onDeleted: (c: PruneCandidate) => Promise<void>,
+    record: (c: PruneCandidate) => Promise<void>,
   ): Promise<{ deleted: PruneCandidate[]; skipped: PruneKept[]; remaining: number }>;
 }
 
@@ -112,26 +103,33 @@ export async function gatherBranchItems(
     }
     read[namespace] = plan.branchesRead;
     let prunedHere = 0;
+    // A failed audit write stops the deletes and the pass.
+    const record = async (c: PruneCandidate) => {
+      await auditStatement(env.DB, SYSTEM_ACTOR, PRUNE_AUDIT_ACTION, namespace, null, {
+        repo: plan.repo,
+        branch: c.branch,
+        sha: c.sha,
+        pr: c.pr,
+        restore: restore(c),
+      }).run();
+    };
+
+    for (const k of plan.kept.filter((k) => k.afterMerge).slice(0, MAX_ITEMS_PER_RULE))
+      items.push({
+        rule: "branch-merged",
+        namespace,
+        line: `${plan.repo} branch ${k.branch} has commits after pull request #${k.afterMerge} merged (tip ${k.sha}), so it is never deleted: open a pull request for them, or delete it.`,
+      });
 
     if (settings.prune) {
-      // One audit row per deleted branch, written before the next delete, with the sha it pointed at:
-      // the deletion is put back by pushing that sha to the branch name (snapshot invariant,
-      // test/write-invariants.test.ts). A failed audit write stops the deletes and the pass.
-      const done = await readers.prune(plan, PRUNE_CAP, async (c) => {
-        await auditStatement(env.DB, SYSTEM_ACTOR, PRUNE_AUDIT_ACTION, namespace, null, {
-          repo: plan.repo,
-          branch: c.branch,
-          sha: c.sha,
-          pr: c.pr,
-        }).run();
-      });
+      const done = await readers.prune(plan, PRUNE_CAP, record);
       pruned += done.deleted.length;
       prunedHere = done.deleted.length;
       for (const c of done.deleted.slice(0, MAX_ITEMS_PER_RULE)) {
         items.push({
           rule: "branch-pruned",
           namespace,
-          line: `${plan.repo} branch ${c.branch} was deleted: pull request #${c.pr} merged from its tip ${c.sha}. Put it back with git push origin ${c.sha}:refs/heads/${c.branch} if it was wanted.`,
+          line: `${plan.repo} branch ${c.branch} was deleted: pull request #${c.pr} merged from its tip ${c.sha}. Put it back with ${restore(c)} if it was wanted.`,
         });
       }
       for (const s of done.skipped) {
@@ -203,7 +201,7 @@ export async function gatherBranchItems(
     stale.sort((a, b) => b.ms - a.ms);
 
     if (settings.prune && plan.listsComplete) {
-      const old = stale.filter((s) => s.ms >= ORPHAN_DAYS * DAY_MS);
+      const old = stale.filter((s) => s.ms >= UNMERGED_DAYS * DAY_MS);
       const budget = Math.max(0, PRUNE_CAP - prunedHere);
       const done =
         old.length === 0
@@ -211,14 +209,7 @@ export async function gatherBranchItems(
           : await readers.prune(
               { ...plan, prune: old.map((s) => ({ branch: s.branch, sha: s.sha, pr: null })) },
               budget,
-              async (c) => {
-                await auditStatement(env.DB, SYSTEM_ACTOR, PRUNE_AUDIT_ACTION, namespace, null, {
-                  repo: plan.repo,
-                  branch: c.branch,
-                  sha: c.sha,
-                  pr: null,
-                }).run();
-              },
+              record,
             );
       pruned += done.deleted.length;
       const why = new Map(old.map((s) => [s.branch, s]));
@@ -227,7 +218,7 @@ export async function gatherBranchItems(
         items.push({
           rule: "branch-pruned",
           namespace,
-          line: `${plan.repo} branch ${c.branch} was deleted: no open pull request and no commit for ${s.age} days (${s.reason}). Put it back with git push origin ${c.sha}:refs/heads/${c.branch} if it was wanted.`,
+          line: `${plan.repo} branch ${c.branch} was deleted: no open pull request and no commit for ${s.age} days (${s.reason}). Put it back with ${restore(c)} if it was wanted.`,
         });
       }
       for (const k of done.skipped)
@@ -256,6 +247,8 @@ export async function gatherBranchItems(
   return { items, read, pruned };
 }
 
+const restore = (c: PruneCandidate) => `git push origin ${c.sha}:refs/heads/${c.branch}`;
+
 function notChecked(namespace: string, problem: string): MaintenanceItem {
   return {
     rule: "branches-not-checked",
@@ -283,6 +276,6 @@ export function githubBranchReaders(env: Env): BranchReaders {
       if (!date) throw new Error("the commit carries no committer date");
       return date;
     },
-    prune: (plan, cap, onDeleted) => deletePruneCandidates(env, plan, cap, onDeleted),
+    prune: (plan, cap, record) => deletePruneCandidates(env, plan, cap, record),
   };
 }

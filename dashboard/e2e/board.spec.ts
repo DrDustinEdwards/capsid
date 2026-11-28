@@ -59,6 +59,17 @@ test("the open handoffs, the threads and the pull request trouble are drawn", as
   await expect(trouble.getByText(/as of/)).toBeVisible();
 });
 
+test("PLANT: the handoffs ring is drawn when the Board is reached from another page", async ({
+  page,
+}) => {
+  await visit(page, "health");
+  await page
+    .locator("nav.cap-admin-menu")
+    .getByRole("link", { name: /^Board/ })
+    .click();
+  await expect(page.locator("#handoffs .ring-head svg")).toHaveCount(1);
+});
+
 test("PLANT: the list does not move once the page has loaded", async ({ page }) => {
   await page.goto("./");
   const row = waiting(page).locator(".cap-row").first();

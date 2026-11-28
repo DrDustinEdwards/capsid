@@ -53,8 +53,10 @@ export async function signedInCrawlTick(
   now: Date,
   self: Fetch,
 ): Promise<{ note: string } | null> {
-  const stored = await env.APP_KV.get(SIGNED_IN_REPORT_KEY);
-  const at = stored ? Date.parse((JSON.parse(stored) as { at?: string }).at ?? "") : Number.NaN;
+  const stored = (await env.APP_KV.get(SIGNED_IN_REPORT_KEY, "json").catch(() => null)) as {
+    at?: string;
+  } | null;
+  const at = Date.parse(stored?.at ?? "");
   if (Number.isFinite(at) && now.getTime() - at < REFRESH_MS) return null;
   const report = await buildSignedInReport(env, self, now);
   await env.APP_KV.put(SIGNED_IN_REPORT_KEY, JSON.stringify(report));

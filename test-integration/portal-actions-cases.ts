@@ -11,10 +11,9 @@ export const AGENT_CASES: Record<string, Case> = {
       return { namespace: "capsid", number: "41", reason: "replaced by #42" };
     },
     after: async () => {
-      expect(githubCalls).toContain(`PATCH ${GITHUB_PR}`);
-      expect(githubCalls).toContain(
-        "DELETE https://api.github.com/repos/example/capsid/git/refs/heads/feat/sample",
-      );
+      expect(githubCalls, "a close leaves its branch for the daily prune").toEqual([
+        `PATCH ${GITHUB_PR}`,
+      ]);
       const row = await env.DB.prepare(
         "SELECT params FROM audit_log WHERE action = 'pr-closed' ORDER BY id DESC LIMIT 1",
       ).first<{ params: string }>();
@@ -22,8 +21,6 @@ export const AGENT_CASES: Record<string, Case> = {
         repo: "example/capsid",
         number: 41,
         reason: "replaced by #42",
-        head_branch: "feat/sample",
-        head_branch_deleted: true,
       });
       await env.APP_KV.delete("gh:token:v3:example/capsid");
     },

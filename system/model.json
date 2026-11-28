@@ -1686,7 +1686,7 @@
           "kind": "writes",
           "to": "capsid-db",
           "toward": "capsid-db",
-          "text": "Guarded: when anyone but the admin or an agent allowed to merge edits the rules, a core.md or the decisions, Capsid holds the edit as a proposal until someone approves it."
+          "text": "Guarded: when anyone but the admin or an agent allowed to merge edits the rules, a core.md or the decisions, Capsid refuses the write and changes nothing."
         },
         {
           "from": "capsid-worker",

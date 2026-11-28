@@ -215,6 +215,7 @@ const OUTPUTS: Record<string, Shape> = {
     message: str.optional(),
     state: str.optional(),
     head_branch: nullable(str).optional(),
+    head_branch_sha: str.optional(),
     head_branch_deleted: bool.optional(),
     head_branch_note: str.optional(),
     outcome_rows_updated: num.optional(),

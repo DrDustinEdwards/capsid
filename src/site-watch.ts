@@ -1,6 +1,5 @@
-import { sendEmail } from "@dustinedwards/site-runtime/email";
 import type { Env } from "./env";
-import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
 import { runSiteRepair, type RepairOutcome } from "./site-repair";
 import { tokenSet, type FetchLike } from "./site-operator";
@@ -12,15 +11,12 @@ import { callSignal } from "./call-signal";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { MAX_HEALTH_BYTES } from "./ops-snapshot";
 
-// THE WATCHER'S SITE REPAIRS the one watcher for every site. On each watcher pass, for every site
-// with a health route (ops_sites.health_path): 1. Read its health route. Healthy (200, ok, and no
-// alert named in `alerts`): nothing to do. 2. Unhealthy: the failing checks' names, alert checks
-// included.
+// The watcher's site repairs: each pass reads every site's health route; an unhealthy one gets the
+// repair its failing checks map to, then a re-check, and a finding if it does not settle.
 
 const HEALTH_TIMEOUT_MS = 10_000;
 const WEEK_MS = 7 * DAY_MS;
 const WEEKLY_PREFIX = "site-weekly:";
-const ALERT_PREFIX = "site-alert:";
 const TEXT_MAX = 300;
 // The settle after a converged repair: three re-reads thirty seconds apart.
 const SETTLE_POLLS = 3;
@@ -79,8 +75,7 @@ export async function readHealth(fetchImpl: FetchLike, url: string): Promise<Rea
   }
 }
 
-// The checks a site-runtime health body names in `alerts` (0.59.0): a failure someone should hear
-// of now, though the check is only a warning and `ok` stays true.
+// The checks a health body names in `alerts`: a failure to hear of now, though `ok` stays true.
 function alertChecks(body: unknown): string[] {
   const alerts = (body as { alerts?: unknown } | null)?.alerts;
   return Array.isArray(alerts)
@@ -132,7 +127,6 @@ export function repairPlan(
 const repairLine = (tool: string, o: RepairOutcome) =>
   o.ran ? o.line : `${tool} was not run: ${o.refusal}`;
 
-/** One site, one pass. */
 async function watchSite(
   env: Env,
   site: OpsSiteConfig & { origin: string },
@@ -236,7 +230,7 @@ async function watchSite(
     let recheck = await readHealth(fetchImpl, url);
     // Every repair said it converged and the re-read still fails: a store the repair rewrote can
     // list short for about a minute after (dustinedwards.info's Ask index read 157 then 155 after
-    // its own sync_ask), so it is re-read a few times before it is a finding and a mail.
+    // its own sync_ask), so it is re-read a few times before it is a finding.
     for (
       let poll = 0;
       !missed && recheck.status !== 0 && !healthy(recheck) && poll < SETTLE_POLLS;
@@ -265,7 +259,7 @@ async function watchSite(
   };
 }
 
-/** The finding's headline, which is also the mail's subject: an alert first, by name. */
+/** The finding's headline: an alert first, by name. */
 function headline(name: string, alerts: string[], repairable: boolean): string {
   if (alerts.length > 0) return `${name} raised an alert: ${alerts.join(", ")}`;
   return repairable
@@ -273,7 +267,7 @@ function headline(name: string, alerts: string[], repairable: boolean): string {
     : `${name} is unhealthy`;
 }
 
-/** Every site with a health route or an operator API, one pass, then the red and green mail. */
+/** Every site with a health route or an operator API, one pass. */
 export async function watchSites(
   env: Env,
   config: readonly OpsSiteConfig[],
@@ -288,88 +282,14 @@ export async function watchSites(
   const watched = config.filter((s) => s.origin && (s.operator || s.health_path));
   // Each site's reads and repairs are its own, so the sites run together; what they found is
   // joined in the config's order.
-  const results = await mapLimit(watched, WATCH_CONCURRENCY, async (site) => {
-    const r = await watchSite(
-      env,
-      site as OpsSiteConfig & { origin: string },
-      actor,
-      fetchImpl,
-      now,
-      sleep,
-    );
-    const mail = r.read ? await mailOnChange(env, site.namespace, site.name, r.finding, now) : [];
-    return { r, mail };
-  });
-  for (const { r, mail } of results) {
+  const results = await mapLimit(watched, WATCH_CONCURRENCY, (site) =>
+    watchSite(env, site as OpsSiteConfig & { origin: string }, actor, fetchImpl, now, sleep),
+  );
+  for (const r of results) {
     findings.push(...r.weekly);
     lines.push(...r.lines);
-    if (!r.read) {
-      complete = false;
-      continue;
-    }
-    if (r.finding) findings.push(r.finding);
-    lines.push(...mail);
+    if (!r.read) complete = false;
+    else if (r.finding) findings.push(r.finding);
   }
   return { findings, complete, lines };
-}
-
-interface AlertState {
-  red: boolean;
-  since: string;
-}
-
-// Mails once on a change between healthy and not. The state moves only once the mail is sent, or
-// when there is nothing to send it with, so a failed send retries next pass.
-async function mailOnChange(
-  env: Env,
-  namespace: string,
-  name: string,
-  finding: SiteFinding | null,
-  now: Date,
-): Promise<string[]> {
-  const key = `${ALERT_PREFIX}${namespace}`;
-  let before: AlertState | null = null;
-  try {
-    const raw = await env.APP_KV.get(key);
-    before = raw ? (JSON.parse(raw) as AlertState) : null;
-  } catch (err) {
-    logEvent(
-      "SITE_ALERT_STATE_UNREADABLE",
-      {
-        message: `SITE_ALERT_STATE_UNREADABLE ${namespace}: ${errorMessage(err)}`,
-      },
-      { level: "error" },
-    );
-  }
-  const red = finding !== null;
-  // No state yet and healthy: nothing changed that anyone needs to hear about.
-  if ((before?.red ?? false) === red) return [];
-  const subject = finding ? finding.headline : `${name} recovered`;
-  const text = red
-    ? [
-        `Changed to unhealthy at ${now.toISOString()}. You will not be mailed again until it recovers.`,
-        "",
-        ...(finding?.evidence ?? []),
-        "",
-        "The finding is open in Capsid Portal, Incidents.",
-      ].join("\n")
-    : [
-        `Healthy again at ${now.toISOString()}${before ? `, after being unhealthy since ${before.since}` : ""}.`,
-      ].join("\n");
-  const sent = await sendEmail(env.EMAIL, {
-    from: env.ALERT_FROM ?? "",
-    to: env.ALERT_EMAIL ?? "",
-    subject,
-    text,
-  });
-  // A refusal keeps the state, so the next pass sends it again; with nothing configured the change is recorded unmailed.
-  if (!sent.sent && sent.code !== "not_configured")
-    return [
-      `${namespace}: the "${subject}" mail did not send (${clip(sent.error)}); it is retried next pass`,
-    ];
-  const note = sent.sent
-    ? `${namespace}: mailed "${subject}"`
-    : `${namespace}: "${subject}" was not mailed: no send_email binding (EMAIL, ALERT_EMAIL, ALERT_FROM) is configured`;
-  await env.APP_KV.put(key, JSON.stringify({ red, since: now.toISOString() } satisfies AlertState));
-  return [note];
 }

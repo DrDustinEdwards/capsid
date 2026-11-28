@@ -1,6 +1,5 @@
 import { AwayLink } from "capsomer/react/link";
 import { trendChart } from "./charts";
-import { Suspense } from "react";
 import { useApp } from "../app/ctx";
 import { KIND_STATUS, ciState } from "../lib/derive";
 import { ago } from "../lib/format";
@@ -8,6 +7,7 @@ import { parse, utc } from "capsomer/behavior/time";
 import { Status } from "capsomer/react/status";
 import { Panel } from "capsomer/react/panel";
 import { NoSnapshot } from "./shared";
+import { ChartSlot } from "../ui/ChartSlot";
 
 const CiHistory = trendChart("CiHistory");
 
@@ -75,9 +75,9 @@ export function DefaultBranches() {
           <NoSnapshot />
         )}
       </Panel>
-      <Suspense fallback={null}>
+      <ChartSlot>
         <CiHistory />
-      </Suspense>
+      </ChartSlot>
     </>
   );
 }

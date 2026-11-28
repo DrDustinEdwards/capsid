@@ -3,6 +3,7 @@
 import { frameHtml } from "capsomer/behavior/chart-frame";
 import { progressRing } from "enarratio";
 
+import { statusHtml } from "capsomer/behavior/status";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { layout, pageHead, percent, scroller } from "./pages.mjs";
 
@@ -35,7 +36,11 @@ const ring = (
 /** @param {any} stats */
 export function numbersHtml(stats) {
   const siteRings = [];
-  if (stats.sites.uptime_7d !== null)
+  if (stats.sites.uptime_7d === null)
+    siteRings.push(
+      `<p>${statusHtml("nodata", "No data", { reason: "fewer than ten half-hours were measured in the last 7 days" })}</p>`,
+    );
+  else
     siteRings.push(
       ring(
         "uptime",

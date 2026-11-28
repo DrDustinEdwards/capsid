@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { useApp } from "../app/ctx";
 import { ago } from "../lib/format";
 import { parse } from "capsomer/behavior/time";
@@ -211,9 +210,9 @@ function Handoffs({
       count={board?.handoffs.open}
       src={
         board && (
-          <Suspense fallback={null}>
+          <ChartSlot>
             <HandoffsRing board={board} />
-          </Suspense>
+          </ChartSlot>
         )
       }
     >

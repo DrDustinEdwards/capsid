@@ -320,7 +320,7 @@ test("the analytics rule takes no path, and reads the account's list once for an
   assert.equal(out.summary.analytics_read, 2);
 });
 
-test("PLANT: an analytics read that fails is an unread finding for the site and leaves the check un-run, never clean", async () => {
+test("PLANT: an analytics or head read that fails is an unread finding for the site and leaves the check un-run, never clean", async () => {
   const failing = {
     ...deps({}),
     analytics: async (): Promise<WebAnalyticsSite[]> => {
@@ -328,18 +328,25 @@ test("PLANT: an analytics read that fails is an unread finding for the site and 
         "the Web Analytics sites list was refused with 403: CF_OPS_TOKEN lacks Account / Account Settings / Read",
       );
     },
+    head: async (): Promise<typeof HEAD> => {
+      throw new Error("GitHub answered 502");
+    },
   };
   const out = await liveChecks(
-    { body: "- site sample analytics" },
+    { body: "- site sample analytics\n- site sample sha" },
     [SITE],
     [probe()],
     failing,
     NOW,
   );
-  assert.deepEqual(prints(out.findings), ["live-analytics-unread-sample"]);
+  assert.deepEqual(prints(out.findings), [
+    "live-analytics-unread-sample",
+    "live-sha-unread-sample",
+  ]);
   assert.match(out.findings[0]?.evidence[0] ?? "", /Account Settings \/ Read/);
+  assert.match(out.findings[1]?.evidence[0] ?? "", /502/);
   assert.equal(out.ran, false);
-  assert.deepEqual(out.summary, summary(0, 0, 0, 0, 1, 0));
+  assert.deepEqual(out.summary, summary(0, 0, 1, 0, 1, 0));
 });
 
 const HEAD = { sha: "b".repeat(40), committed_at: "2026-10-04T10:00:00.000Z" };

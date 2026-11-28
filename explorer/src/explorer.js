@@ -341,8 +341,7 @@ const KIND_RANK = {
   Part: 3,
   Step: 4,
   Action: 5,
-  Module: 6,
-  Function: 7,
+  Code: 6,
 };
 
 // The index is read once, from the explorer itself.

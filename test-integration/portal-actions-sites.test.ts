@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { capsidStatus } from "../src/status";
 import { APP_ROSTER } from "../src/roster";
+import { updateNamespace } from "../src/namespace-admin";
 import type {
   PortalActivity,
   PortalNamespaces,
@@ -58,6 +59,39 @@ describe("the project actions against real D1", () => {
       ).first(),
     ).not.toBeNull();
     expect(await auditRows(), "a refused delete wrote a row").toEqual(auditBefore);
+  });
+});
+
+describe("the namespace mapping", () => {
+  it("a mapping changed between the read and the write is refused, and the other edit stands", async () => {
+    await env.DB.prepare("INSERT INTO namespaces (namespace, repos) VALUES ('sample-race', ?1)")
+      .bind(JSON.stringify([{ repo: "example/sample-a", label: "primary" }]))
+      .run();
+    const other = JSON.stringify([{ repo: "example/sample-b", label: "primary" }]);
+    const racing = new Proxy(env.DB, {
+      get(target, prop) {
+        if (prop === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            await target
+              .prepare("UPDATE namespaces SET repos = ?1 WHERE namespace = 'sample-race'")
+              .bind(other)
+              .run();
+            return target.batch(statements);
+          };
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const auditBefore = await auditRows();
+    const done = await updateNamespace(racing, "admin:test", "sample-race", [
+      { repo: "example/sample-c", label: "primary" },
+    ]);
+    expect(done.ok).toBe(false);
+    const row = await env.DB.prepare(
+      "SELECT repos FROM namespaces WHERE namespace = 'sample-race'",
+    ).first<{ repos: string }>();
+    expect(row?.repos).toBe(other);
+    expect(await auditRows(), "a refused update wrote a row").toEqual(auditBefore);
   });
 });
 
