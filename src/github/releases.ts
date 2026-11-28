@@ -98,10 +98,7 @@ export async function tagRelease(
   };
 }
 
-// Shared with the maintenance pass's release-tag rule (src/maintenance-releases.ts), which tags a
-// repo that is no namespace's and so skips tagRelease's lookup.
-
-export function releaseNotes(markdown: string, tag: string): string | null {
+function releaseNotes(markdown: string, tag: string): string | null {
   const notes = changelogSection(markdown, tag);
   if (!notes) return null;
   return notes.length > NOTES_MAX
@@ -110,7 +107,7 @@ export function releaseNotes(markdown: string, tag: string): string | null {
 }
 
 /** Never moves a tag: GitHub's 422 for an existing ref is thrown saying nothing changed. */
-export async function createTag(
+async function createTag(
   env: Env,
   owner: string,
   repo: string,
@@ -135,7 +132,7 @@ export async function createTag(
   }
 }
 
-export async function publishRelease(
+async function publishRelease(
   env: Env,
   owner: string,
   repo: string,

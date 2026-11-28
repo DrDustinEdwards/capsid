@@ -9,7 +9,6 @@ import {
   type BranchReaders,
 } from "../src/maintenance-branches";
 import type { DeployReaders } from "../src/maintenance-deploys";
-import type { ReleaseReaders } from "../src/maintenance-releases";
 import worker from "../src/index";
 import type { Env } from "../src/env";
 import type { PortalMaintenance } from "../src/ops-types/views";
@@ -64,21 +63,6 @@ const ONE_DRIFT = async () => ({
   ],
   read: 1,
 });
-// The release-tag rule (test/maintenance-releases.test.ts) reads each shared package's repo; here there is none.
-const notCalled = async (): Promise<never> => {
-  throw new Error("not called");
-};
-const NO_RELEASES: ReleaseReaders = {
-  packages: async () => [],
-  head: notCalled,
-  tags: notCalled,
-  manifestCommits: notCalled,
-  versionAt: notCalled,
-  changelog: notCalled,
-  tag: notCalled,
-  release: notCalled,
-};
-
 beforeEach(async () => {
   await resetCapsidDb();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
@@ -178,7 +162,6 @@ describe("maintenanceTick", () => {
       NO_BRANCHES,
       NO_DEPLOYS,
       NO_DRIFT,
-      NO_RELEASES,
     );
     expect(early.ran).toBe(false);
     expect(await readMaintenance(env as never)).toBeNull();
@@ -190,7 +173,6 @@ describe("maintenanceTick", () => {
       NO_BRANCHES,
       NO_DEPLOYS,
       ONE_DRIFT,
-      NO_RELEASES,
     );
     expect(first.ran).toBe(true);
     expect((await readMaintenance(env as never))?.items.map((i) => i.rule)).toEqual([
@@ -211,7 +193,6 @@ describe("maintenanceTick", () => {
       NO_BRANCHES,
       NO_DEPLOYS,
       NO_DRIFT,
-      NO_RELEASES,
     );
     expect(second.ran).toBe(false);
     const nextDay = await maintenanceTick(
@@ -221,7 +202,6 @@ describe("maintenanceTick", () => {
       NO_BRANCHES,
       NO_DEPLOYS,
       NO_DRIFT,
-      NO_RELEASES,
     );
     expect(nextDay.ran).toBe(true);
   });
@@ -246,7 +226,6 @@ describe("maintenanceTick", () => {
         ONE_MERGED,
         NO_DEPLOYS,
         NO_DRIFT,
-        NO_RELEASES,
       );
       expect(ran.ran && ran.note).toContain("1 pruned");
       const rows = await env.DB.prepare(
@@ -312,7 +291,6 @@ describe("GET /portal/api/maintenance, through the Worker", () => {
           NO_BRANCHES,
           NO_DEPLOYS,
           ONE_DRIFT,
-          NO_RELEASES,
         )
       ).ran,
     ).toBe(true);

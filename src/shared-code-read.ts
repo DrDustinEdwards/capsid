@@ -39,25 +39,22 @@ const RENOVATE_FILES = [
   ".renovaterc.json",
 ];
 
-// A repo's root package.json, on its default branch or at `ref`, through the App. Uncached: the
-// release-tag rule reads it to decide a write.
-export async function readRootManifest(
+// A repo's root package.json, on its default branch, through the App. Uncached.
+async function readRootManifest(
   env: Env,
   full: string,
-  ref?: string,
 ): Promise<RootManifest> {
   const [owner, repo] = full.split("/");
-  const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
   const resp = await ghFetch(
     env,
     owner,
     repo,
-    `/repos/${owner}/${repo}/contents/package.json${query}`,
+    `/repos/${owner}/${repo}/contents/package.json`,
   );
   if (!resp.ok) {
     await resp.body?.cancel();
     throw new Error(
-      `GitHub answered ${resp.status} for ${full}'s package.json${ref ? ` at ${ref.slice(0, 12)}` : ""}`,
+      `GitHub answered ${resp.status} for ${full}'s package.json`,
     );
   }
   const data = (await resp.json()) as { content?: unknown; encoding?: unknown };
