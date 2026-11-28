@@ -20,16 +20,12 @@ function run(f: OpsFeed) {
   return { list, calls, texts: list.map((c) => c.label) };
 }
 
-test("PLANT: a revoked agent has no Revoke", () => {
+test("PLANT: each stop previews a revoke of one live agent, and a revoked agent has none", () => {
   const f = feed();
-  const { texts } = run(f);
-  const revoked = f.live.agents.filter((a) => a.revoked_at).map((a) => a.name);
-  assert.ok(revoked.length > 0, "the sample has a revoked agent");
-  for (const name of revoked) assert.ok(!texts.includes(`Revoke ${name}`), name);
-});
-
-test("PLANT: each stop runs its own control: a revoke previews", () => {
-  const f = feed();
+  assert.ok(
+    f.live.agents.some((a) => a.revoked_at),
+    "the sample has a revoked agent",
+  );
   const { list, calls } = run(f);
   for (const c of list) c.run();
   const live = f.live.agents

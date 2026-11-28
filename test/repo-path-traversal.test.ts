@@ -26,36 +26,34 @@ function makeEnv(repos: unknown[]) {
 
 const ONE_REPO = [{ repo: "owner/mapped-repo", label: "primary" }];
 
-test("repoPathProblem rejects '.' and '..' segments and control chars, and allows real repo paths", () => {
-  assert.ok(repoPathProblem("../../x"));
-  assert.ok(repoPathProblem("a/../b"));
-  assert.ok(repoPathProblem("./x"));
-  assert.ok(repoPathProblem("a/b/.."));
-  assert.ok(repoPathProblem("x/\n/y"));
-  assert.ok(repoPathProblem("/leading"));
-  assert.ok(repoPathProblem("trailing/"));
-  assert.ok(repoPathProblem("a//b"));
-  assert.equal(repoPathProblem(".github/workflows/improve-score.yml"), null);
-  assert.equal(repoPathProblem(".npmrc"), null);
-  assert.equal(repoPathProblem("src/foo.test.ts"), null);
-  assert.equal(repoPathProblem("a..b/c"), null); // "a..b" is a legal name; only a whole ".." segment moves the URL
-  assert.equal(repoPathProblem("README.md"), null);
-});
-
-test("encodePath throws on a '..' segment (old code returned it verbatim)", () => {
+test("the path, segment and owner/name validators refuse '.' and '..' segments, and allow real names", () => {
+  for (const bad of [
+    "../../x",
+    "a/../b",
+    "./x",
+    "a/b/..",
+    "x/\n/y",
+    "/leading",
+    "trailing/",
+    "a//b",
+  ])
+    assert.ok(repoPathProblem(bad), bad);
+  // "a..b" is a legal name; only a whole ".." segment moves the URL.
+  for (const good of [
+    ".github/workflows/ci.yml",
+    ".npmrc",
+    "src/foo.test.ts",
+    "a..b/c",
+    "README.md",
+  ])
+    assert.equal(repoPathProblem(good), null, good);
   assert.throws(() => encodePath("../../x"), /'\.\.' segment/);
   assert.throws(() => encodePath("a/./b"), /'\.' segment/);
   assert.equal(encodePath("a/b c/d.md"), "a/b%20c/d.md");
-});
-
-test("repoTokenOk and parseReposList reject '..' as an owner/name mapping", () => {
   assert.equal(repoTokenOk("../evil"), false);
   assert.equal(repoTokenOk("owner/.."), false);
   assert.equal(repoTokenOk("owner/repo"), true);
-  const bad = parseReposList(JSON.stringify([{ repo: "../evil", label: "primary" }]));
-  assert.ok("error" in bad);
-  const good = parseReposList(JSON.stringify([{ repo: "owner/repo", label: "primary" }]));
-  assert.ok("list" in good);
+  assert.ok("error" in parseReposList(JSON.stringify([{ repo: "../evil", label: "primary" }])));
 });
 
 test("read_repo_file refuses a traversal path and makes no escaping request", async () => {

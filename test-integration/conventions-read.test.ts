@@ -44,64 +44,7 @@ beforeEach(async () => {
 });
 
 describe("conventions-read", () => {
-  it("a direct read of capsid/conventions.md writes one row, addressed to no document", async () => {
-    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" });
-    const out = await rows();
-    expect(out).toHaveLength(1);
-    expect(out[0]).toMatchObject({ actor: "test:reader", namespace: "capsid", path: null });
-    expect(JSON.parse(out[0].params)).toEqual({ via: "read", for_namespace: "capsid" });
-  });
-
-  it("a brief writes one row, naming the namespace it was for", async () => {
-    await call("capsid_start_session", { namespace: "sample" });
-    const out = await rows();
-    expect(out).toHaveLength(1);
-    expect(JSON.parse(out[0].params)).toEqual({ via: "brief", for_namespace: "sample" });
-  });
-
-  it("a second read by the same caller inside the hour writes none, whichever tool it came by", async () => {
-    await call("capsid_start_session", { namespace: "sample" });
-    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" });
-    await call("capsid_start_session", { namespace: "sample" });
-    expect(await rows()).toHaveLength(1);
-  });
-
-  it("threads that name themselves are counted one by one under one login, and a thread once an hour", async () => {
-    await call("capsid_start_session", { namespace: "sample", thread: "Thread A" });
-    await call("capsid_start_session", { namespace: "sample", thread: "Thread B" });
-    await call("capsid_start_session", { namespace: "sample", thread: "Thread A" });
-    const out = await rows();
-    expect(out.map((r) => JSON.parse(r.params).thread)).toEqual(["Thread A", "Thread B"]);
-  });
-
-  it("another caller's read is its own row", async () => {
-    await call(
-      "capsid_read_doc",
-      { action: "read", namespace: "capsid", path: "conventions.md" },
-      "agent:one",
-    );
-    await call(
-      "capsid_read_doc",
-      { action: "read", namespace: "capsid", path: "conventions.md" },
-      "agent:two",
-    );
-    expect((await rows()).map((r) => r.actor)).toEqual(["agent:one", "agent:two"]);
-  });
-
-  it("a read after the hour writes a new row, and one just inside it does not", async () => {
-    await env.DB.prepare(
-      "INSERT INTO audit_log (actor, action, namespace, path, params, at) VALUES ('test:reader', 'conventions-read', 'capsid', NULL, '{}', datetime('now', '-61 minutes'))",
-    ).run();
-    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" });
-    expect(await rows("test:reader")).toHaveLength(2);
-    await env.DB.prepare(
-      "UPDATE audit_log SET at = datetime('now', '-59 minutes') WHERE action = 'conventions-read'",
-    ).run();
-    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" });
-    expect(await rows("test:reader")).toHaveLength(2);
-  });
-
-  it("a read of any other document writes none, in capsid or elsewhere", async () => {
+  it("a read of capsid/conventions.md and a brief each write one row with their address; a read of any other document writes none", async () => {
     await call("capsid_read_doc", {
       action: "read",
       namespace: "capsid",
@@ -110,11 +53,45 @@ describe("conventions-read", () => {
     await call("capsid_read_doc", { action: "read", namespace: "sample", path: "core.md" });
     await call("capsid_read_doc", { action: "read", namespace: "sample", path: "notes.md" });
     expect(await rows()).toEqual([]);
+    await call(
+      "capsid_read_doc",
+      { action: "read", namespace: "capsid", path: "conventions.md" },
+      "agent:one",
+    );
+    await call("capsid_start_session", { namespace: "sample" }, "agent:two");
+    // A namespace with no core.md still counts: the brief still carries the rules.
+    await call("capsid_start_session", { namespace: "empty" }, "agent:three");
+    const out = await rows();
+    expect(out.map((r) => [r.actor, r.namespace, r.path, JSON.parse(r.params)])).toEqual([
+      ["agent:one", "capsid", null, { via: "read", for_namespace: "capsid" }],
+      ["agent:two", "capsid", null, { via: "brief", for_namespace: "sample" }],
+      ["agent:three", "capsid", null, { via: "brief", for_namespace: "empty" }],
+    ]);
   });
 
-  it("a brief for a namespace with no core.md still counts, because it still carries the rules", async () => {
-    await call("capsid_start_session", { namespace: "empty" });
-    expect(await rows()).toHaveLength(1);
+  it("a caller's second read inside the hour writes none, whichever tool it came by; one after the hour writes a new row", async () => {
+    await call("capsid_start_session", { namespace: "sample" });
+    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" });
+    await call("capsid_start_session", { namespace: "sample" });
+    expect(await rows("test:reader")).toHaveLength(1);
+    await env.DB.prepare(
+      "UPDATE audit_log SET at = datetime('now', '-59 minutes') WHERE action = 'conventions-read'",
+    ).run();
+    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" });
+    expect(await rows("test:reader")).toHaveLength(1);
+    await env.DB.prepare(
+      "UPDATE audit_log SET at = datetime('now', '-61 minutes') WHERE action = 'conventions-read'",
+    ).run();
+    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" });
+    expect(await rows("test:reader")).toHaveLength(2);
+  });
+
+  it("threads that name themselves are counted one by one under one login, and a thread once an hour", async () => {
+    await call("capsid_start_session", { namespace: "sample", thread: "Thread A" });
+    await call("capsid_start_session", { namespace: "sample", thread: "Thread B" });
+    await call("capsid_start_session", { namespace: "sample", thread: "Thread A" });
+    const out = await rows();
+    expect(out.map((r) => JSON.parse(r.params).thread)).toEqual(["Thread A", "Thread B"]);
   });
 
   it("does not make the reader the document's last_actor", async () => {

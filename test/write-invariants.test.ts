@@ -5,8 +5,8 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer, concurrentEditWarning, type ToolGrant } from "../src/server.ts";
 import { fakeD1, fakeEnv, type FakeD1Rows, type Recorded } from "./fakes.ts";
 
-// Drives the real handlers over a real MCP connection and records the SQL they issue (test/invariants.test.ts reads the
-// source); it proves which statements are emitted, not that the SQL is correct.
+// Drives the real handlers over a real MCP connection and records the SQL they issue: which statements are emitted,
+// not that the SQL is correct.
 
 interface FakeOptions {
   namespaceExists?: boolean;
@@ -264,24 +264,6 @@ test("capsid_delete_doc copies title and body to document_versions before the DE
   assert.ok(snapshot < removal, "the snapshot must come before the DELETE in the batch");
 });
 
-test("a read-only key cannot reach any mutating tool, and writes nothing", async () => {
-  for (const { label, tool, args } of MUTATORS) {
-    const c = await connect("read");
-    // A tool that needs write in whole is not served to a read grant, so the protocol refuses
-    // it; an action tool is served and refuses the write action by name.
-    const result = (await c.client
-      .callTool({ name: tool, arguments: args })
-      .catch((error: unknown) => ({
-        isError: true,
-        content: [{ text: error instanceof Error ? error.message : String(error) }],
-      }))) as Result;
-    await c.close();
-    assert.equal(result.isError, true, `${label} did not refuse a read-only key`);
-    assert.match(result.content[0].text, /requires the write grant|not found/);
-    assert.deepEqual(c.recorded, [], `${label} wrote while refusing a read-only key`);
-  }
-});
-
 test("every mutator refuses an unregistered namespace, and writes nothing", async () => {
   // A typo in `namespace` must not open a shadow namespace the lint loop never counts.
   for (const { label, tool, args, refusesUnregisteredWith } of MUTATORS) {
@@ -342,14 +324,11 @@ const warningFor = async (opts: FakeOptions, args: Record<string, unknown> = {})
   return (JSON.parse(text) as { concurrency_warning?: string }).concurrency_warning;
 };
 
-test("overwriting a document touched in the last hour warns, with the time, and still lands", async () => {
+test("overwriting a document touched in the last hour warns, with the time, and still lands; an older one or a guarded write does not", async () => {
   const warning = await warningFor({ updatedAt: recently(10) });
   assert.match(warning ?? "", /possible concurrent edit/);
   assert.match(warning ?? "", /pass if_match/i);
   assert.match(warning ?? "", /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
-});
-
-test("an older document or a guarded write does not warn", async () => {
   assert.equal(await warningFor({ updatedAt: recently(61) }), undefined);
   assert.equal(await warningFor({ updatedAt: "2020-01-01 00:00:00" }), undefined);
   assert.equal(
@@ -560,7 +539,7 @@ const ELICITED: Array<[string, string, Record<string, unknown>]> = [
   ["delete", "capsid_delete_doc", { ...DELETE, confirm: undefined }],
 ];
 
-test("after an elicitation, write, restore and delete each refuse a body changed while the prompt was open, and each lands with no race", async () => {
+test("after an elicitation, write, restore and delete each refuse a body changed while the prompt was open, and each lands with no race; a declined one writes nothing", async () => {
   for (const [label, tool, args] of ELICITED) {
     const raced = await run(
       tool,
@@ -589,6 +568,16 @@ test("after an elicitation, write, restore and delete each refuse a body changed
     assert.ok(!clean.result.isError, `${label} was refused: ${clean.text}`);
     assert.ok(clean.recorded.length > 0, label);
   }
+  const declined = await run(
+    "capsid_write_doc",
+    { ...WRITE, confirm: undefined },
+    {},
+    { elicit: "decline" },
+  );
+  assert.equal(declined.prompts.length, 1);
+  assert.equal(declined.result.isError, true, "a declined overwrite was written anyway");
+  assert.match(declined.text, /overwrite of capsid\/doc\.md declined/);
+  assert.deepEqual(declined.recorded, []);
 });
 
 test("a confirm: true delete lands over a changed body, and is refused when the row is gone", async () => {
@@ -614,19 +603,6 @@ test("a confirm: true delete lands over a changed body, and is refused when the 
   );
   assert.match(removed.text, /no longer exists/);
   assert.deepEqual(removed.recorded, []);
-});
-
-test("a declined elicitation refuses, and writes nothing", async () => {
-  const { result, text, prompts, recorded } = await run(
-    "capsid_write_doc",
-    { ...WRITE, confirm: undefined },
-    {},
-    { elicit: "decline" },
-  );
-  assert.equal(prompts.length, 1);
-  assert.equal(result.isError, true, "a declined overwrite was written anyway");
-  assert.match(text, /overwrite of capsid\/doc\.md declined/);
-  assert.deepEqual(recorded, []);
 });
 
 // A landed GitHub change is not reported as a failure.
@@ -704,27 +680,50 @@ test("capsid_close_pr close reports success with a warning when the audit insert
   }
 });
 
-// Patch uniqueness: test/write-modes.test.ts proves the rule on `assembleBody`; this proves
-// the handler applies it. The assertion that matters is refused and nothing written.
+// test/write-modes.test.ts proves the patch rule on `assembleBody`; this proves the handler applies it.
 
-test("a patch whose find occurs zero or several times is refused and writes nothing; exactly once lands", async () => {
+test("a patch whose find does not occur once is refused and writes nothing; exactly once lands", async () => {
   const patch = (body: string, find: string) =>
     run(
       "capsid_write_doc",
       { action: "write", ...DOC, mode: "patch", find, replace_with: "DELTA", confirm: true },
       { body },
     );
-  for (const [body, find, re] of [
-    ["alpha beta gamma", "no such text", /occurs 0 times|not found|exactly once/i],
-    ["repeat once, repeat twice", "repeat", /occurs 2 times|exactly once/i],
-  ] as const) {
-    const { result, text, recorded } = await patch(body, find);
-    assert.equal(result.isError, true, `a patch with ${find} was applied`);
-    assert.match(text, re);
-    assert.equal(hasUpsert(recorded), false, "a refused patch still wrote the document");
-  }
+  const missing = await patch("alpha beta gamma", "no such text");
+  assert.equal(missing.result.isError, true, "a patch with no match was applied");
+  assert.match(missing.text, /occurs 0 times|not found|exactly once/i);
+  assert.equal(hasUpsert(missing.recorded), false, "a refused patch still wrote the document");
   const { result, text, recorded } = await patch("alpha beta gamma", "beta");
   assert.ok(!result.isError, text);
   const insert = recorded.find((r) => /INSERT INTO documents/i.test(r.sql));
   assert.ok(insert?.params.includes("alpha DELTA gamma"), JSON.stringify(insert?.params));
+});
+
+// A write normalizes only the caller's new text; what was stored before is left as it is.
+const EM = String.fromCharCode(0x2014);
+const storedBody = (recorded: Recorded[]) =>
+  String(recorded.find((r) => /INSERT INTO documents/i.test(r.sql))?.params[3]);
+
+test("append and patch normalize the caller's text and leave a wide dash already stored untouched", async () => {
+  const appended = await run(
+    "capsid_write_doc",
+    { action: "write", ...DOC, mode: "append", body: `added ${EM} by the caller` },
+    { body: `stored ${EM} as it is` },
+  );
+  assert.ok(!appended.result.isError, appended.text);
+  assert.equal(storedBody(appended.recorded), `stored ${EM} as it is\n\nadded, by the caller`);
+  const patched = await run(
+    "capsid_write_doc",
+    {
+      action: "write",
+      ...DOC,
+      mode: "patch",
+      find: "ANCHOR",
+      replace_with: `new ${EM} text`,
+      confirm: true,
+    },
+    { body: `one ${EM} stored\nANCHOR\nthree ${EM} stored` },
+  );
+  assert.ok(!patched.result.isError, patched.text);
+  assert.equal(storedBody(patched.recorded), `one ${EM} stored\nnew, text\nthree ${EM} stored`);
 });

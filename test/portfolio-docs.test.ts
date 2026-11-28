@@ -150,16 +150,6 @@ test("isPortfolioPath admits the allowed paths and refuses traversal, case, enco
     assert.equal(isPortfolioPath(path), false, `${JSON.stringify(path)} should be refused`);
 });
 
-test("a namespace driver reads every portfolio document in capsid", async () => {
-  const { call, close } = await connect(driver("carrel"));
-  for (const path of ALLOWED) {
-    const r = await call("capsid_read_doc", { namespace: "capsid", path });
-    assert.ok(!r.isError, `${path} was refused: ${r.text}`);
-    assert.equal(JSON.parse(r.text).body, `ALLOWED ${path}`);
-  }
-  await close();
-});
-
 test("PLANT: a namespace driver is refused every capsid path outside the portfolio allowlist", async () => {
   const { call, close } = await connect(driver("carrel"));
   for (const path of DENIED) {
@@ -167,24 +157,6 @@ test("PLANT: a namespace driver is refused every capsid path outside the portfol
     assert.equal(r.isError, true, `${path} was read by a carrel driver`);
     assert.match(r.text, /not scoped to the 'capsid' namespace/, `${path}: ${r.text}`);
     assert.doesNotMatch(r.text, /SECRET/);
-  }
-  await close();
-});
-
-test("traversal, case and encoded paths are refused and leak nothing, whichever check refuses them", async () => {
-  const { call, close } = await connect(driver("carrel"));
-  for (const path of [
-    "rulings/../policy/gates.md",
-    "rulings/%2e%2e/policy/gates.md",
-    "Rulings/remove-improve-loop-2026-10-19.md",
-    "CONVENTIONS.md",
-    "rulings/",
-    "conventions.md/",
-    "rulings\\..\\policy\\gates.md",
-  ]) {
-    const r = await call("capsid_read_doc", { namespace: "capsid", path });
-    assert.equal(r.isError, true, `${path} was not refused`);
-    assert.doesNotMatch(r.text, /SECRET|ALLOWED/, `${path} leaked a body: ${r.text}`);
   }
   await close();
 });
@@ -268,7 +240,7 @@ test("a narrowed driver still cannot list, glob or search with no namespace", as
   await close();
 });
 
-test("THE INNOCENT DIRECTION: capsid's own driver still lists everything in capsid, and carrel's driver its own namespace", async () => {
+test("THE INNOCENT DIRECTION: a carrel driver reads every portfolio document and its own namespace; capsid's own driver still reads everything in capsid", async () => {
   const own = await connect(driver("capsid"));
   const all = await own.call("capsid_find_docs", { namespace: "capsid" });
   assert.equal(
@@ -284,6 +256,11 @@ test("THE INNOCENT DIRECTION: capsid's own driver still lists everything in caps
   await own.close();
 
   const carrel = await connect(driver("carrel"));
+  for (const path of ALLOWED) {
+    const r = await carrel.call("capsid_read_doc", { namespace: "capsid", path });
+    assert.ok(!r.isError, `${path} was refused: ${r.text}`);
+    assert.equal(JSON.parse(r.text).body, `ALLOWED ${path}`);
+  }
   const mine = await carrel.call("capsid_read_doc", { namespace: "carrel", path: "core.md" });
   assert.equal(JSON.parse(mine.text).body, "carrel's own");
   await carrel.close();

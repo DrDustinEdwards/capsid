@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
 
-// write and restore report `snapshotted` from the snapshot's own result. Real SQLite shows D1 answers RETURNING on the INSERT ... SELECT
-// inside a batch, which the fake in test/snapshotted.test.ts cannot.
+// write and restore report `snapshotted` from the snapshot's own result, which D1 answers through RETURNING on the
+// INSERT ... SELECT inside a batch.
 
 const NS = "sample";
 
@@ -78,22 +78,27 @@ describe("snapshotted is read from the batch", () => {
     ).toBe(false);
   });
 
-  it("restore reports false when the row was deleted before its batch", async () => {
-    await seed("snap-3.md");
-    await callTool(env.DB, "capsid_write_doc", write("snap-3.md"));
-    const version = await env.DB.prepare(
-      "SELECT id FROM document_versions WHERE namespace = ?1 AND path = ?2",
-    )
-      .bind(NS, "snap-3.md")
-      .first<{ id: number }>();
-    expect(version).not.toBeNull();
-    const out = await callTool(deletingDb(env.DB, "snap-3.md"), "capsid_write_doc", {
-      action: "restore",
-      namespace: NS,
-      path: "snap-3.md",
-      version_id: version!.id,
-      confirm: true,
-    });
-    expect(out.snapshotted).toBe(false);
+  it("restore reports true when the snapshot was taken, and false when the row was deleted before its batch", async () => {
+    for (const [path, raced, snapshotted] of [
+      ["snap-3.md", false, true],
+      ["snap-4.md", true, false],
+    ] as const) {
+      await seed(path);
+      await callTool(env.DB, "capsid_write_doc", write(path));
+      const version = await env.DB.prepare(
+        "SELECT id FROM document_versions WHERE namespace = ?1 AND path = ?2",
+      )
+        .bind(NS, path)
+        .first<{ id: number }>();
+      expect(version).not.toBeNull();
+      const out = await callTool(raced ? deletingDb(env.DB, path) : env.DB, "capsid_write_doc", {
+        action: "restore",
+        namespace: NS,
+        path,
+        version_id: version!.id,
+        confirm: true,
+      });
+      expect(out.snapshotted, path).toBe(snapshotted);
+    }
   });
 });

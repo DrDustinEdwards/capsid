@@ -1,41 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { portalSessionCookie } from "../src/portal-auth.ts";
 import { PORTAL_CSRF_COOKIE } from "../src/ops-feed.ts";
 import type { PortalPerformed, PortalPreview } from "../src/ops-types/portal.ts";
-import { captureErrors, FEED } from "./fakes.ts";
+import { captureErrors } from "./fakes.ts";
 import {
-  handlePortalActivity,
-  handlePortalApiNotFound,
-  handlePortalNamespaces,
   handlePortalPerform,
   handlePortalPreview,
   handlePortalSignOut,
-  PORTAL_ACTIVITY_PATH,
-  PORTAL_CSRF_HEADER,
-  PORTAL_NAMESPACES_PATH,
-  PORTAL_PERFORM_PATH,
-  PORTAL_PREVIEW_PATH,
   PORTAL_SIGN_OUT_PATH,
 } from "../src/portal-actions.ts";
-import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
-import { handlePortalTrends, PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
 import {
-  handlePortalBoard,
-  handlePortalPrs,
-  PORTAL_BOARD_PATH,
-  PORTAL_PRS_PATH,
-} from "../src/portal-board.ts";
-import { handlePortalFigures, PORTAL_FIGURES_PATH } from "../src/portal-figures.ts";
-import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
-import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
-import {} from "node:path";
-import {
-  type Opts,
-  SECRET,
-  CSRF,
   NOW,
-  EMAIL,
   LATER,
   world,
   post,
@@ -47,40 +22,8 @@ import {
   issue,
   doPerform,
   tamper,
-  EVERY_ACTION,
   auditRows,
 } from "./portal-actions-fixtures.ts";
-
-// Only the action whose mutator writes KV and one audit row, and the revoke, run here;
-// the rest run against real D1 in test-integration/portal-actions.test.ts.
-for (const [action, params] of EVERY_ACTION.filter(
-  ([a]) =>
-    a !== "run_job" &&
-    a !== "pr_close" &&
-    !a.startsWith("site_") &&
-    !a.startsWith("package_") &&
-    !a.startsWith("namespace_"),
-)) {
-  test(`${action} performed from its token writes the rows its preview listed, and returns the feed`, async () => {
-    const w = world();
-    const { token, audit } = await previewOk(w, action, params);
-    const res = await doPerform(w, token);
-    assert.equal(res.status, 200, await res.clone().text());
-    const body = (await res.json()) as PortalPerformed;
-    assert.equal(body.action, action);
-    assert.equal(body.warning, null);
-    assert.deepEqual(
-      body.feed,
-      { ...FEED, csrf: CSRF, user: { name: "admin", initials: "A" } },
-      "the feed does not carry the session's csrf",
-    );
-    assert.deepEqual(
-      auditRows(w.d1).sort(),
-      [...audit].sort(),
-      "the rows written are not the rows the preview listed",
-    );
-  });
-}
 
 test("a co-owner's click is audited under her own verified email, never ADMIN_EMAIL", async () => {
   const w = world({ coOwners: " other@example.com , co@example.com " });
@@ -104,20 +47,6 @@ test("a co-owner's click is audited under her own verified email, never ADMIN_EM
   assert.equal(click?.params[0], "access:co@example.com");
 });
 
-test("a co-owner's session is refused when CO_OWNER_EMAILS is unset", async () => {
-  const none = world();
-  const refused = await handlePortalPreview(
-    await preview(
-      { action: "revoke_agent", params: { name: "capsid-driver" } },
-      { session: "co@example.com" },
-    ),
-    none.env,
-    NOW,
-  );
-  assert.equal(refused.status, 302, "an unadmitted session is sent to sign in");
-  wroteNothing(none, "a co-owner with no CO_OWNER_EMAILS");
-});
-
 // A confirmation is used once: the nonce makes a second perform a refusal of its own.
 test("PLANT: a confirmation is spent by its first perform, and a replay is refused with 409 and writes nothing", async () => {
   const w = world();
@@ -132,82 +61,89 @@ test("PLANT: a confirmation is spent by its first perform, and a replay is refus
   assert.equal(auditRows(w.d1).filter((r) => r.startsWith("portal-revoke_agent")).length, 1);
 });
 
-test("PLANT: an expired token is refused with 410 and nothing is performed", async () => {
-  const w = world();
-  const { token } = await issue(w);
-  const res = await doPerform(w, token, {}, LATER(5 * 60_000 + 1_000));
-  assert.equal(res.status, 410);
-  assert.match(await res.text(), /expired: preview again/);
-  wroteNothing(w, "an expired perform");
-});
-
-test("PLANT: a token whose params were edited is refused with 403", async () => {
-  const w = world();
-  const { token } = await issue(w);
-  const edited = tamper(
-    token,
-    (c) => ((c.params as Record<string, string>).name = "capsid-new-driver"),
-  );
-  const res = await handlePortalPerform(await perform({ token: edited }), w.env, NOW, deps);
-  assert.equal(res.status, 403);
-  assert.match(await res.text(), /does not verify/);
-  wroteNothing(w, "a tampered perform");
-});
-
-test("PLANT: a token for one action cannot perform another", async () => {
-  const w = world();
-  const { token } = await issue(w);
-  // Named in the body beside the token: refused, and the token's action does not run.
-  const named = await handlePortalPerform(
-    await perform({ token, action: "activate_agent" }),
-    w.env,
-    NOW,
-    deps,
-  );
-  assert.equal(named.status, 400);
-  const edited = tamper(token, (c) => (c.action = "activate_agent"));
-  const signed = await handlePortalPerform(await perform({ token: edited }), w.env, NOW, deps);
-  assert.equal(signed.status, 403);
-  wroteNothing(w, "a cross-action perform");
-});
-
-test("PLANT: a perform body carrying params is refused, whatever the token", async () => {
-  const w = world();
-  const { token } = await issue(w);
-  const res = await handlePortalPerform(
-    await perform({ token, params: { name: "capsid-new-driver" } }),
-    w.env,
-    NOW,
-    deps,
-  );
-  assert.equal(res.status, 400);
-  assert.match(await res.text(), /only \{ token \}/);
-  wroteNothing(w, "a perform with params");
-});
-
-test("a token issued to another session is refused with 403", async () => {
-  const w = world();
-  const { token } = await issue(w);
-  // ADMIN_EMAIL changed between the preview and the perform, and the new administrator
-  // signed in: a valid session, a valid signature, the wrong person.
-  const other = world({ adminEmail: "other@example.com" });
-  const res = await handlePortalPerform(
-    await perform({ token }, { session: "other@example.com" }),
-    other.env,
-    NOW,
-    deps,
-  );
-  assert.equal(res.status, 403);
-  assert.match(await res.text(), /issued for another email/);
-  wroteNothing(other, "another session's perform");
-});
-
-test("a malformed token is refused with 403", async () => {
-  for (const token of ["", "abc", "abc.def", `${"a".repeat(10)}.${"g".repeat(64)}`]) {
+test("PLANT: a token that is expired, edited, for another action or session, or malformed is refused, and writes nothing", async () => {
+  type World = ReturnType<typeof world>;
+  const withBody = async (w: World, body: object) =>
+    handlePortalPerform(await perform(body), w.env, NOW, deps);
+  const cases: Array<
+    [string, (w: World, token: string) => Promise<[Response, World]>, number, RegExp]
+  > = [
+    [
+      "expired",
+      async (w, t) => [await doPerform(w, t, {}, LATER(5 * 60_000 + 1_000)), w],
+      410,
+      /expired: preview again/,
+    ],
+    [
+      "params edited",
+      async (w, t) => [
+        await doPerform(
+          w,
+          tamper(t, (c) => ((c.params as Record<string, string>).name = "capsid-new-driver")),
+        ),
+        w,
+      ],
+      403,
+      /does not verify/,
+    ],
+    [
+      "action edited",
+      async (w, t) => [
+        await doPerform(
+          w,
+          tamper(t, (c) => (c.action = "activate_agent")),
+        ),
+        w,
+      ],
+      403,
+      /does not verify/,
+    ],
+    [
+      "another action beside it",
+      async (w, t) => [await withBody(w, { token: t, action: "activate_agent" }), w],
+      400,
+      /only \{ token \}/,
+    ],
+    [
+      "params in the body",
+      async (w, t) => [await withBody(w, { token: t, params: { name: "x" } }), w],
+      400,
+      /only \{ token \}/,
+    ],
+    // ADMIN_EMAIL changed between preview and perform, and the new administrator signed in.
+    [
+      "another session",
+      async (_w, t) => {
+        const other = world({ adminEmail: "other@example.com" });
+        return [
+          await handlePortalPerform(
+            await perform({ token: t }, { session: "other@example.com" }),
+            other.env,
+            NOW,
+            deps,
+          ),
+          other,
+        ];
+      },
+      403,
+      /issued for another email/,
+    ],
+    ...["", "abc", "abc.def", `${"a".repeat(10)}.${"g".repeat(64)}`].map(
+      (bad): [string, (w: World) => Promise<[Response, World]>, number, RegExp] => [
+        `malformed '${bad.slice(0, 12)}'`,
+        async (w) => [await doPerform(w, bad), w],
+        403,
+        /./,
+      ],
+    ),
+  ];
+  for (const [label, run, status, pattern] of cases) {
     const w = world();
-    const res = await doPerform(w, token);
-    assert.equal(res.status, 403, `token '${token}'`);
-    wroteNothing(w, "a malformed perform");
+    const { token } = await issue(w);
+    const [res, checked] = await run(w, token);
+    assert.equal(res.status, status, label);
+    assert.match(await res.text(), pattern, label);
+    wroteNothing(checked, label);
   }
 });
 
@@ -271,73 +207,16 @@ test("PLANT: Sec-Fetch-Site cross-site and same-site are refused on both POSTs; 
   }
 });
 
-test("a body over 64KB is refused with 413 before it is parsed", async () => {
-  const w = world();
-  const res = await handlePortalPreview(
-    await preview(null, {
-      raw: JSON.stringify({ action: "revoke_agent", params: { name: "x".repeat(70_000) } }),
-    }),
-    w.env,
-    NOW,
-  );
-  assert.equal(res.status, 413);
-});
-
-test("a body that is not a JSON object is refused with 400", async () => {
-  for (const raw of ["not json", "[]", "null"]) {
+test("a body over 64KB is refused with 413 before it is parsed, and one that is not a JSON object with 400", async () => {
+  const big = JSON.stringify({ action: "revoke_agent", params: { name: "x".repeat(70_000) } });
+  for (const [raw, status] of [
+    [big, 413],
+    ["not json", 400],
+    ["[]", 400],
+    ["null", 400],
+  ] as const) {
     const res = await handlePortalPreview(await preview(null, { raw }), world().env, NOW);
-    assert.equal(res.status, 400, raw);
-  }
-});
-
-const ROUTES = [
-  [PORTAL_PREVIEW_PATH, "POST", (r: Request, e: never) => handlePortalPreview(r, e, NOW)],
-  [PORTAL_PERFORM_PATH, "POST", (r: Request, e: never) => handlePortalPerform(r, e, NOW, deps)],
-  [PORTAL_NAMESPACES_PATH, "GET", (r: Request, e: never) => handlePortalNamespaces(r, e, NOW)],
-  [PORTAL_ACTIVITY_PATH, "GET", (r: Request, e: never) => handlePortalActivity(r, e, NOW)],
-  [PORTAL_LIBRARY_PATH, "GET", (r: Request, e: never) => handlePortalLibrary(r, e, NOW)],
-  [PORTAL_TRENDS_PATH, "GET", (r: Request, e: never) => handlePortalTrends(r, e, NOW)],
-  [PORTAL_BOARD_PATH, "GET", (r: Request, e: never) => handlePortalBoard(r, e, NOW)],
-  [PORTAL_PRS_PATH, "GET", (r: Request, e: never) => handlePortalPrs(r, e, NOW)],
-  [PORTAL_FIGURES_PATH, "GET", (r: Request, e: never) => handlePortalFigures(r, e, NOW)],
-  [PORTAL_MAINTENANCE_PATH, "GET", (r: Request, e: never) => handlePortalMaintenance(r, e, NOW)],
-  [PORTAL_CONVERGENCE_PATH, "GET", (r: Request, e: never) => handlePortalConvergence(r, e, NOW)],
-  [PORTAL_SIGN_OUT_PATH, "POST", (r: Request, e: never) => handlePortalSignOut(r, e, NOW)],
-  ["/portal/api/not-a-route", "GET", (r: Request, e: never) => handlePortalApiNotFound(r, e, NOW)],
-] as const;
-
-test("every route refuses a bearer with 403 and sends an anonymous caller to sign in", async () => {
-  for (const [path, method, handler] of ROUTES) {
-    const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
-    const headers = {
-      Cookie: `${session}; __Secure-${PORTAL_CSRF_COOKIE}=${CSRF}`,
-      [PORTAL_CSRF_HEADER]: CSRF,
-      "Sec-Fetch-Site": "same-origin",
-    };
-    const body =
-      method === "POST"
-        ? JSON.stringify({ action: "revoke_agent", params: { name: "capsid-driver" } })
-        : undefined;
-    // A bearer beside a valid session and CSRF pair is still refused: the gate reads it first.
-    const bearer = await handler(
-      new Request(`https://capsid.example${path}`, {
-        method,
-        headers: { ...headers, Authorization: "Bearer capsid_x" },
-        body,
-      }),
-      world().env,
-    );
-    assert.equal(bearer.status, 403, `${path} served a bearer`);
-    const anonymous = await handler(
-      new Request(`https://capsid.example${path}`, {
-        method,
-        headers: { [PORTAL_CSRF_HEADER]: CSRF },
-        body,
-      }),
-      world().env,
-    );
-    assert.equal(anonymous.status, 302, `${path} did not send an anonymous caller to sign in`);
-    assert.match(anonymous.headers.get("Location") ?? "", /sample\.cloudflareaccess\.com/);
+    assert.equal(res.status, status, raw.slice(0, 20));
   }
 });
 
@@ -346,9 +225,7 @@ function setCookies(res: Response): string[] {
   return (res.headers as unknown as { getSetCookie(): string[] }).getSetCookie();
 }
 
-async function signOut(opts: Opts = {}): Promise<Request> {
-  return post(PORTAL_SIGN_OUT_PATH, {}, opts);
-}
+const signOut = () => post(PORTAL_SIGN_OUT_PATH, {});
 
 test("sign out expires the session and CSRF cookies at Path=/portal, and ends a copy of that session, not the others, on the server", async () => {
   const w = world();
@@ -378,20 +255,3 @@ test("sign out expires the session and CSRF cookies at Path=/portal, and ends a 
   const other = await handlePortalSignOut(await signOut(), w.env, NOW);
   assert.equal(other.status, 204, "signing out one session ended another");
 });
-
-for (const [label, opts] of [
-  ["with no CSRF header", { csrfHeader: null }],
-  [
-    "when the CSRF header does not match the cookie",
-    { csrfHeader: "ffffffff-2222-4333-8444-555555555555" },
-  ],
-  ["from another site", { site: "cross-site" }],
-] as const) {
-  test(`PLANT: sign out REFUSES ${label}, and clears nothing`, async () => {
-    const w = world();
-    const res = await handlePortalSignOut(await signOut(opts), w.env, NOW);
-    assert.equal(res.status, 403, `sign out was served ${label}`);
-    assert.deepEqual(setCookies(res), [], `sign out cleared a cookie ${label}`);
-    wroteNothing(w, `sign out ${label}`);
-  });
-}

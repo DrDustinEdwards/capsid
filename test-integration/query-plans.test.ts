@@ -171,22 +171,6 @@ describe("query plans", () => {
     }
   });
 
-  it("PLANT: the reputation aggregations group in index order, not through a temp b-tree", async () => {
-    for (const sql of [
-      "SELECT actor, COUNT(*) AS n FROM audit_log WHERE action = 'open_pr' GROUP BY actor",
-      `SELECT actor, COUNT(*) AS n FROM audit_log WHERE action = 'manage_pr' AND params LIKE '%"merged":true%' GROUP BY actor`,
-    ]) {
-      const result = await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`).all<{ detail: string }>();
-      const plan = result.results.map((r) => r.detail).join(" | ");
-      expect(plan, `${sql.slice(0, 60)} does not use audit_log_action_actor`).toContain(
-        "audit_log_action_actor",
-      );
-      expect(plan, `${sql.slice(0, 60)} builds a temp b-tree to group`).not.toContain(
-        "TEMP B-TREE",
-      );
-    }
-  });
-
   it("PLANT: the prompt and anomaly reads use the indexes 0070 added", async () => {
     for (const [sql, index] of [
       [

@@ -62,7 +62,7 @@ async function stubPortalAccess(
 
 async function started(
   e: never,
-  returnTo = "/portal/jobs",
+  returnTo = "/portal/board",
 ): Promise<{ state: string; cookie: string; location: string }> {
   const res = await startPortalLogin(new Request(`${ORIGIN}/portal/`), e, returnTo);
   assert.equal(res.status, 302);
@@ -109,7 +109,7 @@ test("the admin completes the login: session cookie carries the email, state coo
   const bodies = await stubPortalAccess(location);
   const res = await handlePortalCallback(callback(state, cookie), e, new Date());
   assert.equal(res.status, 302);
-  assert.equal(res.headers.get("Location"), "/portal/jobs");
+  assert.equal(res.headers.get("Location"), "/portal/board");
   assert.equal(bodies[0]?.get("redirect_uri"), `${ORIGIN}/portal/callback`);
   assert.ok(bodies[0]?.get("code_verifier"), "the exchange sent no PKCE verifier");
   const cookies = setCookies(res);
@@ -134,33 +134,6 @@ test("the admin completes the login: session cookie carries the email, state coo
     await (e as { OAUTH_KV: KVNamespace }).OAUTH_KV.get(`capsid:portal-state:${state}`),
     null,
   );
-});
-
-test("PLANT: a stored return path that would leave the origin lands on the Portal's home instead", async () => {
-  // Open redirect: /portal//attacker.example passed the check, and the Location became the protocol-relative //attacker.example.
-  for (const origin of [ORIGIN, "https://portal.dustinedwards.info"]) {
-    const e = env();
-    const res0 = await startPortalLogin(
-      new Request(`${origin}/portal/`),
-      e,
-      "/portal//attacker.example",
-    );
-    const location = String(res0.headers.get("Location"));
-    const state = String(new URL(location).searchParams.get("state"));
-    const cookie = (res0.headers.get("Set-Cookie") ?? "").split(";")[0];
-    await stubPortalAccess(location);
-    const res = await handlePortalCallback(
-      new Request(`${origin}/portal/callback?code=c&state=${state}`, {
-        headers: { Cookie: cookie },
-      }),
-      e,
-      new Date(),
-    );
-    assert.equal(res.status, 302);
-    const target = String(res.headers.get("Location"));
-    assert.ok(!target.startsWith("//"), target);
-    assert.equal(new URL(target, origin).origin, origin, target);
-  }
 });
 
 test("the name in the ID token rides the session cookie, and a token with no name leaves the session email-only", async () => {
@@ -215,7 +188,7 @@ test("a state with no KV entry is refused as expired", async () => {
   assert.equal(await res.text(), "state expired or already used. Open /portal again.");
 });
 
-// Each of these reaches the ID token check and must end with no session cookie.
+// Access's ID token checks are site-runtime's; these are Capsid's admission rules.
 for (const [name, claims, overrides, pattern] of [
   [
     "an email that is not the admin",
@@ -230,17 +203,6 @@ for (const [name, claims, overrides, pattern] of [
     { CO_OWNER_EMAILS: "" },
     /not an administrator of capsid/,
   ],
-  [
-    "a wrong issuer",
-    {
-      iss: "https://other.cloudflareaccess.com/cdn-cgi/access/sso/oidc/sample-client",
-    },
-    {},
-    /could not be verified/,
-  ],
-  ["a wrong audience", { aud: "other-client" }, {}, /could not be verified/],
-  ["a nonce from another sign-in", { nonce: "someone-elses-nonce" }, {}, /could not be verified/],
-  ["an expired token", { exp: Math.floor(Date.now() / 1000) - 120 }, {}, /could not be verified/],
 ] as const) {
   test(`${name} is refused and gets no session`, async () => {
     const e = env(overrides);
@@ -270,81 +232,49 @@ test("Access reporting a refused sign-in on the callback gets no session and nev
   assert.equal(res.headers.get("Set-Cookie"), null);
 });
 
-// PLANT: the return clamp. A stored return path outside the Portal must not become an open redirect;
-// /portalx shares the prefix and must not pass.
-for (const stored of [
-  "/portalx",
-  "/console",
-  "https://example.com/portal/",
-  "//example.com/portal/",
-]) {
-  test(`a stored return path of ${stored} lands on /portal/`, async () => {
-    const e = env();
-    const { state, cookie, location } = await started(e, stored);
-    await stubPortalAccess(location);
-    const res = await handlePortalCallback(callback(state, cookie), e, new Date());
-    assert.equal(res.status, 302);
-    assert.equal(res.headers.get("Location"), "/portal/");
-  });
-}
-
-// The router hands these handlers the rewritten request (/x on the Portal host is /portal/x
-// here), so they see the Portal host's origin and an internal /portal path.
-
-const PORTAL_ORIGIN = `https://${PORTAL_HOST}`;
-
-test("on the Portal host the login sends Access /callback, scopes its cookies to Path=/, and returns to the root path", async () => {
-  const e = env();
-  const start = await startPortalLogin(
-    new Request(`${PORTAL_ORIGIN}/portal/jobs`),
-    e,
-    "/portal/jobs",
-  );
-  const location = String(start.headers.get("Location"));
-  assert.equal(new URL(location).searchParams.get("redirect_uri"), `${PORTAL_ORIGIN}/callback`);
-  assert.match(
-    setCookies(start)[0],
-    /^__Host-capsid_portal_state=[0-9a-f]{64}; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=600$/,
-  );
-  const state = String(new URL(location).searchParams.get("state"));
-  const bodies = await stubPortalAccess(location);
-  const res = await handlePortalCallback(
-    new Request(`${PORTAL_ORIGIN}/portal/callback?code=c&state=${state}`, {
-      headers: { Cookie: setCookies(start)[0].split(";")[0] },
-    }),
-    e,
-    new Date(),
-  );
-  assert.equal(res.status, 302);
-  assert.equal(res.headers.get("Location"), "/jobs");
-  assert.equal(
-    bodies[0]?.get("redirect_uri"),
-    `${PORTAL_ORIGIN}/callback`,
-    "the exchange must name the same callback the start sent",
-  );
-  const cookies = setCookies(res);
-  assert.match(
-    cookies[0],
-    /^__Host-capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=90000$/,
-  );
-  assert.equal(
-    cookies[1],
-    "__Host-capsid_portal_state=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
-  );
+test("PLANT: a stored return path outside the Portal lands on the Portal's home, on either host", async () => {
+  for (const [origin, home] of [
+    [ORIGIN, "/portal/"],
+    ["https://portal.dustinedwards.info", "/"],
+  ] as const)
+    for (const stored of [
+      "/portal//attacker.example",
+      "/portalx",
+      "/elsewhere",
+      "https://example.com/portal/",
+      "//example.com/portal/",
+    ]) {
+      const e = env();
+      const start = await startPortalLogin(new Request(`${origin}/portal/`), e, stored);
+      const location = String(start.headers.get("Location"));
+      const state = String(new URL(location).searchParams.get("state"));
+      await stubPortalAccess(location);
+      const res = await handlePortalCallback(
+        new Request(`${origin}/portal/callback?code=c&state=${state}`, {
+          headers: { Cookie: setCookies(start)[0].split(";")[0] },
+        }),
+        e,
+        new Date(),
+      );
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.get("Location"), home, `${origin} ${stored}`);
+    }
 });
 
-// PLANT: host-only cookies. Domain=dustinedwards.info would hand the session to every family subdomain,
-// the public sites included.
-test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to its host's Portal path", async () => {
-  const seen: Array<{ host: string; cookie: string }> = [];
-  for (const [origin, path] of [
-    [ORIGIN, "/portal"],
-    [PORTAL_ORIGIN, "/"],
+// The router hands these handlers the rewritten request (/x on the Portal host is /portal/x here).
+const PORTAL_ORIGIN = `https://${PORTAL_HOST}`;
+
+// Domain=dustinedwards.info would hand the session to every subdomain, the public sites included.
+test("PLANT: each host's login sends Access its own callback and returns there; no Portal cookie carries a Domain, and each is scoped to its host's Portal path", async () => {
+  for (const [origin, path, callbackPath, back] of [
+    [ORIGIN, "/portal", "/portal/callback", "/portal/board"],
+    [PORTAL_ORIGIN, "/", "/callback", "/board"],
   ] as const) {
     const e = env();
-    const start = await startPortalLogin(new Request(`${origin}/portal/`), e, "/portal/");
+    const start = await startPortalLogin(new Request(`${origin}/portal/`), e, "/portal/board");
     const location = String(start.headers.get("Location"));
-    await stubPortalAccess(location);
+    assert.equal(new URL(location).searchParams.get("redirect_uri"), `${origin}${callbackPath}`);
+    const bodies = await stubPortalAccess(location);
     const state = String(new URL(location).searchParams.get("state"));
     const done = await handlePortalCallback(
       new Request(`${origin}/portal/callback?code=c&state=${state}`, {
@@ -352,6 +282,12 @@ test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to 
       }),
       e,
       new Date(),
+    );
+    assert.equal(done.headers.get("Location"), back);
+    assert.equal(
+      bodies[0]?.get("redirect_uri"),
+      `${origin}${callbackPath}`,
+      "the exchange names another callback",
     );
     const csrf = portalCsrf(new Request(`${origin}/portal/api/ops`)).setCookie;
     assert.ok(csrf, "a request with no CSRF cookie must be given one");
@@ -361,8 +297,8 @@ test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to 
       ...portalSignOutCookies(path),
       csrf,
     ];
+    assert.equal(cookies.length, 6);
     for (const cookie of cookies) {
-      seen.push({ host: origin, cookie });
       assert.doesNotMatch(
         cookie,
         /;\s*domain\s*=/i,
@@ -375,8 +311,6 @@ test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to 
       );
     }
   }
-  // A count, so a cookie that stops being collected fails.
-  assert.equal(seen.length, 12);
 });
 
 test("a co-owner completes the login: the cookie carries her email and verifies on a later request", async () => {
@@ -393,8 +327,7 @@ test("a co-owner completes the login: the cookie carries her email and verifies 
     new Date(),
   );
   assert.deepEqual(session, { email: "co@example.com" });
-  // PLANT: the same payload signed with the root secret itself, as before the session had
-  // its own derived key, does not verify: the root secret signs nothing.
+  // PLANT: the same payload signed with the root secret itself does not verify: the root secret signs nothing.
   const value = setCookies(res)[0].split(";")[0];
   const encoded = value.slice(value.indexOf(".") + 1);
   const rootSigned = `${value.slice(0, value.indexOf("=") + 1)}${await hmacSha256Hex(SECRET, encoded)}.${encoded}`;

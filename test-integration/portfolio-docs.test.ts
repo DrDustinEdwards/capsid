@@ -76,21 +76,4 @@ describe("portfolio documents", () => {
     });
     expect(out.documents.map((d: { path: string }) => d.path).sort()).toEqual(ALLOWED);
   });
-
-  it("brief names the same paths to read first, less the rulings, which are records", async () => {
-    const out = await ok("capsid_start_session", { namespace: "carrel" });
-    expect(out.portfolio_documents.read_first).toEqual(
-      ALLOWED.filter((p) => !p.startsWith("rulings/")),
-    );
-  });
-
-  it("a read outside the list is refused", async () => {
-    const result = await call("capsid_read_doc", {
-      action: "read",
-      namespace: "capsid",
-      path: "policy/gates.md",
-    });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toMatch(/not scoped to the 'capsid' namespace/);
-  });
 });

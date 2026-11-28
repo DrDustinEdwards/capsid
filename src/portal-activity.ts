@@ -2,9 +2,8 @@ import { auditDetail } from "./audit-detail";
 import { queryParam } from "./portal-auth";
 import type { AuditDetail } from "./ops-types/portal";
 
-// Recent activity: a bounded, filtered read of audit_log across every namespace, for Capsid
-// Portal's Activity view. The filter comes off a query string, so every value is a bound parameter;
-// the test asserts the statement's shape as well as its results.
+// Recent activity: a bounded, filtered read of audit_log across every namespace, for the Portal's
+// Activity view. The filter comes off a query string, so every value is a bound parameter.
 
 export const ACTIVITY_LIMIT = 50;
 

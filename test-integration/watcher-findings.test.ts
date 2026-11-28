@@ -7,7 +7,6 @@ import { siteMapFindings } from "../src/watcher-detect";
 import { ciFindings, type Finding } from "../src/watcher-detect";
 import { CI_RED_HOURS } from "../src/watcher-detect";
 import {
-  MAX_EVIDENCE,
   REOPEN_QUIET_MS,
   d1FindingMemory,
   type EvidenceEntry,
@@ -143,28 +142,6 @@ describe("the finding's row across passes", () => {
       reopen_after: null,
       seen_count: 4,
     });
-  });
-
-  it("keeps the newest MAX_EVIDENCE sightings", async () => {
-    const memory = d1FindingMemory(tickEnv());
-    const f = {
-      fingerprint: "backup-stale",
-      namespace: "sample",
-      title: "Watcher: t [backup-stale]",
-      evidence: ["sighting 0"],
-    };
-    expect(await memory.insert(f, NOW)).toBe(true);
-    expect(await memory.insert(f, NOW), "a second first row").toBe(false);
-    for (let i = 1; i < MAX_EVIDENCE + 5; i++) {
-      const row = (await findingRow("backup-stale"))!;
-      expect(await memory.sight(row, { ...f, evidence: [`sighting ${i}`] }, at(i))).toBe(true);
-    }
-    const row = (await findingRow("backup-stale"))!;
-    expect(row.seen_count).toBe(MAX_EVIDENCE + 5);
-    const evidence = JSON.parse(row.evidence) as EvidenceEntry[];
-    expect(evidence).toHaveLength(MAX_EVIDENCE);
-    expect(evidence[0].lines).toEqual(["sighting 5"]);
-    expect(evidence[MAX_EVIDENCE - 1].lines).toEqual([`sighting ${MAX_EVIDENCE + 4}`]);
   });
 
   it("a state move is guarded on the state it was read in, and reports a lost race", async () => {

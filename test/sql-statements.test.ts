@@ -15,42 +15,33 @@ function extractFrom(files: Record<string, string>) {
   }
 }
 
-test("a statement after a skipped one still has its hole found", () => {
-  // The hole regex was global, so after a skipped statement its lastIndex sat past the next one's start and its `${...}`
-  // could be handed to the plan check as plannable SQL.
-  const { statements, skipped } = extractFrom({
-    "a.ts": [
-      "db.prepare(`UPDATE improve_runs SET ${sets.join(', ')} WHERE id = ?1 AND padding_padding_padding = 1`);",
-      "db.prepare(`SELECT id FROM jobs WHERE ${odd} = 1`);",
-    ].join("\n"),
-  });
-  const withHole = statements.filter((s) => s.sql.includes("${"));
-  assert.deepEqual(
-    withHole,
-    [],
-    "a statement with an unsubstituted hole was returned as plannable",
-  );
-  assert.equal(skipped.length, 2);
-});
-
-test("a statement with a line comment before its string is extracted", () => {
-  const { statements, skipped } = extractFrom({
-    "c.ts":
-      'db.prepare(\n  // why this query is shaped this way\n  "SELECT id FROM jobs WHERE id = ?1"\n);\n',
-  });
-  assert.deepEqual(
-    statements.map((s) => s.sql),
-    ["SELECT id FROM jobs WHERE id = ?1"],
-  );
-  assert.deepEqual(skipped, []);
-});
-
-test("a prepare call on an expression is counted as skipped", () => {
-  const { statements, skipped } = extractFrom({
-    "b.ts":
-      'db.prepare(flag ? `SELECT 1 FROM jobs` : `SELECT 2 FROM jobs`);\ndb.prepare("SELECT id FROM jobs");\n',
-  });
-  assert.equal(statements.length, 1);
-  assert.equal(skipped.length, 1);
-  assert.match(skipped[0].sql, /^\(expression\) flag \?/);
+test("the extractor skips a statement with a hole or on an expression, and finds one after a skipped one or a line comment", () => {
+  for (const [label, text, sqls, skipped] of [
+    [
+      "a hole, then another",
+      "db.prepare(`UPDATE docs SET ${sets} WHERE id = ?1 AND padding_padding_padding = 1`);\ndb.prepare(`SELECT id FROM docs WHERE ${odd} = 1`);",
+      [],
+      2,
+    ],
+    [
+      "a line comment before the string",
+      'db.prepare(\n  // why\n  "SELECT id FROM docs WHERE id = ?1"\n);\n',
+      ["SELECT id FROM docs WHERE id = ?1"],
+      0,
+    ],
+    [
+      "an expression, then a plain statement",
+      'db.prepare(flag ? `SELECT 1 FROM docs` : `SELECT 2 FROM docs`);\ndb.prepare("SELECT id FROM docs");\n',
+      ["SELECT id FROM docs"],
+      1,
+    ],
+  ] as const) {
+    const out = extractFrom({ "a.ts": text });
+    assert.deepEqual(
+      out.statements.map((s) => s.sql),
+      sqls,
+      label,
+    );
+    assert.equal(out.skipped.length, skipped, label);
+  }
 });

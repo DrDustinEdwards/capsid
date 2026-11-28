@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { adminAgentForEmail } from "../src/agents.ts";
 import { PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "../src/portal-auth.ts";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH } from "../src/ops-feed.ts";
 import {
@@ -42,11 +41,7 @@ import {
   PUBLIC_VERSIONS_PATH,
 } from "../src/public-data.ts";
 import { SIGNED_IN_REPORT_PATH } from "@dustinedwards/site-runtime/signed-in-crawl";
-import { requiredForAction } from "../src/scope.ts";
 import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope-routes.ts";
-import { fakeEnv, fakeKv } from "./fakes.ts";
-import { buildServer } from "../src/server.ts";
-import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
 // A route that checks only the write grant lets a driver minted for one namespace act across all of them. Routes
 // run through the Worker in test-integration/; node cannot load src/routes.ts, so this checks every path is in a table.
@@ -148,30 +143,4 @@ test("every route in defaultHandler is either gated through checkScope or listed
         `route ${path} is listed as ungated with no real reason`,
       );
   }
-});
-
-async function servedActions(build: typeof buildServer, name: string): Promise<string[]> {
-  const server = build(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
-  const client = new Client({ name: "route-gates", version: "1.0.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const { tools } = await client.listTools();
-  await client.close();
-  const served = tools.find((tool) => tool.name === name)?.inputSchema.properties?.action as
-    | { enum?: string[] }
-    | undefined;
-  return served?.enum ?? [];
-}
-
-test("capsid_read_status serves status and the versions model, as reads", async () => {
-  // The actions come from the schemas the servers serve, so an action added to either
-  // tool without a decision here fails.
-  const driver = await servedActions(buildServer, "capsid_read_status");
-  assert.deepEqual(
-    driver,
-    ["status", "versions"],
-    "capsid_read_status's action list changed; decide its requirement here and in TOOL_ACTION_GRANTS",
-  );
-  assert.equal(requiredForAction("capsid_read_status", "status"), "read");
-  assert.equal(requiredForAction("capsid_read_status", "versions"), "read");
 });

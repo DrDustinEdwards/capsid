@@ -6,12 +6,11 @@ import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import {
   PUBLIC_BUILD_LAST_KEY,
   PUBLIC_CODE_KEY,
-  PUBLIC_DOCS,
   PUBLIC_MODEL_KEY,
   publicBuildTick,
   type PublicBuildReaders,
+  bundledModel,
 } from "../src/public-data.ts";
-import { bundledModel } from "../src/public-data.ts";
 import type { StatsRows } from "../src/public-stats.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
@@ -99,7 +98,7 @@ test("PLANT: a field the schema does not name never reaches the document", async
   PublicCodeSchema.parse(doc);
 });
 
-test("a stale function and an older mutation run reach the document; a bad mutated sha throws", async () => {
+test("a stale function and an older mutation run reach the document", async () => {
   const m = sampleMap();
   m.tools = { typescript: "5.9.3", coverage: "istanbul", mutation: "stryker" };
   m.mutated = { sha: "b".repeat(40), date: "2026-10-12" };
@@ -117,17 +116,6 @@ test("a stale function and an older mutation run reach the document; a bad mutat
   assert.deepEqual(doc.maps[0].mutated, { sha: "b".repeat(40), date: "2026-10-12" });
   assert.equal(doc.maps[0].modules[0].functions[0].stale, true);
   PublicCodeSchema.parse(doc);
-  const bad = { ...m, mutated: { sha: "main", date: "2026-10-12" } };
-  await assert.rejects(
-    buildPublicCode(
-      env,
-      bundledModel(),
-      privacy,
-      "2026-10-17",
-      only({ "DrDustinEdwards/d1-dump": bad }).read,
-    ),
-    /invalid/,
-  );
 });
 
 test("a map that fails the schema, names another repo, or climbs out of the repo throws", async () => {
@@ -142,6 +130,10 @@ test("a map that fails the schema, names another repo, or climbs out of the repo
   await assert.rejects(
     bad({ ...sampleMap(), sha: "main" }),
     /code map for DrDustinEdwards\/d1-dump is invalid/,
+  );
+  await assert.rejects(
+    bad({ ...sampleMap(), mutated: { sha: "main", date: "2026-10-12" } }),
+    /invalid/,
   );
   await assert.rejects(
     bad(sampleMap("DrDustinEdwards/germomics")),
@@ -189,26 +181,29 @@ test("a framework's route file names are module paths: $ for a parameter, bracke
   );
 });
 
+// Every repo in ALL, no stats, and d1-dump's code map from `map`.
+const readersFor = (map: () => unknown): PublicBuildReaders => ({
+  listRepos: async () => ({
+    repos: ALL.map((n): InstalledRepo => ({
+      full_name: `DrDustinEdwards/${n}`,
+      private: PRIVATE_REPOS.has(n),
+      archived: false,
+      pushed_at: null,
+    })),
+  }),
+  statsRows: async (_e, _n, systems): Promise<StatsRows> => ({
+    rings: [],
+    documents: 0,
+    namespaces: 0,
+    systems,
+    sha: undefined,
+  }),
+  codeMap: async (_e, repo) => (repo === "DrDustinEdwards/d1-dump" ? map() : null),
+});
+
 test("a broken map keeps the last code document and is reported, and the model is still built", async () => {
   const kv = fakeKv({ seed: { [PUBLIC_CODE_KEY]: "last code" } });
-  const readers: PublicBuildReaders = {
-    listRepos: async () => ({
-      repos: ALL.map((n): InstalledRepo => ({
-        full_name: `DrDustinEdwards/${n}`,
-        private: PRIVATE_REPOS.has(n),
-        archived: false,
-        pushed_at: null,
-      })),
-    }),
-    statsRows: async (_e, _n, systems): Promise<StatsRows> => ({
-      rings: [],
-      documents: 0,
-      namespaces: 0,
-      systems,
-      sha: undefined,
-    }),
-    codeMap: async (_e, repo) => (repo === "DrDustinEdwards/d1-dump" ? { version: 2 } : null),
-  };
+  const readers = readersFor(() => ({ version: 2 }));
   const report = await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), NOW, readers);
   assert.ok(report.ran && "codeFailed" in report, report.note);
   assert.match(
@@ -224,40 +219,22 @@ test("a broken map keeps the last code document and is reported, and the model i
 
   const good = fakeKv();
   const ok = await publicBuildTick(fakeEnv({ APP_KV: good.kv }), NOW, {
-    ...readers,
-    codeMap: async (_e, repo) => (repo === "DrDustinEdwards/d1-dump" ? sampleMap() : null),
+    ...readersFor(() => sampleMap()),
   });
   assert.ok(ok.ran && !("codeFailed" in ok));
   assert.match(ok.note, /1 code map\(s\) \(d1-dump\)/);
   const doc = PublicCodeSchema.parse(JSON.parse(good.store.get(PUBLIC_CODE_KEY) ?? "null"));
   assert.equal(doc.maps[0].modules[0].functions[0].crap, 210);
-  assert.equal(PUBLIC_DOCS.code.key, PUBLIC_CODE_KEY);
 });
 
 test("later the same day the code maps alone are rebuilt hourly, and the model is left alone", async () => {
   const kv = fakeKv();
   let map: unknown = sampleMap();
   let listed = 0;
+  const base = readersFor(() => map);
   const readers: PublicBuildReaders = {
-    listRepos: async () => {
-      listed++;
-      return {
-        repos: ALL.map((n): InstalledRepo => ({
-          full_name: `DrDustinEdwards/${n}`,
-          private: PRIVATE_REPOS.has(n),
-          archived: false,
-          pushed_at: null,
-        })),
-      };
-    },
-    statsRows: async (_e, _n, systems): Promise<StatsRows> => ({
-      rings: [],
-      documents: 0,
-      namespaces: 0,
-      systems,
-      sha: undefined,
-    }),
-    codeMap: async (_e, repo) => (repo === "DrDustinEdwards/d1-dump" ? map : null),
+    ...base,
+    listRepos: async (...args) => (listed++, base.listRepos(...args)),
   };
   const at = (min: number) => new Date(NOW.getTime() + min * 60_000);
   assert.ok((await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), NOW, readers)).ran);

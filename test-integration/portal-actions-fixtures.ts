@@ -2,7 +2,6 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { resetCapsidDb } from "./reset-db";
 import { expect } from "vitest";
 import worker from "../src/index";
-import { grantAgent } from "../src/agents";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
 import {
@@ -17,7 +16,6 @@ export const SECRET = "integration-portal-cookie-key";
 export const CSRF = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 export const NOW = new Date();
 export const ACTOR = "access:admin@example.com";
-export const DRIVER = grantAgent("write", "agent:capsid-driver");
 
 export const OPERATOR_TOKEN = "integration-operator-token-0000000000000";
 

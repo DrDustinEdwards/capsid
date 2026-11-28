@@ -7,8 +7,7 @@ import { APP_ROSTER } from "../src/roster";
 import { OPS_FEED_PATH, OPS_FEED_READS, OPS_REFRESH_PATH, opsFeed } from "../src/ops-feed";
 import type { OpsFeed } from "../src/ops-types/feed";
 
-// The Watch Floor feed against a real D1 and KV: which rows each list keeps, and how
-// many reads one request costs (src/ops-feed.ts states the count; this counts).
+// The Portal feed against a real D1 and KV: which rows each list keeps, and how many reads one request costs.
 
 const ORIGIN = "https://capsid.test";
 const SECRET = "integration-portal-cookie-key";
@@ -121,6 +120,12 @@ describe("the feed's routes through the Worker", () => {
         headers: { Authorization: "Bearer capsid_agent_x", "X-Capsid-Ops": "refresh" },
       });
       expect(bearer.status, path).toBe(403);
+      // The gate reads the header first, so a bearer beside a valid session is refused too.
+      const both = await signedFetch(path, {
+        method,
+        headers: { Authorization: "Bearer capsid_agent_x", "X-Capsid-Ops": "refresh" },
+      });
+      expect(both.status, path).toBe(403);
       const anonymous = await SELF.fetch(`${ORIGIN}${path}`, {
         method,
         headers: { "X-Capsid-Ops": "refresh" },

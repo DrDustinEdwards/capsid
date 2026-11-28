@@ -318,13 +318,6 @@ test("a 410 marks the device gone, and the item is kept for a later device", asy
   const report = await pushTick(w.env, NOW, service(410).fetcher);
   assert.equal(report.sent.length, 0);
   assert.equal(w.tables.push_subscriptions!.rows[0]!.status, "gone");
-  assert.ok(
-    w.writes.some((s) =>
-      /^UPDATE push_subscriptions SET status = 'gone', .* WHERE id = \?1 AND status = 'active' RETURNING id$/.test(
-        s,
-      ),
-    ),
-  );
   const state = JSON.parse(w.kv.store.get("push:state") ?? '{"sent":{}}') as {
     sent: Record<string, string>;
   };

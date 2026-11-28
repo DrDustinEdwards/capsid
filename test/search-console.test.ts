@@ -8,6 +8,7 @@ import {
   searchConsole,
 } from "../src/search-console.ts";
 import { fakeEnv } from "./fakes.ts";
+import { testPem } from "./test-pem.ts";
 
 const NOW = new Date("2026-10-18T12:00:00.000Z");
 const ORIGIN = "https://www.sample.example.com";
@@ -39,27 +40,12 @@ function siteDb(rows: Array<typeof ROW>) {
   };
 }
 
-async function serviceAccountKey(): Promise<string> {
-  const pair = (await crypto.subtle.generateKey(
-    {
-      name: "RSASSA-PKCS1-v1_5",
-      modulusLength: 2048,
-      publicExponent: new Uint8Array([1, 0, 1]),
-      hash: "SHA-256",
-    },
-    true,
-    ["sign", "verify"],
-  )) as CryptoKeyPair;
-  const der = Buffer.from(await crypto.subtle.exportKey("pkcs8", pair.privateKey)).toString(
-    "base64",
-  );
-  const pem = `-----BEGIN PRIVATE KEY-----\n${der.match(/.{1,64}/g)!.join("\n")}\n-----END PRIVATE KEY-----\n`;
-  return JSON.stringify({
+const serviceAccountKey = async () =>
+  JSON.stringify({
     type: "service_account",
     client_email: "reader@sample-project.iam.gserviceaccount.com",
-    private_key: pem,
+    private_key: await testPem(),
   });
-}
 
 function google(sites: Array<{ siteUrl: string; permissionLevel: string }>) {
   const calls: Array<{ method: string; url: string; body: string | null; auth: string | null }> =
