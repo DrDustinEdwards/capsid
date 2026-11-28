@@ -126,7 +126,7 @@ Health's **Problems** tab shows every task in the Scheduled tasks panel: its sta
 
 ## Packages
 
-The npm package list, `ops_packages` (`migrations/0028_ops_packages.sql`), is added to, edited and removed from at the top of the Packages page's Shared tab, through the same preview and perform as the sites (`src/ops-package-config.ts`). The versions table reads it (below); nothing else does, and the watcher reads nothing for packages. `ops_package_weeks` is no longer written.
+The npm package list, `ops_packages` (`migrations/0028_ops_packages.sql`), is added to, edited and removed from at the top of the Packages page's Shared tab, through the same preview and perform as the sites (`src/ops-package-config.ts`). The versions table reads it (below); nothing else does, and the watcher reads nothing for packages.
 
 **Exact times** in a panel or a detail field are shown in the viewer's own time zone with UTC beside it, in a `<time>` element, and need no hover. Rows keep relative times.
 
